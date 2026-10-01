@@ -58,6 +58,7 @@ export const BOT_COMMANDS = [
   { command: "start", description: "شروع و راهنما" },
   { command: "settings", description: "تنظیمات (تم، لحن، فونت، تعداد اسلاید)" },
   { command: "credit", description: "اعتبار باقی‌مانده و شارژ" },
+  { command: "files", description: "فایل‌های ۲۴ ساعت اخیر من" },
   { command: "invite", description: "دعوت دوستان و دریافت ارائه‌ی رایگان" },
   { command: "id", description: "نمایش شناسه‌ی عددی من" },
 ];
@@ -67,6 +68,7 @@ export const ADMIN_COMMANDS = [
   ...BOT_COMMANDS,
   { command: "admin", description: "راهنمای دستورهای مدیر" },
   { command: "stats", description: "آمار کاربران و ارائه‌ها" },
+  { command: "broadcast", description: "پیام همگانی: /broadcast متن" },
   { command: "user", description: "وضعیت یک کاربر: /user شناسه" },
   { command: "grant", description: "افزودن اعتبار: /grant شناسه تعداد" },
   { command: "ban", description: "مسدود کردن: /ban شناسه" },

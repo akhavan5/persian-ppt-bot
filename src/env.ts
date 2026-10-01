@@ -1,8 +1,10 @@
 import type { DeckParams } from "./types";
+import type { BroadcastParams } from "./broadcast";
 
 export interface Env {
   KV: KVNamespace;
   DECK_WORKFLOW: Workflow<DeckParams>;
+  BROADCAST_WORKFLOW: Workflow<BroadcastParams>;
 
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;

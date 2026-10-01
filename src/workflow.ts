@@ -5,9 +5,10 @@ import type { DeckParams } from "./types";
 import { LlmError, makeDeck, makeOutline } from "./llm";
 import { fetchImages } from "./images";
 import { buildPptx } from "./pptx";
-import { editMessage, esc, sendDocument } from "./telegram";
+import { editMessage, esc, sendDocument, sendMessage } from "./telegram";
 import { toFa } from "./util";
-import { BUY_NOTE, buyKb, bumpStat, getCredit, refundCredit, releaseLock } from "./settings";
+import { BUY_NOTE, adminIds, buyKb, bumpStat, getCredit, refundCredit, releaseLock } from "./settings";
+import { saveFile } from "./files";
 
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
 
@@ -54,8 +55,12 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           const bytes = await buildPptx(deck, {
             theme: settings.theme, font: settings.font, persianDigits: settings.digits, images,
           });
-          await sendDocument(this.env, chatId, bytes, safeFilename(deck.title),
+          const filename = safeFilename(deck.title);
+          await sendDocument(this.env, chatId, bytes, filename,
             `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید`);
+          // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
+          await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
+            .catch((err) => console.error("saveFile", err));
           const done = "✅ آماده شد! فایل بالا را ببین. برای ساخت ارائه‌ی بعدی، موضوع جدید را بفرست.";
           // اعتبار کم: بهترین لحظه برای نمایش دکمه‌های خرید
           const c = await getCredit(this.env, userId).catch(() => null);
@@ -75,6 +80,15 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         await status("❌ ساخت ارائه با خطا مواجه شد" + (credit && credit !== "none" ? "؛ اعتبارت برگردانده شد" : "") +
           ". چند دقیقه بعد دوباره امتحان کن؛ اگر تکرار شد، تنظیمات سرویس هوش مصنوعی را بررسی کن.");
       });
+      // خبر به مدیر؛ برای جلوگیری از سیل پیام (مثلاً کلید نادرست)، هر ۵ دقیقه حداکثر یک بار
+      await step.do("alert-admin", async () => {
+        const ids = adminIds(this.env);
+        if (!ids.length || (await this.env.KV.get("alert:fail")) !== null) return;
+        await this.env.KV.put("alert:fail", "1", { expirationTtl: 300 });
+        const reason = String(e instanceof Error ? e.message : e).slice(0, 300);
+        const msg = `🚨 <b>خطا در ساخت ارائه</b>\n👤 <code>${userId}</code>\n📝 ${esc(topic.slice(0, 80))}\n⚠️ <code>${esc(reason)}</code>\n\n<i>خطاهای بعدی تا ۵ دقیقه اعلام نمی‌شوند.</i>`;
+        for (const id of ids) await sendMessage(this.env, Number(id), msg).catch(() => {});
+      }).catch(() => {});
       await step.do("fail-cleanup", async () => {
         await releaseLock(this.env, userId);
         await bumpStat(this.env, "fail").catch(() => {});

@@ -6,8 +6,9 @@ import {
   refundCredit, releaseLock, saveSettings, SLIDE_CHOICES, SUPPORT_CONTACT, supportLink, spendCredit, touchUser,
   BUY_NOTE, buyKb, REF_MAX, rewardReferral,
 } from "./settings";
-import { ADMIN_CMDS, handleAdmin } from "./admin";
-import { editMessage, esc, sendMessage, tg } from "./telegram";
+import { ADMIN_CMDS, handleAdmin, handleBroadcastCallback } from "./admin";
+import { listFiles, loadFile } from "./files";
+import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 
 const HELP =
@@ -17,7 +18,8 @@ const HELP =
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت دانشجویی، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار باقی‌مانده و خرید شارژ\n" +
-  "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان";
+  "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
+  "📁 /files ← دریافت دوباره‌ی فایل‌های ۲۴ ساعت اخیر";
 
 type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
@@ -66,6 +68,13 @@ async function handleCallback(env: Env, cq: any) {
   if (blocked) return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
 
   const [act, a, b] = String(cq.data ?? "").split(":");
+  if (act === "bc") return await handleBroadcastCallback(env, cq);
+  if (act === "f") {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+    const f = await loadFile(env, userId, a);
+    if (!f) return await sendMessage(env, chatId, "⌛️ این فایل منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).");
+    return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>`);
+  }
   const s = await getSettings(env, userId);
   let view = mainMenu(s);
 
@@ -135,7 +144,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   }
   const isNew = await touchUser(env, userId, msg.from.username).catch((e) => { console.error("touchUser", e); return false; });
 
-  if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args);
+  if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args, text);
 
   // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده، به دعوت‌کننده ۱ ارائه‌ی رایگان می‌دهد
   if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
@@ -143,6 +152,12 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     if (await rewardReferral(env, inviter, userId).catch(() => false)) {
       await sendMessage(env, inviter, "🎉 یکی از دوستانت با لینک تو وارد ربات شد؛ <b>۱ ارائه‌ی رایگان</b> به اعتبارت اضافه شد. برای دیدن اعتبار: /credit").catch(() => {});
     }
+  }
+  if (cmd === "/files") {
+    const list = await listFiles(env, userId);
+    if (!list.length) return await sendMessage(env, chatId, "📁 فایلی برای ۲۴ ساعت اخیر نداری. فایل هر ارائه بعد از ساخته شدن تا ۲۴ ساعت اینجا می‌ماند.");
+    return await sendMessage(env, chatId, "📁 <b>فایل‌های ۲۴ ساعت اخیر</b>\nبرای دریافت دوباره، یکی را بزن:",
+      kb(list.map((f) => [{ text: `📥 ${f.title.slice(0, 40)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` }])));
   }
   if (cmd === "/invite") {
     const me = await tg<{ username?: string }>(env, "getMe");

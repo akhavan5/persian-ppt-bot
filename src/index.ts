@@ -4,6 +4,7 @@ import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { adminIds } from "./settings";
 
 export { DeckWorkflow } from "./workflow";
+export { BroadcastWorkflow } from "./broadcast";
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;

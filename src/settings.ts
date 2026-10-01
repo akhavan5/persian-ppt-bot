@@ -131,7 +131,7 @@ export const acquireLock = (env: Env, userId: number) => env.KV.put(lockKey(user
 export const releaseLock = (env: Env, userId: number) => env.KV.delete(lockKey(userId));
 
 // ---------- آمار ----------
-export type StatName = "started" | "ok" | "fail";
+export type StatName = "started" | "ok" | "fail" | "newusers";
 export async function bumpStat(env: Env, name: StatName) {
   const k = `stat:${name}:${today()}`;
   const n = Number(await env.KV.get(k)) || 0;
@@ -143,6 +143,7 @@ export async function touchUser(env: Env, userId: number, username?: string): Pr
   const k = `seen:${userId}`;
   if ((await env.KV.get(k)) === null) {
     await env.KV.put(k, JSON.stringify({ t: new Date().toISOString(), u: username ?? null }));
+    await bumpStat(env, "newusers").catch(() => {});
     return true; // کاربر جدید
   }
   return false;
@@ -170,8 +171,7 @@ export async function getUserSeen(env: Env, userId: number): Promise<{ t: string
   return (await env.KV.get(`seen:${userId}`, "json")) as any;
 }
 
-export async function getStats(env: Env) {
-  const day = today();
+export async function getStats(env: Env, days = 7) {
   let users = 0, cursor: string | undefined;
   for (let i = 0; i < 20; i++) {
     const r = await env.KV.list({ prefix: "seen:", cursor });
@@ -179,7 +179,10 @@ export async function getStats(env: Env) {
     if (r.list_complete) break;
     cursor = (r as any).cursor;
   }
-  const g = async (n: StatName) => Number(await env.KV.get(`stat:${n}:${day}`)) || 0;
-  const [started, ok, fail] = await Promise.all([g("started"), g("ok"), g("fail")]);
-  return { users, started, ok, fail };
+  const names: StatName[] = ["started", "ok", "fail", "newusers"];
+  const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
+  const rows = await Promise.all(dates.map((d) => Promise.all(names.map(async (n) => Number(await env.KV.get(`stat:${n}:${d}`)) || 0))));
+  const pack = (v: number[]) => ({ started: v[0], ok: v[1], fail: v[2], newusers: v[3] });
+  const week = pack(names.map((_, j) => rows.reduce((a, r) => a + r[j], 0)));
+  return { users, today: pack(rows[0]), week };
 }
