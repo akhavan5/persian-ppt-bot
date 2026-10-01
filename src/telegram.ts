@@ -58,6 +58,7 @@ export const BOT_COMMANDS = [
   { command: "start", description: "شروع و راهنما" },
   { command: "settings", description: "تنظیمات (تم، لحن، فونت، تعداد اسلاید)" },
   { command: "credit", description: "اعتبار باقی‌مانده و شارژ" },
+  { command: "invite", description: "دعوت دوستان و دریافت ارائه‌ی رایگان" },
   { command: "id", description: "نمایش شناسه‌ی عددی من" },
 ];
 

@@ -30,6 +30,20 @@ export const supportLink = (userId: number) =>
   `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
   encodeURIComponent(`سلام، می‌خواهم اعتبار ربات ساخت پاورپوینت را شارژ کنم.\nشناسه‌ی من: ${userId}`);
 
+export const BUY_NOTE = "💰 برای خرید شارژ، یکی از بسته‌های زیر را انتخاب کن:";
+const buyLink = (userId: number, count: number, price: number) =>
+  `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
+  encodeURIComponent(`سلام، می‌خواهم بسته‌ی ${count} پاورپوینتی (${price} هزار تومان) ربات ساخت پاورپوینت را بخرم.\nشناسه‌ی من: ${userId}`);
+/** دو دکمه‌ی شیشه‌ای خرید؛ پیام آماده شامل بسته‌ی انتخابی و شناسه‌ی کاربر است */
+export const buyKb = (userId: number) => ({
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: "🛒 ۱۰ پاورپوینت — ۵۰ هزار تومان", url: buyLink(userId, 10, 50) }],
+      [{ text: "🛒 ۲۰ پاورپوینت — ۸۰ هزار تومان", url: buyLink(userId, 20, 80) }],
+    ],
+  },
+});
+
 // ---------- مجوز، مدیر و مسدودسازی ----------
 const idList = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 export const adminIds = (env: Env) => idList(env.ADMIN_IDS);
@@ -122,11 +136,32 @@ export async function bumpStat(env: Env, name: StatName) {
 }
 
 /** اولین دفعه‌ای که کاربر مجاز پیام می‌دهد ثبت می‌شود (برای آمار و /user). فقط زمان و نام کاربری. */
-export async function touchUser(env: Env, userId: number, username?: string) {
+export async function touchUser(env: Env, userId: number, username?: string): Promise<boolean> {
   const k = `seen:${userId}`;
   if ((await env.KV.get(k)) === null) {
     await env.KV.put(k, JSON.stringify({ t: new Date().toISOString(), u: username ?? null }));
+    return true; // کاربر جدید
   }
+  return false;
+}
+
+// ---------- دعوت دوستان ----------
+/** حداکثر تعداد دعوت‌هایی که پاداش دارند (جلوگیری از سوءاستفاده با حساب‌های ساختگی) */
+export const REF_MAX = 20;
+
+/** به دعوت‌کننده ۱ ارائه‌ی رایگان می‌دهد. هر کاربر جدید فقط یک بار حساب می‌شود. */
+export async function rewardReferral(env: Env, inviterId: number, newUserId: number): Promise<boolean> {
+  if (!Number.isSafeInteger(inviterId) || inviterId <= 0 || inviterId === newUserId) return false;
+  if ((await env.KV.get(`ref:${newUserId}`)) !== null) return false;
+  if ((await env.KV.get(`seen:${inviterId}`)) === null) return false; // دعوت‌کننده باید کاربر واقعی ربات باشد
+  if (await isBanned(env, inviterId)) return false;
+  const ck = `refc:${inviterId}`;
+  const n = Number(await env.KV.get(ck)) || 0;
+  if (n >= REF_MAX) return false;
+  await env.KV.put(`ref:${newUserId}`, String(inviterId));
+  await env.KV.put(ck, String(n + 1));
+  await setBonus(env, inviterId, (await getBonus(env, inviterId)) + 1);
+  return true;
 }
 export async function getUserSeen(env: Env, userId: number): Promise<{ t: string; u: string | null } | null> {
   return (await env.KV.get(`seen:${userId}`, "json")) as any;

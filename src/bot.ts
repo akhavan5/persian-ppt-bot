@@ -4,6 +4,7 @@ import { FONTS, THEMES, TONES } from "./themes";
 import {
   acquireLock, bumpStat, clampSlides, getCredit, getSettings, isAdmin, isAllowed, isBanned, isLocked,
   refundCredit, releaseLock, saveSettings, SLIDE_CHOICES, SUPPORT_CONTACT, supportLink, spendCredit, touchUser,
+  BUY_NOTE, buyKb, REF_MAX, rewardReferral,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin } from "./admin";
 import { editMessage, esc, sendMessage, tg } from "./telegram";
@@ -15,7 +16,8 @@ const HELP =
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ کمی بعد فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت و تعداد پیش‌فرض اسلاید\n" +
-  "💳 /credit ← اعتبار باقی‌مانده و خرید شارژ";
+  "💳 /credit ← اعتبار باقی‌مانده و خرید شارژ\n" +
+  "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان";
 
 type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
@@ -99,14 +101,6 @@ function extractSlideCount(text: string): { topic: string; slides?: number } {
 
 // ---------- پیام‌های اعتبار ----------
 const RESET_NOTE = "<i>سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
-const BUY_NOTE = "💰 برای خرید شارژ، یکی از بسته‌های زیر را انتخاب کن:";
-const buyLink = (userId: number, count: number, price: number) =>
-  `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
-  encodeURIComponent(`سلام، می‌خواهم بسته‌ی ${count} پاورپوینتی (${price} هزار تومان) ربات ساخت پاورپوینت را بخرم.\nشناسه‌ی من: ${userId}`);
-const buyKb = (userId: number) => kb([
-  [{ text: "🛒 ۱۰ پاورپوینت — ۵۰ هزار تومان", url: buyLink(userId, 10, 50) }],
-  [{ text: "🛒 ۲۰ پاورپوینت — ۸۰ هزار تومان", url: buyLink(userId, 20, 80) }],
-]);
 const supportKb = (userId: number) => kb([[{ text: "💬 پیام به پشتیبانی", url: supportLink(userId) }]]);
 
 // ---------- ورودی اصلی ----------
@@ -133,9 +127,25 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
       `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nبرای دریافت دسترسی، دکمه‌ی زیر را بزن.`,
       supportKb(userId));
   }
-  await touchUser(env, userId, msg.from.username).catch((e) => console.error("touchUser", e));
+  const isNew = await touchUser(env, userId, msg.from.username).catch((e) => { console.error("touchUser", e); return false; });
 
   if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args);
+
+  // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده، به دعوت‌کننده ۱ ارائه‌ی رایگان می‌دهد
+  if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
+    const inviter = Number(args[0].slice(4));
+    if (await rewardReferral(env, inviter, userId).catch(() => false)) {
+      await sendMessage(env, inviter, "🎉 یکی از دوستانت با لینک تو وارد ربات شد؛ <b>۱ ارائه‌ی رایگان</b> به اعتبارت اضافه شد. برای دیدن اعتبار: /credit").catch(() => {});
+    }
+  }
+  if (cmd === "/invite") {
+    const me = await tg<{ username?: string }>(env, "getMe");
+    const link = `https://t.me/${me.username}?start=ref_${userId}`;
+    const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
+    return await sendMessage(env, chatId,
+      `🎁 <b>دعوت دوستان</b>\nبه ازای هر دوستی که با لینک تو وارد ربات شود، <b>۱ ارائه‌ی رایگان</b> می‌گیری (حداکثر ${toFa(String(REF_MAX))} دعوت).\n\n🔗 لینک اختصاصی تو:\n${link}`,
+      kb([[{ text: "📤 ارسال به دوستان", url: share }]]));
+  }
 
   if (cmd === "/credit" || cmd === "/balance") {
     const c = await getCredit(env, userId);

@@ -7,7 +7,7 @@ import { fetchImages } from "./images";
 import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument } from "./telegram";
 import { toFa } from "./util";
-import { bumpStat, refundCredit, releaseLock } from "./settings";
+import { BUY_NOTE, buyKb, bumpStat, getCredit, refundCredit, releaseLock } from "./settings";
 
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
 
@@ -55,7 +55,16 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           });
           await sendDocument(this.env, chatId, bytes, safeFilename(deck.title),
             `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید`);
-          await status("✅ آماده شد! فایل بالا را ببین. برای ساخت ارائه‌ی بعدی، موضوع جدید را بفرست.");
+          const done = "✅ آماده شد! فایل بالا را ببین. برای ساخت ارائه‌ی بعدی، موضوع جدید را بفرست.";
+          // اعتبار کم: بهترین لحظه برای نمایش دکمه‌های خرید
+          const c = await getCredit(this.env, userId).catch(() => null);
+          if (c && !c.unlimited && c.total <= 1) {
+            const warn = c.total === 0 ? "⚠️ اعتبارت تمام شد." : "⚠️ فقط ۱ ارائه‌ی دیگر اعتبار داری.";
+            await editMessage(this.env, chatId, mid,
+              `${done}\n\n${warn}\n${BUY_NOTE}\n🎁 یا با /invite دوستانت را دعوت کن و ارائه‌ی رایگان بگیر.`, buyKb(userId)).catch(() => {});
+          } else {
+            await status(done);
+          }
         });
     } catch (e) {
       console.error("deck workflow failed", e);
