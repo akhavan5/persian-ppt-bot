@@ -53,7 +53,7 @@ async function handleCallback(env: Env, cq: any) {
   const userId: number = cq.from.id;
   const chatId: number = cq.message?.chat?.id;
   const mid: number = cq.message?.message_id;
-  if (!chatId || !mid || !isAllowed(env, userId)) return void tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+  if (!chatId || !mid || !isAllowed(env, userId)) return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
 
   const [act, a, b] = String(cq.data ?? "").split(":");
   const s = await getSettings(env, userId);
@@ -61,7 +61,7 @@ async function handleCallback(env: Env, cq: any) {
 
   if (act === "x") {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
-    return void tg(env, "deleteMessage", { chat_id: chatId, message_id: mid }).catch(() => {});
+    return await tg(env, "deleteMessage", { chat_id: chatId, message_id: mid }).catch(() => {});
   }
   if (act === "m") view = subMenu(a, s);
   else if (act === "t") {
@@ -93,7 +93,7 @@ function extractSlideCount(text: string): { topic: string; slides?: number } {
 }
 
 // ---------- ورودی اصلی ----------
-export async function handleUpdate(env: Env, update: any): Promise<void> {
+export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (update.callback_query) return handleCallback(env, update.callback_query);
 
   const msg = update.message;
@@ -105,26 +105,26 @@ export async function handleUpdate(env: Env, update: any): Promise<void> {
 
   const cmd = text.startsWith("/") ? text.split(/[\s@]/)[0].toLowerCase() : "";
   console.log("incoming", JSON.stringify({ text: text.slice(0, 40), cmd, userId }));
-  if (cmd === "/id") return void sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>\n<i>نسخه: v3-debug</i>`);
+  if (cmd === "/id") return await sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>\n<i>نسخه: v4</i>`);
 
   if (!isAllowed(env, userId)) {
-    return void sendMessage(env, chatId, `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nشناسه‌ی شما: <code>${userId}</code>`);
+    return await sendMessage(env, chatId, `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nشناسه‌ی شما: <code>${userId}</code>`);
   }
-  if (cmd === "/start" || cmd === "/help") return void sendMessage(env, chatId, HELP);
+  if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, HELP);
   if (cmd === "/settings") {
     const { text: t, ...extra } = mainMenu(await getSettings(env, userId));
-    return void sendMessage(env, chatId, t, extra);
+    return await sendMessage(env, chatId, t, extra);
   }
-  if (cmd) return void sendMessage(env, chatId, "دستور ناشناخته است. /start را بزن.");
-  if (!text) return void sendMessage(env, chatId, "لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست.");
+  if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. /start را بزن.");
+  if (!text) return await sendMessage(env, chatId, "لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست.");
 
   const { topic, slides } = extractSlideCount(text);
-  if (topic.length < 3) return void sendMessage(env, chatId, "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
-  if (topic.length > 600) return void sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
+  if (topic.length < 3) return await sendMessage(env, chatId, "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
+  if (topic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
 
   const quota = await bumpDaily(env, userId);
   if (!quota.ok) {
-    return void sendMessage(env, chatId, `⏳ سقف روزانه (${toFa(String(quota.limit))} ارائه) پر شده است. فردا دوباره امتحان کن.`);
+    return await sendMessage(env, chatId, `⏳ سقف روزانه (${toFa(String(quota.limit))} ارائه) پر شده است. فردا دوباره امتحان کن.`);
   }
 
   const settings = await getSettings(env, userId);
