@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
 
-export const DEFAULTS: Settings = { theme: "ocean", font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true };
+export const DEFAULTS: Settings = { theme: "ocean", font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, mode: "normal", sources: false, questions: false };
 export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 
 export const clampSlides = (n: number) => Math.min(20, Math.max(3, Math.round(n)));
@@ -16,6 +16,9 @@ export async function getSettings(env: Env, userId: number): Promise<Settings> {
   s.slides = clampSlides(Number(s.slides) || DEFAULTS.slides);
   s.digits = !!s.digits;
   s.images = !!s.images;
+  s.mode = s.mode === "student" ? "student" : "normal";
+  s.sources = !!s.sources;
+  s.questions = !!s.questions;
   return s;
 }
 

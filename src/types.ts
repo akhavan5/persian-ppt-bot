@@ -1,7 +1,9 @@
-export type Layout = "title" | "section" | "bullets" | "image_text" | "two_column" | "stats" | "closing";
+export type Layout = "title" | "section" | "bullets" | "image_text" | "two_column" | "stats" | "table" | "chart" | "sources" | "questions" | "closing";
 
 export interface Column { heading: string; bullets: string[] }
 export interface Stat { value: string; label: string }
+export interface Table { headers: string[]; rows: string[][] }
+export interface Chart { type: "bar" | "line" | "pie"; labels: string[]; series: { name: string; values: number[] }[] }
 
 export interface Slide {
   layout: Layout;
@@ -10,12 +12,16 @@ export interface Slide {
   bullets: string[];
   columns: Column[];
   stats: Stat[];
+  table?: Table;
+  chart?: Chart;
   image_query?: string;
   notes?: string;
 }
 
 export interface Deck { title: string; slides: Slide[] }
-export interface OutlineItem { title: string; summary: string }
+/** kind: اسلایدهای ویژه که چیدمان‌شان ثابت است */
+export type SlideKind = "sources" | "questions";
+export interface OutlineItem { title: string; summary: string; kind?: SlideKind }
 export interface Outline { title: string; slides: OutlineItem[] }
 
 export interface Settings {
@@ -25,6 +31,11 @@ export interface Settings {
   tone: string;
   digits: boolean;
   images: boolean;
+  /** normal | student (ساختار دانشجویی: فهرست، مقدمه، بدنه، نتیجه‌گیری، منابع) */
+  mode: "normal" | "student";
+  /** افزودن اسلاید منابع / پرسش‌های پایانی */
+  sources: boolean;
+  questions: boolean;
 }
 
 export interface DeckParams {

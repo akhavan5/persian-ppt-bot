@@ -15,7 +15,7 @@ const HELP =
   "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ کمی بعد فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
-  "⚙️ /settings ← تغییر تم، لحن، فونت و تعداد پیش‌فرض اسلاید\n" +
+  "⚙️ /settings ← تغییر تم، لحن، فونت، حالت دانشجویی، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار باقی‌مانده و خرید شارژ\n" +
   "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان";
 
@@ -28,6 +28,9 @@ function mainMenu(s: Settings) {
     [{ text: `🎨 تم: ${THEMES[s.theme].name}`, callback_data: "m:theme" }, { text: `🗣 لحن: ${TONES[s.tone]}`, callback_data: "m:tone" }],
     [{ text: `🔤 فونت: ${s.font}`, callback_data: "m:font" }, { text: `📄 اسلاید: ${toFa(String(s.slides))}`, callback_data: "m:slides" }],
     [{ text: `🖼 تصویر: ${s.images ? "روشن" : "خاموش"}`, callback_data: "t:images" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
+    [{ text: `🎓 حالت: ${s.mode === "student" ? "دانشجویی" : "عادی"}`, callback_data: "t:mode" }],
+    [{ text: `📚 منابع: ${s.mode === "student" ? "روشن (دانشجویی)" : s.sources ? "روشن" : "خاموش"}`, callback_data: "t:sources" },
+      { text: `❓ پرسش پایانی: ${s.questions ? "روشن" : "خاموش"}`, callback_data: "t:questions" }],
     [{ text: "✅ بستن", callback_data: "x:close" }],
   ];
   return { text: "⚙️ <b>تنظیمات</b>\nگزینه‌ای را برای تغییر انتخاب کن:", ...kb(rows) };
@@ -74,6 +77,9 @@ async function handleCallback(env: Env, cq: any) {
   else if (act === "t") {
     if (a === "images") s.images = !s.images;
     if (a === "digits") s.digits = !s.digits;
+    if (a === "mode") s.mode = s.mode === "student" ? "normal" : "student";
+    if (a === "sources") s.sources = !s.sources;
+    if (a === "questions") s.questions = !s.questions;
     await saveSettings(env, userId, s);
     view = mainMenu(s);
   } else if (act === "v") {
@@ -184,6 +190,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   const settings = await getSettings(env, userId);
   if (slides) settings.slides = slides;
+  if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8); // ساختار دانشجویی حداقل ۸ اسلاید می‌خواهد
 
   const undo = async () => { // اگر قبل از شروع Workflow چیزی خراب شد: اعتبار برگردد و قفل آزاد شود
     await refundCredit(env, userId, quota.source, quota.day).catch((e) => console.error("refund", e));

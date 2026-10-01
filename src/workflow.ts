@@ -29,19 +29,20 @@ function safeFilename(title: string): string {
 export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
     const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
+    const contentOpts = { mode: settings.mode, sources: settings.sources, questions: settings.questions };
     const status = (t: string) => editMessage(this.env, chatId, mid, t).catch(() => {});
 
     try {
       const outline = await step.do("outline", LLM_STEP, () =>
         guard(async () => {
           await status("⏳ ۱/۳ — طراحی سرفصل‌ها…");
-          return makeOutline(this.env, topic, settings.slides, settings.tone);
+          return makeOutline(this.env, topic, settings.slides, settings.tone, contentOpts);
         }));
 
       const deck = await step.do("content", LLM_STEP, () =>
         guard(async () => {
           await status("✍️ ۲/۳ — نوشتن محتوای اسلایدها…");
-          return makeDeck(this.env, topic, outline.title, outline.slides, settings.tone);
+          return makeDeck(this.env, topic, outline.title, outline.slides, settings.tone, contentOpts);
         }));
 
       // ساخت فایل و ارسال در یک گام: خروجی باینری نباید از گام برگردانده شود (سقف ۱ مگابایت برای وضعیت گام)

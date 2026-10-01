@@ -31,7 +31,7 @@ interface TextOpts {
   bold?: boolean;
   align?: "right" | "center" | "left";
   valign?: "top" | "middle" | "bottom";
-  bullet?: boolean;
+  bullet?: boolean | "number";
   space?: number;
 }
 
@@ -98,7 +98,8 @@ class Builder {
         color,
         lineSpacingMultiple: 1.15,
         paraSpaceAfter: o.space ?? 8,
-        ...(o.bullet ? { bullet: { characterCode: "2022", indent: 25 } } : {}),
+        ...(o.bullet === "number" ? { bullet: { type: "number", indent: 28 } }
+          : o.bullet ? { bullet: { characterCode: "2022", indent: 25 } } : {}),
       },
     }));
     s.addText(runs as any, { x, y, w, h, margin: 0, valign: o.valign ?? "top", fit: "none", wrap: true });
@@ -193,6 +194,71 @@ class Builder {
     return s;
   }
 
+  private table(sd: Slide) {
+    const s = this.slide(this.t.bg);
+    this.title(s, sd.title);
+    const t = sd.table!;
+    const n = t.headers.length, tw = W - 2 * M;
+    const size = Math.max(13, (t.rows.length <= 4 ? 20 : t.rows.length <= 6 ? 18 : 16) - (n >= 5 ? 3 : n === 4 ? 1 : 0));
+    const rowH = Math.min(0.8, 4.7 / (t.rows.length + 1));
+    const rev = <T,>(a: T[]) => [...a].reverse(); // ستون اول سمت راست
+    const cell = (text: string, color: string, fill: string, bold = false) => ({
+      text: this.txt(text),
+      options: { fontFace: this.font, fontSize: size, color, bold, align: "right" as const, valign: "middle" as const,
+        rtlMode: true, lang: "fa-IR", fill: { color: fill },
+        border: [{ type: "none" }, { type: "none" }, { type: "solid", pt: 0.75, color: this.t.muted }, { type: "none" }] as any },
+    });
+    const rows = [
+      rev(t.headers).map((h) => cell(h, this.t.onPrimary, this.t.primary, true)),
+      ...t.rows.map((r, i) => rev(r).map((c) => cell(c, this.t.text, i % 2 ? this.t.bg : this.t.surface))),
+    ];
+    s.addTable(rows as any, { x: M, y: 1.85, w: tw, colW: Array(n).fill(tw / n), rowH });
+    return s;
+  }
+
+  private chart(sd: Slide) {
+    const s = this.slide(this.t.bg);
+    this.title(s, sd.title);
+    const c = sd.chart!;
+    const hasText = sd.bullets.length > 0;
+    const labels = c.labels.map((l) => this.txt(l));
+    const data = c.series.map((se, i) => ({ name: this.txt(se.name || `سری ${i + 1}`), labels, values: se.values }));
+    const palette = [this.t.primary, this.t.accent, "E0A93B", "2F7D5B", "D9482B", "5B3FA6", this.t.muted, "14B8A6"];
+    const type = c.type === "line" ? this.p.ChartType.line : c.type === "pie" ? this.p.ChartType.pie : this.p.ChartType.bar;
+    const font = { fontFace: this.font, color: this.t.text } as const;
+    s.addChart(type, data as any, {
+      x: M, y: 1.8, w: hasText ? 7.0 : W - 2 * M, h: 4.55,
+      chartColors: c.type === "pie" ? palette.slice(0, labels.length) : palette.slice(0, data.length),
+      showLegend: c.type === "pie" || data.length > 1, legendPos: "b", legendFontFace: this.font, legendFontSize: 14, legendColor: this.t.text,
+      catAxisLabelFontFace: this.font, catAxisLabelFontSize: 14, catAxisLabelColor: this.t.text,
+      valAxisLabelFontFace: this.font, valAxisLabelFontSize: 13, valAxisLabelColor: this.t.muted,
+      valGridLine: { color: this.t.muted, size: 0.5, style: "dash" } as any, catGridLine: { style: "none" } as any,
+      showValue: c.type !== "pie", showPercent: c.type === "pie", dataLabelFontFace: this.font, dataLabelFontSize: 13, dataLabelColor: c.type === "pie" ? "FFFFFF" : font.color,
+      ...(c.type === "line" ? { lineSize: 3, lineDataSymbolSize: 9 } : {}),
+      ...(c.type === "bar" ? { barGapWidthPct: 60 } : {}),
+    } as any);
+    if (hasText) {
+      const tx = M + 7.3, tw = W - M - tx;
+      this.text(s, tx, 1.8, tw, 4.55, sd.bullets.slice(0, 3), fitSize(sd.bullets.slice(0, 3), tw, 4.55, 22, 14, true), this.t.text,
+        { bullet: true, valign: "middle" });
+    }
+    this.text(s, M, 6.45, W - 2 * M, 0.35, ["داده‌ها تقریبی‌اند؛ پیش از ارائه با منبع معتبر تطبیق دهید."], 11, this.t.muted, { space: 0 });
+    return s;
+  }
+
+  /** فهرست شماره‌دار: برای «منابع» و «پرسش‌های پایانی» */
+  private numbered(sd: Slide, foot?: string) {
+    const s = this.slide(this.t.bg);
+    this.title(s, sd.title);
+    this.shape(s, M, 1.8, W - 2 * M, foot ? 4.5 : 4.85, this.t.surface);
+    const paras = sd.bullets.length ? sd.bullets : [""];
+    const iw = W - 2 * M - 1.0, ih = foot ? 3.8 : 4.1;
+    this.text(s, M + 0.5, 2.1, iw, ih, paras, fitSize(paras, iw, ih, foot ? 22 : 26, 14, true, 12), this.t.text,
+      { bullet: "number", valign: "middle", space: 12 });
+    if (foot) this.text(s, M, 6.45, W - 2 * M, 0.35, [foot], 11, this.t.muted, { space: 0 });
+    return s;
+  }
+
   // ---------- ساخت نهایی ----------
   async build(deck: Deck): Promise<Uint8Array> {
     let sec = 0;
@@ -205,6 +271,10 @@ class Builder {
       else if (lay === "image_text" && img) s = this.imageText(sd, img);
       else if (lay === "two_column" && sd.columns.length) s = this.twoColumn(sd);
       else if (lay === "stats" && sd.stats.length) s = this.stats(sd);
+      else if (lay === "table" && sd.table) s = this.table(sd);
+      else if (lay === "chart" && sd.chart) s = this.chart(sd);
+      else if (lay === "sources") s = this.numbered(sd, "منابع پیشنهادی برای مطالعه‌ی بیشتر؛ پیش از ارجاع، وجود و صحت آن‌ها را بررسی کنید.");
+      else if (lay === "questions") s = this.numbered(sd);
       else s = this.bullets(sd);
       if (lay !== "title" && lay !== "closing" && lay !== "section") this.number(s, i + 1);
       if (sd.notes) s.addNotes(this.txt(sd.notes));
