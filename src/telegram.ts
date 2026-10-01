@@ -57,5 +57,5 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
 export const BOT_COMMANDS = [
   { command: "start", description: "شروع و راهنما" },
   { command: "settings", description: "تنظیمات (تم، لحن، فونت، تعداد اسلاید)" },
-  { command: "id", description: "نمایش شناسه‌ی عددی من" },
+  { command: "credit", description: "اعتبار باقی‌مانده‌ی امروز" },
 ];

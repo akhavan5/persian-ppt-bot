@@ -35,10 +35,20 @@ export const dailyLimit = (env: Env) => {
 };
 
 /** شمارنده‌ی روزانه (UTC). KV همگام‌سازی لحظه‌ای ندارد؛ برای کنترل هزینه کافی است، نه یک سد ریاضی دقیق. */
+const dailyKey = (userId: number) => `rl:${userId}:${new Date().toISOString().slice(0, 10)}`;
+
+/** اعتبار امروز بدون مصرف کردن آن. limit=0 یعنی نامحدود. */
+export async function getDaily(env: Env, userId: number): Promise<{ used: number; limit: number; left: number }> {
+  const limit = dailyLimit(env);
+  if (limit === 0) return { used: 0, limit, left: Infinity };
+  const used = Number((await env.KV.get(dailyKey(userId))) ?? 0);
+  return { used, limit, left: Math.max(0, limit - used) };
+}
+
 export async function bumpDaily(env: Env, userId: number): Promise<{ ok: boolean; used: number; limit: number }> {
   const limit = dailyLimit(env);
   if (limit === 0) return { ok: true, used: 0, limit };
-  const key = `rl:${userId}:${new Date().toISOString().slice(0, 10)}`;
+  const key = dailyKey(userId);
   const used = Number((await env.KV.get(key)) ?? 0);
   if (used >= limit) return { ok: false, used, limit };
   await env.KV.put(key, String(used + 1), { expirationTtl: 172_800 });

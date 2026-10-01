@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { DeckParams, Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
-import { bumpDaily, clampSlides, dailyLimit, getSettings, isAllowed, saveSettings, SLIDE_CHOICES } from "./settings";
+import { bumpDaily, clampSlides, getDaily, getSettings, isAllowed, saveSettings, SLIDE_CHOICES } from "./settings";
 import { editMessage, esc, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 
@@ -11,6 +11,7 @@ const HELP =
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ کمی بعد فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت و تعداد پیش‌فرض اسلاید\n" +
+  "💳 /credit ← اعتبار باقی‌مانده‌ی امروز\n" +
   "ℹ️ متن اسلایدها را پیش از ارائه بررسی کن؛ مدل ممکن است اطلاعات نادرست بنویسد.";
 
 type Btn = { text: string; callback_data: string };
@@ -109,6 +110,14 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (!isAllowed(env, userId)) {
     return await sendMessage(env, chatId, `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nشناسه‌ی شما: <code>${userId}</code>`);
   }
+  if (cmd === "/credit" || cmd === "/balance") {
+    const d = await getDaily(env, userId);
+    const msg = d.limit === 0
+      ? "💳 اعتبار شما <b>نامحدود</b> است."
+      : `💳 اعتبار امروز: <b>${toFa(String(d.left))}</b> از ${toFa(String(d.limit))} ارائه باقی مانده است.\n` +
+        "<i>اعتبار هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
+    return await sendMessage(env, chatId, msg);
+  }
   if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, HELP);
   if (cmd === "/settings") {
     const { text: t, ...extra } = mainMenu(await getSettings(env, userId));
@@ -129,8 +138,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const settings = await getSettings(env, userId);
   if (slides) settings.slides = slides;
 
+  const creditLine = quota.limit > 0 ? `\n💳 اعتبار باقی‌مانده‌ی امروز: ${toFa(String(Math.max(0, quota.limit - quota.used)))}` : "";
   const status = await sendMessage(env, chatId,
-    `⏳ در حال آماده‌سازی ارائه‌ی «${esc(topic)}» (${toFa(String(settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.`);
+    `⏳ در حال آماده‌سازی ارائه‌ی «${esc(topic)}» (${toFa(String(settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`);
 
   const params: DeckParams = { chatId, statusMessageId: status.message_id, userId, topic, settings };
   try {
