@@ -1,0 +1,50 @@
+import type { Env } from "./env";
+import { handleUpdate } from "./bot";
+import { BOT_COMMANDS, tg } from "./telegram";
+
+export { DeckWorkflow } from "./workflow";
+
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+export default {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(req.url);
+
+    // وبهوک تلگرام — تلگرام هدر محرمانه را روی هر درخواست می‌فرستد
+    if (url.pathname === "/telegram" && req.method === "POST") {
+      const got = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
+      if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(got, env.TELEGRAM_WEBHOOK_SECRET)) {
+        return new Response("forbidden", { status: 403 });
+      }
+      const update = await req.json();
+      // فوراً ۲۰۰ برمی‌گردانیم تا تلگرام درخواست را تکرار نکند؛ کار اصلی در Workflow انجام می‌شود
+      ctx.waitUntil(handleUpdate(env, update).catch((e) => console.error("handleUpdate", e)));
+      return new Response("ok");
+    }
+
+    // ثبت وبهوک: یک بار در مرورگر باز کن → /setup?secret=<TELEGRAM_WEBHOOK_SECRET>
+    if (url.pathname === "/setup") {
+      const secret = url.searchParams.get("secret") ?? "";
+      if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
+        return new Response("forbidden", { status: 403 });
+      }
+      await tg(env, "setWebhook", {
+        url: `${url.origin}/telegram`,
+        secret_token: env.TELEGRAM_WEBHOOK_SECRET,
+        allowed_updates: ["message", "callback_query"],
+        drop_pending_updates: true,
+      });
+      await tg(env, "setMyCommands", { commands: BOT_COMMANDS });
+      const info = await tg(env, "getWebhookInfo");
+      return Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count });
+    }
+
+    if (url.pathname === "/") return new Response("persian-ppt-bot is running");
+    return new Response("not found", { status: 404 });
+  },
+} satisfies ExportedHandler<Env>;
