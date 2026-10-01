@@ -14,6 +14,7 @@
   "kv_namespaces": [{ "binding": "KV","id": "72ced82828e44f8984116448ff111735" }],
 
   "workflows": [
-    { "name": "persian-ppt-deck", "binding": "DECK_WORKFLOW", "class_name": "DeckWorkflow" }
+    { "name": "persian-ppt-deck", "binding": "DECK_WORKFLOW", "class_name": "DeckWorkflow" },
+    { "name": "persian-ppt-broadcast", "binding": "BROADCAST_WORKFLOW", "class_name": "BroadcastWorkflow" }
   ]
 }
