@@ -57,7 +57,8 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
 export const BOT_COMMANDS = [
   { command: "start", description: "شروع و راهنما" },
   { command: "settings", description: "تنظیمات (تم، لحن، فونت، تعداد اسلاید)" },
-  { command: "credit", description: "اعتبار باقی‌مانده‌ی امروز" },
+  { command: "credit", description: "اعتبار باقی‌مانده و شارژ" },
+  { command: "id", description: "نمایش شناسه‌ی عددی من" },
 ];
 
 /** منوی دستورهای مدیر (فقط برای چت خود مدیرها ثبت می‌شود) */

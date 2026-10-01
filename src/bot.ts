@@ -3,7 +3,7 @@ import type { DeckParams, Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
 import {
   acquireLock, bumpStat, clampSlides, getCredit, getSettings, isAdmin, isAllowed, isBanned, isLocked,
-  refundCredit, releaseLock, saveSettings, SLIDE_CHOICES, SUPPORT_CONTACT, spendCredit, touchUser,
+  refundCredit, releaseLock, saveSettings, SLIDE_CHOICES, SUPPORT_CONTACT, supportLink, spendCredit, touchUser,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin } from "./admin";
 import { editMessage, esc, sendMessage, tg } from "./telegram";
@@ -15,10 +15,11 @@ const HELP =
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ کمی بعد فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت و تعداد پیش‌فرض اسلاید\n" +
-  "💳 /credit ← اعتبار باقی‌مانده‌ی امروز\n" +
+  "💳 /credit ← اعتبار باقی‌مانده و درخواست شارژ\n" +
+  "🆔 /id ← شناسه‌ی عددی شما\n" +
   "ℹ️ متن اسلایدها را پیش از ارائه بررسی کن؛ مدل ممکن است اطلاعات نادرست بنویسد.";
 
-type Btn = { text: string; callback_data: string };
+type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
 
 // ---------- منوی تنظیمات ----------
@@ -100,7 +101,9 @@ function extractSlideCount(text: string): { topic: string; slides?: number } {
 
 // ---------- پیام‌های اعتبار ----------
 const RESET_NOTE = "<i>سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
-const CONTACT_NOTE = `برای افزایش اعتبار به ${SUPPORT_CONTACT} پیام بده.`;
+const CONTACT_NOTE = `برای افزایش اعتبار به ${SUPPORT_CONTACT} پیام بده؛ با دکمه‌ی زیر شناسه‌ات خودکار توی پیام می‌آید.`;
+const supportKb = (userId: number) => kb([[{ text: "💬 پیام به پشتیبانی برای شارژ", url: supportLink(userId) }]]);
+const idLine = (userId: number) => `🆔 شناسه‌ی شما: <code>${userId}</code>`;
 
 // ---------- ورودی اصلی ----------
 export async function handleUpdate(env: Env, update: any): Promise<unknown> {
@@ -123,7 +126,8 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   }
   if (!isAllowed(env, userId)) {
     return await sendMessage(env, chatId,
-      `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nبرای دریافت دسترسی به ${SUPPORT_CONTACT} پیام بده و این شناسه را بفرست:\n<code>${userId}</code>`);
+      `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nبرای دریافت دسترسی به ${SUPPORT_CONTACT} پیام بده؛ با دکمه‌ی زیر شناسه‌ات خودکار توی پیام می‌آید.\n\n${idLine(userId)}`,
+      supportKb(userId));
   }
   await touchUser(env, userId, msg.from.username).catch((e) => console.error("touchUser", e));
 
@@ -131,17 +135,16 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (cmd === "/credit" || cmd === "/balance") {
     const c = await getCredit(env, userId);
-    let out: string;
-    if (c.unlimited) out = "💳 اعتبار شما <b>نامحدود</b> است.";
-    else {
-      out = `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
-        `• سهمیه‌ی امروز: ${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))}\n` +
-        (c.bonus > 0 ? `• اعتبار اضافه: ${toFa(String(c.bonus))}\n` : "") +
-        `\n${RESET_NOTE}` + (c.total === 0 ? `\n${CONTACT_NOTE}` : "");
-    }
-    return await sendMessage(env, chatId, out);
+    if (c.unlimited) return await sendMessage(env, chatId, "💳 اعتبار شما <b>نامحدود</b> است.");
+    const out = `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
+      `• سهمیه‌ی امروز: ${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))}\n` +
+      (c.bonus > 0 ? `• اعتبار اضافه: ${toFa(String(c.bonus))}\n` : "") +
+      `\n${RESET_NOTE}\n\n${idLine(userId)}` + (c.total === 0 ? `\n${CONTACT_NOTE}` : "");
+    return await sendMessage(env, chatId, out, supportKb(userId));
   }
-  if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, HELP);
+  if (cmd === "/start" || cmd === "/help") {
+    return await sendMessage(env, chatId, admin ? HELP + "\n\n🛠 شما مدیر هستید؛ دستورهای مدیریتی: /admin" : HELP);
+  }
   if (cmd === "/settings") {
     const { text: t, ...extra } = mainMenu(await getSettings(env, userId));
     return await sendMessage(env, chatId, t, extra);
@@ -160,7 +163,8 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   const quota = await spendCredit(env, userId);
   if (!quota.ok) {
-    return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n${CONTACT_NOTE}\n\n${RESET_NOTE}`);
+    return await sendMessage(env, chatId,
+      `⏳ اعتبار شما تمام شده است.\n${CONTACT_NOTE}\n\n${idLine(userId)}\n\n${RESET_NOTE}`, supportKb(userId));
   }
   await acquireLock(env, userId);
 

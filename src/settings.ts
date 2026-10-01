@@ -25,6 +25,10 @@ export async function saveSettings(env: Env, userId: number, s: Settings) {
 
 // ---------- تماس برای شارژ ----------
 export const SUPPORT_CONTACT = "@akhavan8";
+/** لینک پیام به پشتیبان با متن آماده‌ای که شناسه‌ی کاربر داخلش هست (کاربر فقط «ارسال» را می‌زند) */
+export const supportLink = (userId: number) =>
+  `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
+  encodeURIComponent(`سلام، می‌خواهم اعتبار ربات ساخت پاورپوینت را شارژ کنم.\nشناسه‌ی من: ${userId}`);
 
 // ---------- مجوز، مدیر و مسدودسازی ----------
 const idList = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
