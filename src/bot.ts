@@ -104,8 +104,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const text: string = String(msg.text ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").trim();
 
   const cmd = text.startsWith("/") ? text.split(/[\s@]/)[0].toLowerCase() : "";
-  console.log("incoming", JSON.stringify({ text: text.slice(0, 40), cmd, userId }));
-  if (cmd === "/id") return await sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>\n<i>نسخه: v4</i>`);
+  if (cmd === "/id") return await sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>`);
 
   if (!isAllowed(env, userId)) {
     return await sendMessage(env, chatId, `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nشناسه‌ی شما: <code>${userId}</code>`);

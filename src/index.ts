@@ -25,9 +25,9 @@ export default {
       // فوراً ۲۰۰ برمی‌گردانیم تا تلگرام درخواست را تکرار نکند؛ کار اصلی در Workflow انجام می‌شود
       ctx.waitUntil(handleUpdate(env, update).catch(async (e) => {
         console.error("handleUpdate", e);
-        // خطا را به کاربر هم نشان بده تا ربات بی‌صدا نماند
+        // ربات بی‌صدا نماند؛ جزئیات خطا فقط در لاگ ثبت می‌شود
         const chatId = (update as any)?.message?.chat?.id ?? (update as any)?.callback_query?.message?.chat?.id;
-        if (chatId) await tg(env, "sendMessage", { chat_id: chatId, text: `⚠️ خطای داخلی: ${String(e).slice(0, 300)}` }).catch(() => {});
+        if (chatId) await tg(env, "sendMessage", { chat_id: chatId, text: "⚠️ مشکلی پیش آمد. چند لحظه بعد دوباره امتحان کن." }).catch(() => {});
       }));
       return new Response("ok");
     }

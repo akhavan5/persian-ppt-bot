@@ -16,7 +16,6 @@ export async function tg<T = any>(env: Env, method: string, body: Record<string,
     console.error("telegram api error", method, JSON.stringify(j));
     throw new Error(`Telegram ${method}: ${j.description ?? r.status}`);
   }
-  console.log("telegram ok", method);
   return j.result as T;
 }
 
