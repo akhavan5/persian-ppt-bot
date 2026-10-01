@@ -99,12 +99,15 @@ function extractSlideCount(text: string): { topic: string; slides?: number } {
 
 // ---------- پیام‌های اعتبار ----------
 const RESET_NOTE = "<i>سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
-const PRICE_NOTE =
-  "💰 <b>تعرفه‌ی شارژ</b>\n" +
-  "• ۱۰ پاورپوینت ← ۵۰ هزار تومان\n" +
-  "• ۲۰ پاورپوینت ← ۸۰ هزار تومان\n" +
-  "برای خرید، دکمه‌ی زیر را بزن.";
-const supportKb = (userId: number) => kb([[{ text: "💬 خرید شارژ از پشتیبانی", url: supportLink(userId) }]]);
+const BUY_NOTE = "💰 برای خرید شارژ، یکی از بسته‌های زیر را انتخاب کن:";
+const buyLink = (userId: number, count: number, price: number) =>
+  `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
+  encodeURIComponent(`سلام، می‌خواهم بسته‌ی ${count} پاورپوینتی (${price} هزار تومان) ربات ساخت پاورپوینت را بخرم.\nشناسه‌ی من: ${userId}`);
+const buyKb = (userId: number) => kb([
+  [{ text: "🛒 ۱۰ پاورپوینت — ۵۰ هزار تومان", url: buyLink(userId, 10, 50) }],
+  [{ text: "🛒 ۲۰ پاورپوینت — ۸۰ هزار تومان", url: buyLink(userId, 20, 80) }],
+]);
+const supportKb = (userId: number) => kb([[{ text: "💬 پیام به پشتیبانی", url: supportLink(userId) }]]);
 
 // ---------- ورودی اصلی ----------
 export async function handleUpdate(env: Env, update: any): Promise<unknown> {
@@ -140,8 +143,8 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const out = `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
       `• سهمیه‌ی امروز: ${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))}\n` +
       (c.bonus > 0 ? `• اعتبار اضافه: ${toFa(String(c.bonus))}\n` : "") +
-      `\n${RESET_NOTE}\n\n${PRICE_NOTE}`;
-    return await sendMessage(env, chatId, out, supportKb(userId));
+      `\n${RESET_NOTE}\n\n${BUY_NOTE}`;
+    return await sendMessage(env, chatId, out, buyKb(userId));
   }
   if (cmd === "/start" || cmd === "/help") {
     return await sendMessage(env, chatId, admin ? HELP + "\n\n🛠 شما مدیر هستید؛ دستورهای مدیریتی: /admin" : HELP);
@@ -165,7 +168,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const quota = await spendCredit(env, userId);
   if (!quota.ok) {
     return await sendMessage(env, chatId,
-      `⏳ اعتبار شما تمام شده است.\n\n${PRICE_NOTE}\n\n${RESET_NOTE}`, supportKb(userId));
+      `⏳ اعتبار شما تمام شده است.\n\n${BUY_NOTE}\n\n${RESET_NOTE}`, buyKb(userId));
   }
   await acquireLock(env, userId);
 
