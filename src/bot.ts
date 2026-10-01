@@ -15,9 +15,7 @@ const HELP =
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ کمی بعد فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت و تعداد پیش‌فرض اسلاید\n" +
-  "💳 /credit ← اعتبار باقی‌مانده و درخواست شارژ\n" +
-  "🆔 /id ← شناسه‌ی عددی شما\n" +
-  "ℹ️ متن اسلایدها را پیش از ارائه بررسی کن؛ مدل ممکن است اطلاعات نادرست بنویسد.";
+  "💳 /credit ← اعتبار باقی‌مانده و خرید شارژ";
 
 type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
@@ -101,9 +99,12 @@ function extractSlideCount(text: string): { topic: string; slides?: number } {
 
 // ---------- پیام‌های اعتبار ----------
 const RESET_NOTE = "<i>سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
-const CONTACT_NOTE = `برای افزایش اعتبار به ${SUPPORT_CONTACT} پیام بده؛ با دکمه‌ی زیر شناسه‌ات خودکار توی پیام می‌آید.`;
-const supportKb = (userId: number) => kb([[{ text: "💬 پیام به پشتیبانی برای شارژ", url: supportLink(userId) }]]);
-const idLine = (userId: number) => `🆔 شناسه‌ی شما: <code>${userId}</code>`;
+const PRICE_NOTE =
+  "💰 <b>تعرفه‌ی شارژ</b>\n" +
+  "• ۱۰ پاورپوینت ← ۵۰ هزار تومان\n" +
+  "• ۲۰ پاورپوینت ← ۸۰ هزار تومان\n" +
+  "برای خرید، دکمه‌ی زیر را بزن.";
+const supportKb = (userId: number) => kb([[{ text: "💬 خرید شارژ از پشتیبانی", url: supportLink(userId) }]]);
 
 // ---------- ورودی اصلی ----------
 export async function handleUpdate(env: Env, update: any): Promise<unknown> {
@@ -126,7 +127,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   }
   if (!isAllowed(env, userId)) {
     return await sendMessage(env, chatId,
-      `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nبرای دریافت دسترسی به ${SUPPORT_CONTACT} پیام بده؛ با دکمه‌ی زیر شناسه‌ات خودکار توی پیام می‌آید.\n\n${idLine(userId)}`,
+      `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nبرای دریافت دسترسی، دکمه‌ی زیر را بزن.`,
       supportKb(userId));
   }
   await touchUser(env, userId, msg.from.username).catch((e) => console.error("touchUser", e));
@@ -139,7 +140,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const out = `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
       `• سهمیه‌ی امروز: ${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))}\n` +
       (c.bonus > 0 ? `• اعتبار اضافه: ${toFa(String(c.bonus))}\n` : "") +
-      `\n${RESET_NOTE}\n\n${idLine(userId)}` + (c.total === 0 ? `\n${CONTACT_NOTE}` : "");
+      `\n${RESET_NOTE}\n\n${PRICE_NOTE}`;
     return await sendMessage(env, chatId, out, supportKb(userId));
   }
   if (cmd === "/start" || cmd === "/help") {
@@ -164,7 +165,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const quota = await spendCredit(env, userId);
   if (!quota.ok) {
     return await sendMessage(env, chatId,
-      `⏳ اعتبار شما تمام شده است.\n${CONTACT_NOTE}\n\n${idLine(userId)}\n\n${RESET_NOTE}`, supportKb(userId));
+      `⏳ اعتبار شما تمام شده است.\n\n${PRICE_NOTE}\n\n${RESET_NOTE}`, supportKb(userId));
   }
   await acquireLock(env, userId);
 
