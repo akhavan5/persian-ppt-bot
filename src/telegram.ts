@@ -59,3 +59,14 @@ export const BOT_COMMANDS = [
   { command: "settings", description: "تنظیمات (تم، لحن، فونت، تعداد اسلاید)" },
   { command: "credit", description: "اعتبار باقی‌مانده‌ی امروز" },
 ];
+
+/** منوی دستورهای مدیر (فقط برای چت خود مدیرها ثبت می‌شود) */
+export const ADMIN_COMMANDS = [
+  ...BOT_COMMANDS,
+  { command: "admin", description: "راهنمای دستورهای مدیر" },
+  { command: "stats", description: "آمار کاربران و ارائه‌ها" },
+  { command: "user", description: "وضعیت یک کاربر: /user شناسه" },
+  { command: "grant", description: "افزودن اعتبار: /grant شناسه تعداد" },
+  { command: "ban", description: "مسدود کردن: /ban شناسه" },
+  { command: "unban", description: "رفع انسداد: /unban شناسه" },
+];

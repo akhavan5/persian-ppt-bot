@@ -7,6 +7,7 @@ import { fetchImages } from "./images";
 import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument } from "./telegram";
 import { toFa } from "./util";
+import { bumpStat, refundCredit, releaseLock } from "./settings";
 
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
 
@@ -27,7 +28,7 @@ function safeFilename(title: string): string {
 
 export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
-    const { chatId, statusMessageId: mid, topic, settings } = event.payload;
+    const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
     const status = (t: string) => editMessage(this.env, chatId, mid, t).catch(() => {});
 
     try {
@@ -58,10 +59,23 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         });
     } catch (e) {
       console.error("deck workflow failed", e);
+      // هر کار در گام جدا تا اگر یکی تکرار شد، بقیه دوباره اجرا نشوند (مثلاً اعتبار دو بار برنگردد)
+      await step.do("refund", () => refundCredit(this.env, userId, credit ?? "none", day));
       await step.do("notify-failure", async () => {
-        await status("❌ ساخت ارائه با خطا مواجه شد. چند دقیقه بعد دوباره امتحان کن؛ اگر تکرار شد، تنظیمات سرویس هوش مصنوعی را بررسی کن.");
+        await status("❌ ساخت ارائه با خطا مواجه شد" + (credit && credit !== "none" ? "؛ اعتبارت برگردانده شد" : "") +
+          ". چند دقیقه بعد دوباره امتحان کن؛ اگر تکرار شد، تنظیمات سرویس هوش مصنوعی را بررسی کن.");
+      });
+      await step.do("fail-cleanup", async () => {
+        await releaseLock(this.env, userId);
+        await bumpStat(this.env, "fail").catch(() => {});
       });
       throw e;
     }
+
+    // خارج از try: خطا در این گام نباید باعث «برگشت اعتبار» بعد از ارسال موفق فایل شود
+    await step.do("finish", async () => {
+      await releaseLock(this.env, userId);
+      await bumpStat(this.env, "ok").catch(() => {});
+    });
   }
 }

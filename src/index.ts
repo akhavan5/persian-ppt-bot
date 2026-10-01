@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { handleUpdate } from "./bot";
-import { BOT_COMMANDS, tg } from "./telegram";
+import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
+import { adminIds } from "./settings";
 
 export { DeckWorkflow } from "./workflow";
 
@@ -45,6 +46,10 @@ export default {
         drop_pending_updates: true,
       });
       await tg(env, "setMyCommands", { commands: BOT_COMMANDS });
+      // منوی کامل‌تر فقط برای چت خود مدیرها
+      for (const id of adminIds(env)) {
+        await tg(env, "setMyCommands", { commands: ADMIN_COMMANDS, scope: { type: "chat", chat_id: Number(id) } }).catch((e) => console.error("admin commands", e));
+      }
       const info = await tg(env, "getWebhookInfo");
       return Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count });
     }

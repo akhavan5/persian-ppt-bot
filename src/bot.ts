@@ -1,7 +1,11 @@
 import type { Env } from "./env";
 import type { DeckParams, Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
-import { bumpDaily, clampSlides, getDaily, getSettings, isAllowed, saveSettings, SLIDE_CHOICES } from "./settings";
+import {
+  acquireLock, bumpStat, clampSlides, getCredit, getSettings, isAdmin, isAllowed, isBanned, isLocked,
+  refundCredit, releaseLock, saveSettings, SLIDE_CHOICES, SUPPORT_CONTACT, spendCredit, touchUser,
+} from "./settings";
+import { ADMIN_CMDS, handleAdmin } from "./admin";
 import { editMessage, esc, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 
@@ -54,7 +58,8 @@ async function handleCallback(env: Env, cq: any) {
   const userId: number = cq.from.id;
   const chatId: number = cq.message?.chat?.id;
   const mid: number = cq.message?.message_id;
-  if (!chatId || !mid || !isAllowed(env, userId)) return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+  const blocked = !chatId || !mid || !isAllowed(env, userId) || (!isAdmin(env, userId) && (await isBanned(env, userId)));
+  if (blocked) return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
 
   const [act, a, b] = String(cq.data ?? "").split(":");
   const s = await getSettings(env, userId);
@@ -93,6 +98,10 @@ function extractSlideCount(text: string): { topic: string; slides?: number } {
   return { topic, slides: clampSlides(Number(m[1])) };
 }
 
+// ---------- پیام‌های اعتبار ----------
+const RESET_NOTE = "<i>سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
+const CONTACT_NOTE = `برای افزایش اعتبار به ${SUPPORT_CONTACT} پیام بده.`;
+
 // ---------- ورودی اصلی ----------
 export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (update.callback_query) return handleCallback(env, update.callback_query);
@@ -105,18 +114,32 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const text: string = String(msg.text ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").trim();
 
   const cmd = text.startsWith("/") ? text.split(/[\s@]/)[0].toLowerCase() : "";
+  const args = text.split(/\s+/).slice(1);
   if (cmd === "/id") return await sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>`);
 
-  if (!isAllowed(env, userId)) {
-    return await sendMessage(env, chatId, `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nشناسه‌ی شما: <code>${userId}</code>`);
+  const admin = isAdmin(env, userId);
+  if (!admin && (await isBanned(env, userId))) {
+    return await sendMessage(env, chatId, "⛔️ دسترسی شما به این ربات مسدود شده است.");
   }
+  if (!isAllowed(env, userId)) {
+    return await sendMessage(env, chatId,
+      `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nبرای دریافت دسترسی به ${SUPPORT_CONTACT} پیام بده و این شناسه را بفرست:\n<code>${userId}</code>`);
+  }
+  await touchUser(env, userId, msg.from.username).catch((e) => console.error("touchUser", e));
+
+  if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args);
+
   if (cmd === "/credit" || cmd === "/balance") {
-    const d = await getDaily(env, userId);
-    const msg = d.limit === 0
-      ? "💳 اعتبار شما <b>نامحدود</b> است."
-      : `💳 اعتبار امروز: <b>${toFa(String(d.left))}</b> از ${toFa(String(d.limit))} ارائه باقی مانده است.\n` +
-        "<i>اعتبار هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
-    return await sendMessage(env, chatId, msg);
+    const c = await getCredit(env, userId);
+    let out: string;
+    if (c.unlimited) out = "💳 اعتبار شما <b>نامحدود</b> است.";
+    else {
+      out = `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
+        `• سهمیه‌ی امروز: ${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))}\n` +
+        (c.bonus > 0 ? `• اعتبار اضافه: ${toFa(String(c.bonus))}\n` : "") +
+        `\n${RESET_NOTE}` + (c.total === 0 ? `\n${CONTACT_NOTE}` : "");
+    }
+    return await sendMessage(env, chatId, out);
   }
   if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, HELP);
   if (cmd === "/settings") {
@@ -130,23 +153,41 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (topic.length < 3) return await sendMessage(env, chatId, "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
   if (topic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
 
-  const quota = await bumpDaily(env, userId);
-  if (!quota.ok) {
-    return await sendMessage(env, chatId, `⏳ سقف روزانه (${toFa(String(quota.limit))} ارائه) پر شده است. فردا دوباره امتحان کن.`);
+  // هر کاربر در هر لحظه فقط یک ارائه (قبل از کم کردن اعتبار چک می‌شود)
+  if (await isLocked(env, userId)) {
+    return await sendMessage(env, chatId, "⏳ ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، موضوع بعدی را بفرست.");
   }
+
+  const quota = await spendCredit(env, userId);
+  if (!quota.ok) {
+    return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n${CONTACT_NOTE}\n\n${RESET_NOTE}`);
+  }
+  await acquireLock(env, userId);
 
   const settings = await getSettings(env, userId);
   if (slides) settings.slides = slides;
 
-  const creditLine = quota.limit > 0 ? `\n💳 اعتبار باقی‌مانده‌ی امروز: ${toFa(String(Math.max(0, quota.limit - quota.used)))}` : "";
-  const status = await sendMessage(env, chatId,
-    `⏳ در حال آماده‌سازی ارائه‌ی «${esc(topic)}» (${toFa(String(settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`);
+  const undo = async () => { // اگر قبل از شروع Workflow چیزی خراب شد: اعتبار برگردد و قفل آزاد شود
+    await refundCredit(env, userId, quota.source, quota.day).catch((e) => console.error("refund", e));
+    await releaseLock(env, userId).catch((e) => console.error("unlock", e));
+  };
 
-  const params: DeckParams = { chatId, statusMessageId: status.message_id, userId, topic, settings };
   try {
-    await env.DECK_WORKFLOW.create({ id: `d-${update.update_id}`, params });
+    const creditLine = quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(quota.left))}`;
+    const status = await sendMessage(env, chatId,
+      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(topic)}» (${toFa(String(settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`);
+
+    const params: DeckParams = { chatId, statusMessageId: status.message_id, userId, topic, settings, credit: quota.source, day: quota.day };
+    try {
+      await env.DECK_WORKFLOW.create({ id: `d-${update.update_id}`, params });
+    } catch (e) {
+      console.error("workflow create failed", e);
+      await undo();
+      return await editMessage(env, chatId, status.message_id, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.");
+    }
+    await bumpStat(env, "started").catch(() => {});
   } catch (e) {
-    console.error("workflow create failed", e);
-    await editMessage(env, chatId, status.message_id, "❌ شروع ساخت ارائه ممکن نشد. چند دقیقه بعد دوباره امتحان کن.");
+    await undo(); // مثلاً ارسال پیام وضعیت شکست خورد
+    throw e;
   }
 }

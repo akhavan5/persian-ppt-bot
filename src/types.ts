@@ -33,4 +33,8 @@ export interface DeckParams {
   userId: number;
   topic: string;
   settings: Settings;
+  /** اعتبار از کجا کم شده؛ برای برگشت در صورت خطا */
+  credit: "daily" | "bonus" | "none";
+  /** روز (UTC) شمارنده‌ی روزانه‌ای که کم شده */
+  day: string;
 }
