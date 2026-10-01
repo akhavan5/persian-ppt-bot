@@ -7,8 +7,8 @@ import { fetchImages } from "./images";
 import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument, sendMessage } from "./telegram";
 import { toFa } from "./util";
-import { BUY_NOTE, adminIds, buyKb, bumpStat, getCredit, refundCredit, releaseLock } from "./settings";
-import { saveFile } from "./files";
+import { BUY_NOTE, adminIds, buyKb, bumpStat, getCredit, getUserSeen, refundCredit, releaseLock } from "./settings";
+import { logDeck, saveFile } from "./files";
 
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
 
@@ -61,6 +61,10 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
           await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
             .catch((err) => console.error("saveFile", err));
+          // ثبت در گزارش مدیر (/decks)؛ خطا نباید گام را شکست بدهد
+          const seen = await getUserSeen(this.env, userId).catch(() => null);
+          await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now() })
+            .catch((err) => console.error("logDeck", err));
           const done = "✅ آماده شد! فایل بالا را ببین. برای ساخت ارائه‌ی بعدی، موضوع جدید را بفرست.";
           // اعتبار کم: بهترین لحظه برای نمایش دکمه‌های خرید
           const c = await getCredit(this.env, userId).catch(() => null);

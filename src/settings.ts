@@ -138,15 +138,46 @@ export async function bumpStat(env: Env, name: StatName) {
   await env.KV.put(k, String(n + 1), { expirationTtl: 60 * 60 * 24 * 60 });
 }
 
-/** اولین دفعه‌ای که کاربر مجاز پیام می‌دهد ثبت می‌شود (برای آمار و /user). فقط زمان و نام کاربری. */
-export async function touchUser(env: Env, userId: number, username?: string): Promise<boolean> {
+export interface SeenUser { t: string; u: string | null; n?: string }
+
+/** نام نمایشی کاربر تلگرام (نام + نام خانوادگی) */
+export const displayName = (from: any): string =>
+  [from?.first_name, from?.last_name].filter(Boolean).join(" ").trim().slice(0, 64);
+
+/** اولین دفعه‌ای که کاربر مجاز پیام می‌دهد ثبت می‌شود (برای آمار و /user). زمان، نام کاربری و نام نمایشی.
+ *  اگر نام یا نام کاربری بعداً عوض شود (یا برای کاربران قدیمی که نامشان ثبت نشده)، به‌روز می‌شود. */
+export async function touchUser(env: Env, userId: number, username?: string, name?: string): Promise<boolean> {
   const k = `seen:${userId}`;
-  if ((await env.KV.get(k)) === null) {
-    await env.KV.put(k, JSON.stringify({ t: new Date().toISOString(), u: username ?? null }));
+  const cur = (await env.KV.get(k, "json")) as SeenUser | null;
+  if (cur === null) {
+    await env.KV.put(k, JSON.stringify({ t: new Date().toISOString(), u: username ?? null, n: name ?? "" }));
     await bumpStat(env, "newusers").catch(() => {});
     return true; // کاربر جدید
   }
+  if ((username ?? null) !== (cur.u ?? null) || (name && name !== cur.n)) {
+    await env.KV.put(k, JSON.stringify({ ...cur, u: username ?? null, n: name || cur.n || "" }));
+  }
   return false;
+}
+
+// ---------- ۱۰ کاربر اخیر (بر اساس آخرین پیام) ----------
+export interface RecentUser { id: number; n: string; u: string | null; t: number }
+const RECENT_KEY = "recent:users";
+const RECENT_MAX = 10;
+
+export async function getRecentUsers(env: Env): Promise<RecentUser[]> {
+  const raw = (await env.KV.get(RECENT_KEY, "json")) as RecentUser[] | null;
+  return Array.isArray(raw) ? raw.filter((x) => x && Number.isSafeInteger(x.id)) : [];
+}
+
+/** کاربر را به ابتدای فهرست «اخیر» می‌آورد. اگر همین کاربر کمتر از ۱ دقیقه پیش بالای فهرست بوده، نوشتن تکراری انجام نمی‌شود. */
+export async function noteActive(env: Env, userId: number, username?: string, name?: string) {
+  const list = await getRecentUsers(env);
+  const top = list[0];
+  const u = username ?? null, n = name ?? "";
+  if (top && top.id === userId && top.u === u && top.n === n && Date.now() - top.t < 60_000) return;
+  const next = [{ id: userId, n, u, t: Date.now() }, ...list.filter((x) => x.id !== userId)].slice(0, RECENT_MAX);
+  await env.KV.put(RECENT_KEY, JSON.stringify(next));
 }
 
 // ---------- دعوت دوستان ----------
@@ -167,7 +198,7 @@ export async function rewardReferral(env: Env, inviterId: number, newUserId: num
   await setBonus(env, inviterId, (await getBonus(env, inviterId)) + 1);
   return true;
 }
-export async function getUserSeen(env: Env, userId: number): Promise<{ t: string; u: string | null } | null> {
+export async function getUserSeen(env: Env, userId: number): Promise<SeenUser | null> {
   return (await env.KV.get(`seen:${userId}`, "json")) as any;
 }
 

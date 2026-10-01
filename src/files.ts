@@ -33,3 +33,19 @@ export async function loadFile(env: Env, userId: number, id: string): Promise<{ 
   const data = await env.KV.get(fileKey(userId, id), "arrayBuffer");
   return data ? { entry, data } : null;
 }
+
+// ---------- گزارش ۱۰ ارائه‌ی اخیر (برای مدیر) ----------
+export interface DeckLog { id: string; userId: number; n: string; u: string | null; title: string; slides: number; t: number }
+const LOG_KEY = "recent:decks";
+const LOG_MAX = 10;
+
+export async function getDeckLog(env: Env): Promise<DeckLog[]> {
+  const raw = (await env.KV.get(LOG_KEY, "json")) as DeckLog[] | null;
+  return Array.isArray(raw) ? raw.filter((x) => x && Number.isSafeInteger(x.userId)) : [];
+}
+
+/** id همان شناسه‌ی نمونه‌ی Workflow است؛ اگر گام تکرار شد، رکورد دوباره اضافه نمی‌شود. */
+export async function logDeck(env: Env, e: DeckLog) {
+  const rest = (await getDeckLog(env)).filter((x) => x.id !== e.id);
+  await env.KV.put(LOG_KEY, JSON.stringify([e, ...rest].slice(0, LOG_MAX)));
+}

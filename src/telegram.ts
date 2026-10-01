@@ -69,6 +69,8 @@ export const ADMIN_COMMANDS = [
   { command: "admin", description: "راهنمای دستورهای مدیر" },
   { command: "stats", description: "آمار کاربران و ارائه‌ها" },
   { command: "broadcast", description: "پیام همگانی: /broadcast متن" },
+  { command: "users", description: "۱۰ کاربر اخیر (با لینک پروفایل)" },
+  { command: "decks", description: "۱۰ ارائه‌ی اخیر ساخته‌شده" },
   { command: "user", description: "وضعیت یک کاربر: /user شناسه" },
   { command: "grant", description: "افزودن اعتبار: /grant شناسه تعداد" },
   { command: "ban", description: "مسدود کردن: /ban شناسه" },

@@ -4,9 +4,9 @@ import { FONTS, THEMES, TONES } from "./themes";
 import {
   acquireLock, bumpStat, clampSlides, getCredit, getSettings, isAdmin, isAllowed, isBanned, isLocked,
   refundCredit, releaseLock, saveSettings, SLIDE_CHOICES, SUPPORT_CONTACT, supportLink, spendCredit, touchUser,
-  BUY_NOTE, buyKb, REF_MAX, rewardReferral,
+  BUY_NOTE, buyKb, REF_MAX, rewardReferral, displayName, noteActive,
 } from "./settings";
-import { ADMIN_CMDS, handleAdmin, handleBroadcastCallback } from "./admin";
+import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleBroadcastCallback } from "./admin";
 import { listFiles, loadFile } from "./files";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
@@ -69,6 +69,7 @@ async function handleCallback(env: Env, cq: any) {
 
   const [act, a, b] = String(cq.data ?? "").split(":");
   if (act === "bc") return await handleBroadcastCallback(env, cq);
+  if (act === "af") return await handleAdminFileCallback(env, cq);
   if (act === "f") {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
     const f = await loadFile(env, userId, a);
@@ -142,7 +143,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
       `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nبرای دریافت دسترسی، دکمه‌ی زیر را بزن.`,
       supportKb(userId));
   }
-  const isNew = await touchUser(env, userId, msg.from.username).catch((e) => { console.error("touchUser", e); return false; });
+  const name = displayName(msg.from);
+  const isNew = await touchUser(env, userId, msg.from.username, name).catch((e) => { console.error("touchUser", e); return false; });
+  if (!admin) await noteActive(env, userId, msg.from.username, name).catch((e) => console.error("noteActive", e)); // فهرست «کاربران اخیر» مدیر؛ خود مدیرها در آن نمی‌آیند
 
   if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args, text);
 

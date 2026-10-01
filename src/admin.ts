@@ -1,9 +1,21 @@
 import type { Env } from "./env";
-import { editMessage, esc, sendMessage, tg } from "./telegram";
-import { getBonus, getCredit, getStats, getUserSeen, isAdmin, isBanned, setBanned, setBonus } from "./settings";
+import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
+import { getBonus, getCredit, getRecentUsers, getStats, getUserSeen, isAdmin, isBanned, setBanned, setBonus } from "./settings";
+import { getDeckLog, loadFile } from "./files";
 import { toEn, toFa } from "./util";
 
-export const ADMIN_CMDS = new Set(["/admin", "/stats", "/broadcast", "/grant", "/user", "/ban", "/unban"]);
+export const ADMIN_CMDS = new Set(["/admin", "/stats", "/broadcast", "/grant", "/user", "/users", "/decks", "/ban", "/unban"]);
+
+/** لینک پروفایل: با نام کاربری → t.me/نام_کاربری، وگرنه لینک tg://user (برای کاربرانی که با ربات گفتگو داشته‌اند کار می‌کند) */
+const userLink = (id: number, name?: string | null, username?: string | null) => {
+  const uname = username && /^[A-Za-z0-9_]{3,64}$/.test(username) ? username : null;
+  const label = esc(name || (uname ? "@" + uname : String(id)));
+  return `<a href="${uname ? `https://t.me/${uname}` : `tg://user?id=${id}`}">${label}</a>`;
+};
+
+/** زمان به وقت ایران، مثلاً ۲۰۲۶-۱۰-۰۲ ۱۵:۳۰ */
+const fmtTime = (t: number | string) =>
+  toFa(new Date(t).toLocaleString("sv-SE", { timeZone: "Asia/Tehran" }).slice(0, 16));
 
 const parseId = (s?: string) => {
   const v = toEn(s ?? "").trim();
@@ -14,6 +26,8 @@ const ADMIN_HELP =
   "🛠 <b>دستورهای مدیر</b>\n\n" +
   "/stats ← آمار امروز و ۷ روز اخیر\n" +
   "/broadcast <code>متن</code> ← پیام همگانی به همه‌ی کاربران (با تایید)\n" +
+  "/users ← ۱۰ کاربر اخیر (نام + لینک پروفایل)\n" +
+  "/decks ← ۱۰ ارائه‌ی اخیر ساخته‌شده (با دکمه‌ی دریافت فایل)\n" +
   "/user <code>شناسه</code> ← وضعیت و اعتبار یک کاربر\n" +
   "/grant <code>شناسه تعداد</code> ← افزودن اعتبار (عدد منفی = کم کردن)\n" +
   "/ban <code>شناسه</code> ← مسدود کردن کاربر\n" +
@@ -44,6 +58,33 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
       `❌ ناموفق: ${fa(s.week.fail)}` +
       (rate === null ? "" : `\n📈 نرخ موفقیت: ${fa(rate)}٪`) +
       "\n\n<i>«کاربر جدید» از زمان فعال شدن این قابلیت شمرده می‌شود.</i>");
+  }
+
+  if (cmd === "/users") {
+    const list = await getRecentUsers(env);
+    if (!list.length) return reply("هنوز کاربری ثبت نشده است؛ از این به بعد با پیام هر کاربر در این فهرست ثبت می‌شود.");
+    const lines = list.map((x, i) =>
+      `${toFa(String(i + 1))}. ${userLink(x.id, x.n, x.u)}${x.u ? ` (@${esc(x.u)})` : ""}\n` +
+      `    🆔 <code>${x.id}</code> · 🕒 ${fmtTime(x.t)}`);
+    return reply(`👥 <b>${toFa(String(list.length))} کاربر اخیر</b> (بر اساس آخرین پیام، به وقت ایران)\n\n${lines.join("\n")}\n\n<i>برای دیدن اعتبار و وضعیت: /user شناسه</i>`);
+  }
+
+  if (cmd === "/decks") {
+    const list = await getDeckLog(env);
+    if (!list.length) return reply("هنوز ارائه‌ای ثبت نشده است؛ از این به بعد هر ارائه‌ی ساخته‌شده در این فهرست ثبت می‌شود.");
+    const lines = list.map((x, i) =>
+      `${toFa(String(i + 1))}. <b>${esc(x.title.slice(0, 60))}</b> (${toFa(String(x.slides))} اسلاید)\n` +
+      `    👤 ${userLink(x.userId, x.n, x.u)} · <code>${x.userId}</code> · 🕒 ${fmtTime(x.t)}`);
+    // فایل‌ها فقط ۲۴ ساعت (و ۳ فایل آخر هر کاربر) نگه داشته می‌شوند؛ برای قدیمی‌تر دکمه نمی‌گذاریم
+    const fresh = Date.now() - 24 * 3600 * 1000;
+    const buttons = list
+      .map((x, i) => ({ x, i }))
+      .filter(({ x }) => x.t > fresh)
+      .map(({ x, i }) => [{ text: `📥 ${toFa(String(i + 1))}. ${x.title.slice(0, 30)}`, callback_data: `af:${x.userId}:${x.id}` }]);
+    return await sendMessage(env, chatId,
+      `🗂 <b>${toFa(String(list.length))} ارائه‌ی اخیر</b> (به وقت ایران)\n\n${lines.join("\n")}` +
+      (buttons.length ? "\n\n<i>دکمه‌ها فقط برای فایل‌های ۲۴ ساعت اخیر هستند.</i>" : ""),
+      buttons.length ? { reply_markup: { inline_keyboard: buttons } } : {});
   }
 
   if (cmd === "/broadcast") {
@@ -94,7 +135,9 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
       : `${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))} (امروز) + ${toFa(String(c.bonus))} اضافه`;
     return reply(
       `👤 <b>کاربر</b> <code>${id}</code>\n` +
-      `نام کاربری: ${seen?.u ? "@" + seen.u : "—"}\n` +
+      `نام: ${seen?.n ? esc(seen.n) : "—"}\n` +
+      `نام کاربری: ${seen?.u ? "@" + esc(seen.u) : "—"}\n` +
+      `پروفایل: ${userLink(id, seen?.n || "باز کردن پروفایل", seen?.u)}\n` +
       `اولین پیام: ${seen ? seen.t.slice(0, 16).replace("T", " ") + " UTC" : "هرگز"}\n` +
       `اعتبار: ${credit}\n` +
       `وضعیت: ${banned ? "⛔️ مسدود" : "فعال"}`);
@@ -123,4 +166,16 @@ export async function handleBroadcastCallback(env: Env, cq: any) {
     return await editMessage(env, chatId, mid, "❌ شروع ارسال ممکن نشد. دوباره امتحان کن.");
   }
   await editMessage(env, chatId, mid, "⏳ ارسال همگانی شروع شد. وقتی تمام شد، گزارش را همین‌جا می‌فرستم.");
+}
+
+/** دکمه‌ی «📥» در /decks: فایل ارائه‌ی هر کاربر را (اگر هنوز نگه داشته شده باشد) برای مدیر می‌فرستد */
+export async function handleAdminFileCallback(env: Env, cq: any) {
+  await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+  if (!isAdmin(env, cq.from.id)) return;
+  const chatId: number = cq.message.chat.id;
+  const [, uid, fid] = String(cq.data ?? "").split(":");
+  const userId = Number(uid);
+  const f = Number.isSafeInteger(userId) && fid ? await loadFile(env, userId, fid) : null;
+  if (!f) return await sendMessage(env, chatId, "⌛️ این فایل دیگر در دسترس نیست (فایل‌ها ۲۴ ساعت و حداکثر ۳ فایل آخر هر کاربر نگه داشته می‌شوند).");
+  await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`);
 }
