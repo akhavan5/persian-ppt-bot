@@ -100,10 +100,12 @@ export async function handleUpdate(env: Env, update: any): Promise<void> {
   if (!msg || msg.chat?.type !== "private" || !msg.from) return; // فقط گفتگوی خصوصی
   const chatId: number = msg.chat.id;
   const userId: number = msg.from.id;
-  const text: string = (msg.text ?? "").trim();
+  // نویسه‌های نامرئی جهت‌نما (RLM/LRM و …) که کیبوردهای فارسی گاهی قبل از «/» می‌گذارند حذف می‌شوند؛ ZWNJ (نیم‌فاصله) دست‌نخورده می‌ماند
+  const text: string = String(msg.text ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").trim();
 
   const cmd = text.startsWith("/") ? text.split(/[\s@]/)[0].toLowerCase() : "";
-  if (cmd === "/id") return void sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>`);
+  console.log("incoming", JSON.stringify({ text: text.slice(0, 40), cmd, userId }));
+  if (cmd === "/id") return void sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>\n<i>نسخه: v3-debug</i>`);
 
   if (!isAllowed(env, userId)) {
     return void sendMessage(env, chatId, `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nشناسه‌ی شما: <code>${userId}</code>`);

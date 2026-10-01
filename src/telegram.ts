@@ -12,12 +12,24 @@ export async function tg<T = any>(env: Env, method: string, body: Record<string,
     signal: AbortSignal.timeout(30_000),
   });
   const j = (await r.json()) as any;
-  if (!j.ok) throw new Error(`Telegram ${method}: ${j.description ?? r.status}`);
+  if (!j.ok) {
+    console.error("telegram api error", method, JSON.stringify(j));
+    throw new Error(`Telegram ${method}: ${j.description ?? r.status}`);
+  }
+  console.log("telegram ok", method);
   return j.result as T;
 }
 
-export const sendMessage = (env: Env, chatId: number, text: string, extra: Record<string, unknown> = {}) =>
-  tg<{ message_id: number }>(env, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, ...extra });
+export async function sendMessage(env: Env, chatId: number, text: string, extra: Record<string, unknown> = {}) {
+  try {
+    return await tg<{ message_id: number }>(env, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, ...extra });
+  } catch (e) {
+    // اگر تلگرام HTML پیام را نپذیرفت، همان متن را بدون قالب‌بندی بفرست تا پیام گم نشود
+    if (!String(e).includes("parse entities")) throw e;
+    const plain = text.replace(/<[^>]+>/g, "");
+    return await tg<{ message_id: number }>(env, "sendMessage", { chat_id: chatId, text: plain, link_preview_options: { is_disabled: true }, ...extra });
+  }
+}
 
 /** ویرایش پیام؛ خطای «message is not modified» نادیده گرفته می‌شود. */
 export async function editMessage(env: Env, chatId: number, messageId: number, text: string, extra: Record<string, unknown> = {}) {
