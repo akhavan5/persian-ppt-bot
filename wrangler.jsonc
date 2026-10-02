@@ -10,11 +10,19 @@
   // متغیرها/رمزهایی که در داشبورد تنظیم می‌کنید با هر دیپلوی پاک نشوند
   "keep_vars": true,
 
+  // نسخه‌ی وب: فایل‌های پوشه‌ی public مستقیم از لبه‌ی کلودفلر سرو می‌شوند (بدون اجرای Worker و بدون هزینه‌ی درخواست).
+  // درخواست‌هایی که فایل ندارند (/api/*، /telegram، /setup) خودکار به Worker می‌رسند.
+  "assets": { "directory": "./public" },
+
   // بدون id: Wrangler هنگام اولین دیپلوی، خودش KV را می‌سازد و وصل می‌کند
   "kv_namespaces": [{ "binding": "KV","id": "72ced82828e44f8984116448ff111735" }],
 
   "workflows": [
     { "name": "persian-ppt-deck", "binding": "DECK_WORKFLOW", "class_name": "DeckWorkflow" },
     { "name": "persian-ppt-broadcast", "binding": "BROADCAST_WORKFLOW", "class_name": "BroadcastWorkflow" }
-  ]
+  ],
+
+  // ورود با تلگرام و وضعیت لحظه‌ای ساخت در وب (SQLite-backed؛ روی پلن رایگان هم کار می‌کند)
+  "durable_objects": { "bindings": [{ "name": "WEB_STATE", "class_name": "WebState" }] },
+  "exports": { "WebState": { "type": "durable-object", "storage": "sqlite" } }
 }
