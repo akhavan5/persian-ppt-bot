@@ -59,6 +59,22 @@ export default {
       return Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count });
     }
 
+    // سئو: robots و sitemap با دامنه‌ی واقعی سایت ساخته می‌شوند
+    if (url.pathname === "/robots.txt") {
+      return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /setup\nDisallow: /telegram\n\nSitemap: ${url.origin}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
+    }
+    if (url.pathname === "/sitemap.xml") {
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${url.origin}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+    }
+    // صفحه‌ی اصلی: نشانه‌ی __ORIGIN__ (canonical، og:url، داده‌ی ساختاریافته) با دامنه‌ی واقعی جایگزین می‌شود
+    if (url.pathname === "/" && req.method === "GET") {
+      const res = await env.ASSETS.fetch(req);
+      if (!res.ok) return res;
+      const h = new Headers(res.headers);
+      h.delete("content-length"); h.set("cache-control", "public, max-age=300");
+      return new Response((await res.text()).replaceAll("__ORIGIN__", url.origin), { status: 200, headers: h });
+    }
+
     // هر چیز دیگر: صفحه‌ی وب و فایل‌های استاتیک (پوشه‌ی public)
     return env.ASSETS.fetch(req);
   },

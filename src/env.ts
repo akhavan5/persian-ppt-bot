@@ -33,4 +33,6 @@ export interface Env {
   /** ورود با گوگل (اختیاری): بدون این دو مقدار، دکمه‌ی گوگل نمایش داده نمی‌شود */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /** درگاه زرین‌پال (فقط نسخه‌ی وب): مرچنت‌کد ۳۶ حرفی؛ بدون آن، خرید به تلگرام پشتیبان هدایت می‌شود */
+  ZARINPAL_MERCHANT_ID?: string;
 }

@@ -6,6 +6,7 @@ import {
   SUPPORT_CONTACT, SLIDE_CHOICES, acquireLock, buyLink, bumpStat, clampSlides, getCredit, getSettings,
   isAllowed, isBanned, isLocked, refundCredit, releaseLock, saveSettings, spendCredit,
 } from "./settings";
+import { PLANS, payEnabled, paymentCallback, startPayment } from "./payment";
 import { listFiles, loadFileDirect } from "./files";
 import {
   authUser, clearSessionCookie, createSession, createUser, destroySession, getUserByEmail, googleCallback,
@@ -21,8 +22,6 @@ const SEC_HEADERS = {
 const json = (data: unknown, status = 200, extra: HeadersInit = {}) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", ...SEC_HEADERS, ...extra } });
 const err = (message: string, status = 400) => json({ error: message }, status);
-
-const PLANS = [{ count: 10, price: 50 }, { count: 20, price: 80 }];
 
 async function readBody(req: Request): Promise<Record<string, unknown> | null> {
   if (Number(req.headers.get("content-length") ?? 0) > 20_000) return null;
@@ -48,12 +47,16 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/auth/google" && method === "GET") return googleStart(env, url);
   if (path === "/api/auth/google/callback" && method === "GET") return googleCallback(env, req, url);
 
+  // بازگشت از درگاه زرین‌پال (GET از مرورگر کاربر)
+  if (path === "/api/pay/callback" && method === "GET") return paymentCallback(env, url);
+
   // حفاظت CSRF: درخواست‌های تغییردهنده فقط از همین سایت
   if (method !== "GET" && method !== "HEAD" && req.headers.get("origin") !== url.origin) return err("درخواست نامعتبر", 403);
 
   if (path === "/api/config" && method === "GET") {
     return json({
       google: googleEnabled(env),
+      payEnabled: payEnabled(env),
       themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent })),
       tones: TONES,
       fonts: FONTS,
@@ -74,6 +77,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
   if (path === "/api/generate" && method === "POST") return generate(req, env, user);
+  if (path === "/api/pay/start" && method === "POST") return startPayment(env, url, user, await readBody(req));
 
   if (path.startsWith("/api/jobs/") && method === "GET") return jobStatus(env, user, path.slice("/api/jobs/".length));
 
@@ -136,7 +140,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
       : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: c.limit, bonus: c.bonus },
     settings,
     activeJob,
-    plans: PLANS.map((p) => ({ ...p, url: buyLink(user.id, p.count, p.price) })),
+    plans: PLANS.map((p) => ({ ...p, url: buyLink(user.id, p.count, p.price) })), // url: لینک تلگرام (جایگزین وقتی زرین‌پال فعال نیست)
     support: SUPPORT_CONTACT,
   });
 }
