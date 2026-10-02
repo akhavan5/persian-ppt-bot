@@ -10,7 +10,9 @@ export const PLANS = [
 ];
 
 const ZP = "https://payment.zarinpal.com/pg/v4/payment";
-export const payEnabled = (env: Env) => /^[0-9a-fA-F-]{36}$/.test(env.ZARINPAL_MERCHANT_ID ?? "");
+/** مرچنت‌کد بدون فاصله/خط جدید/کوتیشن اضافه (هنگام کپی در داشبورد زیاد پیش می‌آید) */
+export const merchantId = (env: Env) => (env.ZARINPAL_MERCHANT_ID ?? "").replace(/["'\s]/g, "");
+export const payEnabled = (env: Env) => merchantId(env).length >= 20;
 
 interface PayRecord { uid: string; count: number; amount: number; state: "pending" | "paid" | "failed"; t: number; ref?: number }
 const TTL = 60 * 60 * 24 * 14;
@@ -22,7 +24,7 @@ async function zp(env: Env, endpoint: string, body: Record<string, unknown>): Pr
   const r = await fetch(`${ZP}/${endpoint}.json`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ merchant_id: env.ZARINPAL_MERCHANT_ID, ...body }),
+    body: JSON.stringify({ merchant_id: merchantId(env), ...body }),
     signal: AbortSignal.timeout(15_000),
   });
   return r.json().catch(() => null);
