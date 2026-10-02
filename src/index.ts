@@ -2,9 +2,11 @@ import type { Env } from "./env";
 import { handleUpdate } from "./bot";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { adminIds } from "./settings";
+import { WebState, handleWeb, handleWebLogin, isWebLoginUpdate } from "./web";
 
 export { DeckWorkflow } from "./workflow";
 export { BroadcastWorkflow } from "./broadcast";
+export { WebState };
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -24,6 +26,11 @@ export default {
         return new Response("forbidden", { status: 403 });
       }
       const update = await req.json();
+      // ورود به نسخه‌ی وب (/start wl_… و دکمه‌های تأیید/لغو) جدا از منطق اصلی ربات اداره می‌شود
+      if (isWebLoginUpdate(update)) {
+        ctx.waitUntil(handleWebLogin(env, update).catch((e) => console.error("webLogin", e)));
+        return new Response("ok");
+      }
       // فوراً ۲۰۰ برمی‌گردانیم تا تلگرام درخواست را تکرار نکند؛ کار اصلی در Workflow انجام می‌شود
       ctx.waitUntil(handleUpdate(env, update).catch(async (e) => {
         console.error("handleUpdate", e);
@@ -54,6 +61,9 @@ export default {
       const info = await tg(env, "getWebhookInfo");
       return Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count });
     }
+
+    // API نسخه‌ی وب؛ خود صفحه‌ها (/, /app.js, ...) را Static Assets بدون صدا زدن Worker سرو می‌کند
+    if (url.pathname.startsWith("/api/")) return await handleWeb(req, env, url);
 
     if (url.pathname === "/") return new Response("persian-ppt-bot is running");
     return new Response("not found", { status: 404 });

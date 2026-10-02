@@ -1,10 +1,13 @@
 import type { DeckParams } from "./types";
 import type { BroadcastParams } from "./broadcast";
+import type { WebState } from "./web";
 
 export interface Env {
   KV: KVNamespace;
   DECK_WORKFLOW: Workflow<DeckParams>;
   BROADCAST_WORKFLOW: Workflow<BroadcastParams>;
+  /** Durable Object کوچک برای ورود با تلگرام و وضعیت لحظه‌ای ساخت در نسخه‌ی وب */
+  WEB_STATE: DurableObjectNamespace<WebState>;
 
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;

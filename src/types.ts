@@ -48,4 +48,6 @@ export interface DeckParams {
   credit: "daily" | "bonus" | "none";
   /** روز (UTC) شمارنده‌ی روزانه‌ای که کم شده */
   day: string;
+  /** true = درخواست از نسخه‌ی وب (فایل به‌جای تلگرام در مرورگر تحویل داده می‌شود) */
+  web?: boolean;
 }

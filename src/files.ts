@@ -5,9 +5,9 @@ export interface FileEntry { id: string; name: string; title: string; slides: nu
 
 const TTL = 24 * 60 * 60; // ثانیه
 const KEEP = 3; // آخرین چند فایل هر کاربر
-const MAX_BYTES = 24 * 1024 * 1024; // سقف مقدار در KV ۲۵ مگابایت است
+export const MAX_BYTES = 24 * 1024 * 1024; // سقف مقدار در KV ۲۵ مگابایت است
 
-const fileKey = (userId: number, id: string) => `file:${userId}:${id}`;
+export const fileKey = (userId: number, id: string) => `file:${userId}:${id}`;
 const listKey = (userId: number) => `fl:${userId}`;
 
 export async function listFiles(env: Env, userId: number): Promise<FileEntry[]> {
