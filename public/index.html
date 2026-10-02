@@ -32,7 +32,7 @@
 <link rel="preload" href="https://fonts.gstatic.com/s/vazirmatn/v16/Dxxo8j6PP2D_kU2muijlGMWWMmk.woff2" as="font" type="font/woff2" crossorigin>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
-{"@type":"Organization","@id":"__ORIGIN__/#org","name":"پاورپوینت‌ساز فارسی","alternateName":"pptsaz","url":"__ORIGIN__/","logo":"__ORIGIN__/icon-512.png","telephone":"+98-939-370-4036","contactPoint":{"@type":"ContactPoint","telephone":"+98-939-370-4036","contactType":"customer support","areaServed":"IR","availableLanguage":"fa"},"sameAs":["https://t.me/akhavan8"]},
+{"@type":"Organization","@id":"__ORIGIN__/#org","name":"پاورپوینت‌ساز فارسی","alternateName":"pptsaz","url":"__ORIGIN__/","logo":"__ORIGIN__/icon-512.png","email":"info@pptsaz.ir","telephone":"+98-939-370-4036","contactPoint":{"@type":"ContactPoint","telephone":"+98-939-370-4036","email":"info@pptsaz.ir","contactType":"customer support","areaServed":"IR","availableLanguage":"fa"}},
 {"@type":"WebSite","name":"پاورپوینت‌ساز فارسی","url":"__ORIGIN__/","inLanguage":"fa-IR","publisher":{"@id":"__ORIGIN__/#org"}},
 {"@type":"WebApplication","name":"پاورپوینت‌ساز فارسی","url":"__ORIGIN__/","image":"__ORIGIN__/og-image.png","provider":{"@id":"__ORIGIN__/#org"},"applicationCategory":"BusinessApplication","operatingSystem":"Web","inLanguage":"fa-IR","description":"ساخت پاورپوینت فارسی و قابل‌ویرایش با هوش مصنوعی","offers":[{"@type":"Offer","price":"0","priceCurrency":"IRR","description":"سهمیه‌ی رایگان روزانه"},{"@type":"Offer","price":"500000","priceCurrency":"IRR","description":"بسته‌ی ۱۰ پاورپوینت"},{"@type":"Offer","price":"800000","priceCurrency":"IRR","description":"بسته‌ی ۲۰ پاورپوینت"}]},
 {"@type":"FAQPage","mainEntity":[
@@ -143,6 +143,13 @@ section.block{padding:38px 0}
 .price ul{list-style:none;padding:0;margin:12px 0 16px;color:var(--muted);font-size:.92rem}.price li::before{content:"✓ ";color:var(--ok);font-weight:800}
 .faq details{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:10px}
 .faq details p{margin:10px 0 0;color:var(--muted)}
+.ft{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:28px}
+@media(max-width:760px){.ft{grid-template-columns:1fr;gap:18px}}
+.ft h4{margin:0 0 10px;font-size:.98rem;color:var(--text)}
+.ft ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.ft a{color:var(--muted);text-decoration:none} .ft a:hover{color:var(--primary)}
+.ft p{margin:8px 0 0;max-width:34ch}
+.copy{border-top:1px solid var(--line);margin-top:22px;padding-top:16px;font-size:.85rem;text-align:center}
 .who{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:700px){.who{grid-template-columns:1fr}}
 .who .card{margin:0;height:100%} .who p{margin:0;color:var(--muted);font-size:.96rem}
@@ -152,10 +159,7 @@ section.block{padding:38px 0}
 .contact .card{margin:0;text-align:center}
 .contact a.big{display:block;font-size:1.35rem;font-weight:800;text-decoration:none;margin:4px 0 12px;direction:ltr;unicode-bidi:isolate}
 address{font-style:normal}
-footer .links2{display:flex;gap:16px;flex-wrap:wrap}
-footer a{text-decoration:none}
-footer{border-top:1px solid var(--line);background:#fff;padding:26px 0;margin-top:30px;color:var(--muted);font-size:.9rem}
-footer .in{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+footer{border-top:1px solid var(--line);background:#fff;padding:34px 0 22px;margin-top:30px;color:var(--muted);font-size:.92rem}
 </style>
 </head>
 <body>
@@ -293,15 +297,33 @@ footer .in{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
   </section>
 
   <section class="block" id="contact" aria-labelledby="ch">
-    <div class="sec-head"><h2 id="ch">تماس با ما</h2><p class="muted">برای پرسش، مشکل در پرداخت یا شارژ حساب، با ما در ارتباط باش.</p></div>
+    <div class="sec-head"><h2 id="ch">تماس با ما</h2><p class="muted">برای پرسش، مشکل در پرداخت یا شارژ حساب، تماس بگیر یا ایمیل بزن.</p></div>
     <address class="contact">
       <div class="card"><div class="ico" style="margin-inline:auto">📞</div><h3>تماس تلفنی</h3><a class="big" href="tel:+989393704036">0939 370 4036</a><a class="btn ghost sm" href="tel:+989393704036">تماس بگیر</a></div>
-      <div class="card"><div class="ico" style="margin-inline:auto">✈️</div><h3>پیام در تلگرام</h3><a class="big" href="https://t.me/akhavan8" target="_blank" rel="noopener">@akhavan8</a><a class="btn ghost sm" href="https://t.me/akhavan8" target="_blank" rel="noopener">ارسال پیام</a></div>
+      <div class="card"><div class="ico" style="margin-inline:auto">✉️</div><h3>ایمیل</h3><a class="big" href="mailto:info@pptsaz.ir">info@pptsaz.ir</a><a class="btn ghost sm" href="mailto:info@pptsaz.ir">ارسال ایمیل</a></div>
     </address>
   </section>
 </main>
 
-<footer><div class="wrap in"><span>© پاورپوینت‌ساز فارسی (pptsaz.ir) — ساخت پاورپوینت با هوش مصنوعی</span><div class="links2"><a href="#about">درباره‌ی ما</a><a href="#contact">تماس با ما</a><a href="tel:+989393704036" dir="ltr">0939 370 4036</a><a href="https://t.me/akhavan8" rel="noopener" target="_blank">تلگرام</a></div></div></footer>
+<footer>
+  <div class="wrap">
+    <div class="ft">
+      <div>
+        <a class="brand" href="/"><i>📊</i><span>پاورپوینت‌ساز فارسی</span></a>
+        <p>ساخت پاورپوینت فارسی، راست‌به‌چپ و قابل‌ویرایش با هوش مصنوعی.</p>
+      </div>
+      <nav aria-label="دسترسی سریع">
+        <h4>دسترسی سریع</h4>
+        <ul><li><a href="#features">ویژگی‌ها</a></li><li><a href="#pricing">تعرفه</a></li><li><a href="#faq">پرسش‌های متداول</a></li><li><a href="#about">درباره‌ی ما</a></li><li><a href="#contact">تماس با ما</a></li></ul>
+      </nav>
+      <div>
+        <h4>ارتباط با ما</h4>
+        <ul><li><a href="tel:+989393704036" dir="ltr" style="unicode-bidi:isolate">0939 370 4036</a></li><li><a href="mailto:info@pptsaz.ir" dir="ltr" style="unicode-bidi:isolate">info@pptsaz.ir</a></li></ul>
+      </div>
+    </div>
+    <div class="copy">© پاورپوینت‌ساز فارسی (pptsaz.ir) — همه‌ی حقوق محفوظ است.</div>
+  </div>
+</footer>
 
 <noscript><div class="wrap"><p class="msg err">برای استفاده از سایت، جاوا‌اسکریپت مرورگر را فعال کن.</p></div></noscript>
 
