@@ -39,9 +39,13 @@ export interface Settings {
 }
 
 export interface DeckParams {
+  /** تلگرام: شناسه‌ی چت؛ وب: ۰ */
   chatId: number;
   statusMessageId: number;
-  userId: number;
+  /** تلگرام: عدد؛ وب: رشته‌ی «w_…» */
+  userId: number | string;
+  /** کانال تحویل: پیش‌فرض تلگرام. در «web» به‌جای ارسال فایل، در KV ذخیره می‌شود و صفحه‌ی وب آن را دانلود می‌کند */
+  channel?: "telegram" | "web";
   topic: string;
   settings: Settings;
   /** اعتبار از کجا کم شده؛ برای برگشت در صورت خطا */

@@ -1,13 +1,15 @@
 import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
-import { getBonus, getCredit, getRecentUsers, getStats, getUserSeen, isAdmin, isBanned, setBanned, setBonus } from "./settings";
+import { getBonus, getCredit, getRecentUsers, getStats, getUserSeen, isAdmin, isBanned, setBanned, setBonus, type Uid } from "./settings";
+import { getUserById } from "./auth";
 import { getDeckLog, loadFile } from "./files";
 import { toEn, toFa } from "./util";
 
 export const ADMIN_CMDS = new Set(["/admin", "/stats", "/broadcast", "/grant", "/user", "/users", "/decks", "/ban", "/unban"]);
 
 /** لینک پروفایل: با نام کاربری → t.me/نام_کاربری، وگرنه لینک tg://user (برای کاربرانی که با ربات گفتگو داشته‌اند کار می‌کند) */
-const userLink = (id: number, name?: string | null, username?: string | null) => {
+const userLink = (id: Uid, name?: string | null, username?: string | null) => {
+  if (typeof id === "string") return `<b>${esc(name || id)}</b> 🌐`; // کاربر وب: پروفایل تلگرام ندارد
   const uname = username && /^[A-Za-z0-9_]{3,64}$/.test(username) ? username : null;
   const label = esc(name || (uname ? "@" + uname : String(id)));
   return `<a href="${uname ? `https://t.me/${uname}` : `tg://user?id=${id}`}">${label}</a>`;
@@ -17,8 +19,10 @@ const userLink = (id: number, name?: string | null, username?: string | null) =>
 const fmtTime = (t: number | string) =>
   toFa(new Date(t).toLocaleString("sv-SE", { timeZone: "Asia/Tehran" }).slice(0, 16));
 
-const parseId = (s?: string) => {
+/** شناسه‌ی تلگرام (عدد) یا شناسه‌ی کاربر وب (w_ + ۱۶ نویسه‌ی هگز) */
+const parseId = (s?: string): Uid | null => {
   const v = toEn(s ?? "").trim();
+  if (/^w_[0-9a-f]{16}$/.test(v)) return v;
   return /^\d{1,15}$/.test(v) ? Number(v) : null;
 };
 
@@ -30,6 +34,7 @@ const ADMIN_HELP =
   "/decks ← ۱۰ ارائه‌ی اخیر ساخته‌شده (با دکمه‌ی دریافت فایل)\n" +
   "/user <code>شناسه</code> ← وضعیت و اعتبار یک کاربر\n" +
   "/grant <code>شناسه تعداد</code> ← افزودن اعتبار (عدد منفی = کم کردن)\n" +
+  "<i>برای کاربر وب، شناسه‌ی w_… که در پیام خرید می‌آید را بنویس.</i>\n" +
   "/ban <code>شناسه</code> ← مسدود کردن کاربر\n" +
   "/unban <code>شناسه</code> ← رفع انسداد\n\n" +
   "<i>شناسه‌ی عددی کاربر را خودش با /id می‌تواند ببیند.</i>";
@@ -108,7 +113,7 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
     const after = Math.max(0, before + n);
     await setBonus(env, id, after);
     let note = "";
-    if (n > 0) {
+    if (n > 0 && typeof id === "number") { // کاربر وب پیام تلگرام نمی‌گیرد؛ اعتبارش را در صفحه می‌بیند
       try {
         await sendMessage(env, id, `🎁 ${toFa(String(n))} ارائه به اعتبار شما اضافه شد. برای دیدن اعتبار: /credit`);
       } catch {
@@ -129,10 +134,20 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
   }
 
   if (cmd === "/user") {
-    const [seen, banned, c] = await Promise.all([getUserSeen(env, id), isBanned(env, id), getCredit(env, id)]);
+    const web = typeof id === "string" ? await getUserById(env, id) : null;
+    const [seen, banned, c] = await Promise.all([typeof id === "number" ? getUserSeen(env, id) : Promise.resolve(null), isBanned(env, id), getCredit(env, id)]);
     const credit = c.unlimited
       ? "نامحدود"
       : `${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))} (امروز) + ${toFa(String(c.bonus))} اضافه`;
+    if (typeof id === "string") {
+      return reply(
+        `🌐 <b>کاربر وب</b> <code>${id}</code>\n` +
+        `نام: ${web?.name ? esc(web.name) : "—"}\n` +
+        `ایمیل: ${web ? esc(web.email) : "—"}\n` +
+        `ثبت‌نام: ${web ? new Date(web.created).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "ناموجود"}\n` +
+        `اعتبار: ${credit}\n` +
+        `وضعیت: ${banned ? "⛔️ مسدود" : "فعال"}`);
+    }
     return reply(
       `👤 <b>کاربر</b> <code>${id}</code>\n` +
       `نام: ${seen?.n ? esc(seen.n) : "—"}\n` +
@@ -174,8 +189,8 @@ export async function handleAdminFileCallback(env: Env, cq: any) {
   if (!isAdmin(env, cq.from.id)) return;
   const chatId: number = cq.message.chat.id;
   const [, uid, fid] = String(cq.data ?? "").split(":");
-  const userId = Number(uid);
-  const f = Number.isSafeInteger(userId) && fid ? await loadFile(env, userId, fid) : null;
+  const userId: Uid = /^w_[0-9a-f]{16}$/.test(uid ?? "") ? uid : Number(uid);
+  const f = (typeof userId === "string" || Number.isSafeInteger(userId)) && fid ? await loadFile(env, userId, fid) : null;
   if (!f) return await sendMessage(env, chatId, "⌛️ این فایل دیگر در دسترس نیست (فایل‌ها ۲۴ ساعت و حداکثر ۳ فایل آخر هر کاربر نگه داشته می‌شوند).");
   await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`);
 }

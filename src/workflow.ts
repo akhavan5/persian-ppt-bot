@@ -6,6 +6,7 @@ import { LlmError, makeDeck, makeOutline } from "./llm";
 import { fetchImages } from "./images";
 import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument, sendMessage } from "./telegram";
+import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { BUY_NOTE, adminIds, buyKb, bumpStat, getCredit, getUserSeen, refundCredit, releaseLock } from "./settings";
 import { logDeck, saveFile } from "./files";
@@ -31,8 +32,13 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
     const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
     const contentOpts = { mode: settings.mode, sources: settings.sources, questions: settings.questions };
-    const status = (t: string) => editMessage(this.env, chatId, mid, t).catch(() => {});
+    const web = event.payload.channel === "web";
+    // تلگرام: ویرایش پیام وضعیت؛ وب: متن پیشرفت در KV (صفحه‌ی وب هر چند ثانیه می‌خواند)
+    const status = (t: string) => (web
+      ? this.env.KV.put(`job:${event.instanceId}`, t, { expirationTtl: 3600 })
+      : editMessage(this.env, chatId, mid, t)).catch(() => {});
 
+    let built: { title: string; slides: number; name: string };
     try {
       const outline = await step.do("outline", LLM_STEP, () =>
         guard(async () => {
@@ -47,7 +53,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         }));
 
       // ساخت فایل و ارسال در یک گام: خروجی باینری نباید از گام برگردانده شود (سقف ۱ مگابایت برای وضعیت گام)
-      await step.do("build-and-send",
+      built = await step.do("build-and-send",
         { retries: { limit: 1, delay: "5 seconds" }, timeout: "3 minutes" },
         async () => {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
@@ -56,15 +62,25 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             theme: settings.theme, font: settings.font, persianDigits: settings.digits, images,
           });
           const filename = safeFilename(deck.title);
-          await sendDocument(this.env, chatId, bytes, filename,
-            `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید`);
-          // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
-          await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
-            .catch((err) => console.error("saveFile", err));
+          if (web) {
+            // وب: فایل فقط در KV ذخیره می‌شود و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام باید شکست بخورد (تلاش مجدد/برگشت اعتبار)
+            if (!(await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length))) {
+              throw new Error("generated file is too large to store");
+            }
+          } else {
+            await sendDocument(this.env, chatId, bytes, filename,
+              `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید`);
+            // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
+            await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
+              .catch((err) => console.error("saveFile", err));
+          }
           // ثبت در گزارش مدیر (/decks)؛ خطا نباید گام را شکست بدهد
-          const seen = await getUserSeen(this.env, userId).catch(() => null);
+          const seen = web
+            ? await getUserById(this.env, String(userId)).then((w) => (w ? { n: w.name || w.email, u: null } : null)).catch(() => null)
+            : await getUserSeen(this.env, userId as number).catch(() => null);
           await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now() })
             .catch((err) => console.error("logDeck", err));
+          if (web) return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename };
           const done = "✅ آماده شد! فایل بالا را ببین. برای ساخت ارائه‌ی بعدی، موضوع جدید را بفرست.";
           // اعتبار کم: بهترین لحظه برای نمایش دکمه‌های خرید
           const c = await getCredit(this.env, userId).catch(() => null);
@@ -75,6 +91,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           } else {
             await status(done);
           }
+          return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename };
         });
     } catch (e) {
       console.error("deck workflow failed", e);
@@ -105,5 +122,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       await releaseLock(this.env, userId);
       await bumpStat(this.env, "ok").catch(() => {});
     });
+    // خروجی نمونه‌ی Workflow؛ وضعیت وب از همین‌جا خوانده می‌شود
+    return built;
   }
 }
