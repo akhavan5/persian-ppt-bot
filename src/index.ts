@@ -17,6 +17,12 @@ function safeEqual(a: string, b: string): boolean {
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+    const SITE = (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
+
+    // سئو: www به دامنه‌ی اصلی هدایت دائمی می‌شود (جلوگیری از محتوای تکراری)
+    if (url.hostname === `www.${new URL(SITE).hostname}`) {
+      return Response.redirect(`${SITE}${url.pathname}${url.search}`, req.method === "GET" || req.method === "HEAD" ? 301 : 308);
+    }
 
     // API نسخه‌ی وب (ثبت‌نام، ورود، ساخت ارائه، دانلود)
     if (url.pathname.startsWith("/api/")) return handleWeb(req, env, url);
@@ -61,10 +67,10 @@ export default {
 
     // سئو: robots و sitemap با دامنه‌ی واقعی سایت ساخته می‌شوند
     if (url.pathname === "/robots.txt") {
-      return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /setup\nDisallow: /telegram\n\nSitemap: ${url.origin}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /setup\nDisallow: /telegram\n\nSitemap: ${SITE}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     if (url.pathname === "/sitemap.xml") {
-      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${url.origin}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${SITE}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     // صفحه‌ی اصلی: نشانه‌ی __ORIGIN__ (canonical، og:url، داده‌ی ساختاریافته) با دامنه‌ی واقعی جایگزین می‌شود
     if (url.pathname === "/" && req.method === "GET") {
@@ -72,7 +78,7 @@ export default {
       if (!res.ok) return res;
       const h = new Headers(res.headers);
       h.delete("content-length"); h.set("cache-control", "public, max-age=300");
-      return new Response((await res.text()).replaceAll("__ORIGIN__", url.origin), { status: 200, headers: h });
+      return new Response((await res.text()).replaceAll("__ORIGIN__", SITE), { status: 200, headers: h });
     }
 
     // هر چیز دیگر: صفحه‌ی وب و فایل‌های استاتیک (پوشه‌ی public)

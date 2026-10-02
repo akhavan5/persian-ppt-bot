@@ -35,4 +35,6 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   /** درگاه زرین‌پال (فقط نسخه‌ی وب): مرچنت‌کد ۳۶ حرفی؛ بدون آن، خرید به تلگرام پشتیبان هدایت می‌شود */
   ZARINPAL_MERCHANT_ID?: string;
+  /** آدرس اصلی سایت برای canonical/sitemap/OG (پیش‌فرض https://pptsaz.ir) */
+  SITE_URL?: string;
 }
