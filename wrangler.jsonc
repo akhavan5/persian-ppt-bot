@@ -7,6 +7,14 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
 
+  // نسخه‌ی وب: فایل‌های پوشه‌ی public مستقیم از لبه‌ی کلودفلر سرو می‌شوند؛
+  // Worker فقط برای مسیرهای زیر (API و تلگرام) اجرا می‌شود
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/telegram", "/setup"]
+  },
+
   // متغیرها/رمزهایی که در داشبورد تنظیم می‌کنید با هر دیپلوی پاک نشوند
   "keep_vars": true,
 

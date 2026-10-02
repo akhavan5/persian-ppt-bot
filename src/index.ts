@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { handleUpdate } from "./bot";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { adminIds } from "./settings";
+import { handleWeb } from "./web";
 
 export { DeckWorkflow } from "./workflow";
 export { BroadcastWorkflow } from "./broadcast";
@@ -16,6 +17,9 @@ function safeEqual(a: string, b: string): boolean {
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+
+    // API نسخه‌ی وب (ثبت‌نام، ورود، ساخت ارائه، دانلود)
+    if (url.pathname.startsWith("/api/")) return handleWeb(req, env, url);
 
     // وبهوک تلگرام — تلگرام هدر محرمانه را روی هر درخواست می‌فرستد
     if (url.pathname === "/telegram" && req.method === "POST") {
@@ -55,7 +59,7 @@ export default {
       return Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count });
     }
 
-    if (url.pathname === "/") return new Response("persian-ppt-bot is running");
-    return new Response("not found", { status: 404 });
+    // هر چیز دیگر: صفحه‌ی وب و فایل‌های استاتیک (پوشه‌ی public)
+    return env.ASSETS.fetch(req);
   },
 } satisfies ExportedHandler<Env>;
