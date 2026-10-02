@@ -1,112 +1,114 @@
-:root {
-  --bg: #f5f6fb; --card: #fff; --ink: #14171f; --muted: #667085; --line: #e4e7ee; --field: #f8f9fc;
-  --brand: #4f46e5; --brand-2: #06b6d4; --link: #4338ca; --danger: #d92d20; --ok: #12a150; --r: 16px;
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #0d1017; --card: #151a23; --ink: #e9ecf2; --muted: #9aa4b5; --line: #262d3a; --field: #0f141c; --link: #a5b4fc; --danger: #f97066; --ok: #4ade80; }
-}
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0; background: var(--bg); color: var(--ink); line-height: 1.7;
-  font: 16px/1.7 Vazirmatn, Vazir, Tahoma, "Segoe UI", system-ui, sans-serif;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-}
-[hidden] { display: none !important; }
-a { color: var(--link); }
-h1 { font-size: clamp(1.35rem, 4vw, 1.8rem); line-height: 1.5; margin: .2rem 0 .4rem; }
-h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ساخت پاورپوینت فارسی با هوش مصنوعی</title>
+  <meta name="description" content="فقط موضوع را بنویس؛ پاورپوینت فارسی، راست‌به‌چپ و قابل ویرایش را همین‌جا بگیر.">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📊%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true">📊</span><b>پاورپوینت‌ساز فارسی</b></div>
+    <div id="userbox" class="userbox" hidden>
+      <span id="credit" class="chip"></span>
+      <span id="uname" class="muted"></span>
+      <button id="logout" type="button" class="link">خروج</button>
+    </div>
+  </header>
 
-.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1040px; margin: 0 auto; padding: 14px 16px; }
-.brand { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; }
-.logo { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(135deg, var(--brand), var(--brand-2)); font-size: 18px; }
-.userbox { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; font-size: .9rem; }
-.chip { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--link); padding: 2px 12px; border-radius: 99px; font-weight: 600; }
-.muted { color: var(--muted); }
-.link { background: none; border: 0; color: var(--link); cursor: pointer; font: inherit; padding: 4px; }
+  <main>
+    <!-- در حال بارگذاری -->
+    <section id="boot" class="card center"><div class="spinner" role="status" aria-label="در حال بارگذاری"></div></section>
 
-main { max-width: 1040px; margin: 0 auto; padding: 4px 16px 24px; }
-footer { max-width: 1040px; margin: 0 auto; padding: 8px 16px 28px; color: var(--muted); font-size: .8rem; text-align: center; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; box-shadow: 0 1px 2px rgb(16 24 40 / .04); }
-.card.center { display: grid; place-items: center; min-height: 40vh; }
-.card.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+    <!-- ورود -->
+    <section id="login" class="card login" hidden>
+      <div class="hero" aria-hidden="true">📊</div>
+      <h1>پاورپوینت فارسی، با یک موضوع</h1>
+      <p class="lead">موضوع را بنویس؛ سرفصل و محتوا را هوش مصنوعی می‌نویسد و فایل PPTX راست‌به‌چپ و قابل ویرایش را همین‌جا می‌گیری.</p>
 
-.login { max-width: 520px; margin: 6vh auto 0; text-align: center; }
-.hero { font-size: 44px; }
-.lead { color: var(--muted); margin: 0 0 1.2rem; }
-.steps-how { text-align: start; margin: 1.2rem auto .4rem; padding-inline-start: 1.4rem; color: var(--muted); font-size: .93rem; }
-.wait { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; font-size: .9rem; color: var(--muted); text-align: start; }
+      <a id="tg-btn" class="primary tg" target="_blank" rel="noopener" aria-disabled="true">🔐 ورود با تلگرام</a>
+      <p id="login-msg" class="err" role="alert" hidden></p>
+      <div id="login-wait" class="wait" hidden>
+        <div class="spinner small" aria-hidden="true"></div>
+        <span>منتظر تأیید در تلگرام هستم… اگر تلگرام باز نشد، <a id="tg-link" target="_blank" rel="noopener">این لینک</a> را بزن.</span>
+      </div>
 
-.grid { display: grid; gap: 16px; align-items: start; }
-@media (min-width: 900px) { .grid { grid-template-columns: 1.25fr 1fr; } .side { position: sticky; top: 12px; } }
-.side { display: grid; gap: 16px; }
+      <ol class="steps-how">
+        <li>دکمه‌ی بالا را بزن تا ربات در تلگرام باز شود.</li>
+        <li>در ربات «Start» و بعد «✅ تأیید ورود» را بزن.</li>
+        <li>به همین صفحه برگرد؛ خودکار وارد می‌شوی.</li>
+      </ol>
+      <p class="hint">اعتبار و تنظیمات تو بین ربات و وب مشترک است؛ نیازی به رمز عبور نیست.</p>
+    </section>
 
-.lbl { display: block; font-weight: 600; font-size: .92rem; margin: 16px 0 6px; }
-.lbl:first-child { margin-top: 0; }
-.hint { color: var(--muted); font-size: .8rem; margin: 6px 0 0; }
-.hint.end { text-align: end; margin: 2px 0 0; }
-textarea, select {
-  width: 100%; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line);
-  border-radius: 12px; padding: 10px 12px; outline: none;
-}
-textarea { resize: vertical; min-height: 84px; }
-textarea:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, .sw-in:focus-visible + .sw { outline: 2px solid var(--brand); outline-offset: 2px; }
-.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 12px; background: var(--field); overflow: hidden; }
-.stepper button { width: 40px; height: 40px; border: 0; background: none; color: var(--ink); font-size: 1.25rem; cursor: pointer; }
-.stepper button:disabled { opacity: .35; cursor: default; }
-.stepper output { min-width: 42px; text-align: center; font-weight: 700; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip-btn { border: 1px solid var(--line); background: var(--field); color: var(--ink); border-radius: 99px; padding: 2px 12px; font: inherit; font-size: .85rem; cursor: pointer; }
-.chip-btn[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+    <!-- برنامه -->
+    <section id="app" hidden>
+      <div class="grid">
+        <form id="form" class="card" autocomplete="off" novalidate>
+          <label class="lbl" for="topic">موضوع ارائه</label>
+          <textarea id="topic" rows="3" maxlength="600" placeholder="مثلاً: هوش مصنوعی در آموزش" required></textarea>
+          <div class="hint end"><span id="tcount">۰</span> / ۶۰۰</div>
 
-.themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
-.theme { border: 2px solid var(--line); background: var(--field); color: var(--ink); border-radius: 12px; padding: 8px; font: inherit; font-size: .82rem; cursor: pointer; display: grid; gap: 6px; justify-items: center; }
-.theme i { display: block; width: 100%; height: 26px; border-radius: 8px; }
-.theme[aria-pressed="true"] { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent); }
+          <div class="lbl">تعداد اسلاید</div>
+          <div class="row">
+            <div class="stepper">
+              <button type="button" id="sl-plus" aria-label="افزایش">+</button>
+              <output id="sl-val" aria-live="polite">۸</output>
+              <button type="button" id="sl-minus" aria-label="کاهش">−</button>
+            </div>
+            <div id="sl-chips" class="chips"></div>
+          </div>
 
-.switches { display: grid; gap: 4px; margin-top: 14px; }
-.switch { display: flex; align-items: center; gap: 12px; padding: 8px 2px; cursor: pointer; }
-.switch.dis { opacity: .6; cursor: default; }
-.sw-in { position: absolute; opacity: 0; pointer-events: none; }
-.sw { flex: none; width: 42px; height: 24px; border-radius: 99px; background: var(--line); position: relative; transition: background .15s; }
-.sw::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: inset-inline-start .15s; box-shadow: 0 1px 2px rgb(0 0 0 / .3); }
-.sw-in:checked + .sw { background: var(--brand); }
-.sw-in:checked + .sw::after { inset-inline-start: 21px; }
-.sw-t { display: grid; line-height: 1.5; font-size: .93rem; }
-.sw-t small { color: var(--muted); font-size: .78rem; }
+          <div class="lbl">تم رنگی</div>
+          <div id="themes" class="themes"></div>
 
-.primary {
-  display: block; width: 100%; margin-top: 18px; padding: 12px 16px; border: 0; border-radius: 13px; cursor: pointer; text-align: center; text-decoration: none;
-  font: inherit; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--brand), #6d5df6);
-}
-.primary:hover { filter: brightness(1.06); }
-.primary:disabled, .primary[aria-disabled="true"] { opacity: .55; cursor: not-allowed; filter: none; pointer-events: none; }
-.tg { background: linear-gradient(135deg, #229ed9, #1a7fb8); margin-top: 8px; }
-.err { color: var(--danger); font-size: .9rem; margin: 10px 0 0; }
+          <div class="two">
+            <div><label class="lbl" for="tone">لحن</label><select id="tone"></select></div>
+            <div><label class="lbl" for="font">فونت</label><select id="font"></select></div>
+          </div>
+          <div class="hint">فونت Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد؛ Tahoma و Arial همه‌جا کار می‌کنند.</div>
 
-.steps { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
-.steps li { display: flex; align-items: center; gap: 10px; color: var(--muted); }
-.steps li.active { color: var(--ink); font-weight: 600; }
-.steps li.done { color: var(--ok); }
-.dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 12px; flex: none; }
-.steps li.done .dot { background: var(--ok); border-color: var(--ok); color: #fff; }
-.steps li.active .dot { border-color: var(--brand); border-top-color: transparent; animation: spin .8s linear infinite; }
+          <div id="switches" class="switches"></div>
 
-.r-title { font-weight: 700; font-size: 1.05rem; margin: 0; word-break: break-word; }
-.r-title + .muted { margin: 2px 0 0; }
-.buy { display: grid; gap: 8px; }
-.buy a { display: block; text-align: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; text-decoration: none; background: var(--field); }
-.files { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.files li { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; background: var(--field); }
-.files .t { min-width: 0; }
-.files .t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .92rem; }
-.files .t small { color: var(--muted); }
-.files a { flex: none; text-decoration: none; font-size: .88rem; font-weight: 600; }
+          <button id="go" class="primary" type="submit">ساخت ارائه ✨</button>
+          <p id="form-err" class="err" role="alert" hidden></p>
+        </form>
 
-.spinner { width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--brand); animation: spin .8s linear infinite; }
-.spinner.small { width: 18px; height: 18px; border-width: 2px; flex: none; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner, .steps li.active .dot { animation-duration: 3s; } .sw, .sw::after { transition: none; } }
+        <div class="side">
+          <section id="progress" class="card" hidden aria-live="polite">
+            <h2>در حال ساخت ارائه…</h2>
+            <ol id="steps" class="steps"></ol>
+            <p class="hint">معمولاً ۱ تا ۲ دقیقه طول می‌کشد؛ می‌توانی صفحه را ببندی و بعداً برگردی. <span id="elapsed"></span></p>
+          </section>
+
+          <section id="result" class="card ok" hidden>
+            <h2>✅ ارائه آماده شد</h2>
+            <p id="r-title" class="r-title"></p>
+            <p id="r-meta" class="muted"></p>
+            <a id="r-dl" class="primary" download>📥 دانلود فایل PPTX</a>
+            <p class="hint">برای ساخت ارائه‌ی بعدی، موضوع جدید را بنویس.</p>
+          </section>
+
+          <section id="buy" class="card" hidden>
+            <h2>💳 شارژ اعتبار</h2>
+            <p class="muted" id="buy-note"></p>
+            <div id="buy-links" class="buy"></div>
+            <p class="hint">سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</p>
+          </section>
+
+          <section id="history" class="card" hidden>
+            <h2>📁 فایل‌های ۲۴ ساعت اخیر</h2>
+            <ul id="files" class="files"></ul>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>متن را هوش مصنوعی می‌نویسد؛ آمار و اطلاعات را پیش از ارائه بررسی کن. فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.</footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>

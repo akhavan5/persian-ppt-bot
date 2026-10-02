@@ -1,345 +1,112 @@
-"use strict";
-
-// ---------- ابزارها ----------
-const $ = (s) => document.querySelector(s);
-const fa = (n) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]);
-
-/** ساخت المان بدون innerHTML (عنوان‌ها از مدل زبانی می‌آیند؛ فقط textContent) */
-function h(tag, props = {}, ...kids) {
-  const n = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v == null || v === false) continue;
-    if (k === "class") n.className = v;
-    else if (k === "text") n.textContent = v;
-    else if (k === "bg") n.style.background = v;
-    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
-    else n.setAttribute(k, v === true ? "" : v);
-  }
-  for (const c of kids.flat()) if (c != null) n.append(c);
-  return n;
+:root {
+  --bg: #f5f6fb; --card: #fff; --ink: #14171f; --muted: #667085; --line: #e4e7ee; --field: #f8f9fc;
+  --brand: #4f46e5; --brand-2: #06b6d4; --link: #4338ca; --danger: #d92d20; --ok: #12a150; --r: 16px;
+  color-scheme: light dark;
 }
-
-const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch { /* حالت خصوصی */ } },
-  del(k) { try { localStorage.removeItem(k); } catch { /* */ } },
-};
-
-async function api(path, opts = {}) {
-  const headers = { "x-ppt": "1" };
-  if (opts.body) headers["content-type"] = "application/json";
-  const r = await fetch(path, { credentials: "same-origin", ...opts, headers });
-  let data = null;
-  try { data = await r.json(); } catch { /* بدنه‌ی خالی */ }
-  if (!r.ok) {
-    const e = new Error(data?.error || "http_" + r.status);
-    e.status = r.status; e.code = data?.error;
-    throw e;
-  }
-  return data;
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0d1017; --card: #151a23; --ink: #e9ecf2; --muted: #9aa4b5; --line: #262d3a; --field: #0f141c; --link: #a5b4fc; --danger: #f97066; --ok: #4ade80; }
 }
-
-const ERR = {
-  unauthorized: "نشست شما منقضی شده؛ دوباره وارد شو.",
-  forbidden: "دسترسی شما به این سرویس مجاز نیست.",
-  banned: "دسترسی شما به این سرویس مسدود شده است.",
-  busy: "ارائه‌ی قبلی شما هنوز در حال ساخته شدن است؛ کمی صبر کن.",
-  no_credit: "اعتبار شما تمام شده است.",
-  topic_short: "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.",
-  topic_long: "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).",
-  start_failed: "شروع ساخت ارائه ممکن نشد؛ اعتبارت برگردانده شد. کمی بعد دوباره امتحان کن.",
-};
-const errText = (e) => ERR[e?.code] || "مشکلی پیش آمد؛ چند لحظه بعد دوباره امتحان کن.";
-
-function ago(t) {
-  const m = Math.max(1, Math.round((Date.now() - t) / 60000));
-  return m < 60 ? `${fa(m)} دقیقه پیش` : `${fa(Math.round(m / 60))} ساعت پیش`;
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); line-height: 1.7;
+  font: 16px/1.7 Vazirmatn, Vazir, Tahoma, "Segoe UI", system-ui, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
+[hidden] { display: none !important; }
+a { color: var(--link); }
+h1 { font-size: clamp(1.35rem, 4vw, 1.8rem); line-height: 1.5; margin: .2rem 0 .4rem; }
+h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
 
-// ---------- وضعیت ----------
-let me = null;          // پاسخ /api/me
-let S = null;           // تنظیمات در حال ویرایش
-let extraFiles = [];    // فایل‌هایی که همین الان ساخته شده‌اند (تا فهرست سرور به‌روز شود)
-let jobId = null, jobTimer = 0, tickTimer = 0, jobT0 = 0;
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1040px; margin: 0 auto; padding: 14px 16px; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; }
+.logo { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(135deg, var(--brand), var(--brand-2)); font-size: 18px; }
+.userbox { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; font-size: .9rem; }
+.chip { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--link); padding: 2px 12px; border-radius: 99px; font-weight: 600; }
+.muted { color: var(--muted); }
+.link { background: none; border: 0; color: var(--link); cursor: pointer; font: inherit; padding: 4px; }
 
-const VIEWS = ["boot", "login", "app"];
-function show(view) {
-  for (const v of VIEWS) $("#" + v).hidden = v !== view;
-  $("#userbox").hidden = view !== "app";
+main { max-width: 1040px; margin: 0 auto; padding: 4px 16px 24px; }
+footer { max-width: 1040px; margin: 0 auto; padding: 8px 16px 28px; color: var(--muted); font-size: .8rem; text-align: center; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; box-shadow: 0 1px 2px rgb(16 24 40 / .04); }
+.card.center { display: grid; place-items: center; min-height: 40vh; }
+.card.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+
+.login { max-width: 520px; margin: 6vh auto 0; text-align: center; }
+.hero { font-size: 44px; }
+.lead { color: var(--muted); margin: 0 0 1.2rem; }
+.steps-how { text-align: start; margin: 1.2rem auto .4rem; padding-inline-start: 1.4rem; color: var(--muted); font-size: .93rem; }
+.wait { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; font-size: .9rem; color: var(--muted); text-align: start; }
+
+.grid { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 900px) { .grid { grid-template-columns: 1.25fr 1fr; } .side { position: sticky; top: 12px; } }
+.side { display: grid; gap: 16px; }
+
+.lbl { display: block; font-weight: 600; font-size: .92rem; margin: 16px 0 6px; }
+.lbl:first-child { margin-top: 0; }
+.hint { color: var(--muted); font-size: .8rem; margin: 6px 0 0; }
+.hint.end { text-align: end; margin: 2px 0 0; }
+textarea, select {
+  width: 100%; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 12px; outline: none;
 }
+textarea { resize: vertical; min-height: 84px; }
+textarea:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, .sw-in:focus-visible + .sw { outline: 2px solid var(--brand); outline-offset: 2px; }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 12px; background: var(--field); overflow: hidden; }
+.stepper button { width: 40px; height: 40px; border: 0; background: none; color: var(--ink); font-size: 1.25rem; cursor: pointer; }
+.stepper button:disabled { opacity: .35; cursor: default; }
+.stepper output { min-width: 42px; text-align: center; font-weight: 700; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip-btn { border: 1px solid var(--line); background: var(--field); color: var(--ink); border-radius: 99px; padding: 2px 12px; font: inherit; font-size: .85rem; cursor: pointer; }
+.chip-btn[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
 
-// ---------- ورود با تلگرام ----------
-let loginToken = null, loginTimer = 0, loginT0 = 0;
+.themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.theme { border: 2px solid var(--line); background: var(--field); color: var(--ink); border-radius: 12px; padding: 8px; font: inherit; font-size: .82rem; cursor: pointer; display: grid; gap: 6px; justify-items: center; }
+.theme i { display: block; width: 100%; height: 26px; border-radius: 8px; }
+.theme[aria-pressed="true"] { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent); }
 
-function loginMsg(t) { const n = $("#login-msg"); n.textContent = t || ""; n.hidden = !t; }
-function stopLoginPoll() { clearTimeout(loginTimer); loginTimer = 0; }
+.switches { display: grid; gap: 4px; margin-top: 14px; }
+.switch { display: flex; align-items: center; gap: 12px; padding: 8px 2px; cursor: pointer; }
+.switch.dis { opacity: .6; cursor: default; }
+.sw-in { position: absolute; opacity: 0; pointer-events: none; }
+.sw { flex: none; width: 42px; height: 24px; border-radius: 99px; background: var(--line); position: relative; transition: background .15s; }
+.sw::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: inset-inline-start .15s; box-shadow: 0 1px 2px rgb(0 0 0 / .3); }
+.sw-in:checked + .sw { background: var(--brand); }
+.sw-in:checked + .sw::after { inset-inline-start: 21px; }
+.sw-t { display: grid; line-height: 1.5; font-size: .93rem; }
+.sw-t small { color: var(--muted); font-size: .78rem; }
 
-async function prepareLogin() {
-  stopLoginPoll();
-  loginToken = null;
-  $("#login-wait").hidden = true;
-  const btn = $("#tg-btn");
-  btn.setAttribute("aria-disabled", "true");
-  btn.removeAttribute("href");
-  try {
-    const r = await api("/api/auth/start", { method: "POST" });
-    loginToken = r.token;
-    // لینک از قبل آماده است تا مرورگر کلیک را مسدود نکند
-    btn.href = r.url; $("#tg-link").href = r.url;
-    btn.removeAttribute("aria-disabled");
-  } catch (e) { loginMsg(errText(e)); }
+.primary {
+  display: block; width: 100%; margin-top: 18px; padding: 12px 16px; border: 0; border-radius: 13px; cursor: pointer; text-align: center; text-decoration: none;
+  font: inherit; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--brand), #6d5df6);
 }
+.primary:hover { filter: brightness(1.06); }
+.primary:disabled, .primary[aria-disabled="true"] { opacity: .55; cursor: not-allowed; filter: none; pointer-events: none; }
+.tg { background: linear-gradient(135deg, #229ed9, #1a7fb8); margin-top: 8px; }
+.err { color: var(--danger); font-size: .9rem; margin: 10px 0 0; }
 
-async function showLogin(msg) {
-  show("login");
-  loginMsg(msg || "");
-  await prepareLogin();
-}
+.steps { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
+.steps li { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.steps li.active { color: var(--ink); font-weight: 600; }
+.steps li.done { color: var(--ok); }
+.dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 12px; flex: none; }
+.steps li.done .dot { background: var(--ok); border-color: var(--ok); color: #fff; }
+.steps li.active .dot { border-color: var(--brand); border-top-color: transparent; animation: spin .8s linear infinite; }
 
-$("#tg-btn").addEventListener("click", (ev) => {
-  if (!loginToken) { ev.preventDefault(); return; }
-  $("#login-wait").hidden = false;
-  stopLoginPoll();
-  loginT0 = Date.now();
-  loginTimer = setTimeout(pollLogin, 1500);
-});
+.r-title { font-weight: 700; font-size: 1.05rem; margin: 0; word-break: break-word; }
+.r-title + .muted { margin: 2px 0 0; }
+.buy { display: grid; gap: 8px; }
+.buy a { display: block; text-align: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; text-decoration: none; background: var(--field); }
+.files { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.files li { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; background: var(--field); }
+.files .t { min-width: 0; }
+.files .t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .92rem; }
+.files .t small { color: var(--muted); }
+.files a { flex: none; text-decoration: none; font-size: .88rem; font-weight: 600; }
 
-async function pollLogin() {
-  if (!loginToken) return;
-  try {
-    const r = await api("/api/auth/poll?token=" + encodeURIComponent(loginToken));
-    if (r.s === "ok") { stopLoginPoll(); return await boot(); }
-    if (r.s === "denied") { loginMsg("ورود در تلگرام لغو شد. اگر خودت بودی، دوباره امتحان کن."); return await prepareLogin(); }
-    if (r.s === "expired") { loginMsg("لینک ورود منقضی شد؛ دوباره دکمه را بزن."); return await prepareLogin(); }
-  } catch { /* قطعی لحظه‌ای شبکه؛ دوباره تلاش می‌شود */ }
-  if (Date.now() - loginT0 > 10 * 60 * 1000) { loginMsg("زمان ورود تمام شد؛ دوباره دکمه را بزن."); return await prepareLogin(); }
-  loginTimer = setTimeout(pollLogin, 2500);
-}
-
-document.addEventListener("visibilitychange", () => {
-  // برگشتن از تلگرام (مخصوصاً موبایل): بلافاصله وضعیت را بپرس
-  if (document.hidden) return;
-  if (loginTimer) { clearTimeout(loginTimer); pollLogin(); }
-  if (jobTimer) { clearTimeout(jobTimer); pollJob(); }
-});
-
-$("#logout").addEventListener("click", async () => {
-  try { await api("/api/auth/logout", { method: "POST" }); } catch { /* */ }
-  store.del("ppt_job"); me = null; resetJobUi();
-  await showLogin();
-});
-
-// ---------- راه‌اندازی ----------
-async function boot() {
-  show("boot");
-  try {
-    me = await api("/api/me");
-    showApp();
-  } catch (e) {
-    if (e.status === 401) await showLogin();
-    else await showLogin(errText(e));
-  }
-}
-
-function showApp() {
-  show("app");
-  S = { ...me.settings };
-  $("#uname").textContent = me.user.name || (me.user.username ? "@" + me.user.username : "");
-  buildForm();
-  renderMe();
-  const saved = store.get("ppt_job");
-  if (saved) trackJob(saved, Number(store.get("ppt_job_t")) || Date.now());
-}
-
-function renderMe() {
-  const c = me.credit;
-  $("#credit").textContent = c.unlimited ? "اعتبار: نامحدود" : `اعتبار: ${fa(c.total)} ارائه`;
-  renderBuy(); renderHistory(); syncButton();
-}
-
-const noCredit = () => !me.credit.unlimited && me.credit.total <= 0;
-
-function syncButton() {
-  const btn = $("#go");
-  const busy = !!jobId;
-  btn.disabled = busy || noCredit();
-  btn.textContent = busy ? "در حال ساخت…" : noCredit() ? "اعتبار تمام شده است" : "ساخت ارائه ✨";
-}
-
-function renderBuy() {
-  const c = me.credit, box = $("#buy");
-  box.hidden = c.unlimited || c.total > 1;
-  if (box.hidden) return;
-  $("#buy-note").textContent = c.total === 0 ? "اعتبارت تمام شده است. برای ادامه یکی از بسته‌ها را انتخاب کن:" : "فقط ۱ ارائه‌ی دیگر اعتبار داری. برای شارژ یکی از بسته‌ها را انتخاب کن:";
-  const links = $("#buy-links");
-  links.replaceChildren(
-    ...me.buy.map((b) => h("a", { href: b.url, target: "_blank", rel: "noopener", text: b.text })),
-    h("a", { href: me.support, target: "_blank", rel: "noopener", text: "💬 پیام به پشتیبانی" }),
-  );
-}
-
-function renderHistory() {
-  const seen = new Set(me.files.map((f) => f.id));
-  const list = [...extraFiles.filter((f) => !seen.has(f.id)), ...me.files].sort((a, b) => b.t - a.t).slice(0, 3);
-  const box = $("#history");
-  box.hidden = list.length === 0;
-  $("#files").replaceChildren(...list.map((f) => h("li", {},
-    h("div", { class: "t" }, h("b", { text: f.title }), h("small", { text: `${fa(f.slides)} اسلاید · ${ago(f.t)}` })),
-    h("a", { href: "/api/download?id=" + encodeURIComponent(f.id), download: true, text: "📥 دانلود" }),
-  )));
-}
-
-async function refreshMe() {
-  try { me = await api("/api/me"); renderMe(); }
-  catch (e) { if (e.status === 401) { me = null; await showLogin(errText(e)); } }
-}
-
-// ---------- فرم ----------
-const SWITCHES = [
-  { key: "mode", label: "🎓 حالت دانشجویی", desc: "فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع (حداقل ۸ اسلاید)", on: (s) => s.mode === "student", set: (s, v) => { s.mode = v ? "student" : "normal"; } },
-  { key: "images", label: "🖼 تصویر خودکار", desc: "برای اسلایدهای «تصویر و متن»", on: (s) => s.images, set: (s, v) => { s.images = v; } },
-  { key: "digits", label: "🔢 ارقام فارسی", desc: "خاموش = ارقام انگلیسی", on: (s) => s.digits, set: (s, v) => { s.digits = v; } },
-  { key: "sources", label: "📚 اسلاید منابع", desc: "در حالت دانشجویی همیشه روشن است", on: (s) => s.sources || s.mode === "student", set: (s, v) => { s.sources = v; }, locked: (s) => s.mode === "student" },
-  { key: "questions", label: "❓ پرسش‌های پایانی", desc: "یک اسلاید پرسش در انتها", on: (s) => s.questions, set: (s, v) => { s.questions = v; } },
-];
-
-const SLIDE_CHIPS = [5, 8, 10, 12, 15];
-const minSlides = () => (S.mode === "student" ? me.options.slides.studentMin : me.options.slides.min);
-
-function setSlides(n) {
-  S.slides = Math.min(me.options.slides.max, Math.max(minSlides(), n));
-  $("#sl-val").textContent = fa(S.slides);
-  $("#sl-minus").disabled = S.slides <= minSlides();
-  $("#sl-plus").disabled = S.slides >= me.options.slides.max;
-  for (const b of document.querySelectorAll(".chip-btn")) b.setAttribute("aria-pressed", String(Number(b.dataset.n) === S.slides));
-}
-
-function buildForm() {
-  const o = me.options;
-  $("#sl-chips").replaceChildren(...SLIDE_CHIPS.map((n) => h("button", { type: "button", class: "chip-btn", "data-n": n, text: fa(n), onclick: () => setSlides(n) })));
-  setSlides(S.slides);
-
-  const themes = $("#themes");
-  const paint = () => { for (const b of themes.children) b.setAttribute("aria-pressed", String(b.dataset.id === S.theme)); };
-  themes.replaceChildren(...o.themes.map((t) => h("button", { type: "button", class: "theme", "data-id": t.id, onclick: () => { S.theme = t.id; paint(); } },
-    h("i", { bg: `linear-gradient(135deg, #${t.primary} 55%, #${t.accent} 55%)` }), h("span", { text: t.name }))));
-  paint();
-
-  const tone = $("#tone"), font = $("#font");
-  tone.replaceChildren(...o.tones.map((t) => h("option", { value: t.id, text: t.name })));
-  font.replaceChildren(...o.fonts.map((f) => h("option", { value: f, text: f })));
-  tone.value = S.tone; font.value = S.font;
-  tone.onchange = () => { S.tone = tone.value; };
-  font.onchange = () => { S.font = font.value; };
-
-  const renderSwitches = () => $("#switches").replaceChildren(...SWITCHES.map((d) => {
-    const locked = d.locked?.(S);
-    const input = h("input", { type: "checkbox", class: "sw-in", disabled: !!locked });
-    input.checked = d.on(S);
-    input.addEventListener("change", () => {
-      d.set(S, input.checked);
-      if (d.key === "mode") setSlides(S.slides);
-      renderSwitches();
-    });
-    return h("label", { class: "switch" + (locked ? " dis" : "") }, input, h("span", { class: "sw" }),
-      h("span", { class: "sw-t" }, d.label, h("small", { text: d.desc })));
-  }));
-  renderSwitches();
-
-  $("#sl-minus").onclick = () => setSlides(S.slides - 1);
-  $("#sl-plus").onclick = () => setSlides(S.slides + 1);
-}
-
-const topic = $("#topic");
-topic.addEventListener("input", () => { $("#tcount").textContent = fa(topic.value.length); });
-
-function formErr(t) { const n = $("#form-err"); n.textContent = t || ""; n.hidden = !t; }
-
-$("#form").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  if (jobId || !me || noCredit()) return;
-  const t = topic.value.trim();
-  if (t.length < 3) return formErr(ERR.topic_short);
-  formErr(""); $("#result").hidden = true;
-  $("#go").disabled = true;
-  try {
-    const r = await api("/api/generate", { method: "POST", body: JSON.stringify({ topic: t, settings: S }) });
-    store.set("ppt_job", r.id); store.set("ppt_job_t", String(Date.now()));
-    trackJob(r.id, Date.now());
-  } catch (e) {
-    formErr(errText(e));
-    if (e.status === 401) { me = null; return await showLogin(errText(e)); }
-    await refreshMe();
-    syncButton();
-  }
-});
-
-// ---------- پیگیری ساخت ----------
-const PHASES = ["outline", "content", "build"];
-const PHASE_LABELS = ["طراحی سرفصل‌ها", "نوشتن محتوای اسلایدها", "ساخت فایل پاورپوینت"];
-
-function showProgress(phase) {
-  $("#progress").hidden = false;
-  const cur = Math.max(0, PHASES.indexOf(phase)); // queued → مرحله‌ی اول
-  $("#steps").replaceChildren(...PHASE_LABELS.map((label, i) => h("li", { class: i < cur ? "done" : i === cur ? "active" : "" },
-    h("span", { class: "dot", text: i < cur ? "✓" : "" }), h("span", { text: label }))));
-}
-
-function renderElapsed() {
-  const s = Math.floor((Date.now() - jobT0) / 1000);
-  $("#elapsed").textContent = s > 3 ? `(${fa(s)} ثانیه)` : "";
-}
-
-function resetJobUi() {
-  clearTimeout(jobTimer); clearInterval(tickTimer);
-  jobTimer = 0; tickTimer = 0; jobId = null;
-  $("#progress").hidden = true;
-}
-
-function trackJob(id, t0) {
-  resetJobUi();
-  jobId = id; jobT0 = t0;
-  $("#result").hidden = true;
-  showProgress("queued"); syncButton();
-  tickTimer = setInterval(renderElapsed, 1000);
-  pollJob();
-}
-
-async function pollJob() {
-  clearTimeout(jobTimer); jobTimer = 0;
-  const id = jobId;
-  if (!id) return;
-  try {
-    const j = await api("/api/job?id=" + encodeURIComponent(id));
-    if (id !== jobId) return;
-    if (j.s === "done") return await jobDone(id, j);
-    if (j.s === "error") return await jobFailed(j.msg);
-    showProgress(j.s);
-  } catch (e) {
-    if (id !== jobId) return;
-    if (e.status === 401) { resetJobUi(); me = null; return await showLogin(errText(e)); }
-    if (e.status === 404 || e.status === 400) { // نمونه‌ی قدیمی/منقضی
-      store.del("ppt_job"); resetJobUi(); await refreshMe(); return;
-    }
-    // خطای موقت شبکه/سرور: دوباره تلاش می‌کنیم
-  }
-  jobTimer = setTimeout(pollJob, 2000);
-}
-
-async function jobDone(id, j) {
-  store.del("ppt_job"); resetJobUi();
-  extraFiles.unshift({ id, title: j.title, slides: j.slides, t: Date.now() });
-  $("#r-title").textContent = j.title;
-  $("#r-meta").textContent = `${fa(j.slides)} اسلاید`;
-  $("#r-dl").href = "/api/download?id=" + encodeURIComponent(id);
-  $("#result").hidden = false;
-  await refreshMe();
-}
-
-async function jobFailed(msg) {
-  store.del("ppt_job"); resetJobUi();
-  formErr(msg || "ساخت ارائه با خطا مواجه شد. چند دقیقه بعد دوباره امتحان کن.");
-  await refreshMe();
-}
-
-boot();
+.spinner { width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--brand); animation: spin .8s linear infinite; }
+.spinner.small { width: 18px; height: 18px; border-width: 2px; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner, .steps li.active .dot { animation-duration: 3s; } .sw, .sw::after { transition: none; } }
