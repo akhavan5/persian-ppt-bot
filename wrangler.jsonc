@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // نام Worker باید با نامی که در داشبورد کلودفلر برای اتصال گیت‌هاب می‌سازید یکی باشد
+  "name": "persian-ppt-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // متغیرها/رمزهایی که در داشبورد تنظیم می‌کنید با هر دیپلوی پاک نشوند
+  "keep_vars": true,
+
+  // بدون id: Wrangler هنگام اولین دیپلوی، خودش KV را می‌سازد و وصل می‌کند
+  "kv_namespaces": [{ "binding": "KV","id": "72ced82828e44f8984116448ff111735" }],
+
+  "workflows": [
+    { "name": "persian-ppt-deck", "binding": "DECK_WORKFLOW", "class_name": "DeckWorkflow" },
+    { "name": "persian-ppt-broadcast", "binding": "BROADCAST_WORKFLOW", "class_name": "BroadcastWorkflow" }
+  ]
+}
