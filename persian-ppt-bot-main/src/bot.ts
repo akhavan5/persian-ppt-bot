@@ -1,0 +1,236 @@
+import type { Env } from "./env";
+import type { DeckParams, Settings } from "./types";
+import { FONTS, THEMES, TONES } from "./themes";
+import {
+  acquireLock, bumpStat, clampSlides, getCredit, getSettings, isAdmin, isAllowed, isBanned, isLocked,
+  refundCredit, releaseLock, saveSettings, SLIDE_CHOICES, SUPPORT_CONTACT, supportLink, spendCredit, touchUser,
+  BUY_NOTE, buyKb, REF_MAX, rewardReferral, displayName, noteActive,
+} from "./settings";
+import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleBroadcastCallback } from "./admin";
+import { listFiles, loadFile } from "./files";
+import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
+import { toEn, toFa } from "./util";
+
+const HELP =
+  "سلام! 👋\n" +
+  "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
+  "📝 فقط <b>موضوع ارائه</b> را بفرست؛ کمی بعد فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
+  "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
+  "⚙️ /settings ← تغییر تم، لحن، فونت، حالت دانشجویی، منابع و تعداد اسلاید\n" +
+  "💳 /credit ← اعتبار باقی‌مانده و خرید شارژ\n" +
+  "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
+  "📁 /files ← دریافت دوباره‌ی فایل‌های ۲۴ ساعت اخیر";
+
+type Btn = { text: string; callback_data?: string; url?: string };
+const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
+
+// ---------- منوی تنظیمات ----------
+function mainMenu(s: Settings) {
+  const rows: Btn[][] = [
+    [{ text: `🎨 تم: ${THEMES[s.theme].name}`, callback_data: "m:theme" }, { text: `🗣 لحن: ${TONES[s.tone]}`, callback_data: "m:tone" }],
+    [{ text: `🔤 فونت: ${s.font}`, callback_data: "m:font" }, { text: `📄 اسلاید: ${toFa(String(s.slides))}`, callback_data: "m:slides" }],
+    [{ text: `🖼 تصویر: ${s.images ? "روشن" : "خاموش"}`, callback_data: "t:images" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
+    [{ text: `🎓 حالت: ${s.mode === "student" ? "دانشجویی" : "عادی"}`, callback_data: "t:mode" }],
+    [{ text: `📚 منابع: ${s.mode === "student" ? "روشن (دانشجویی)" : s.sources ? "روشن" : "خاموش"}`, callback_data: "t:sources" },
+      { text: `❓ پرسش پایانی: ${s.questions ? "روشن" : "خاموش"}`, callback_data: "t:questions" }],
+    [{ text: "✅ بستن", callback_data: "x:close" }],
+  ];
+  return { text: "⚙️ <b>تنظیمات</b>\nگزینه‌ای را برای تغییر انتخاب کن:", ...kb(rows) };
+}
+
+function subMenu(kind: string, s: Settings) {
+  const mark = (on: boolean, t: string) => (on ? `✔️ ${t}` : t);
+  let title = "", opts: Btn[] = [];
+  if (kind === "theme") {
+    title = "🎨 تم رنگی";
+    opts = Object.entries(THEMES).map(([k, v]) => ({ text: mark(s.theme === k, v.name), callback_data: `v:theme:${k}` }));
+  } else if (kind === "tone") {
+    title = "🗣 لحن متن";
+    opts = Object.entries(TONES).map(([k, v]) => ({ text: mark(s.tone === k, v), callback_data: `v:tone:${k}` }));
+  } else if (kind === "font") {
+    title = "🔤 فونت\n<i>Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد؛ Tahoma و Arial همه‌جا کار می‌کنند.</i>";
+    opts = FONTS.map((f) => ({ text: mark(s.font === f, f), callback_data: `v:font:${f}` }));
+  } else {
+    title = "📄 تعداد اسلاید پیش‌فرض\n<i>در متن پیام هم می‌توانی بنویسی «۱۲ اسلاید».</i>";
+    opts = SLIDE_CHOICES.map((n) => ({ text: mark(s.slides === n, toFa(String(n))), callback_data: `v:slides:${n}` }));
+  }
+  const rows: Btn[][] = [];
+  for (let i = 0; i < opts.length; i += 2) rows.push(opts.slice(i, i + 2));
+  rows.push([{ text: "◀️ بازگشت", callback_data: "b:main" }]);
+  return { text: title, ...kb(rows) };
+}
+
+async function handleCallback(env: Env, cq: any) {
+  const userId: number = cq.from.id;
+  const chatId: number = cq.message?.chat?.id;
+  const mid: number = cq.message?.message_id;
+  const blocked = !chatId || !mid || !isAllowed(env, userId) || (!isAdmin(env, userId) && (await isBanned(env, userId)));
+  if (blocked) return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+
+  const [act, a, b] = String(cq.data ?? "").split(":");
+  if (act === "bc") return await handleBroadcastCallback(env, cq);
+  if (act === "af") return await handleAdminFileCallback(env, cq);
+  if (act === "f") {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+    const f = await loadFile(env, userId, a);
+    if (!f) return await sendMessage(env, chatId, "⌛️ این فایل منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).");
+    return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>`);
+  }
+  const s = await getSettings(env, userId);
+  let view = mainMenu(s);
+
+  if (act === "x") {
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+    return await tg(env, "deleteMessage", { chat_id: chatId, message_id: mid }).catch(() => {});
+  }
+  if (act === "m") view = subMenu(a, s);
+  else if (act === "t") {
+    if (a === "images") s.images = !s.images;
+    if (a === "digits") s.digits = !s.digits;
+    if (a === "mode") s.mode = s.mode === "student" ? "normal" : "student";
+    if (a === "sources") s.sources = !s.sources;
+    if (a === "questions") s.questions = !s.questions;
+    await saveSettings(env, userId, s);
+    view = mainMenu(s);
+  } else if (act === "v") {
+    if (a === "theme" && b in THEMES) s.theme = b;
+    if (a === "tone" && b in TONES) s.tone = b;
+    if (a === "font" && (FONTS as readonly string[]).includes(b)) s.font = b;
+    if (a === "slides" && Number(b) >= 3) s.slides = clampSlides(Number(b));
+    await saveSettings(env, userId, s);
+    view = mainMenu(s);
+  }
+  await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
+  const { text, ...extra } = view;
+  await editMessage(env, chatId, mid, text, extra);
+}
+
+// ---------- استخراج تعداد اسلاید از متن (مثلاً «… ، ۱۰ اسلاید») ----------
+function extractSlideCount(text: string): { topic: string; slides?: number } {
+  const norm = toEn(text);
+  const m = norm.match(/(\d{1,2})\s*(?:اسلایدی|اسلاید|صفحه‌ای|صفحه|slides?)/i);
+  if (!m) return { topic: text.trim() };
+  const topic = (norm.slice(0, m.index) + " " + norm.slice((m.index ?? 0) + m[0].length))
+    .replace(/\s+/g, " ").replace(/^[\s،,.:;\-–—]+|[\s،,.:;\-–—]+$/g, "");
+  return { topic, slides: clampSlides(Number(m[1])) };
+}
+
+// ---------- پیام‌های اعتبار ----------
+const RESET_NOTE = "<i>سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
+const supportKb = (userId: number) => kb([[{ text: "💬 پیام به پشتیبانی", url: supportLink(userId) }]]);
+
+// ---------- ورودی اصلی ----------
+export async function handleUpdate(env: Env, update: any): Promise<unknown> {
+  if (update.callback_query) return handleCallback(env, update.callback_query);
+
+  const msg = update.message;
+  if (!msg || msg.chat?.type !== "private" || !msg.from) return; // فقط گفتگوی خصوصی
+  const chatId: number = msg.chat.id;
+  const userId: number = msg.from.id;
+  // نویسه‌های نامرئی جهت‌نما (RLM/LRM و …) که کیبوردهای فارسی گاهی قبل از «/» می‌گذارند حذف می‌شوند؛ ZWNJ (نیم‌فاصله) دست‌نخورده می‌ماند
+  const text: string = String(msg.text ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").trim();
+
+  const cmd = text.startsWith("/") ? text.split(/[\s@]/)[0].toLowerCase() : "";
+  const args = text.split(/\s+/).slice(1);
+  if (cmd === "/id") return await sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>`);
+
+  const admin = isAdmin(env, userId);
+  if (!admin && (await isBanned(env, userId))) {
+    return await sendMessage(env, chatId, "⛔️ دسترسی شما به این ربات مسدود شده است.");
+  }
+  if (!isAllowed(env, userId)) {
+    return await sendMessage(env, chatId,
+      `⛔️ این ربات خصوصی است و شما دسترسی ندارید.\nبرای دریافت دسترسی، دکمه‌ی زیر را بزن.`,
+      supportKb(userId));
+  }
+  const name = displayName(msg.from);
+  const isNew = await touchUser(env, userId, msg.from.username, name).catch((e) => { console.error("touchUser", e); return false; });
+  if (!admin) await noteActive(env, userId, msg.from.username, name).catch((e) => console.error("noteActive", e)); // فهرست «کاربران اخیر» مدیر؛ خود مدیرها در آن نمی‌آیند
+
+  if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args, text);
+
+  // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده، به دعوت‌کننده ۱ ارائه‌ی رایگان می‌دهد
+  if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
+    const inviter = Number(args[0].slice(4));
+    if (await rewardReferral(env, inviter, userId).catch(() => false)) {
+      await sendMessage(env, inviter, "🎉 یکی از دوستانت با لینک تو وارد ربات شد؛ <b>۱ ارائه‌ی رایگان</b> به اعتبارت اضافه شد. برای دیدن اعتبار: /credit").catch(() => {});
+    }
+  }
+  if (cmd === "/files") {
+    const list = await listFiles(env, userId);
+    if (!list.length) return await sendMessage(env, chatId, "📁 فایلی برای ۲۴ ساعت اخیر نداری. فایل هر ارائه بعد از ساخته شدن تا ۲۴ ساعت اینجا می‌ماند.");
+    return await sendMessage(env, chatId, "📁 <b>فایل‌های ۲۴ ساعت اخیر</b>\nبرای دریافت دوباره، یکی را بزن:",
+      kb(list.map((f) => [{ text: `📥 ${f.title.slice(0, 40)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` }])));
+  }
+  if (cmd === "/invite") {
+    const me = await tg<{ username?: string }>(env, "getMe");
+    const link = `https://t.me/${me.username}?start=ref_${userId}`;
+    const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
+    return await sendMessage(env, chatId,
+      `🎁 <b>دعوت دوستان</b>\nبه ازای هر دوستی که با لینک تو وارد ربات شود، <b>۱ ارائه‌ی رایگان</b> می‌گیری (حداکثر ${toFa(String(REF_MAX))} دعوت).\n\n🔗 لینک اختصاصی تو:\n${link}`,
+      kb([[{ text: "📤 ارسال به دوستان", url: share }]]));
+  }
+
+  if (cmd === "/credit" || cmd === "/balance") {
+    const c = await getCredit(env, userId);
+    if (c.unlimited) return await sendMessage(env, chatId, "💳 اعتبار شما <b>نامحدود</b> است.");
+    const out = `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
+      `• سهمیه‌ی امروز: ${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))}\n` +
+      (c.bonus > 0 ? `• اعتبار اضافه: ${toFa(String(c.bonus))}\n` : "") +
+      `\n${RESET_NOTE}\n\n${BUY_NOTE}`;
+    return await sendMessage(env, chatId, out, buyKb(userId));
+  }
+  if (cmd === "/start" || cmd === "/help") {
+    return await sendMessage(env, chatId, admin ? HELP + "\n\n🛠 شما مدیر هستید؛ دستورهای مدیریتی: /admin" : HELP);
+  }
+  if (cmd === "/settings") {
+    const { text: t, ...extra } = mainMenu(await getSettings(env, userId));
+    return await sendMessage(env, chatId, t, extra);
+  }
+  if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. /start را بزن.");
+  if (!text) return await sendMessage(env, chatId, "لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست.");
+
+  const { topic, slides } = extractSlideCount(text);
+  if (topic.length < 3) return await sendMessage(env, chatId, "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
+  if (topic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
+
+  // هر کاربر در هر لحظه فقط یک ارائه (قبل از کم کردن اعتبار چک می‌شود)
+  if (await isLocked(env, userId)) {
+    return await sendMessage(env, chatId, "⏳ ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، موضوع بعدی را بفرست.");
+  }
+
+  const quota = await spendCredit(env, userId);
+  if (!quota.ok) {
+    return await sendMessage(env, chatId,
+      `⏳ اعتبار شما تمام شده است.\n\n${BUY_NOTE}\n\n${RESET_NOTE}`, buyKb(userId));
+  }
+  await acquireLock(env, userId);
+
+  const settings = await getSettings(env, userId);
+  if (slides) settings.slides = slides;
+  if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8); // ساختار دانشجویی حداقل ۸ اسلاید می‌خواهد
+
+  const undo = async () => { // اگر قبل از شروع Workflow چیزی خراب شد: اعتبار برگردد و قفل آزاد شود
+    await refundCredit(env, userId, quota.source, quota.day).catch((e) => console.error("refund", e));
+    await releaseLock(env, userId).catch((e) => console.error("unlock", e));
+  };
+
+  try {
+    const creditLine = quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(quota.left))}`;
+    const status = await sendMessage(env, chatId,
+      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(topic)}» (${toFa(String(settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`);
+
+    const params: DeckParams = { chatId, statusMessageId: status.message_id, userId, topic, settings, credit: quota.source, day: quota.day };
+    try {
+      await env.DECK_WORKFLOW.create({ id: `d-${update.update_id}`, params });
+    } catch (e) {
+      console.error("workflow create failed", e);
+      await undo();
+      return await editMessage(env, chatId, status.message_id, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.");
+    }
+    await bumpStat(env, "started").catch(() => {});
+  } catch (e) {
+    await undo(); // مثلاً ارسال پیام وضعیت شکست خورد
+    throw e;
+  }
+}
