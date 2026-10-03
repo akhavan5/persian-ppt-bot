@@ -1,16 +1,17 @@
 /** درگاه پرداخت سیزپی (SizPay، API ساده: GetTokenSimple / ConfirmSimple) — فقط نسخه‌ی وب. پس از پرداخت موفق، اعتبار اضافه (bonus) به حساب کاربر افزوده می‌شود. */
 import type { Env } from "./env";
-import { getBonus, getSub, putSub, setBonus } from "./settings";
+import { PLAN_MAX_SLIDES, getBonus, getSub, putSub, setBonus } from "./settings";
 import { hitLimit, type WebUser } from "./auth";
 
 /**
  * پلن‌های ماهانه (price: هزار تومان). هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
- * هر دو پلن به «همه‌ی مدل‌ها» دسترسی می‌دهند؛ کاربر رایگان فقط مدل اول را دارد.
+ * همه‌ی مدل‌ها برای همه رایگان است؛ پلن‌ها فقط اعتبار می‌فروشند و سقف اسلاید هر ارائه را بالا می‌برند
+ * (رایگان ۸، پلاس ۲۰، پرو ۳۵ اسلاید).
  */
-export interface Plan { id: string; name: string; price: number; credits: number; days: number }
+export interface Plan { id: string; name: string; price: number; credits: number; days: number; maxSlides: number }
 export const PLANS: Plan[] = [
-  { id: "plus", name: "پلاس", price: 99, credits: 20, days: 30 },
-  { id: "pro", name: "پرو", price: 199, credits: 50, days: 30 },
+  { id: "plus", name: "پلاس", price: 99, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.plus },
+  { id: "pro", name: "پرو", price: 199, credits: 20, days: 30, maxSlides: PLAN_MAX_SLIDES.pro },
 ];
 const RANK: Record<string, number> = { plus: 1, pro: 2 };
 

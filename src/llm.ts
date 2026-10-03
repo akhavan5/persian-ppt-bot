@@ -248,7 +248,7 @@ function ensureKinds(slides: OutlineItem[], o: ContentOpts): OutlineItem[] {
   if (wantSources(o) && !has("sources")) {
     slides.splice(closeAt(), 0, { title: "منابع", summary: "منابع پیشنهادی برای مطالعه‌ی بیشتر", kind: "sources" });
   }
-  return slides.slice(0, 30);
+  return slides.slice(0, 37); // سقف پلن ۳۵ + حداکثر ۲ اسلاید منابع/پرسش که مدل جا انداخته باشد
 }
 
 function structureRules(o: ContentOpts): string {
@@ -268,7 +268,7 @@ Number of slides (including title and closing): ${n}
 Tone: ${TONES[tone] ?? tone}
 Audience: ${o.audience || (o.mode === "student" ? "university class" : "general")}
 Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers", "kind": "sources|questions (ONLY on those special slides, otherwise omit)"}]}
-${structureRules(o)}`, 2500, o.model);
+${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model); // ۳۵ اسلاید با ۲۵۰۰ توکن جا نمی‌شد
   const out = normalizeOutline(data, topic);
   out.slides = ensureKinds(out.slides, o);
   return out;

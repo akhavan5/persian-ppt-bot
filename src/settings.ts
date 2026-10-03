@@ -10,7 +10,15 @@ export const isWebId = (id: Uid) => typeof id === "string" && id.startsWith("w_"
 export const DEFAULTS: Settings = { theme: "ocean", font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, mode: "normal", sources: false, questions: false };
 export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 
-export const clampSlides = (n: number) => Math.min(20, Math.max(3, Math.round(n)));
+// ---------- سقف اسلاید (فقط وب): رایگان ۸، پلاس ۲۰، پرو ۳۵ ----------
+export const FREE_MAX_SLIDES = 8;
+export const ABS_MAX_SLIDES = 35;
+export const PLAN_MAX_SLIDES: Record<string, number> = { plus: 20, pro: 35 };
+/** گزینه‌های انتخاب تعداد اسلاید در وب (گزینه‌های بالاتر از سقف پلن کاربر قفل نمایش داده می‌شوند) */
+export const WEB_SLIDE_CHOICES = [5, 6, 8, 10, 12, 15, 20, 25, 30, 35];
+
+/** max پیش‌فرض ۲۰ است تا رفتار ربات تلگرام تغییر نکند؛ وب سقف پلن کاربر را پاس می‌دهد */
+export const clampSlides = (n: number, max = 20) => Math.min(max, Math.max(3, Math.round(n)));
 
 export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   const raw = (await env.KV.get(`u:${userId}`, "json")) as Partial<Settings> | null;
@@ -18,7 +26,7 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   if (!(s.theme in THEMES)) s.theme = DEFAULTS.theme;
   if (!(s.tone in TONES)) s.tone = DEFAULTS.tone;
   if (!(FONTS as readonly string[]).includes(s.font)) s.font = DEFAULTS.font;
-  s.slides = clampSlides(Number(s.slides) || DEFAULTS.slides);
+  s.slides = clampSlides(Number(s.slides) || DEFAULTS.slides, ABS_MAX_SLIDES);
   s.digits = !!s.digits;
   s.images = !!s.images;
   s.mode = s.mode === "student" ? "student" : "normal";
@@ -110,14 +118,18 @@ export async function putSub(env: Env, userId: Uid, s: Sub) {
 }
 
 // ---------- دسترسی به مدل‌ها ----------
-/** مدل اولِ فهرست = مدل رایگان */
+/** مدل اولِ فهرست = مدل پیش‌فرض */
 export const freeModelId = (env: Env) => modelList(env)[0].id;
-/** مدل رایگان برای همه؛ بقیه‌ی مدل‌ها فقط برای مدیر یا عضو پلن فعال */
-export async function canUseModel(env: Env, userId: Uid, modelId: string): Promise<boolean> {
-  if (modelId === freeModelId(env)) return true;
-  if (!modelList(env).some((m) => m.id === modelId)) return false;
-  if (isAdmin(env, userId)) return true;
-  return (await getSub(env, userId)) !== null;
+/** همه‌ی مدل‌های فهرست برای همه‌ی کاربران رایگان است؛ فقط وجود مدل در فهرست بررسی می‌شود. */
+export async function canUseModel(env: Env, _userId: Uid, modelId: string): Promise<boolean> {
+  return modelList(env).some((m) => m.id === modelId);
+}
+
+/** سقف تعداد اسلاید هر ارائه: مدیر ۳۵؛ عضو پلن فعال طبق پلن (پلاس ۲۰، پرو ۳۵)؛ بقیه ۸ */
+export async function maxSlidesFor(env: Env, userId: Uid): Promise<number> {
+  if (isAdmin(env, userId)) return ABS_MAX_SLIDES;
+  const sub = await getSub(env, userId);
+  return sub ? (PLAN_MAX_SLIDES[sub.plan] ?? FREE_MAX_SLIDES) : FREE_MAX_SLIDES;
 }
 
 export type CreditSource = "daily" | "plan" | "bonus" | "none";

@@ -3,9 +3,10 @@ import type { Env } from "./env";
 import type { DeckParams, Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
 import {
-  SUPPORT_CONTACT, SLIDE_CHOICES, acquireLock, bumpStat, canUseModel, clampSlides, freeModelId, getCredit, getSettings, getSub,
-  isAdmin, isAllowed, isBanned, isLocked, planLink, refundCredit, releaseLock, saveSettings, spendCredit,
+  FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, acquireLock, bumpStat, clampSlides, getCredit, getSettings, getSub,
+  isAdmin, isAllowed, isBanned, isLocked, maxSlidesFor, planLink, refundCredit, releaseLock, saveSettings, spendCredit,
 } from "./settings";
+import { toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect } from "./files";
@@ -31,6 +32,10 @@ async function readBody(req: Request): Promise<Record<string, unknown> | null> {
 }
 
 const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
+
+const slidesLimitMsg = (max: number) => max <= FREE_MAX_SLIDES
+  ? `در پلن رایگان حداکثر ${toFa(String(FREE_MAX_SLIDES))} اسلاید می‌توانی بسازی؛ برای تعداد بیشتر پلن پلاس (تا ${toFa(String(PLANS[0].maxSlides))} اسلاید) یا پرو (تا ${toFa(String(PLANS[1].maxSlides))} اسلاید) را بگیر.`
+  : `پلن فعلی تو حداکثر ${toFa(String(max))} اسلاید در هر ارائه را پشتیبانی می‌کند؛ برای تعداد بیشتر پلن را ارتقا بده.`;
 
 export async function handleWeb(req: Request, env: Env, url: URL): Promise<Response> {
   try {
@@ -62,9 +67,10 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent })),
       tones: TONES,
       fonts: FONTS,
-      slideChoices: SLIDE_CHOICES,
-      // مدل اول رایگان است؛ بقیه فقط با پلن پلاس/پرو (قفل در سرور هم اعمال می‌شود)
-      models: modelList(env).map((m, i) => ({ id: m.id, name: m.name, brand: m.brand, free: i === 0 })),
+      slideChoices: WEB_SLIDE_CHOICES,
+      freeMaxSlides: FREE_MAX_SLIDES,
+      // همه‌ی مدل‌ها برای همه رایگان است
+      models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: true })),
       plans: PLANS,
     });
   }
@@ -136,9 +142,9 @@ async function login(req: Request, env: Env): Promise<Response> {
 
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
-  const [c, settings, locked, sub] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), isLocked(env, user.id), getSub(env, user.id)]);
+  const [c, settings, locked, sub, maxSlides] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), isLocked(env, user.id), getSub(env, user.id), maxSlidesFor(env, user.id)]);
   const premium = !!sub || isAdmin(env, user.id);
-  if (!premium) settings.model = freeModelId(env); // پلن تمام شده: نمایش مدل رایگان
+  settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
   const activeJob = locked ? await env.KV.get(`wj:${user.id}`) : null;
   return json({
     user: publicUser(user),
@@ -146,6 +152,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
       ? { unlimited: true }
       : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: c.limit, bonus: c.bonus, plan: c.plan },
     premium,
+    maxSlides,
     plan: sub ? { id: sub.plan, exp: sub.exp, credits: sub.credits } : null,
     settings,
     activeJob,
@@ -162,11 +169,12 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
   if (typeof b.tone === "string" && b.tone in TONES) s.tone = b.tone;
   if (typeof b.font === "string" && (FONTS as readonly string[]).includes(b.font)) s.font = b.font;
   if (typeof b.mode === "string" && (b.mode === "normal" || b.mode === "student")) s.mode = b.mode;
-  if (typeof b.slides === "number" && Number.isFinite(b.slides)) s.slides = clampSlides(b.slides);
-  if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) {
-    if (!(await canUseModel(env, user.id, b.model))) return json({ error: "این مدل مخصوص اعضای پلن پلاس و پرو است.", needPlan: true }, 403);
-    s.model = b.model;
+  if (typeof b.slides === "number" && Number.isFinite(b.slides)) {
+    const max = await maxSlidesFor(env, user.id);
+    if (Math.round(b.slides) > max) return json({ error: slidesLimitMsg(max), needPlan: true }, 403);
+    s.slides = clampSlides(b.slides, max);
   }
+  if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) s.model = b.model;
   for (const k of ["digits", "images", "sources", "questions"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
   await saveSettings(env, user.id, s);
   return json({ settings: await getSettings(env, user.id) });
@@ -182,6 +190,12 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   if (topic.length < 3) return err("موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
   if (topic.length > 600) return err("موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
 
+  // سقف اسلاید بر اساس پلن؛ پیش از کسر اعتبار بررسی می‌شود
+  const maxSlides = await maxSlidesFor(env, user.id);
+  if (typeof b?.slides === "number" && Number.isFinite(b.slides) && Math.round(b.slides) > maxSlides) {
+    return json({ error: slidesLimitMsg(maxSlides), needPlan: true }, 403);
+  }
+
   if (await isLocked(env, user.id)) return err("ارائه‌ی قبلی هنوز در حال ساخته شدن است؛ کمی صبر کن.", 409);
 
   const quota = await spendCredit(env, user.id);
@@ -189,8 +203,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   await acquireLock(env, user.id);
 
   const settings: Settings = await getSettings(env, user.id);
-  if (!(await canUseModel(env, user.id, settings.model ?? ""))) settings.model = freeModelId(env); // پلن تمام شده ⇒ مدل رایگان
-  if (typeof b?.slides === "number" && Number.isFinite(b.slides)) settings.slides = clampSlides(b.slides);
+  settings.slides = typeof b?.slides === "number" && Number.isFinite(b.slides) ? clampSlides(b.slides, maxSlides) : Math.min(settings.slides, maxSlides);
   if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8);
 
   const undo = async () => {
