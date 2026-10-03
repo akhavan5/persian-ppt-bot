@@ -6,7 +6,7 @@ import {
   SUPPORT_CONTACT, SLIDE_CHOICES, acquireLock, buyLink, bumpStat, clampSlides, getCredit, getSettings,
   isAllowed, isBanned, isLocked, refundCredit, releaseLock, saveSettings, spendCredit,
 } from "./settings";
-import { PLANS, payEnabled, paymentCallback, startPayment } from "./payment";
+import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect } from "./files";
 import {
   authUser, clearSessionCookie, createSession, createUser, destroySession, getUserByEmail, googleCallback,
@@ -47,8 +47,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/auth/google" && method === "GET") return googleStart(env, url);
   if (path === "/api/auth/google/callback" && method === "GET") return googleCallback(env, req, url);
 
-  // بازگشت از درگاه زرین‌پال (GET از مرورگر کاربر)
-  if (path === "/api/pay/callback" && method === "GET") return paymentCallback(env, url);
+  // درگاه سیزپی: انتقال به درگاه (GET) و بازگشت از درگاه (POST از مرورگر کاربر؛ بدون بررسی origin)
+  if (path === "/api/pay/go" && method === "GET") return paymentGo(env, url);
+  if (path === "/api/pay/callback") return paymentCallback(env, req, url);
 
   // حفاظت CSRF: درخواست‌های تغییردهنده فقط از همین سایت
   if (method !== "GET" && method !== "HEAD" && req.headers.get("origin") !== url.origin) return err("درخواست نامعتبر", 403);
@@ -140,7 +141,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
       : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: c.limit, bonus: c.bonus },
     settings,
     activeJob,
-    plans: PLANS.map((p) => ({ ...p, url: buyLink(user.id, p.count, p.price) })), // url: لینک تلگرام (جایگزین وقتی زرین‌پال فعال نیست)
+    plans: PLANS.map((p) => ({ ...p, url: buyLink(user.id, p.count, p.price) })), // url: لینک تلگرام (جایگزین وقتی درگاه پرداخت فعال نیست)
     support: SUPPORT_CONTACT,
   });
 }
