@@ -154,11 +154,14 @@ footer .wrap{position:relative}
 .ft-seal .t{display:grid;gap:2px;line-height:1.7;text-align:start}
 .ft-seal b{color:#fff;font-size:.95rem}
 .ft-seal small{font-size:.8rem;color:#9fb2d1}
-.ft-seal .seal{flex:none;display:grid;place-items:center;min-width:92px;min-height:92px;border-radius:14px;background:#fff;padding:8px}
-.ft-seal .seal a{display:block}.ft-seal img{display:block;max-width:76px;height:auto}
+.ft-seal .seals{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.ft-seal .seal{position:relative;flex:none;display:grid;place-items:center;min-width:92px;min-height:92px;border-radius:14px;background:#fff;padding:8px}
+.ft-seal .seal-aq img{margin:0!important;max-width:80px}
+.ft-seal .seal::before{content:"🛡️";position:absolute;inset:0;display:grid;place-items:center;font-size:36px;opacity:.35}
+.ft-seal .seal a{position:relative;z-index:1;display:grid;place-items:center;min-width:76px;min-height:76px}.ft-seal img{display:block;max-width:76px;height:auto}
 .copy{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,.12);padding:16px 0 20px;font-size:.84rem;color:#8ea2c4}
 .copy a{color:#cfdcf3;text-decoration:none;font-weight:600}.copy a:hover{color:#fff}
-@media(max-width:760px){.ft{flex-direction:column;align-items:stretch;padding:34px 0 26px}.ft-brand{max-width:none}.ft-seal{justify-content:space-between}.copy{justify-content:center;text-align:center}}
+@media(max-width:760px){.ft{flex-direction:column;align-items:stretch;padding:34px 0 26px}.ft-brand{max-width:none}.ft-seal{flex-direction:column;align-items:stretch;text-align:center}.ft-seal .t{text-align:center}.copy{justify-content:center;text-align:center}}
 .who{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:700px){.who{grid-template-columns:1fr}}
 .who .card{margin:0;height:100%} .who p{margin:0;color:var(--muted);font-size:.96rem}
@@ -321,8 +324,8 @@ address{font-style:normal}
         <p>از یک موضوع ساده تا ارائه‌ای کامل و آماده‌ی نمایش؛ فارسی، راست‌به‌چپ و قابل‌ویرایش.</p>
       </div>
       <div class="ft-seal">
-        <div class="t"><b>نماد اعتماد الکترونیکی</b><small>برای بررسی اعتبار، روی نماد کلیک کن.</small></div>
-        <div class="seal"><a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8023522&Code=1TrYIskseCN8cpO19zZ0yVlXOspM46Qc'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8023522&Code=1TrYIskseCN8cpO19zZ0yVlXOspM46Qc' alt='' style='cursor:pointer' code='1TrYIskseCN8cpO19zZ0yVlXOspM46Qc'></a></div>
+        <div class="t"><b>اعتماد و پرداخت امن</b><small>برای بررسی اعتبار، روی نمادها کلیک کن.</small></div>
+        <div class="seals"><div class="seal"><a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8023522&Code=1TrYIskseCN8cpO19zZ0yVlXOspM46Qc'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8023522&Code=1TrYIskseCN8cpO19zZ0yVlXOspM46Qc' alt='' style='cursor:pointer' code='1TrYIskseCN8cpO19zZ0yVlXOspM46Qc'></a></div><div class="seal seal-aq"><a onclick="window.open('https://panel.aqayepardakht.ir/trustGateway/104502',null,'width=400, height=600, scrollbars=no, resizable=no')" href="javascript:void(0)" referrerpolicy="strict-origin-when-cross-origin" title="پرداخت امن آقای پرداخت"><img style="border-radius: 0px;margin-right: 10px;" src="https://cdn.aqayepardakht.ir/trustlogo/1.svg" alt="پرداخت امن آقای پرداخت"></a></div></div>
       </div>
     </div>
     <div class="copy"><span>© پاورپوینت‌ساز فارسی (pptsaz.ir) — همه‌ی حقوق محفوظ است.</span><a href="#top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false">↑ بازگشت به بالا</a></div>
