@@ -51,7 +51,7 @@ export interface DeckParams {
   topic: string;
   settings: Settings;
   /** اعتبار از کجا کم شده؛ برای برگشت در صورت خطا */
-  credit: "daily" | "bonus" | "none";
+  credit: "daily" | "plan" | "bonus" | "none";
   /** روز (UTC) شمارنده‌ی روزانه‌ای که کم شده */
   day: string;
 }

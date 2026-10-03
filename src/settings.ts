@@ -44,6 +44,10 @@ export const BUY_NOTE = "💰 برای خرید شارژ، یکی از بسته�
 export const buyLink = (userId: Uid, count: number, price: number) =>
   `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
   encodeURIComponent(`سلام، می‌خواهم بسته‌ی ${count} پاورپوینتی (${price} هزار تومان) ربات ساخت پاورپوینت را بخرم.\nشناسه‌ی من: ${userId}`);
+/** لینک تلگرام برای خرید پلن ماهانه (وقتی درگاه پرداخت فعال نیست) */
+export const planLink = (userId: Uid, name: string, price: number) =>
+  `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
+  encodeURIComponent(`سلام، می‌خواهم پلن ${name} (${price} هزار تومان در ماه) پاورپوینت‌ساز را بخرم.\nشناسه‌ی من: ${userId}`);
 /** دو دکمه‌ی شیشه‌ای خرید؛ پیام آماده شامل بسته‌ی انتخابی و شناسه‌ی کاربر است */
 export const buyKb = (userId: Uid) => ({
   reply_markup: {
@@ -90,22 +94,49 @@ export async function setBonus(env: Env, userId: Uid, n: number) {
   else await env.KV.put(bonusKey(userId), String(n));
 }
 
-export type CreditSource = "daily" | "bonus" | "none";
-export interface CreditInfo { unlimited: boolean; limit: number; used: number; dailyLeft: number; bonus: number; total: number }
+// ---------- پلن ماهانه (پلاس / پرو) — فقط وب ----------
+/** plan: شناسه‌ی پلن؛ exp: پایان اعتبار پلن (ms)؛ credits: اعتبار ماهانه‌ی باقی‌مانده (با پایان پلن می‌سوزد) */
+export interface Sub { plan: string; exp: number; credits: number }
+const subKey = (userId: Uid) => `sub:${userId}`;
+
+/** اشتراک فعال کاربر؛ اگر نداشته باشد یا تمام شده باشد null */
+export async function getSub(env: Env, userId: Uid): Promise<Sub | null> {
+  const s = (await env.KV.get(subKey(userId), "json")) as Sub | null;
+  if (!s || !Number.isFinite(s.exp) || s.exp <= Date.now()) return null;
+  return { plan: String(s.plan), exp: s.exp, credits: Math.max(0, Math.floor(Number(s.credits) || 0)) };
+}
+export async function putSub(env: Env, userId: Uid, s: Sub) {
+  await env.KV.put(subKey(userId), JSON.stringify(s), { expirationTtl: Math.max(60, Math.ceil((s.exp - Date.now()) / 1000) + 86_400) });
+}
+
+// ---------- دسترسی به مدل‌ها ----------
+/** مدل اولِ فهرست = مدل رایگان */
+export const freeModelId = (env: Env) => modelList(env)[0].id;
+/** مدل رایگان برای همه؛ بقیه‌ی مدل‌ها فقط برای مدیر یا عضو پلن فعال */
+export async function canUseModel(env: Env, userId: Uid, modelId: string): Promise<boolean> {
+  if (modelId === freeModelId(env)) return true;
+  if (!modelList(env).some((m) => m.id === modelId)) return false;
+  if (isAdmin(env, userId)) return true;
+  return (await getSub(env, userId)) !== null;
+}
+
+export type CreditSource = "daily" | "plan" | "bonus" | "none";
+export interface CreditInfo { unlimited: boolean; limit: number; used: number; dailyLeft: number; plan: number; bonus: number; total: number }
 
 /** وضعیت اعتبار بدون مصرف کردن آن. مدیرها یا DAILY_LIMIT=0 ⇒ نامحدود. */
 export async function getCredit(env: Env, userId: Uid): Promise<CreditInfo> {
   const limit = dailyLimit(env, userId);
   if (isAdmin(env, userId) || limit === 0) {
-    return { unlimited: true, limit, used: 0, dailyLeft: Infinity, bonus: 0, total: Infinity };
+    return { unlimited: true, limit, used: 0, dailyLeft: Infinity, plan: 0, bonus: 0, total: Infinity };
   }
-  const [usedRaw, bonus] = await Promise.all([env.KV.get(dailyKey(userId)), getBonus(env, userId)]);
+  const [usedRaw, bonus, sub] = await Promise.all([env.KV.get(dailyKey(userId)), getBonus(env, userId), getSub(env, userId)]);
   const used = Number(usedRaw ?? 0) || 0;
   const dailyLeft = Math.max(0, limit - used);
-  return { unlimited: false, limit, used, dailyLeft, bonus, total: dailyLeft + bonus };
+  const plan = sub?.credits ?? 0;
+  return { unlimited: false, limit, used, dailyLeft, plan, bonus, total: dailyLeft + plan + bonus };
 }
 
-/** یک ارائه اعتبار برمی‌دارد: اول از سهمیه‌ی روزانه، بعد از اعتبار اضافه. KV همگام‌سازی لحظه‌ای ندارد؛ برای کنترل هزینه کافی است، نه یک سد ریاضی دقیق. */
+/** یک ارائه اعتبار برمی‌دارد: اول سهمیه‌ی روزانه (چون هر روز دوباره پر می‌شود)، بعد اعتبار پلن ماهانه، بعد اعتبار اضافه. KV همگام‌سازی لحظه‌ای ندارد؛ برای کنترل هزینه کافی است، نه یک سد ریاضی دقیق. */
 export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean; source: CreditSource; day: string; left: number; unlimited: boolean }> {
   const day = today();
   const c = await getCredit(env, userId);
@@ -113,6 +144,13 @@ export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean;
   if (c.dailyLeft > 0) {
     await env.KV.put(dailyKey(userId, day), String(c.used + 1), { expirationTtl: 172_800 });
     return { ok: true, source: "daily", day, left: c.total - 1, unlimited: false };
+  }
+  if (c.plan > 0) {
+    const sub = await getSub(env, userId);
+    if (sub && sub.credits > 0) {
+      await putSub(env, userId, { ...sub, credits: sub.credits - 1 });
+      return { ok: true, source: "plan", day, left: c.total - 1, unlimited: false };
+    }
   }
   if (c.bonus > 0) {
     await setBonus(env, userId, c.bonus - 1);
@@ -127,6 +165,9 @@ export async function refundCredit(env: Env, userId: Uid, source: CreditSource, 
     const k = dailyKey(userId, day);
     const used = Number(await env.KV.get(k)) || 0;
     if (used > 0) await env.KV.put(k, String(used - 1), { expirationTtl: 172_800 });
+  } else if (source === "plan") {
+    const sub = await getSub(env, userId); // اگر پلن در این فاصله تمام شده باشد، چیزی برنمی‌گردد
+    if (sub) await putSub(env, userId, { ...sub, credits: sub.credits + 1 });
   } else if (source === "bonus") {
     await setBonus(env, userId, (await getBonus(env, userId)) + 1);
   }

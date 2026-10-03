@@ -3,8 +3,8 @@ import type { Env } from "./env";
 import type { DeckParams, Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
 import {
-  SUPPORT_CONTACT, SLIDE_CHOICES, acquireLock, buyLink, bumpStat, clampSlides, getCredit, getSettings,
-  isAllowed, isBanned, isLocked, refundCredit, releaseLock, saveSettings, spendCredit,
+  SUPPORT_CONTACT, SLIDE_CHOICES, acquireLock, bumpStat, canUseModel, clampSlides, freeModelId, getCredit, getSettings, getSub,
+  isAdmin, isAllowed, isBanned, isLocked, planLink, refundCredit, releaseLock, saveSettings, spendCredit,
 } from "./settings";
 import { modelList } from "./llm";
 import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
@@ -63,7 +63,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       tones: TONES,
       fonts: FONTS,
       slideChoices: SLIDE_CHOICES,
-      models: modelList(env).map((m) => ({ id: m.id, name: m.name })),
+      // مدل اول رایگان است؛ بقیه فقط با پلن پلاس/پرو (قفل در سرور هم اعمال می‌شود)
+      models: modelList(env).map((m, i) => ({ id: m.id, name: m.name, brand: m.brand, free: i === 0 })),
+      plans: PLANS,
     });
   }
 
@@ -134,16 +136,20 @@ async function login(req: Request, env: Env): Promise<Response> {
 
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
-  const [c, settings, locked] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), isLocked(env, user.id)]);
+  const [c, settings, locked, sub] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), isLocked(env, user.id), getSub(env, user.id)]);
+  const premium = !!sub || isAdmin(env, user.id);
+  if (!premium) settings.model = freeModelId(env); // پلن تمام شده: نمایش مدل رایگان
   const activeJob = locked ? await env.KV.get(`wj:${user.id}`) : null;
   return json({
     user: publicUser(user),
     credit: c.unlimited
       ? { unlimited: true }
-      : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: c.limit, bonus: c.bonus },
+      : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: c.limit, bonus: c.bonus, plan: c.plan },
+    premium,
+    plan: sub ? { id: sub.plan, exp: sub.exp, credits: sub.credits } : null,
     settings,
     activeJob,
-    plans: PLANS.map((p) => ({ ...p, url: buyLink(user.id, p.count, p.price) })), // url: لینک تلگرام (جایگزین وقتی درگاه پرداخت فعال نیست)
+    plans: PLANS.map((p) => ({ ...p, url: planLink(user.id, p.name, p.price) })), // url: لینک تلگرام (جایگزین وقتی درگاه پرداخت فعال نیست)
     support: SUPPORT_CONTACT,
   });
 }
@@ -157,7 +163,10 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
   if (typeof b.font === "string" && (FONTS as readonly string[]).includes(b.font)) s.font = b.font;
   if (typeof b.mode === "string" && (b.mode === "normal" || b.mode === "student")) s.mode = b.mode;
   if (typeof b.slides === "number" && Number.isFinite(b.slides)) s.slides = clampSlides(b.slides);
-  if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) s.model = b.model;
+  if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) {
+    if (!(await canUseModel(env, user.id, b.model))) return json({ error: "این مدل مخصوص اعضای پلن پلاس و پرو است.", needPlan: true }, 403);
+    s.model = b.model;
+  }
   for (const k of ["digits", "images", "sources", "questions"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
   await saveSettings(env, user.id, s);
   return json({ settings: await getSettings(env, user.id) });
@@ -180,6 +189,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   await acquireLock(env, user.id);
 
   const settings: Settings = await getSettings(env, user.id);
+  if (!(await canUseModel(env, user.id, settings.model ?? ""))) settings.model = freeModelId(env); // پلن تمام شده ⇒ مدل رایگان
   if (typeof b?.slides === "number" && Number.isFinite(b.slides)) settings.slides = clampSlides(b.slides);
   if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8);
 

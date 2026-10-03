@@ -1,13 +1,30 @@
 /** درگاه پرداخت سیزپی (SizPay، API ساده: GetTokenSimple / ConfirmSimple) — فقط نسخه‌ی وب. پس از پرداخت موفق، اعتبار اضافه (bonus) به حساب کاربر افزوده می‌شود. */
 import type { Env } from "./env";
-import { getBonus, setBonus } from "./settings";
+import { getBonus, getSub, putSub, setBonus } from "./settings";
 import { hitLimit, type WebUser } from "./auth";
 
-/** price: هزار تومان */
-export const PLANS = [
-  { id: "p10", count: 10, price: 50 },
-  { id: "p20", count: 20, price: 80 },
+/**
+ * پلن‌های ماهانه (price: هزار تومان). هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
+ * هر دو پلن به «همه‌ی مدل‌ها» دسترسی می‌دهند؛ کاربر رایگان فقط مدل اول را دارد.
+ */
+export interface Plan { id: string; name: string; price: number; credits: number; days: number }
+export const PLANS: Plan[] = [
+  { id: "plus", name: "پلاس", price: 99, credits: 20, days: 30 },
+  { id: "pro", name: "پرو", price: 199, credits: 50, days: 30 },
 ];
+const RANK: Record<string, number> = { plus: 1, pro: 2 };
+
+/**
+ * فعال‌سازی / تمدید پلن بعد از پرداخت موفق:
+ * - بدون پلن فعال: از همین الان ۳۰ روز.
+ * - با پلن فعال: ۳۰ روز به پایان پلن فعلی اضافه می‌شود و اعتبار جدید روی اعتبار باقی‌مانده‌ی پلن جمع می‌شود.
+ * - پلن نمایش‌داده‌شده همیشه بالاترین سطحِ بین پلن فعلی و پلن خریداری‌شده است.
+ */
+export async function activatePlan(env: Env, uid: string, p: Plan) {
+  const cur = await getSub(env, uid);
+  const plan = cur && (RANK[cur.plan] ?? 0) > (RANK[p.id] ?? 0) ? cur.plan : p.id;
+  await putSub(env, uid, { plan, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits });
+}
 
 const API = "https://rt.sizpay.ir/api/PaymentSimple";
 const ROUTE = "https://rt.sizpay.ir/Route/Payment";
@@ -35,7 +52,7 @@ export function parseSizKey(raw: string | undefined): SizKey | null {
 }
 export const payEnabled = (env: Env) => parseSizKey(env.SIZPAY_KEY) !== null;
 
-interface PayRecord { uid: string; count: number; amount: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string }
+interface PayRecord { uid: string; plan?: string; count: number; amount: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string }
 const TTL = 60 * 60 * 24 * 14;
 
 const json = (data: unknown, status = 200) =>
@@ -69,7 +86,7 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
     Username: key.username, Password: key.password, MerchantID: key.merchant, TerminalID: key.terminal,
     DocDate: "", ReturnURL: `${url.origin}/api/pay/callback`, ExtraInf: "",
     Amount: String(amount), OrderID: order, InvoiceNo: order,
-    AppExtraInf: { PayerNm: user.name ?? "", PayerMobile: "", PayerEmail: user.email, Descr: `خرید ${plan.count} اعتبار ساخت پاورپوینت`, PayerIP: "", PayTitle: "" },
+    AppExtraInf: { PayerNm: user.name ?? "", PayerMobile: "", PayerEmail: user.email, Descr: `اشتراک ماهانه پلن ${plan.name} (${plan.credits} اعتبار)`, PayerIP: "", PayTitle: "" },
     SignData: "",
   }).catch((e) => { console.error("sizpay token", e); return null; });
 
@@ -78,7 +95,7 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
     console.error("sizpay token failed", JSON.stringify({ c: res?.ResCod, m: res?.Message }).slice(0, 300));
     return json({ error: "اتصال به درگاه پرداخت ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن." }, 502);
   }
-  const rec: PayRecord = { uid: user.id, count: plan.count, amount, order, state: "pending", t: Date.now() };
+  const rec: PayRecord = { uid: user.id, plan: plan.id, count: plan.credits, amount, order, state: "pending", t: Date.now() };
   await env.KV.put(`pay:${token}`, JSON.stringify(rec), { expirationTtl: TTL });
   return json({ url: `/api/pay/go?t=${encodeURIComponent(token)}` });
 }
@@ -116,7 +133,8 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
 
   const rec = (await env.KV.get(`pay:${token}`, "json")) as PayRecord | null;
   if (!rec) return go("pay=fail");
-  if (rec.state === "paid") return go(`pay=ok&n=${rec.count}`);
+  const okQ = `pay=ok&n=${rec.count}${rec.plan ? `&p=${encodeURIComponent(rec.plan)}` : ""}`;
+  if (rec.state === "paid") return go(okQ);
   if (!ok(field("ResCod"))) {
     await env.KV.put(`pay:${token}`, JSON.stringify({ ...rec, state: "failed" }), { expirationTtl: TTL });
     return go("pay=cancel");
@@ -138,8 +156,10 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   const fresh = (await env.KV.get(`pay:${token}`, "json")) as PayRecord | null;
   if (fresh?.state !== "paid") {
     await env.KV.put(`pay:${token}`, JSON.stringify({ ...rec, state: "paid", ref: String(res.RefNo ?? "") }), { expirationTtl: TTL * 6 });
-    await setBonus(env, rec.uid, (await getBonus(env, rec.uid)) + rec.count);
-    console.log("payment ok", rec.uid, rec.count, res.RefNo);
+    const plan = rec.plan ? PLANS.find((p) => p.id === rec.plan) : undefined;
+    if (plan) await activatePlan(env, rec.uid, plan);
+    else await setBonus(env, rec.uid, (await getBonus(env, rec.uid)) + rec.count); // رکوردهای قدیمیِ بسته‌ی اعتباری (پیش از پلن‌ها)
+    console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, res.RefNo);
   }
-  return go(`pay=ok&n=${rec.count}`);
+  return go(okQ);
 }

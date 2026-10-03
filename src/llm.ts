@@ -24,19 +24,30 @@ function useOpenAI(env: Env): boolean {
   return p === "openai" || (!!env.OPENAI_API_KEY && p !== "anthropic");
 }
 
-export interface ModelOption { id: string; name: string; model: string }
+export interface ModelOption { id: string; name: string; model: string; brand: string }
+/** برند مدل (برای نمایش لوگو در وب)؛ از روی نام مدل تشخیص داده می‌شود. ترتیب مهم است: «deepseek-…-qwen» باید deepseek حساب شود. */
+export function brandOf(id: string): string {
+  if (/deepseek/i.test(id)) return "deepseek";
+  if (/qwen|qwq/i.test(id)) return "qwen";
+  if (/zai|glm/i.test(id)) return "zai";
+  if (/openai|gpt|(^|\/)o\d/i.test(id)) return "openai";
+  if (/claude|anthropic/i.test(id)) return "anthropic";
+  return "other";
+}
+const shortName = (id: string) => id.split("/").pop() || id;
 /**
  * فهرست مدل‌های قابل انتخاب. متغیر OPENAI_MODELS (در کلودفلر) یکی از این دو شکل را می‌پذیرد:
  *   ۱) متن ساده: هر مدل با کاما یا خط جدید جدا شود؛ نام نمایشی اختیاری با «|»:   gpt-4o-mini|سریع, gpt-4o|دقیق
  *   ۲) JSON: ["gpt-4o-mini", {"model":"gpt-4o","name":"دقیق"}]
- * مدل اول پیش‌فرض است. اگر OPENAI_MODELS خالی باشد، از OPENAI_MODEL (و OPENAI_MODEL_2) استفاده می‌شود.
+ * مدل اول = «مدل رایگان» (برای همه‌ی کاربران وب و پیش‌فرض)؛ بقیه‌ی مدل‌ها فقط برای اعضای پلن پلاس/پرو باز می‌شوند.
+ * اگر OPENAI_MODELS خالی باشد، از OPENAI_MODEL (و OPENAI_MODEL_2) استفاده می‌شود.
  */
 export function modelList(env: Env): ModelOption[] {
-  if (!useOpenAI(env)) { const m = env.ANTHROPIC_MODEL || "claude-sonnet-5-5"; return [{ id: m, name: m, model: m }]; }
+  if (!useOpenAI(env)) { const m = env.ANTHROPIC_MODEL || "claude-sonnet-5-5"; return [{ id: m, name: m, model: m, brand: "anthropic" }]; }
   const out: ModelOption[] = [];
   const add = (model: unknown, name?: unknown) => {
     const m = String(model ?? "").trim();
-    if (m && !out.some((o) => o.id === m)) out.push({ id: m, name: String(name ?? "").trim() || m, model: m });
+    if (m && !out.some((o) => o.id === m)) out.push({ id: m, name: String(name ?? "").trim() || shortName(m), model: m, brand: brandOf(m) });
   };
   const raw = (env.OPENAI_MODELS ?? "").trim();
   if (raw.startsWith("[")) {
