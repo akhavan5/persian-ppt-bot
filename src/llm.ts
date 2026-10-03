@@ -24,6 +24,21 @@ function useOpenAI(env: Env): boolean {
   return p === "openai" || (!!env.OPENAI_API_KEY && p !== "anthropic");
 }
 
+export interface ModelOption { id: "m1" | "m2"; name: string; model: string }
+/** مدل‌های قابل انتخاب (مدل دوم فقط روی مسیر سازگار با OpenAI و با تنظیم OPENAI_MODEL_2 فعال است) */
+export function modelList(env: Env): ModelOption[] {
+  if (!useOpenAI(env)) return [{ id: "m1", name: env.ANTHROPIC_MODEL || "claude-sonnet-5-5", model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5" }];
+  const m1 = env.OPENAI_MODEL || "gpt-4o-mini";
+  const list: ModelOption[] = [{ id: "m1", name: (env.OPENAI_MODEL_NAME || "").trim() || m1, model: m1 }];
+  const m2 = (env.OPENAI_MODEL_2 || "").trim();
+  if (m2) list.push({ id: "m2", name: (env.OPENAI_MODEL_2_NAME || "").trim() || m2, model: m2 });
+  return list;
+}
+export const resolveModel = (env: Env, id?: string): ModelOption => {
+  const l = modelList(env);
+  return l.find((m) => m.id === id) ?? l[0];
+};
+
 export function hasKey(env: Env): boolean {
   return useOpenAI(env) ? !!env.OPENAI_API_KEY : !!env.ANTHROPIC_API_KEY;
 }
@@ -35,11 +50,11 @@ async function failFrom(r: Response, who: string): Promise<never> {
   throw new LlmError(`${who} ${r.status}: ${body}`, fatal);
 }
 
-async function complete(env: Env, prompt: string, maxTokens: number): Promise<string> {
+async function complete(env: Env, prompt: string, maxTokens: number, modelId?: string): Promise<string> {
   if (useOpenAI(env)) {
     const base = (env.OPENAI_BASE_URL || "https://api.gapgpt.app/v1").replace(/\/+$/, "");
     const body: Record<string, unknown> = {
-      model: env.OPENAI_MODEL || "gpt-4o-mini",
+      model: resolveModel(env, modelId).model,
       max_tokens: Math.min(maxTokens, 8000),
       temperature: 0.5,
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
@@ -86,10 +101,10 @@ export function parseJson(text: string): any {
   return JSON.parse(t.slice(a, b + 1));
 }
 
-async function ask(env: Env, prompt: string, maxTokens = 6000): Promise<any> {
+async function ask(env: Env, prompt: string, maxTokens = 6000, modelId?: string): Promise<any> {
   let last: unknown;
   for (let i = 0; i < 2; i++) { // یک بار تلاش مجدد در صورت JSON نامعتبر
-    const text = await complete(env, prompt, maxTokens);
+    const text = await complete(env, prompt, maxTokens, modelId);
     try { return parseJson(text); } catch (e) { last = e; }
   }
   throw last instanceof Error ? last : new Error("invalid JSON");
@@ -179,7 +194,7 @@ export function normalizeOutline(data: any, topic: string): Outline {
 }
 
 // ---------- تولید ----------
-export interface ContentOpts { audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean }
+export interface ContentOpts { model?: string; audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean }
 const wantSources = (o: ContentOpts) => o.mode === "student" || !!o.sources;
 const wantQuestions = (o: ContentOpts) => !!o.questions;
 
@@ -214,7 +229,7 @@ Number of slides (including title and closing): ${n}
 Tone: ${TONES[tone] ?? tone}
 Audience: ${o.audience || (o.mode === "student" ? "university class" : "general")}
 Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers", "kind": "sources|questions (ONLY on those special slides, otherwise omit)"}]}
-${structureRules(o)}`, 2500);
+${structureRules(o)}`, 2500, o.model);
   const out = normalizeOutline(data, topic);
   out.slides = ensureKinds(out.slides, o);
   return out;
@@ -253,7 +268,7 @@ Layout rules:
 - "section": only for a divider between big parts, and only in decks of 10+ slides.
 - Vary layouts; do not use the same one more than 3 times in a row.
 - Include "notes" for every slide: ${student ? "a full speaking script of 4-6 sentences" : "2-3 sentences"}.
-- "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.`, student ? 8000 : 6000);
+- "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.`, student ? 8000 : 6000, o.model);
   const deck = normalizeDeck(data, outline);
   deck.slides.forEach((sl, i) => { const k = outline[i]?.kind; if (k) sl.layout = k; }); // چیدمان اسلایدهای ویژه ثابت است
   if (!deck.title) deck.title = title || topic;

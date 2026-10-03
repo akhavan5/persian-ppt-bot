@@ -14,6 +14,11 @@ export interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_MODEL?: string;
+  /** اختیاری: مدل دوم روی همان OPENAI_BASE_URL؛ با تنظیم آن، کاربر وب در تنظیمات بین دو مدل انتخاب می‌کند */
+  OPENAI_MODEL_2?: string;
+  /** اختیاری: نام نمایشی مدل‌ها در صفحه‌ی وب (پیش‌فرض: خود نام مدل) */
+  OPENAI_MODEL_NAME?: string;
+  OPENAI_MODEL_2_NAME?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;
   LLM_PROVIDER?: string;

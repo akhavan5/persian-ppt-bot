@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
+import { modelList } from "./llm";
 
 /** شناسه‌ی کاربر: عددی برای تلگرام، رشته‌ی «w_…» برای کاربران وب */
 export type Uid = number | string;
@@ -23,6 +24,7 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   s.mode = s.mode === "student" ? "student" : "normal";
   s.sources = !!s.sources;
   s.questions = !!s.questions;
+  s.model = modelList(env).some((m) => m.id === s.model) ? s.model : "m1";
   return s;
 }
 

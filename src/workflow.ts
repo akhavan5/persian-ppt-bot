@@ -31,7 +31,7 @@ function safeFilename(title: string): string {
 export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
     const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
-    const contentOpts = { mode: settings.mode, sources: settings.sources, questions: settings.questions };
+    const contentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions };
     const web = event.payload.channel === "web";
     // تلگرام: ویرایش پیام وضعیت؛ وب: متن پیشرفت در KV (صفحه‌ی وب هر چند ثانیه می‌خواند)
     const status = (t: string) => (web

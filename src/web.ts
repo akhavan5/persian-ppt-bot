@@ -6,6 +6,7 @@ import {
   SUPPORT_CONTACT, SLIDE_CHOICES, acquireLock, buyLink, bumpStat, clampSlides, getCredit, getSettings,
   isAllowed, isBanned, isLocked, refundCredit, releaseLock, saveSettings, spendCredit,
 } from "./settings";
+import { modelList } from "./llm";
 import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect } from "./files";
 import {
@@ -62,6 +63,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       tones: TONES,
       fonts: FONTS,
       slideChoices: SLIDE_CHOICES,
+      models: modelList(env).map((m) => ({ id: m.id, name: m.name })),
     });
   }
 
@@ -155,6 +157,7 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
   if (typeof b.font === "string" && (FONTS as readonly string[]).includes(b.font)) s.font = b.font;
   if (typeof b.mode === "string" && (b.mode === "normal" || b.mode === "student")) s.mode = b.mode;
   if (typeof b.slides === "number" && Number.isFinite(b.slides)) s.slides = clampSlides(b.slides);
+  if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) s.model = b.model;
   for (const k of ["digits", "images", "sources", "questions"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
   await saveSettings(env, user.id, s);
   return json({ settings: await getSettings(env, user.id) });
