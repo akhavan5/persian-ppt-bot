@@ -34,13 +34,14 @@
 {"@context":"https://schema.org","@graph":[
 {"@type":"Organization","@id":"__ORIGIN__/#org","name":"پاورپوینت‌ساز فارسی","alternateName":"pptsaz","url":"__ORIGIN__/","logo":"__ORIGIN__/icon-512.png","email":"info@pptsaz.ir","telephone":"+98-939-370-4036","contactPoint":{"@type":"ContactPoint","telephone":"+98-939-370-4036","email":"info@pptsaz.ir","contactType":"customer support","areaServed":"IR","availableLanguage":"fa"}},
 {"@type":"WebSite","name":"پاورپوینت‌ساز فارسی","url":"__ORIGIN__/","inLanguage":"fa-IR","publisher":{"@id":"__ORIGIN__/#org"}},
-{"@type":"WebApplication","name":"پاورپوینت‌ساز فارسی","url":"__ORIGIN__/","image":"__ORIGIN__/og-image.png","provider":{"@id":"__ORIGIN__/#org"},"applicationCategory":"BusinessApplication","operatingSystem":"Web","inLanguage":"fa-IR","description":"ساخت پاورپوینت فارسی و قابل‌ویرایش با هوش مصنوعی","offers":[{"@type":"Offer","price":"0","priceCurrency":"IRR","description":"سهمیه‌ی رایگان روزانه"},{"@type":"Offer","price":"500000","priceCurrency":"IRR","description":"بسته‌ی ۱۰ پاورپوینت"},{"@type":"Offer","price":"800000","priceCurrency":"IRR","description":"بسته‌ی ۲۰ پاورپوینت"}]},
+{"@type":"WebApplication","name":"پاورپوینت‌ساز فارسی","url":"__ORIGIN__/","image":"__ORIGIN__/og-image.png","provider":{"@id":"__ORIGIN__/#org"},"applicationCategory":"BusinessApplication","operatingSystem":"Web","inLanguage":"fa-IR","description":"ساخت پاورپوینت فارسی و قابل‌ویرایش با هوش مصنوعی","offers":[{"@type":"Offer","price":"0","priceCurrency":"IRR","description":"سهمیه‌ی رایگان روزانه با یک مدل هوش مصنوعی"},{"@type":"Offer","price":"990000","priceCurrency":"IRR","description":"پلن پلاس ماهانه؛ ۲۰ اعتبار و دسترسی به همه‌ی مدل‌ها"},{"@type":"Offer","price":"1990000","priceCurrency":"IRR","description":"پلن پرو ماهانه؛ ۵۰ اعتبار و دسترسی به همه‌ی مدل‌ها"}]},
 {"@type":"FAQPage","mainEntity":[
-{"@type":"Question","name":"آیا ساخت پاورپوینت با هوش مصنوعی رایگان است؟","acceptedAnswer":{"@type":"Answer","text":"بله، هر کاربر هر روز سهمیه‌ی رایگان دارد. برای ساخت بیشتر می‌توانید بسته‌ی اعتباری بخرید."}},
+{"@type":"Question","name":"آیا ساخت پاورپوینت با هوش مصنوعی رایگان است؟","acceptedAnswer":{"@type":"Answer","text":"بله، هر کاربر هر روز سهمیه‌ی رایگان دارد. برای ساخت بیشتر و دسترسی به همه‌ی مدل‌ها می‌توانید پلن پلاس یا پرو بخرید."}},
 {"@type":"Question","name":"فایل خروجی چه فرمتی دارد؟","acceptedAnswer":{"@type":"Answer","text":"خروجی فایل PPTX است که در PowerPoint، LibreOffice و Google Slides باز می‌شود و همه‌ی متن‌ها، جدول‌ها و نمودارها قابل‌ویرایش‌اند."}},
 {"@type":"Question","name":"آیا پاورپوینت‌ها راست‌به‌چپ و فارسی هستند؟","acceptedAnswer":{"@type":"Answer","text":"بله، همه‌ی اسلایدها راست‌به‌چپ طراحی می‌شوند و فونت فارسی (وزیرمتن، تاهوما و...) و ارقام فارسی پشتیبانی می‌شود."}},
 {"@type":"Question","name":"حالت دانشجویی چیست؟","acceptedAnswer":{"@type":"Answer","text":"ساختار استاندارد ارائه‌ی دانشگاهی: فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع."}},
-{"@type":"Question","name":"پرداخت چگونه انجام می‌شود؟","acceptedAnswer":{"@type":"Answer","text":"پرداخت آنلاین و امن از طریق درگاه سیزپی انجام می‌شود و اعتبار بلافاصله به حساب شما اضافه می‌شود."}}
+{"@type":"Question","name":"پرداخت چگونه انجام می‌شود؟","acceptedAnswer":{"@type":"Answer","text":"پرداخت آنلاین و امن از طریق درگاه سیزپی انجام می‌شود و اعتبار بلافاصله به حساب شما اضافه می‌شود."}},
+{"@type":"Question","name":"پلن‌های ماهانه چطور کار می‌کنند؟","acceptedAnswer":{"@type":"Answer","text":"پلن پلاس (۲۰ اعتبار) و پلن پرو (۵۰ اعتبار) ۳۰ روزه‌اند و تمدید خودکار ندارند. هر دو به همه‌ی مدل‌های هوش مصنوعی دسترسی می‌دهند؛ کاربر رایگان فقط یک مدل دارد."}}
 ]}]}
 </script>
 <style>
@@ -172,6 +173,41 @@ footer .wrap{position:relative}
 .contact .card{margin:0;text-align:center}
 .contact a.big{display:block;font-size:1.35rem;font-weight:800;text-decoration:none;margin:4px 0 12px;direction:ltr;unicode-bidi:isolate}
 address{font-style:normal}
+/* انتخاب مدل (روی صفحه‌ی اصلی) */
+.models-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:18px 0 10px}
+.models-h label{margin:0}
+.models-h .hint{font-size:.8rem;color:var(--muted)}
+.models{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px 10px;padding-top:6px}
+.mdl{position:relative;display:flex;align-items:center;gap:10px;text-align:start;border:2px solid var(--line);background:#fff;border-radius:14px;padding:10px 12px;cursor:pointer;min-width:0;transition:.15s}
+.mdl:hover{border-color:#b9cdf5;transform:translateY(-1px)}
+.mdl:focus-visible{outline:3px solid rgba(37,99,235,.35);outline-offset:2px}
+.mdl[aria-pressed=true]{border-color:var(--primary);background:var(--soft);box-shadow:0 0 0 4px rgba(37,99,235,.10)}
+.mdl .logo{position:relative;flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:11px;color:#fff;font-weight:800;font-size:1rem;overflow:hidden}
+.mdl .logo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;padding:6px}
+.mdl .nm{display:grid;line-height:1.4;min-width:0}
+.mdl .nm b{font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;unicode-bidi:plaintext;text-align:right}
+.mdl .nm small{font-size:.74rem;color:var(--muted)}
+.mdl.locked{background:#fbfcff}
+.mdl.locked .logo{filter:grayscale(.55);opacity:.8}
+.mdl.locked .nm b{color:#4a5873}
+.mdl .tag{position:absolute;inset-block-start:-9px;inset-inline-end:10px;font-size:.68rem;font-weight:800;line-height:1;padding:4px 8px;border-radius:99px;color:#fff;white-space:nowrap}
+.mdl .tag.free{background:var(--ok)}
+.mdl .tag.pro{background:linear-gradient(135deg,#f59e0b,#ea580c);box-shadow:0 3px 8px rgba(234,88,12,.3)}
+.btn.gold{background:linear-gradient(135deg,#f59e0b,#ea580c);box-shadow:0 6px 18px rgba(234,88,12,.28)}
+.btn.gold:hover{box-shadow:0 10px 22px rgba(234,88,12,.36)}
+.ribbon{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff;font-size:.74rem;font-weight:800;line-height:1;padding:5px 12px;border-radius:99px;white-space:nowrap}
+.price{position:relative}
+/* پنجره‌ی پلن‌ها */
+#buy{max-width:580px}
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;margin:18px 0 6px}
+@media(max-width:520px){.plans{grid-template-columns:1fr}}
+.plan{position:relative;border:2px solid var(--line);border-radius:16px;padding:18px 16px 16px;text-align:center;background:#fff}
+.plan.best{border-color:var(--primary);box-shadow:0 12px 30px rgba(37,99,235,.16)}
+.plan h3{margin:0}
+.plan .pp{font-size:1.6rem;font-weight:800;margin:4px 0}
+.plan .pp small{font-size:.8rem;color:var(--muted);font-weight:600}
+.plan ul{list-style:none;padding:0;margin:8px 0 14px;color:var(--muted);font-size:.88rem;text-align:start}
+.plan li::before{content:"✓ ";color:var(--ok);font-weight:800}
 </style>
 </head>
 <body>
@@ -184,7 +220,8 @@ address{font-style:normal}
       <button class="btn sm" id="openReg" type="button">ثبت‌نام رایگان</button>
     </div>
     <div class="row" id="userbar" hidden>
-      <button class="chip" id="creditChip" type="button" aria-label="اعتبار و خرید شارژ"></button>
+      <button class="btn gold sm" id="upgradeBtn" type="button" hidden>👑 ارتقا</button>
+      <button class="chip" id="creditChip" type="button" aria-label="اعتبار و پلن‌ها"></button>
       <span class="muted" id="userName"></span>
       <button class="btn ghost sm" id="logout" type="button">خروج</button>
     </div>
@@ -201,6 +238,10 @@ address{font-style:normal}
     <label for="topic" style="margin-top:0">موضوع ارائه</label>
     <textarea id="topic" maxlength="600" placeholder="مثلاً: هوش مصنوعی در آموزش؛ فرصت‌ها و چالش‌ها"></textarea>
     <div class="ex" id="examples"></div>
+    <div id="modelsBox" hidden>
+      <div class="models-h"><label id="modelsLbl">مدل هوش مصنوعی</label><span class="hint" id="modelsHint"></span></div>
+      <div class="models" id="models" role="group" aria-labelledby="modelsLbl"></div>
+    </div>
     <div class="gen">
       <div><label for="slides" style="margin-top:0">تعداد اسلاید</label><select id="slides"></select></div>
       <button class="btn" id="go" type="button">✨ بساز</button>
@@ -229,7 +270,6 @@ address{font-style:normal}
       <details id="setBox">
         <summary>⚙️ تنظیمات ظاهر و محتوا</summary>
         <label>تم رنگی</label><div class="themes" id="themes"></div>
-        <div id="modelRow" hidden><label for="model">مدل هوش مصنوعی</label><select id="model"></select></div>
         <div class="grid2">
           <div><label for="tone">لحن</label><select id="tone"></select></div>
           <div><label for="font">فونت</label><select id="font"></select></div>
@@ -281,23 +321,24 @@ address{font-style:normal}
   </section>
 
   <section class="block" id="pricing" aria-labelledby="ph">
-    <div class="sec-head"><h2 id="ph">تعرفه‌ها</h2><p class="muted">هر روز سهمیه‌ی رایگان داری؛ برای ساخت بیشتر بسته‌ی اعتباری بخر.</p></div>
+    <div class="sec-head"><h2 id="ph">تعرفه‌ها</h2><p class="muted">هر روز سهمیه‌ی رایگان داری؛ برای اعتبار بیشتر و دسترسی به همه‌ی مدل‌ها، یکی از پلن‌های ماهانه را بگیر.</p></div>
     <div class="grid3">
-      <div class="card price"><h3>رایگان</h3><div class="big">۰ <small>تومان</small></div><ul><li>سهمیه‌ی روزانه‌ی رایگان</li><li>همه‌ی امکانات</li></ul><button class="btn ghost block" type="button" data-auth="register">ثبت‌نام رایگان</button></div>
-      <div class="card price hot"><h3>۱۰ پاورپوینت</h3><div class="big">۵۰ هزار <small>تومان</small></div><ul><li>پرداخت آنلاین با سیزپی</li><li>شارژ آنی حساب</li></ul><button class="btn block" type="button" data-plan="p10">خرید بسته</button></div>
-      <div class="card price"><h3>۲۰ پاورپوینت</h3><div class="big">۸۰ هزار <small>تومان</small></div><ul><li>صرفه‌جویی بیشتر</li><li>شارژ آنی حساب</li></ul><button class="btn block" type="button" data-plan="p20">خرید بسته</button></div>
+      <div class="card price"><h3>رایگان</h3><div class="big">۰ <small>تومان</small></div><ul><li>سهمیه‌ی روزانه‌ی رایگان</li><li>یک مدل هوش مصنوعی</li><li>همه‌ی امکانات ساخت و ویرایش</li></ul><button class="btn ghost block" type="button" data-auth="register">ثبت‌نام رایگان</button></div>
+      <div class="card price"><h3>👑 پلاس</h3><div class="big">۹۹ هزار <small>تومان / ماه</small></div><ul><li>۲۰ اعتبار ماهانه</li><li>دسترسی به همه‌ی مدل‌ها</li><li>هر ارائه حدود ۴٬۹۵۰ تومان</li></ul><button class="btn ghost block" type="button" data-plan="plus">خرید پلن پلاس</button></div>
+      <div class="card price hot"><span class="ribbon">به‌صرفه‌ترین</span><h3>👑 پرو</h3><div class="big">۱۹۹ هزار <small>تومان / ماه</small></div><ul><li>۵۰ اعتبار ماهانه</li><li>دسترسی به همه‌ی مدل‌ها</li><li>هر ارائه حدود ۳٬۹۸۰ تومان</li></ul><button class="btn block" type="button" data-plan="pro">خرید پلن پرو</button></div>
     </div>
   </section>
 
   <section class="block faq" id="faq" aria-labelledby="fqh">
     <div class="sec-head"><h2 id="fqh">پرسش‌های متداول</h2></div>
     <div style="max-width:780px;margin:0 auto">
-      <details><summary>آیا ساخت پاورپوینت با هوش مصنوعی رایگان است؟</summary><p>بله، هر کاربر هر روز سهمیه‌ی رایگان دارد. برای ساخت بیشتر می‌توانی بسته‌ی اعتباری بخری.</p></details>
+      <details><summary>آیا ساخت پاورپوینت با هوش مصنوعی رایگان است؟</summary><p>بله، هر کاربر هر روز سهمیه‌ی رایگان دارد. برای ساخت بیشتر و دسترسی به همه‌ی مدل‌ها می‌توانی پلن پلاس یا پرو بخری.</p></details>
       <details><summary>فایل خروجی چه فرمتی دارد؟</summary><p>فایل PPTX است که در PowerPoint، LibreOffice و Google Slides باز می‌شود و همه‌ی متن‌ها، جدول‌ها و نمودارها قابل‌ویرایش‌اند.</p></details>
       <details><summary>آیا پاورپوینت‌ها راست‌به‌چپ و فارسی هستند؟</summary><p>بله، همه‌ی اسلایدها راست‌به‌چپ طراحی می‌شوند و فونت فارسی (وزیرمتن، تاهوما و...) و ارقام فارسی پشتیبانی می‌شود.</p></details>
       <details><summary>حالت دانشجویی چیست؟</summary><p>ساختار استاندارد ارائه‌ی دانشگاهی: فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع.</p></details>
-      <details><summary>پرداخت چگونه انجام می‌شود؟</summary><p>پرداخت آنلاین و امن از طریق درگاه سیزپی انجام می‌شود و اعتبار بلافاصله به حساب تو اضافه می‌شود.</p></details>
-      <details><summary>آیا محتوای تولیدشده همیشه درست است؟</summary><p>متن را هوش مصنوعی می‌نویسد و ممکن است اشتباه داشته باشد؛ پیش از ارائه حتماً بررسی کن.</p></details>
+      <details><summary>پرداخت چگونه انجام می‌شود؟</summary><p>پرداخت آنلاین و امن از طریق درگاه سیزپی انجام می‌شود و پلن بلافاصله فعال می‌شود.</p></details>
+      <details><summary>پلن‌های ماهانه چطور کار می‌کنند؟</summary><p>پلن پلاس (۲۰ اعتبار) و پلن پرو (۵۰ اعتبار) ۳۰ روزه‌اند و تمدید خودکار ندارند. هر دو به همه‌ی مدل‌ها دسترسی می‌دهند؛ کاربر رایگان فقط یک مدل دارد. اگر پیش از پایان پلن دوباره بخری، ۳۰ روز به مدت پلن و اعتبار جدید به اعتبار باقی‌مانده اضافه می‌شود؛ اعتبار پلن با پایان آن از بین می‌رود.</p></details>
+            <details><summary>آیا محتوای تولیدشده همیشه درست است؟</summary><p>متن را هوش مصنوعی می‌نویسد و ممکن است اشتباه داشته باشد؛ پیش از ارائه حتماً بررسی کن.</p></details>
     </div>
   </section>
 
@@ -363,10 +404,11 @@ address{font-style:normal}
 <!-- اعتبار و خرید -->
 <dialog id="buy">
   <button class="x" type="button" id="buyClose" aria-label="بستن">×</button>
-  <h2 style="margin-top:0;font-size:1.15rem">💳 اعتبار و خرید شارژ</h2>
-  <p id="creditDetail" style="margin-top:0"></p>
-  <div id="plans" style="display:grid;gap:8px"></div>
-  <p class="muted" id="buyNote"></p>
+  <h2 style="margin-top:0;font-size:1.15rem">👑 پلن‌های پاورپوینت‌ساز</h2>
+  <p class="msg info" id="buyWhy" style="margin:8px 0" hidden></p>
+  <p id="creditDetail" style="margin:8px 0 0"></p>
+  <div class="plans" id="plans"></div>
+  <p class="muted" id="buyNote" style="margin-bottom:0"></p>
 </dialog>
 <div class="toast"><span id="toast" role="status"></span></div>
 
@@ -412,6 +454,7 @@ async function boot() {
   if (me && continueGen) { continueGen = false; $("#go").click(); }
 }
 function renderCommon() {
+  renderModels();
   const sl = $("#slides"), cur = sl.value || 8;
   sl.replaceChildren(...cfg.slideChoices.map((n) => h("option", { value: n }, fa(n))));
   sl.value = me ? me.settings.slides : cur;
@@ -475,49 +518,114 @@ function renderApp() {
   renderCredit();
   $("#tone").replaceChildren(...Object.entries(cfg.tones).map(([k, v]) => h("option", { value: k }, v)));
   $("#font").replaceChildren(...cfg.fonts.map((f) => h("option", { value: f }, f)));
-  show($("#modelRow"), cfg.models.length > 1);
-  $("#model").replaceChildren(...cfg.models.map((m) => h("option", { value: m.id }, m.name)));
   syncSettings();
   loadFiles();
   if (me.activeJob) track(me.activeJob);
 }
 function syncSettings() {
   const s = me.settings;
-  $("#tone").value = s.tone; $("#font").value = s.font; $("#model").value = s.model;
+  $("#tone").value = s.tone; $("#font").value = s.font;
   $("#mode").checked = s.mode === "student";
   for (const k of ["images", "digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
   $("#sources").disabled = s.mode === "student";
+  renderModels();
   $("#themes").replaceChildren(...cfg.themes.map((t) =>
     h("button", { type: "button", class: "theme", "aria-pressed": String(s.theme === t.key), onclick: () => saveSetting({ theme: t.key }) },
       h("b", { style: `background:linear-gradient(135deg,#${t.primary},#${t.accent})` }), t.name)));
 }
 async function saveSetting(patch) {
   try { me.settings = (await api("/api/settings", { method: "PUT", body: patch })).settings; syncSettings(); toast("ذخیره شد ✓"); }
-  catch (e) { toast(e.message); syncSettings(); }
+  catch (e) { toast(e.message); syncSettings(); if (e.data && e.data.needPlan) openBuy(e.message); }
 }
 $("#tone").onchange = (e) => saveSetting({ tone: e.target.value });
 $("#font").onchange = (e) => saveSetting({ font: e.target.value });
-$("#model").onchange = (e) => saveSetting({ model: e.target.value });
 $("#mode").onchange = (e) => saveSetting({ mode: e.target.checked ? "student" : "normal" });
 for (const k of ["images", "digits", "sources", "questions"]) $("#" + k).onchange = (e) => saveSetting({ [k]: e.target.checked });
 
-// ---------- اعتبار و پرداخت سیزپی ----------
+// ---------- مدل‌های هوش مصنوعی (روی صفحه‌ی اصلی) ----------
+// لوگوی اختیاری: فایل /models/<brand>.svg را در public/models بگذار (qwen, deepseek, openai, zai)؛ بدون آن نشان رنگی با حرف اول نمایش داده می‌شود.
+const BRANDS = {
+  qwen: { label: "Qwen", c: ["#7c3aed", "#4f46e5"], g: "Q" },
+  deepseek: { label: "DeepSeek", c: ["#2f6bff", "#1d3fbf"], g: "D" },
+  openai: { label: "OpenAI", c: ["#10a37f", "#0b7a5e"], g: "O" },
+  zai: { label: "Z.ai", c: ["#111827", "#334155"], g: "Z" },
+  anthropic: { label: "Claude", c: ["#d97757", "#b4532a"], g: "C" },
+  other: { label: "AI", c: ["#64748b", "#475569"], g: "AI" },
+};
+function modelLogo(brand) {
+  const b = BRANDS[brand] || BRANDS.other;
+  const el = h("span", { class: "logo", style: `background:linear-gradient(135deg,${b.c[0]},${b.c[1]})`, "aria-hidden": "true" }, b.g);
+  if (BRANDS[brand]) el.append(h("img", { src: `/models/${brand}.svg`, alt: "", onerror: (e) => e.target.remove() }));
+  return el;
+}
+function renderModels() {
+  if (!cfg || !cfg.models) return;
+  const premium = !!(me && me.premium);
+  const free = cfg.models.find((m) => m.free) || cfg.models[0];
+  const cur = me && me.settings.model ? me.settings.model : free.id;
+  show($("#modelsBox"), cfg.models.length > 1);
+  $("#modelsHint").textContent = premium ? "همه‌ی مدل‌ها برای تو باز است ✓" : "👑 مدل‌های قفل‌دار با پلن پلاس یا پرو باز می‌شوند";
+  $("#models").replaceChildren(...cfg.models.map((m) => {
+    const locked = !m.free && !premium, b = BRANDS[m.brand] || BRANDS.other;
+    return h("button", {
+      type: "button", class: "mdl" + (locked ? " locked" : ""), "aria-pressed": String(!locked && m.id === cur),
+      title: locked ? "مخصوص پلن‌های پلاس و پرو" : m.name, onclick: () => pickModel(m),
+    }, modelLogo(m.brand), h("span", { class: "nm" }, h("b", {}, m.name), h("small", {}, b.label)),
+    m.free ? h("span", { class: "tag free" }, "رایگان") : locked ? h("span", { class: "tag pro" }, "👑 پریمیوم") : null);
+  }));
+}
+function pickModel(m) {
+  if (!m.free && !(me && me.premium)) { openBuy(`مدل ${m.name} مخصوص اعضای پریمیوم (پلاس و پرو) است؛ با خرید پلن، همه‌ی مدل‌ها باز می‌شوند.`); return; }
+  if (me && me.settings.model !== m.id) saveSetting({ model: m.id }); // مهمان فقط مدل رایگان را دارد و همان پیش‌فرض است
+}
+
+// ---------- اعتبار، پلن‌ها و پرداخت سیزپی ----------
 function renderCredit() {
   const c = me.credit;
-  $("#creditChip").textContent = "💳 " + (c.unlimited ? "اعتبار نامحدود" : `اعتبار: ${fa(c.total)}`);
-  $("#creditDetail").textContent = c.unlimited ? "اعتبار شما نامحدود است."
-    : `اعتبار باقی‌مانده: ${fa(c.total)} ارائه (سهمیه‌ی امروز ${fa(c.dailyLeft)} از ${fa(c.limit)}${c.bonus ? ` + ${fa(c.bonus)} اعتبار اضافه` : ""}).`;
-  $("#plans").replaceChildren(...me.plans.map((p) =>
-    h("button", { class: "btn", type: "button", onclick: () => buyPlan(p.id) }, `🛒 ${fa(p.count)} پاورپوینت — ${fa(p.price)} هزار تومان`)));
-  $("#buyNote").textContent = cfg.payEnabled
-    ? "پرداخت آنلاین و امن از طریق درگاه سیزپی انجام می‌شود و اعتبار بلافاصله اضافه می‌شود. سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد به وقت ایران دوباره پر می‌شود."
-    : `خرید از طریق پیام به ${me.support} در تلگرام انجام می‌شود؛ پیام آماده شامل شناسه‌ی حساب تو (${me.user.id}) است.`;
+  $("#creditChip").textContent = (me.plan ? "👑 " : "💳 ") + (c.unlimited ? "اعتبار نامحدود" : `اعتبار: ${fa(c.total)}`);
+  show($("#upgradeBtn"), !me.premium);
+  renderModels();
 }
-$("#creditChip").onclick = () => $("#buy").showModal();
+const perPpt = (p) => fa(Math.round(p.price * 1000 / p.credits).toLocaleString("en-US")).replace(/,/g, "٬");
+function renderBuy() {
+  const list = me ? me.plans : cfg.plans, c = me && me.credit, d = [];
+  if (me && me.plan) {
+    const pl = list.find((x) => x.id === me.plan.id);
+    d.push(`👑 پلن ${pl ? pl.name : ""} تا ${new Date(me.plan.exp).toLocaleDateString("fa-IR", { year: "numeric", month: "long", day: "numeric" })} فعال است.`);
+  }
+  if (c && c.unlimited) d.push("اعتبار شما نامحدود است.");
+  else if (c) {
+    const parts = [`سهمیه‌ی امروز ${fa(c.dailyLeft)} از ${fa(c.limit)}`];
+    if (c.plan) parts.push(`${fa(c.plan)} اعتبار پلن`);
+    if (c.bonus) parts.push(`${fa(c.bonus)} اعتبار اضافه`);
+    d.push(`اعتبار باقی‌مانده: ${fa(c.total)} ارائه (${parts.join(" + ")}).`);
+  }
+  $("#creditDetail").textContent = d.join(" ");
+  $("#plans").replaceChildren(...list.map((p) => {
+    const best = p.id === "pro", mine = me && me.plan && me.plan.id === p.id;
+    return h("div", { class: "plan" + (best ? " best" : "") },
+      best ? h("span", { class: "ribbon" }, "به‌صرفه‌ترین") : null,
+      h("h3", {}, `👑 پلن ${p.name}`),
+      h("div", { class: "pp" }, fa(p.price), h("small", {}, " هزار تومان / ماه")),
+      h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, "دسترسی به همه‌ی مدل‌ها"), h("li", {}, `هر ارائه حدود ${perPpt(p)} تومان`)),
+      h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: () => buyPlan(p.id) }, mine ? `تمدید ${fa(p.days)} روزه` : `خرید پلن ${p.name}`));
+  }));
+  $("#buyNote").textContent = (cfg.payEnabled
+    ? "پلن‌ها ۳۰ روزه‌اند و تمدید خودکار ندارند. پرداخت آنلاین و امن از طریق درگاه سیزپی است و پلن بلافاصله فعال می‌شود؛ اگر پیش از پایان دوباره بخری، ۳۰ روز و اعتبار جدید به پلن فعلی اضافه می‌شود."
+    : me ? `خرید از طریق پیام به ${me.support} در تلگرام انجام می‌شود؛ پیام آماده شامل شناسه‌ی حساب تو (${me.user.id}) است.` : "")
+    + (me ? " سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد به وقت ایران دوباره پر می‌شود." : "");
+}
+function openBuy(why = "") {
+  const w = $("#buyWhy"); w.textContent = why; show(w, !!why);
+  renderBuy();
+  if (!$("#buy").open) $("#buy").showModal();
+}
+$("#creditChip").onclick = () => openBuy();
+$("#upgradeBtn").onclick = () => openBuy();
 async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderCredit(); } } catch {} }
 
 async function buyPlan(id) {
-  if (!me) { openAuth("register", "برای خرید بسته، ابتدا وارد شو یا ثبت‌نام کن."); return; }
+  if (!me) { $("#buy").close(); openAuth("register", "برای خرید پلن، ابتدا وارد شو یا ثبت‌نام کن."); return; }
   const plan = me.plans.find((p) => p.id === id); if (!plan) return;
   if (!cfg.payEnabled) { window.open(plan.url, "_blank", "noopener"); return; }
   try { location.href = (await api("/api/pay/start", { method: "POST", body: { plan: id } })).url; }
@@ -527,8 +635,9 @@ function handlePayReturn() {
   const q = new URLSearchParams(location.search), p = q.get("pay");
   if (!p) return;
   history.replaceState(null, "", "/");
+  const pl = me && me.plans.find((x) => x.id === q.get("p"));
   const T = {
-    ok: `✅ پرداخت موفق بود؛ ${fa(q.get("n") || "")} اعتبار به حسابت اضافه شد.`, cancel: "پرداخت لغو شد.",
+    ok: pl ? `✅ پلن ${pl.name} فعال شد؛ ${fa(q.get("n") || pl.credits)} اعتبار ماهانه به حسابت اضافه شد.` : `✅ پرداخت موفق بود؛ ${fa(q.get("n") || "")} اعتبار به حسابت اضافه شد.`, cancel: "پرداخت لغو شد.",
     fail: "پرداخت ناموفق بود؛ اگر مبلغی کسر شده باشد، بانک آن را برمی‌گرداند.",
     error: "تایید پرداخت با خطا روبه‌رو شد؛ چند دقیقه بعد همین صفحه را دوباره باز کن یا به پشتیبانی پیام بده.",
   };
@@ -556,7 +665,7 @@ $("#go").onclick = async () => {
     refreshMe(); track(r.jobId);
   } catch (e) {
     msg.textContent = e.message; show(msg, true);
-    if (e.status === 401) { me = null; boot(); } else if (e.data && e.data.noCredit) $("#buy").showModal();
+    if (e.status === 401) { me = null; boot(); } else if (e.data && e.data.noCredit) openBuy("اعتبارت تمام شد؛ برای ادامه یکی از پلن‌ها را بگیر یا فردا دوباره امتحان کن.");
     $("#go").disabled = false;
   }
 };
