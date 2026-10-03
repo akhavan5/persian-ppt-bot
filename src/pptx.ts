@@ -155,7 +155,13 @@ class Builder {
   private imageText(sd: Slide, img: Uint8Array) {
     const s = this.slide(this.t.bg);
     this.title(s, sd.title);
-    s.addImage({ data: `image/jpeg;base64,${toBase64(img)}`, x: M, y: 1.8, w: IMAGE_BOX.w, h: IMAGE_BOX.h });
+    // تصویر تولیدی مربع است؛ با sizing=cover به اندازه‌ی کادر برش می‌خورد (بدون کشیدگی).
+    // w/h = ابعاد (نسبت) خود تصویر، و sizing.w/h = اندازه‌ی کادر
+    const png = img[0] === 0x89 && img[1] === 0x50; // امضای PNG
+    s.addImage({
+      data: `image/${png ? "png" : "jpeg"};base64,${toBase64(img)}`, x: M, y: 1.8,
+      w: IMAGE_BOX.h, h: IMAGE_BOX.h, sizing: { type: "cover", w: IMAGE_BOX.w, h: IMAGE_BOX.h },
+    });
     const tx = W / 2 + 0.1, tw = W / 2 - M - 0.1;
     const paras = sd.bullets.length ? sd.bullets : [""];
     this.text(s, tx, 1.8, tw, 4.85, paras, fitSize(paras, tw, 4.85, 24, 15, true), this.t.text,

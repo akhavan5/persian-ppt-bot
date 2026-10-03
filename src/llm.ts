@@ -289,7 +289,7 @@ export async function makeDeck(env: Env, topic: string, title: string, outline: 
 
   const parts = await Promise.all(batches.map(async ([a, z], bi) => {
     const slice = outline.slice(a, z);
-    const tableOk = nb === 1 || bi % 2 === 0, chartOk = bi === Math.min(1, nb - 1);
+    const tableOk = nb === 1 || bi % 2 === 0, chartOk = bi === Math.min(1, nb - 1), imageOk = bi === 0;
     const scope = nb === 1 ? "" : `\nThe deck has ${outline.length} slides in total: ${ctx}\nWrite ONLY slides ${a + 1} to ${z} (${slice.length} slides) — return exactly ${slice.length} slide objects, in this order.\n`;
     const edges = [a === 0 ? `- the first slide is "title" (title + subtitle).` : "", z === outline.length ? `- the last slide is "closing" (short thanks/CTA in title, optional bullets).` : ""].filter(Boolean).join("\n");
     const data = await askRetry(env, `Write the full content of this Persian presentation.
@@ -307,12 +307,12 @@ Return JSON: {"title": "...", "slides": [{
   "stats": [{"value": "...", "label": "..."}],
   "table": {"headers": ["..."], "rows": [["..."]]},
   "chart": {"type": "bar|line|pie", "labels": ["..."], "series": [{"name": "...", "values": [1, 2]}]},
-  "image_query": "short English photo search query",
+  "image_query": "English description of ONE concrete visual scene for this slide (objects, setting; no abstract words), max 12 words",
   "notes": "speaker notes in Persian"}]}
 
 Layout rules:
 ${edges}
-- "bullets": ${student ? "4-6 bullets (up to ~18 words each; define terms, add a concrete example where useful)" : "3-5 bullets"}. "image_text": 3-4 bullets + image_query (use for concrete, visual topics).
+- "bullets": ${student ? "4-6 bullets (up to ~18 words each; define terms, add a concrete example where useful)" : "3-5 bullets"}. "image_text": 3-4 bullets + image_query. ${imageOk ? 'Use it EXACTLY ONCE here, on the most concrete, visual topic (never on the title/closing slide); every deck gets one picture.' : 'Do NOT use "image_text" in this part.'}
 - "two_column": exactly 2 columns (comparison, pros/cons), 2-4 bullets each.
 - "stats": 2-4 items ONLY if the numbers are well-known and reliable, otherwise use another layout.
 - "table": 2-4 columns, 3-6 rows, very short cells (max 6 words). Use for comparisons, classifications or timelines. ${tableOk ? "Use at most once here." : 'Do NOT use "table" in this part.'}
@@ -329,6 +329,11 @@ ${edges}
 
   const deck: Deck = { title: title || topic, slides: parts.flat() };
   deck.slides.forEach((sl, i) => { const k = outline[i]?.kind; if (k) sl.layout = k; }); // چیدمان اسلایدهای ویژه ثابت است
+  // اگر مدل هیچ اسلاید تصویری نساخت، اولین اسلاید «bullets» که image_query دارد به تصویری تبدیل می‌شود (فعلاً فقط یک تصویر در هر ارائه)
+  if (!deck.slides.some((s) => s.layout === "image_text" && s.image_query)) {
+    const c = deck.slides.find((s, i) => i > 0 && i < deck.slides.length - 1 && s.layout === "bullets" && s.image_query && !outline[i]?.kind);
+    if (c) { c.layout = "image_text"; c.bullets = c.bullets.slice(0, 4); }
+  }
   return deck;
 }
 

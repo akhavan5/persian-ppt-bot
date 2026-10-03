@@ -22,6 +22,8 @@ export interface Env {
   ANTHROPIC_MODEL?: string;
   LLM_PROVIDER?: string;
   PEXELS_API_KEY?: string;
+  /** Workers AI (تولید تصویر)؛ در wrangler.jsonc با «ai» تعریف می‌شود و کلید جدا ندارد */
+  AI?: Ai;
 
   /** فقط برای تست محلی با سرور شبیه‌ساز تلگرام؛ در تولید تنظیم نکنید */
   TELEGRAM_API_BASE?: string;
