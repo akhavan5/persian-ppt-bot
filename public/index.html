@@ -229,6 +229,7 @@ address{font-style:normal}
       <details id="setBox">
         <summary>⚙️ تنظیمات ظاهر و محتوا</summary>
         <label>تم رنگی</label><div class="themes" id="themes"></div>
+        <div id="modelRow" hidden><label for="model">مدل هوش مصنوعی</label><select id="model"></select></div>
         <div class="grid2">
           <div><label for="tone">لحن</label><select id="tone"></select></div>
           <div><label for="font">فونت</label><select id="font"></select></div>
@@ -474,13 +475,15 @@ function renderApp() {
   renderCredit();
   $("#tone").replaceChildren(...Object.entries(cfg.tones).map(([k, v]) => h("option", { value: k }, v)));
   $("#font").replaceChildren(...cfg.fonts.map((f) => h("option", { value: f }, f)));
+  show($("#modelRow"), cfg.models.length > 1);
+  $("#model").replaceChildren(...cfg.models.map((m) => h("option", { value: m.id }, m.name)));
   syncSettings();
   loadFiles();
   if (me.activeJob) track(me.activeJob);
 }
 function syncSettings() {
   const s = me.settings;
-  $("#tone").value = s.tone; $("#font").value = s.font;
+  $("#tone").value = s.tone; $("#font").value = s.font; $("#model").value = s.model;
   $("#mode").checked = s.mode === "student";
   for (const k of ["images", "digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
   $("#sources").disabled = s.mode === "student";
@@ -494,6 +497,7 @@ async function saveSetting(patch) {
 }
 $("#tone").onchange = (e) => saveSetting({ tone: e.target.value });
 $("#font").onchange = (e) => saveSetting({ font: e.target.value });
+$("#model").onchange = (e) => saveSetting({ model: e.target.value });
 $("#mode").onchange = (e) => saveSetting({ mode: e.target.checked ? "student" : "normal" });
 for (const k of ["images", "digits", "sources", "questions"]) $("#" + k).onchange = (e) => saveSetting({ [k]: e.target.checked });
 
