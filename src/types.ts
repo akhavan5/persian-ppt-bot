@@ -36,7 +36,7 @@ export interface Settings {
   /** افزودن اسلاید منابع / پرسش‌های پایانی */
   sources: boolean;
   questions: boolean;
-  /** مدل هوش مصنوعی: m1 (پیش‌فرض) یا m2 (مدل دوم، اگر OPENAI_MODEL_2 تنظیم شده باشد) */
+  /** نام مدل انتخابی (از فهرست OPENAI_MODELS)؛ خالی = مدل اول */
   model?: string;
 }
 

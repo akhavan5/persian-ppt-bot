@@ -24,7 +24,8 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   s.mode = s.mode === "student" ? "student" : "normal";
   s.sources = !!s.sources;
   s.questions = !!s.questions;
-  s.model = modelList(env).some((m) => m.id === s.model) ? s.model : "m1";
+  const models = modelList(env);
+  s.model = models.some((m) => m.id === s.model) ? s.model : models[0].id;
   return s;
 }
 

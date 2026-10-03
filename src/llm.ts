@@ -24,15 +24,30 @@ function useOpenAI(env: Env): boolean {
   return p === "openai" || (!!env.OPENAI_API_KEY && p !== "anthropic");
 }
 
-export interface ModelOption { id: "m1" | "m2"; name: string; model: string }
-/** مدل‌های قابل انتخاب (مدل دوم فقط روی مسیر سازگار با OpenAI و با تنظیم OPENAI_MODEL_2 فعال است) */
+export interface ModelOption { id: string; name: string; model: string }
+/**
+ * فهرست مدل‌های قابل انتخاب. متغیر OPENAI_MODELS (در کلودفلر) یکی از این دو شکل را می‌پذیرد:
+ *   ۱) متن ساده: هر مدل با کاما یا خط جدید جدا شود؛ نام نمایشی اختیاری با «|»:   gpt-4o-mini|سریع, gpt-4o|دقیق
+ *   ۲) JSON: ["gpt-4o-mini", {"model":"gpt-4o","name":"دقیق"}]
+ * مدل اول پیش‌فرض است. اگر OPENAI_MODELS خالی باشد، از OPENAI_MODEL (و OPENAI_MODEL_2) استفاده می‌شود.
+ */
 export function modelList(env: Env): ModelOption[] {
-  if (!useOpenAI(env)) return [{ id: "m1", name: env.ANTHROPIC_MODEL || "claude-sonnet-5-5", model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5" }];
-  const m1 = env.OPENAI_MODEL || "gpt-4o-mini";
-  const list: ModelOption[] = [{ id: "m1", name: (env.OPENAI_MODEL_NAME || "").trim() || m1, model: m1 }];
-  const m2 = (env.OPENAI_MODEL_2 || "").trim();
-  if (m2) list.push({ id: "m2", name: (env.OPENAI_MODEL_2_NAME || "").trim() || m2, model: m2 });
-  return list;
+  if (!useOpenAI(env)) { const m = env.ANTHROPIC_MODEL || "claude-sonnet-5-5"; return [{ id: m, name: m, model: m }]; }
+  const out: ModelOption[] = [];
+  const add = (model: unknown, name?: unknown) => {
+    const m = String(model ?? "").trim();
+    if (m && !out.some((o) => o.id === m)) out.push({ id: m, name: String(name ?? "").trim() || m, model: m });
+  };
+  const raw = (env.OPENAI_MODELS ?? "").trim();
+  if (raw.startsWith("[")) {
+    try {
+      for (const x of JSON.parse(raw)) typeof x === "string" ? add(x) : add(x?.model ?? x?.id, x?.name);
+    } catch { /* JSON نامعتبر: نادیده گرفته می‌شود و فهرست پیش‌فرض به کار می‌رود */ }
+  } else {
+    for (const part of raw.split(/[,\n;]+/)) { const [m, ...n] = part.split("|"); add(m, n.join("|")); }
+  }
+  if (!out.length) { add(env.OPENAI_MODEL || "gpt-4o-mini"); add(env.OPENAI_MODEL_2); }
+  return out.slice(0, 12);
 }
 export const resolveModel = (env: Env, id?: string): ModelOption => {
   const l = modelList(env);

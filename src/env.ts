@@ -14,11 +14,10 @@ export interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_MODEL?: string;
-  /** اختیاری: مدل دوم روی همان OPENAI_BASE_URL؛ با تنظیم آن، کاربر وب در تنظیمات بین دو مدل انتخاب می‌کند */
+  /** اختیاری: فهرست مدل‌های قابل انتخاب در وب، با کاما/خط جدید (نام نمایشی با «|») یا JSON؛ مدل اول پیش‌فرض است. مثال: gpt-4o-mini|سریع, gpt-4o|دقیق */
+  OPENAI_MODELS?: string;
+  /** قدیمی: اگر OPENAI_MODELS خالی باشد، مدل دوم از اینجا خوانده می‌شود */
   OPENAI_MODEL_2?: string;
-  /** اختیاری: نام نمایشی مدل‌ها در صفحه‌ی وب (پیش‌فرض: خود نام مدل) */
-  OPENAI_MODEL_NAME?: string;
-  OPENAI_MODEL_2_NAME?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;
   LLM_PROVIDER?: string;
