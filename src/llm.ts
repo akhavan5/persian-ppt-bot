@@ -86,13 +86,16 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
     };
+    // Qwen3 به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کند و روی درخواست‌های بلند تایم‌اوت می‌شود؛ برای تولید JSON لازم نیست
+    if (/qwen3|qwen-3/i.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
     const headers = { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` };
     const call = () => fetch(`${base}/chat/completions`, {
       method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(180_000),
     });
     let r = await call();
     if (r.status === 400) { // برخی سرویس‌ها response_format را نمی‌پذیرند
-      delete body.response_format;
+      delete body.response_format; // برخی سرویس‌ها response_format یا chat_template_kwargs را نمی‌پذیرند
+      delete body.chat_template_kwargs;
       r = await call();
     }
     if (!r.ok) await failFrom(r, "LLM");
@@ -121,7 +124,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
 }
 
 export function parseJson(text: string): any {
-  const t = text.replace(/```(?:json)?/g, "").trim();
+  const t = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```(?:json)?/g, "").trim();
   const a = t.indexOf("{"), b = t.lastIndexOf("}");
   if (a < 0 || b < 0) throw new Error("no JSON in model output");
   return JSON.parse(t.slice(a, b + 1));
@@ -134,6 +137,16 @@ async function ask(env: Env, prompt: string, maxTokens = 6000, modelId?: string)
     try { return parseJson(text); } catch (e) { last = e; }
   }
   throw last instanceof Error ? last : new Error("invalid JSON");
+}
+
+/** یک بار تلاش مجدد برای خطای گذرا (تایم‌اوت، ۴۲۹، ۵xx)؛ خطای قطعی (کلید/مدل نادرست) بلافاصله پرتاب می‌شود. */
+async function askRetry(env: Env, prompt: string, maxTokens: number, modelId?: string): Promise<any> {
+  try { return await ask(env, prompt, maxTokens, modelId); }
+  catch (e) {
+    if (e instanceof LlmError && e.fatal) throw e;
+    await new Promise((r) => setTimeout(r, 3000));
+    return ask(env, prompt, maxTokens, modelId);
+  }
 }
 
 // ---------- ابزارهای پاک‌سازی خروجی مدل ----------
@@ -264,12 +277,27 @@ ${structureRules(o)}`, 2500, o.model);
 export async function makeDeck(env: Env, topic: string, title: string, outline: OutlineItem[], tone: string, o: ContentOpts = {}): Promise<Deck> {
   if (!hasKey(env)) return mockDeck(title || topic, outline);
   const student = o.mode === "student";
-  const data = await ask(env, `Write the full content of this Persian presentation.
+
+  // محتوا به دسته‌های کوچک (۳ تا ۴ اسلاید) شکسته می‌شود و دسته‌ها هم‌زمان ساخته می‌شوند:
+  // هر درخواست کوتاه و سریع است، پس مدل‌های کندتر (مثل Qwen) روی یک درخواست بلند تایم‌اوت نمی‌شوند.
+  const size = student ? 3 : 4;
+  const batches: [number, number][] = [];
+  if (outline.length <= 6) batches.push([0, outline.length]);
+  else for (let a = 0; a < outline.length; a += size) batches.push([a, Math.min(outline.length, a + size)]);
+  const nb = batches.length;
+  const ctx = outline.map((x, i) => `${i + 1}. ${x.title}`).join(" | ");
+
+  const parts = await Promise.all(batches.map(async ([a, z], bi) => {
+    const slice = outline.slice(a, z);
+    const tableOk = nb === 1 || bi % 2 === 0, chartOk = bi === Math.min(1, nb - 1);
+    const scope = nb === 1 ? "" : `\nThe deck has ${outline.length} slides in total: ${ctx}\nWrite ONLY slides ${a + 1} to ${z} (${slice.length} slides) — return exactly ${slice.length} slide objects, in this order.\n`;
+    const edges = [a === 0 ? `- the first slide is "title" (title + subtitle).` : "", z === outline.length ? `- the last slide is "closing" (short thanks/CTA in title, optional bullets).` : ""].filter(Boolean).join("\n");
+    const data = await askRetry(env, `Write the full content of this Persian presentation.
 Topic: ${topic}
 Title: ${title}
 Tone: ${TONES[tone] ?? tone}
-Audience: ${o.audience || (student ? "university class" : "general")}
-Outline (keep this order and count): ${JSON.stringify(outline)}
+Audience: ${o.audience || (student ? "university class" : "general")}${scope}
+Outline of the slides to write (keep this order and count): ${JSON.stringify(slice)}
 
 Return JSON: {"title": "...", "slides": [{
   "layout": "title|section|bullets|image_text|two_column|stats|table|chart|sources|questions|closing",
@@ -283,21 +311,24 @@ Return JSON: {"title": "...", "slides": [{
   "notes": "speaker notes in Persian"}]}
 
 Layout rules:
-- first slide "title" (title + subtitle), last slide "closing" (short thanks/CTA in title, optional bullets).
+${edges}
 - "bullets": ${student ? "4-6 bullets (up to ~18 words each; define terms, add a concrete example where useful)" : "3-5 bullets"}. "image_text": 3-4 bullets + image_query (use for concrete, visual topics).
 - "two_column": exactly 2 columns (comparison, pros/cons), 2-4 bullets each.
 - "stats": 2-4 items ONLY if the numbers are well-known and reliable, otherwise use another layout.
-- "table": 2-4 columns, 3-6 rows, very short cells (max 6 words). Use for comparisons, classifications or timelines. Use at most twice.
-- "chart": ONLY when you know real, widely reported figures (rounded is fine); labels 3-8; "pie" has exactly one series. Optionally 1-2 bullets with the takeaway. NEVER invent data: if unsure, use "table" or "bullets" instead. Use at most once.
+- "table": 2-4 columns, 3-6 rows, very short cells (max 6 words). Use for comparisons, classifications or timelines. ${tableOk ? "Use at most once here." : 'Do NOT use "table" in this part.'}
+- "chart": ONLY when you know real, widely reported figures (rounded is fine); labels 3-8; "pie" has exactly one series. Optionally 1-2 bullets with the takeaway. NEVER invent data: if unsure, use "table" or "bullets" instead. ${chartOk ? "Use at most once here." : 'Do NOT use "chart" in this part.'}
 - "sources" (only for outline items with kind "sources"): 3-6 entries in "bullets". Only real, well-known references you are highly confident exist (famous books with author, official organizations or their websites by name, widely known reports). No URLs, no page numbers, no invented titles; if unsure, write the organization or field name instead of a specific title.
 - "questions" (only for outline items with kind "questions"): 3-5 thought-provoking questions for the audience in "bullets", each one sentence ending with «؟».
 - "section": only for a divider between big parts, and only in decks of 10+ slides.
 - Vary layouts; do not use the same one more than 3 times in a row.
 - Include "notes" for every slide: ${student ? "a full speaking script of 4-6 sentences" : "2-3 sentences"}.
-- "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.`, student ? 8000 : 6000, o.model);
-  const deck = normalizeDeck(data, outline);
+- "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.`,
+      (student ? 900 : 700) * slice.length + 500, o.model);
+    return normalizeDeck(data, slice).slides.slice(0, slice.length); // normalizeDeck کمبود را از روی سرفصل پر می‌کند ⇒ ترتیب دسته‌ها به‌هم نمی‌خورد
+  }));
+
+  const deck: Deck = { title: title || topic, slides: parts.flat() };
   deck.slides.forEach((sl, i) => { const k = outline[i]?.kind; if (k) sl.layout = k; }); // چیدمان اسلایدهای ویژه ثابت است
-  if (!deck.title) deck.title = title || topic;
   return deck;
 }
 
