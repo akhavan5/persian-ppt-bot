@@ -307,7 +307,7 @@ Return JSON: {"title": "...", "slides": [{
   "stats": [{"value": "...", "label": "..."}],
   "table": {"headers": ["..."], "rows": [["..."]]},
   "chart": {"type": "bar|line|pie", "labels": ["..."], "series": [{"name": "...", "values": [1, 2]}]},
-  "image_query": "English description of ONE concrete visual scene for this slide (objects, setting; no abstract words), max 12 words",
+  "image_query": "English description of ONE concrete visual scene for this slide (objects, setting; no abstract words), max 12 words. It must directly depict the subject of THIS presentation topic (e.g. solar panels and wind turbines for renewable energy); never generic landmarks, mosques, buildings or cultural stereotypes unless the topic itself is about them",
   "notes": "speaker notes in Persian"}]}
 
 Layout rules:

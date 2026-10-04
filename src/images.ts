@@ -7,7 +7,7 @@ import { IMAGE_BOX } from "./pptx";
 export const MAX_IMAGES = 1;
 const MODEL_MAIN = "@cf/black-forest-labs/flux-1-schnell";
 const MODEL_BACKUP = "@cf/bytedance/stable-diffusion-xl-lightning";
-const STYLE = ", clean modern illustration for a presentation slide, soft lighting, high quality, no text, no letters, no watermark";
+const STYLE = ", professional presentation slide image, subject large and centered filling the frame, detailed, vivid colors, high quality, no text, no letters, no watermark";
 
 const PX_W = 1200;
 const PX_H = Math.round((PX_W * IMAGE_BOX.h) / IMAGE_BOX.w);
@@ -60,14 +60,24 @@ async function viaApi(env: Env, query: string): Promise<Uint8Array | null> {
   const headers = { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` };
   // اگر آدرس API از نوع OpenAI-compatible کلودفلر باشد (…/accounts/ID/ai/v1)، آن /images/generations را ندارد؛
   // تصویر باید از مسیر …/ai/run/<model> گرفته شود (خروجی: {result:{image:base64}} یا خود تصویر)
-  const cf = /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai\/v1$/.test(base);
+  const runBase = (env.OPENAI_IMAGE_BASE_URL || "").trim().replace(/\/+$/, "");
+  const cf = !!runBase || /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai\/v1$/.test(base);
   try {
     if (cf) {
       const model = env.OPENAI_IMAGE_MODEL || MODEL_MAIN;
-      const input = /flux/i.test(model) ? { prompt: query + STYLE, steps: 4 } : { prompt: query + STYLE, num_steps: 8 };
-      const r = await fetch(`${base.replace(/\/v1$/, "")}/run/${model}`, {
-        method: "POST", headers, body: JSON.stringify(input), signal: AbortSignal.timeout(60_000),
-      });
+      const url = `${runBase || base.replace(/\/v1$/, "/run")}/${model}`;
+      let r: Response;
+      if (/flux-2/i.test(model)) {
+        // خانواده‌ی FLUX.2 ورودی را فقط به‌صورت multipart/form-data می‌پذیرد
+        const f = new FormData();
+        f.append("prompt", query + STYLE);
+        f.append("width", "1024");
+        f.append("height", "832");
+        r = await fetch(url, { method: "POST", headers: { authorization: headers.authorization }, body: f, signal: AbortSignal.timeout(90_000) });
+      } else {
+        const input = /flux/i.test(model) ? { prompt: query + STYLE, steps: 4 } : { prompt: query + STYLE, num_steps: 8 };
+        r = await fetch(url, { method: "POST", headers, body: JSON.stringify(input), signal: AbortSignal.timeout(60_000) });
+      }
       if (!r.ok) { console.error("image api", r.status, (await r.text()).slice(0, 200)); return null; }
       if ((r.headers.get("content-type") || "").startsWith("image/")) return await toBytes(new Uint8Array(await r.arrayBuffer()));
       const j = (await r.json()) as any;
