@@ -32,18 +32,17 @@ export async function activatePlan(env: Env, uid: string, p: Plan) {
  * DIGIPAY_CLIENT_ID, DIGIPAY_CLIENT_SECRET, DIGIPAY_USERNAME, DIGIPAY_PASSWORD
  * تا هر چهار مقدار تنظیم نشوند، پرداخت آنلاین غیرفعال است و دکمه‌ی خرید کاربر را به پشتیبان تلگرام می‌فرستد.
  */
-const clean = (v?: string) => (v ?? "").trim().replace(/^(["'])(.*)\1$/s, "$2").trim();
 const cfg = (env: Env) => ({
-  clientId: clean(env.DIGIPAY_CLIENT_ID),
-  clientSecret: clean(env.DIGIPAY_CLIENT_SECRET),
-  username: clean(env.DIGIPAY_USERNAME),
-  password: clean(env.DIGIPAY_PASSWORD),
+  clientId: (env.DIGIPAY_CLIENT_ID ?? "").trim(),
+  clientSecret: (env.DIGIPAY_CLIENT_SECRET ?? "").trim(),
+  username: (env.DIGIPAY_USERNAME ?? "").trim(),
+  password: (env.DIGIPAY_PASSWORD ?? "").trim(),
 });
 const DP_API = "https://api.mydigipay.com/digipay/api";
 /** طبق مستند رسمی: نوع تیکت برای «تمام فیچرهای UPG» همیشه ۱۱ است (نوع واقعی پرداخت — ۰ کارتی، ۱۱ کیف پول، ۵/۱۳ اعتباری — در callback برمی‌گردد) */
 const DP_TICKET_TYPE = "11";
 /** درگاه ترجیحی: ۲ = مستقیم به درگاه کارتی (IPG)، ۰ = مستقیم کیف پول، null = نمایش صفحه‌ی انتخاب ابزار پرداخت دیجی‌پی */
-const DP_GATEWAY: number | null = 2;
+const DP_GATEWAY: number | null = null;
 /** نوع پیش‌فرض تایید اگر callback نوع را نفرستاد (IPG) */
 const DP_VERIFY_FALLBACK = "0";
 
@@ -77,13 +76,7 @@ async function dpToken(env: Env, force = false): Promise<string | null> {
   }).catch((e) => { console.error("digipay auth", e); return null; });
   const d = (await r?.json().catch(() => null)) as any;
   const token = r?.ok ? (d?.access_token as string | undefined) : undefined;
-  if (!token) {
-    // اطلاعات عیب‌یابی بدون افشای مقدارها: فقط طول‌ها و اینکه مقدارها اشتباهی با هم یکی نباشند
-    console.error("digipay auth failed", r?.status, JSON.stringify(d).slice(0, 300),
-      JSON.stringify({ len: { cid: c.clientId.length, cs: c.clientSecret.length, u: c.username.length, p: c.password.length },
-        userIsClientId: c.username === c.clientId, passIsClientSecret: c.password === c.clientSecret, userLooksMobile: /^(\+?98|0)?9\d{9}$/.test(c.username) }));
-    return null;
-  }
+  if (!token) { console.error("digipay auth failed", r?.status, JSON.stringify(d).slice(0, 300)); return null; }
   const ttl = Math.max(60, Math.min(Number(d?.expires_in) || 3600, 86_400) - 120);
   await env.KV.put(TOKEN_KEY, JSON.stringify({ t: token }), { expirationTtl: ttl }).catch(() => {});
   return token;
@@ -104,14 +97,6 @@ async function dp(env: Env, endpoint: string, body: Record<string, unknown>, ret
 }
 const dpOk = (res: any) => res?.result?.status === 0 || res?.result?.status === "0";
 
-/** استانداردسازی شماره‌ی موبایل (همان منطق افزونه‌ی رسمی دیجی‌پی)؛ خروجی 09xxxxxxxxx یا null */
-function normMobile(raw: unknown): string | null {
-  let n = String(raw ?? "").replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/\D/g, "");
-  n = n.replace(/^(0098|98)/, "");
-  if (/^9\d{9}$/.test(n)) n = "0" + n;
-  return /^09\d{9}$/.test(n) ? n : null;
-}
-
 /** شماره‌ی سفارش یکتا (providerId) */
 const newOrderId = () => `pp${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const ORDER_RE = /^pp\d{13,17}$/;
@@ -123,16 +108,17 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
   if (!plan) return json({ error: "بسته‌ی انتخابی نامعتبر است." }, 400);
   if (await hitLimit(env, `payrl:${user.id}`, 20, 3600)) return json({ error: "تعداد درخواست پرداخت زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
 
-  const mobile = normMobile(b?.mobile);
-  if (!mobile) return json({ error: "شماره موبایل معتبر وارد کن (مثل 09123456789)؛ دیجی‌پی برای پرداخت آن را لازم دارد." }, 400);
-
   const amount = plan.price * 1000 * 10; // تومان → ریال
   const order = newOrderId();
   const res = await dp(env, `tickets/business?type=${DP_TICKET_TYPE}`, {
     amount,
-    cellNumber: mobile,
     providerId: order,
     callbackUrl: `${url.origin}/api/pay/callback?o=${order}`,
+    // سبد خرید: طبق مستند دیجی‌پی برای نمایش پرداخت اعتباری/اقساطی اجباری است (افزونه‌ی رسمی هم همیشه می‌فرستد)
+    basketDetailsDto: {
+      basketId: order,
+      items: [{ sellerId: "1", supplierId: "1", productCode: plan.id, brand: "", productType: 3, count: 1, categoryId: "0" }],
+    },
     ...(DP_GATEWAY === null ? {} : { additionalInfo: { preferredGateway: DP_GATEWAY } }),
   }).catch((e) => { console.error("digipay ticket", e); return null; });
 
