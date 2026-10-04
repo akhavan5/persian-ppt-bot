@@ -118,6 +118,11 @@ export async function getSub(env: Env, userId: Uid): Promise<Sub | null> {
   if (!s || !Number.isFinite(s.exp) || s.exp <= Date.now()) return null;
   return { plan: String(s.plan), exp: s.exp, credits: Math.max(0, Math.floor(Number(s.credits) || 0)) };
 }
+/** پلن «فعال» = پلنی که نه منقضی شده و نه اعتبارش تمام شده؛ در غیر این صورت کاربر مثل پلن رایگان رفتار می‌کند. */
+export async function getActiveSub(env: Env, userId: Uid): Promise<Sub | null> {
+  const s = await getSub(env, userId);
+  return s && s.credits > 0 ? s : null;
+}
 export async function putSub(env: Env, userId: Uid, s: Sub) {
   await env.KV.put(subKey(userId), JSON.stringify(s), { expirationTtl: Math.max(60, Math.ceil((s.exp - Date.now()) / 1000) + 86_400) });
 }
@@ -133,14 +138,14 @@ export async function canUseModel(env: Env, _userId: Uid, modelId: string): Prom
 /** سقف تعداد اسلاید هر ارائه: مدیر ۳۵؛ عضو پلن فعال طبق پلن (پلاس ۲۰، پرو ۳۵)؛ بقیه ۸ */
 export async function maxSlidesFor(env: Env, userId: Uid): Promise<number> {
   if (isAdmin(env, userId)) return ABS_MAX_SLIDES;
-  const sub = await getSub(env, userId);
+  const sub = await getActiveSub(env, userId);
   return sub ? (PLAN_MAX_SLIDES[sub.plan] ?? FREE_MAX_SLIDES) : FREE_MAX_SLIDES;
 }
 
 /** سقف تعداد تصویر هر ارائه‌ی وب: مدیر ۶؛ عضو پلن فعال طبق پلن (پلاس ۳، پرو ۶)؛ بقیه ۱ */
 export async function maxImagesFor(env: Env, userId: Uid): Promise<number> {
   if (isAdmin(env, userId)) return ABS_MAX_IMAGES;
-  const sub = await getSub(env, userId);
+  const sub = await getActiveSub(env, userId);
   return sub ? (PLAN_MAX_IMAGES[sub.plan] ?? FREE_MAX_IMAGES) : FREE_MAX_IMAGES;
 }
 
@@ -155,12 +160,13 @@ export async function getCredit(env: Env, userId: Uid): Promise<CreditInfo> {
   }
   const [usedRaw, bonus, sub] = await Promise.all([env.KV.get(dailyKey(userId)), getBonus(env, userId), getSub(env, userId)]);
   const used = Number(usedRaw ?? 0) || 0;
-  const dailyLeft = Math.max(0, limit - used);
+  // تا وقتی پلن فعال (پلاس/پرو با اعتبار باقی‌مانده) دارد سهمیه‌ی روزانه‌ی رایگان ندارد؛ با پایان پلن (انقضا یا تمام شدن اعتبار) به پلن رایگان برمی‌گردد
+  const dailyLeft = sub && sub.credits > 0 ? 0 : Math.max(0, limit - used);
   const plan = sub?.credits ?? 0;
   return { unlimited: false, limit, used, dailyLeft, plan, bonus, total: dailyLeft + plan + bonus };
 }
 
-/** یک ارائه اعتبار برمی‌دارد: اول سهمیه‌ی روزانه (چون هر روز دوباره پر می‌شود)، بعد اعتبار پلن ماهانه، بعد اعتبار اضافه. KV همگام‌سازی لحظه‌ای ندارد؛ برای کنترل هزینه کافی است، نه یک سد ریاضی دقیق. */
+/** یک ارائه اعتبار برمی‌دارد: اول سهمیه‌ی روزانه (فقط کاربران بدون پلن فعال؛ با پایان پلن دوباره برقرار می‌شود)، بعد اعتبار پلن ماهانه، بعد اعتبار اضافه. KV همگام‌سازی لحظه‌ای ندارد؛ برای کنترل هزینه کافی است، نه یک سد ریاضی دقیق. */
 export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean; source: CreditSource; day: string; left: number; unlimited: boolean }> {
   const day = today();
   const c = await getCredit(env, userId);

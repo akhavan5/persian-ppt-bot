@@ -1,6 +1,6 @@
 /** درگاه پرداخت دیجی‌پی (UPG — درگاه یکپارچه، OAuth + tickets/business + purchases/verify) — فقط نسخه‌ی وب. پس از پرداخت موفق، پلن کاربر فعال/تمدید می‌شود. */
 import type { Env } from "./env";
-import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getBonus, getSub, putSub, setBonus } from "./settings";
+import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getActiveSub, getBonus, putSub, setBonus } from "./settings";
 import { hitLimit, type WebUser } from "./auth";
 
 /**
@@ -17,12 +17,12 @@ const RANK: Record<string, number> = { plus: 1, pro: 2 };
 
 /**
  * فعال‌سازی / تمدید پلن بعد از پرداخت موفق:
- * - بدون پلن فعال: از همین الان ۳۰ روز.
+ * - بدون پلن فعال (هرگز نخریده، منقضی شده، یا اعتبارش تمام شده): از همین الان ۳۰ روز با اعتبار جدید؛ روزهای باقی‌مانده‌ی پلنِ بی‌اعتبار حساب نمی‌شود.
  * - با پلن فعال: ۳۰ روز به پایان پلن فعلی اضافه می‌شود و اعتبار جدید روی اعتبار باقی‌مانده‌ی پلن جمع می‌شود.
  * - پلن نمایش‌داده‌شده همیشه بالاترین سطحِ بین پلن فعلی و پلن خریداری‌شده است.
  */
 export async function activatePlan(env: Env, uid: string, p: Plan) {
-  const cur = await getSub(env, uid);
+  const cur = await getActiveSub(env, uid); // پلنِ منقضی یا بدون اعتبار = پلن رایگان؛ خرید جدید از نو شروع می‌شود
   const plan = cur && (RANK[cur.plan] ?? 0) > (RANK[p.id] ?? 0) ? cur.plan : p.id;
   await putSub(env, uid, { plan, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits });
 }

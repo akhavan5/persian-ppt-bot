@@ -3,7 +3,7 @@ import type { Env } from "./env";
 import type { DeckParams, Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
 import {
-  FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, acquireLock, bumpStat, clampSlides, getCredit, getSettings, getSub,
+  FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, acquireLock, bumpStat, clampSlides, getActiveSub, getCredit, getSettings,
   isAdmin, isAllowed, isBanned, isLocked, maxImagesFor, maxSlidesFor, planLink, refundCredit, releaseLock, saveSettings, spendCredit,
 } from "./settings";
 import { toFa } from "./util";
@@ -186,7 +186,7 @@ async function runningJob(env: Env, userId: string): Promise<{ busy: boolean; jo
 
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
-  const [c, settings, running, sub, maxSlides, maxImages] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id)]);
+  const [c, settings, running, sub, maxSlides, maxImages] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id)]);
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
   settings.imageCount = Math.min(settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0), maxImages);
@@ -195,7 +195,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     user: publicUser(user),
     credit: c.unlimited
       ? { unlimited: true }
-      : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: c.limit, bonus: c.bonus, plan: c.plan },
+      : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: sub ? 0 : c.limit, bonus: c.bonus, plan: c.plan },
     premium,
     maxSlides,
     maxImages,

@@ -711,7 +711,8 @@ function renderBuy() {
   }
   if (c && c.unlimited) d.push("اعتبار شما نامحدود است.");
   else if (c) {
-    const parts = [`سهمیه‌ی امروز ${fa(c.dailyLeft)} از ${fa(c.limit)}`];
+    const parts = [];
+    if (!me.plan) parts.push(`سهمیه‌ی امروز ${fa(c.dailyLeft)} از ${fa(c.limit)}`); // عضو پلن سهمیه‌ی روزانه ندارد
     if (c.plan) parts.push(`${fa(c.plan)} اعتبار پلن`);
     if (c.bonus) parts.push(`${fa(c.bonus)} اعتبار اضافه`);
     d.push(`اعتبار باقی‌مانده: ${fa(c.total)} ارائه (${parts.join(" + ")}).`);
@@ -729,10 +730,9 @@ function renderBuy() {
       h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, `تا ${fa(p.maxSlides)} اسلاید در هر ارائه`), h("li", {}, `تا ${fa(p.maxImages)} تصویر در هر ارائه`)),
       h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: () => buyPlan(p.id) }, mine ? `تمدید ${fa(p.days)} روزه` : `خرید پلن ${p.name}`));
   }));
-  $("#buyNote").textContent = (cfg.payEnabled
+  $("#buyNote").textContent = cfg.payEnabled
     ? "پلن‌ها ۳۰ روزه‌اند و تمدید خودکار ندارند. پرداخت آنلاین و امن از طریق درگاه دیجی‌پی است و پلن بلافاصله فعال می‌شود؛ اگر پیش از پایان دوباره بخری، ۳۰ روز و اعتبار جدید به پلن فعلی اضافه می‌شود."
-    : me ? `خرید از طریق پیام به ${me.support} در تلگرام انجام می‌شود؛ پیام آماده شامل شناسه‌ی حساب تو (${me.user.id}) است.` : "")
-    + (me ? " سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد به وقت ایران دوباره پر می‌شود." : "");
+    : me ? `خرید از طریق پیام به ${me.support} در تلگرام انجام می‌شود؛ پیام آماده شامل شناسه‌ی حساب تو (${me.user.id}) است.` : "";
 }
 function openBuy(why = "") {
   const w = $("#buyWhy"); w.textContent = why; show(w, !!why);
