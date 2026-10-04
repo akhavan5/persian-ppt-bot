@@ -7,6 +7,8 @@ import { IMAGE_BOX } from "./pptx";
 import { fetchWithAccounts, parseAccounts } from "./accounts";
 
 export const MAX_IMAGES = 1;
+/** فاصله‌ی شروع درخواست تصویرها (میلی‌ثانیه): تصویر دوم ۳ ثانیه بعد از اول، سوم ۶ ثانیه بعد و ... */
+const IMAGE_STAGGER_MS = 3000;
 const MODEL_MAIN = "@cf/black-forest-labs/flux-1-schnell";
 const STYLE = ", professional presentation slide image, subject large and centered filling the frame, detailed, vivid colors, high quality, no text, no letters, no watermark";
 
@@ -79,7 +81,11 @@ async function viaApi(env: Env, query: string): Promise<Uint8Array | null> {
 export async function fetchImages(env: Env, slides: Slide[], max = MAX_IMAGES, _useApi = true): Promise<Map<number, Uint8Array>> {
   const out = new Map<number, Uint8Array>();
   const idx = slides.flatMap((s, i) => (s.layout === "image_text" && s.image_query ? [i] : [])).slice(0, max);
-  const res = await Promise.all(idx.map((i) => viaApi(env, slides[i].image_query!)));
+  // بین شروع درخواست هر تصویر چند ثانیه فاصله است تا درخواست‌ها هم‌زمان به Workers AI نرسند (هم‌زمانی گاهی یکی را در صف نگه می‌دارد و تایم‌اوت می‌شود)
+  const res = await Promise.all(idx.map(async (i, k) => {
+    if (k) await new Promise((r) => setTimeout(r, k * IMAGE_STAGGER_MS));
+    return viaApi(env, slides[i].image_query!);
+  }));
   idx.forEach((i, k) => { const r = res[k]; if (r) out.set(i, r); });
   return out;
 }
