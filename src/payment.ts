@@ -110,17 +110,25 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
 
   const amount = plan.price * 1000 * 10; // تومان → ریال
   const order = newOrderId();
-  const res = await dp(env, `tickets/business?type=${DP_TICKET_TYPE}`, {
+  const base = {
     amount,
     providerId: order,
     callbackUrl: `${url.origin}/api/pay/callback?o=${order}`,
-    // سبد خرید: طبق مستند دیجی‌پی برای نمایش پرداخت اعتباری/اقساطی اجباری است (افزونه‌ی رسمی هم همیشه می‌فرستد)
-    basketDetailsDto: {
-      basketId: order,
-      items: [{ sellerId: "1", supplierId: "1", productCode: plan.id, brand: "", productType: 3, count: 1, categoryId: "0" }],
-    },
     ...(DP_GATEWAY === null ? {} : { additionalInfo: { preferredGateway: DP_GATEWAY } }),
-  }).catch((e) => { console.error("digipay ticket", e); return null; });
+  };
+  // سبد خرید: طبق مستند دیجی‌پی برای نمایش پرداخت اعتباری/اقساطی اجباری است (افزونه‌ی رسمی هم همیشه می‌فرستد)
+  const basket = {
+    basketId: order,
+    items: [{ sellerId: "1", supplierId: "1", productCode: plan.id, brand: "", productType: 3, count: 1, categoryId: "0" }],
+  };
+  const ticket = (body: Record<string, unknown>) =>
+    dp(env, `tickets/business?type=${DP_TICKET_TYPE}`, body).catch((e) => { console.error("digipay ticket", e); return null; });
+  let res = await ticket({ ...base, basketDetailsDto: basket });
+  // 1103 = «فیچر یافت نشد»: ابزار اعتباری/اقساطی برای این حساب فعال نیست؛ بدون سبد دوباره تلاش می‌کنیم تا پرداخت (کیف پول/کارتی) از کار نیفتد
+  if (String(res?.result?.status) === "1103") {
+    console.error("digipay ticket 1103 with basket — retrying without basket");
+    res = await ticket(base);
+  }
 
   const redirect = res?.redirectUrl as string | undefined;
   if (!dpOk(res) || !redirect || !/^https:\/\//i.test(redirect)) {
