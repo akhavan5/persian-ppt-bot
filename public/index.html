@@ -98,7 +98,6 @@ textarea{min-height:110px;resize:vertical}
 .msg.err{background:#fdecea;color:var(--danger)} .msg.info{background:var(--soft);color:#1d4ed8}
 .hero{text-align:center;padding:46px 0 26px;max-width:780px;margin:0 auto}
 .hero p.lead{font-size:1.08rem;color:var(--muted);margin:0 0 6px}
-.imgbox{width:100%;font:inherit;text-align:start;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}.imgbox b{color:var(--primary)}
 .gen{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:12px;align-items:end}
 @media(max-width:560px){.gen{grid-template-columns:1fr}}
 .maker{max-width:780px;margin:0 auto 18px;text-align:right;border-color:#cfdcf7}
@@ -245,7 +244,7 @@ address{font-style:normal}
     </div>
     <div class="gen">
       <div><label for="slides" style="margin-top:0">تعداد اسلاید</label><select id="slides"></select></div>
-      <div><label for="imgBox" style="margin-top:0">تصویر در هر ارائه</label><button type="button" id="imgBox" class="imgbox" title="سقف تصویر بر اساس پلن">🖼 <b id="imgMax">۱</b></button></div>
+      <div><label for="imgCount" style="margin-top:0">تعداد تصویر</label><select id="imgCount"></select></div>
       <button class="btn" id="go" type="button">✨ بساز</button>
     </div>
     <div id="genMsg" class="msg err" role="alert" hidden></div>
@@ -278,7 +277,6 @@ address{font-style:normal}
         </div>
         <div style="margin-top:8px">
           <label class="sw"><span>حالت دانشجویی<small>فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع</small></span><input type="checkbox" id="mode"></label>
-          <label class="sw"><span>تصویر خودکار<small id="imgHint">برای اسلایدهای «تصویر و متن»</small></span><input type="checkbox" id="images"></label>
           <label class="sw"><span>ارقام فارسی</span><input type="checkbox" id="digits"></label>
           <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
           <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
@@ -467,26 +465,34 @@ function renderCommon() {
 }
 
 // ---------- تعداد اسلاید (سقف بر اساس پلن: رایگان ۸، پلاس ۲۰، پرو ۳۵) ----------
-let lastSlides = 8;
+let lastSlides = 8, lastImages = 1;
 const slideMax = () => (me && me.maxSlides) || cfg.freeMaxSlides || 8;
 const imgMax = () => (me && me.maxImages) || cfg.freeMaxImages || 1;
 const planImages = (id) => ((cfg.plans || []).find((p) => p.id === id) || {}).maxImages || 0;
 const planSlides = (id) => ((cfg.plans || []).find((p) => p.id === id) || {}).maxSlides || 0;
-function renderImgBox() {
+function renderImages() {
   if (!cfg) return;
-  const n = imgMax();
-  $("#imgMax").textContent = "تا " + fa(n);
-  $("#imgBox").onclick = () => { if (n < planImages("pro")) openBuy(`تعداد تصویر هر ارائه: پلن رایگان ${fa(cfg.freeMaxImages || 1)}، پلاس تا ${fa(planImages("plus"))} و پرو تا ${fa(planImages("pro"))} تصویر.`); };
+  const el = $("#imgCount"), max = imgMax();
+  const want = Math.min(me && me.settings.imageCount != null ? me.settings.imageCount : (el.value !== "" ? Number(el.value) : 1), max);
+  el.replaceChildren(...[0, 1, 2, 3, 4, 5, 6].map((n) => h("option", { value: n }, (n ? fa(n) : "بدون تصویر") + (n > max ? " 🔒" : ""))));
+  el.value = String(want); lastImages = want;
 }
 function renderSlides() {
   if (!cfg) return;
-  renderImgBox();
+  renderImages();
   const sl = $("#slides"), max = slideMax();
   const want = Math.min(Number(sl.value) || (me ? me.settings.slides : 8), max);
   sl.replaceChildren(...cfg.slideChoices.map((n) => h("option", { value: n }, fa(n) + (n > max ? " 🔒" : ""))));
   sl.value = String([...cfg.slideChoices].reverse().find((n) => n <= want) ?? cfg.slideChoices[0]);
   lastSlides = Number(sl.value);
 }
+$("#imgCount").onchange = (e) => {
+  const n = Number(e.target.value);
+  if (n > imgMax()) {
+    e.target.value = String(lastImages);
+    openBuy(`ساخت ${fa(n)} تصویر در هر ارائه فقط با پلن‌های پولی ممکن است: پلن رایگان ${fa(cfg.freeMaxImages || 1)}، پلاس تا ${fa(planImages("plus"))} و پرو تا ${fa(planImages("pro"))} تصویر.`);
+  } else { lastImages = n; if (me) saveSetting({ imageCount: n }); }
+};
 $("#slides").onchange = (e) => {
   const n = Number(e.target.value);
   if (n > slideMax()) {
@@ -560,8 +566,8 @@ function syncSettings() {
   const s = me.settings;
   $("#tone").value = s.tone; $("#font").value = s.font;
   $("#mode").checked = s.mode === "student";
-  for (const k of ["images", "digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
-  $("#imgHint").textContent = `تا ${fa(imgMax())} تصویر در هر ارائه، برای اسلایدهای «تصویر و متن»`;
+  for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
+  renderImages();
   $("#sources").disabled = s.mode === "student";
   renderModels();
   $("#themes").replaceChildren(...cfg.themes.map((t) =>
@@ -575,7 +581,7 @@ async function saveSetting(patch) {
 $("#tone").onchange = (e) => saveSetting({ tone: e.target.value });
 $("#font").onchange = (e) => saveSetting({ font: e.target.value });
 $("#mode").onchange = (e) => saveSetting({ mode: e.target.checked ? "student" : "normal" });
-for (const k of ["images", "digits", "sources", "questions"]) $("#" + k).onchange = (e) => saveSetting({ [k]: e.target.checked });
+for (const k of ["digits", "sources", "questions"]) $("#" + k).onchange = (e) => saveSetting({ [k]: e.target.checked });
 
 // ---------- مدل‌های هوش مصنوعی (روی صفحه‌ی اصلی) ----------
 // لوگوی اختیاری: فایل /models/<brand>.svg را در public/models بگذار (qwen, deepseek, openai, zai)؛ بدون آن نشان رنگی با حرف اول نمایش داده می‌شود.
@@ -705,7 +711,7 @@ $("#go").onclick = async () => {
   }
   $("#go").disabled = true;
   try {
-    const r = await api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value) } });
+    const r = await api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), imageCount: Number($("#imgCount").value) } });
     $("#jobText").textContent = "⏳ در صف…"; jobView("run");
     $("#job").scrollIntoView({ behavior: "smooth", block: "center" });
     refreshMe(); track(r.jobId);

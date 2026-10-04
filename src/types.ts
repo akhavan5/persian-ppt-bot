@@ -31,6 +31,8 @@ export interface Settings {
   tone: string;
   digits: boolean;
   images: boolean;
+  /** فقط وب: تعداد تصویر انتخابی هر ارائه (۰ = بدون تصویر)؛ خالی = ۱ اگر images روشن باشد */
+  imageCount?: number;
   /** normal | student (ساختار دانشجویی: فهرست، مقدمه، بدنه، نتیجه‌گیری، منابع) */
   mode: "normal" | "student";
   /** افزودن اسلاید منابع / پرسش‌های پایانی */

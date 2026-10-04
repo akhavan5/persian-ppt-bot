@@ -33,6 +33,9 @@ async function readBody(req: Request): Promise<Record<string, unknown> | null> {
 
 const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
 
+const imagesLimitMsg = (max: number) => max <= FREE_MAX_IMAGES
+  ? `در پلن رایگان حداکثر ${toFa(String(FREE_MAX_IMAGES))} تصویر در هر ارائه می‌گیری؛ برای تصویر بیشتر پلن پلاس (تا ${toFa(String(PLANS[0].maxImages))} تصویر) یا پرو (تا ${toFa(String(PLANS[1].maxImages))} تصویر) را بگیر.`
+  : `سقف پلن تو ${toFa(String(max))} تصویر در هر ارائه است.`;
 const slidesLimitMsg = (max: number) => max <= FREE_MAX_SLIDES
   ? `در پلن رایگان حداکثر ${toFa(String(FREE_MAX_SLIDES))} اسلاید می‌توانی بسازی؛ برای تعداد بیشتر پلن پلاس (تا ${toFa(String(PLANS[0].maxSlides))} اسلاید) یا پرو (تا ${toFa(String(PLANS[1].maxSlides))} اسلاید) را بگیر.`
   : `پلن فعلی تو حداکثر ${toFa(String(max))} اسلاید در هر ارائه را پشتیبانی می‌کند؛ برای تعداد بیشتر پلن را ارتقا بده.`;
@@ -146,6 +149,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
   const [c, settings, locked, sub, maxSlides, maxImages] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), isLocked(env, user.id), getSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id)]);
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
+  settings.imageCount = Math.min(settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0), maxImages);
   const activeJob = locked ? await env.KV.get(`wj:${user.id}`) : null;
   return json({
     user: publicUser(user),
@@ -176,6 +180,12 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
     if (Math.round(b.slides) > max) return json({ error: slidesLimitMsg(max), needPlan: true }, 403);
     s.slides = clampSlides(b.slides, max);
   }
+  if (typeof b.imageCount === "number" && Number.isFinite(b.imageCount)) {
+    const maxImg = await maxImagesFor(env, user.id);
+    if (Math.round(b.imageCount) > maxImg) return json({ error: imagesLimitMsg(maxImg), needPlan: true }, 403);
+    s.imageCount = Math.max(0, Math.round(b.imageCount));
+    s.images = s.imageCount > 0;
+  }
   if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) s.model = b.model;
   for (const k of ["digits", "images", "sources", "questions"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
   await saveSettings(env, user.id, s);
@@ -198,6 +208,12 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
     return json({ error: slidesLimitMsg(maxSlides), needPlan: true }, 403);
   }
 
+  // تعداد تصویر: انتخاب کاربر (یا تنظیم ذخیره‌شده) در سقف پلن
+  const maxImg = await maxImagesFor(env, user.id);
+  if (typeof b?.imageCount === "number" && Number.isFinite(b.imageCount) && Math.round(b.imageCount) > maxImg) {
+    return json({ error: imagesLimitMsg(maxImg), needPlan: true }, 403);
+  }
+
   if (await isLocked(env, user.id)) return err("ارائه‌ی قبلی هنوز در حال ساخته شدن است؛ کمی صبر کن.", 409);
 
   const quota = await spendCredit(env, user.id);
@@ -206,6 +222,9 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
 
   const settings: Settings = await getSettings(env, user.id);
   settings.slides = typeof b?.slides === "number" && Number.isFinite(b.slides) ? clampSlides(b.slides, maxSlides) : Math.min(settings.slides, maxSlides);
+  const wantImg = typeof b?.imageCount === "number" && Number.isFinite(b.imageCount) ? Math.round(b.imageCount) : (settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0));
+  const imageCount = Math.max(0, Math.min(wantImg, maxImg));
+  settings.images = imageCount > 0;
   if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8);
 
   const undo = async () => {
@@ -217,7 +236,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   const jobId = `${user.id}-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
   const params: DeckParams = {
     chatId: 0, statusMessageId: 0, userId: user.id, channel: "web",
-    topic, settings, maxImages: await maxImagesFor(env, user.id), credit: quota.source, day: quota.day,
+    topic, settings, maxImages: imageCount, credit: quota.source, day: quota.day,
   };
   try {
     await env.KV.put(`job:${jobId}`, "⏳ در صف…", { expirationTtl: 3600 });
