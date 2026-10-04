@@ -92,6 +92,14 @@ async function dp(env: Env, endpoint: string, body: Record<string, unknown>, ret
 }
 const dpOk = (res: any) => res?.result?.status === 0 || res?.result?.status === "0";
 
+/** استانداردسازی شماره‌ی موبایل (همان منطق افزونه‌ی رسمی دیجی‌پی)؛ خروجی 09xxxxxxxxx یا null */
+function normMobile(raw: unknown): string | null {
+  let n = String(raw ?? "").replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/\D/g, "");
+  n = n.replace(/^(0098|98)/, "");
+  if (/^9\d{9}$/.test(n)) n = "0" + n;
+  return /^09\d{9}$/.test(n) ? n : null;
+}
+
 /** شماره‌ی سفارش یکتا (providerId) */
 const newOrderId = () => `pp${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const ORDER_RE = /^pp\d{13,17}$/;
@@ -103,16 +111,20 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
   if (!plan) return json({ error: "بسته‌ی انتخابی نامعتبر است." }, 400);
   if (await hitLimit(env, `payrl:${user.id}`, 20, 3600)) return json({ error: "تعداد درخواست پرداخت زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
 
+  const mobile = normMobile(b?.mobile);
+  if (!mobile) return json({ error: "شماره موبایل معتبر وارد کن (مثل 09123456789)؛ دیجی‌پی برای پرداخت آن را لازم دارد." }, 400);
+
   const amount = plan.price * 1000 * 10; // تومان → ریال
   const order = newOrderId();
   const res = await dp(env, `tickets/business?type=${DP_TYPE}`, {
     amount,
+    cellNumber: mobile,
     providerId: order,
     callbackUrl: `${url.origin}/api/pay/callback?o=${order}`,
   }).catch((e) => { console.error("digipay ticket", e); return null; });
 
   const redirect = res?.redirectUrl as string | undefined;
-  if (!dpOk(res) || !redirect || !/^https:\/\/[a-z0-9.-]*mydigipay\.(com|info)\//i.test(redirect)) {
+  if (!dpOk(res) || !redirect || !/^https:\/\//i.test(redirect)) {
     console.error("digipay ticket failed", JSON.stringify({ s: res?.result?.status, m: res?.result?.message }).slice(0, 300));
     return json({ error: "اتصال به درگاه پرداخت ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن." }, 502);
   }
@@ -166,6 +178,15 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   if (!dpOk(res)) {
     console.error("digipay verify failed", JSON.stringify({ s: res?.result?.status, m: res?.result?.message }).slice(0, 300));
     return go("pay=fail");
+  }
+
+  // پرداخت‌های اعتباری/اقساطی (نوع ۵ و ۱۳): دیجی‌پی بدون تایید تحویل اقساط را شروع نمی‌کند (مثل افزونه‌ی رسمی ۱.۷.۱)
+  if (type === "5" || type === "13") {
+    const title = PLANS.find((x) => x.id === rec.plan)?.name ?? "اعتبار";
+    const d = await dp(env, `purchases/deliver?type=${type}`, {
+      deliveryDate: Date.now(), invoiceNumber: order, trackingCode, products: [`اشتراک ماهانه پلن ${title}`],
+    }).catch((e) => { console.error("digipay deliver", e); return null; });
+    if (!dpOk(d)) console.error("digipay deliver failed", JSON.stringify({ s: d?.result?.status, m: d?.result?.message }).slice(0, 300));
   }
 
   // ابتدا پرداخت‌شده علامت می‌خورد، بعد پلن فعال می‌شود (جلوگیری از افزودن دوباره با رفرش)
