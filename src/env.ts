@@ -42,8 +42,11 @@ export interface Env {
   /** ورود با گوگل (اختیاری): بدون این دو مقدار، دکمه‌ی گوگل نمایش داده نمی‌شود */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
-  /** درگاه سیزپی (فقط نسخه‌ی وب): «کلید اصلی» تک‌پارچه (Secret)؛ بدون آن، خرید به تلگرام پشتیبان هدایت می‌شود */
-  SIZPAY_KEY?: string;
+  /** درگاه دیجی‌پی (فقط نسخه‌ی وب): از داشبورد کلودفلر تنظیم شود؛ بدون هر چهار مقدار، خرید به تلگرام پشتیبان هدایت می‌شود */
+  DIGIPAY_CLIENT_ID?: string;
+  DIGIPAY_CLIENT_SECRET?: string;
+  DIGIPAY_USERNAME?: string;
+  DIGIPAY_PASSWORD?: string;
   /** آدرس اصلی سایت برای canonical/sitemap/OG (پیش‌فرض https://pptsaz.ir) */
   SITE_URL?: string;
 }

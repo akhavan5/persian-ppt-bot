@@ -1,4 +1,4 @@
-/** درگاه پرداخت سیزپی (SizPay، API ساده: GetTokenSimple / ConfirmSimple) — فقط نسخه‌ی وب. پس از پرداخت موفق، اعتبار اضافه (bonus) به حساب کاربر افزوده می‌شود. */
+/** درگاه پرداخت دیجی‌پی (UPG — درگاه یکپارچه، OAuth + tickets/business + purchases/verify) — فقط نسخه‌ی وب. پس از پرداخت موفق، پلن کاربر فعال/تمدید می‌شود. */
 import type { Env } from "./env";
 import { PLAN_MAX_SLIDES, getBonus, getSub, putSub, setBonus } from "./settings";
 import { hitLimit, type WebUser } from "./auth";
@@ -27,140 +27,155 @@ export async function activatePlan(env: Env, uid: string, p: Plan) {
   await putSub(env, uid, { plan, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits });
 }
 
-const API = "https://rt.sizpay.ir/api/PaymentSimple";
-const ROUTE = "https://rt.sizpay.ir/Route/Payment";
-
-interface SizKey { merchant: string; terminal: string; username: string; password: string }
-
 /**
- * «کلید اصلی» سیزپی یک رشته‌ی تک‌پارچه است: نسخه (۲ حرف، مثل V0) و سپس چند بخش که هرکدام با طولش (۳ رقم) شروع می‌شود:
- *   ۱) Base64 از «کد پذیرنده (۱۵ رقم) + کد ترمینال»  ۲) نام کاربری  ۳) رمز عبور
+ * تنظیمات دیجی‌پی — از متغیرهای داشبورد کلودفلر خوانده می‌شود (Workers → Settings → Variables and Secrets):
+ * DIGIPAY_CLIENT_ID, DIGIPAY_CLIENT_SECRET, DIGIPAY_USERNAME, DIGIPAY_PASSWORD
+ * تا هر چهار مقدار تنظیم نشوند، پرداخت آنلاین غیرفعال است و دکمه‌ی خرید کاربر را به پشتیبان تلگرام می‌فرستد.
  */
-export function parseSizKey(raw: string | undefined): SizKey | null {
-  const k = (raw ?? "").replace(/["'\s]/g, "");
-  if (k.length < 20) return null;
-  const parts: string[] = [];
-  for (let i = 2; i < k.length;) {
-    const n = Number(k.slice(i, i + 3));
-    if (!Number.isInteger(n) || n <= 0 || i + 3 + n > k.length) return null;
-    parts.push(k.slice(i + 3, i + 3 + n)); i += 3 + n;
-  }
-  if (parts.length < 3) return null;
-  let ids: string;
-  try { ids = atob(parts[0]); } catch { return null; }
-  if (!/^\d{16,}$/.test(ids)) return null;
-  return { merchant: ids.slice(0, 15), terminal: ids.slice(15), username: parts[1], password: parts[2] };
-}
-export const payEnabled = (env: Env) => parseSizKey(env.SIZPAY_KEY) !== null;
+const cfg = (env: Env) => ({
+  clientId: (env.DIGIPAY_CLIENT_ID ?? "").trim(),
+  clientSecret: (env.DIGIPAY_CLIENT_SECRET ?? "").trim(),
+  username: (env.DIGIPAY_USERNAME ?? "").trim(),
+  password: (env.DIGIPAY_PASSWORD ?? "").trim(),
+});
+const DP_API = "https://api.mydigipay.com/digipay/api";
+const DP_TYPE = "0"; // 0 = درگاه کارتی (IPG)
 
-interface PayRecord { uid: string; plan?: string; count: number; amount: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string }
+export const payEnabled = (env: Env) => { const c = cfg(env); return Boolean(c.clientId && c.clientSecret && c.username && c.password); };
+
+interface PayRecord { uid: string; plan?: string; count: number; amount: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string; redirect?: string }
 const TTL = 60 * 60 * 24 * 14;
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
-async function siz(endpoint: string, body: Record<string, unknown>): Promise<any> {
-  const r = await fetch(`${API}/${endpoint}`, {
+const DP_HEADERS = { Agent: "WEB", "Digipay-Version": "2022-02-02" };
+const TOKEN_KEY = "dp:token";
+
+/** دریافت (و کش در KV) توکن دسترسی OAuth دیجی‌پی با grant_type=password */
+async function dpToken(env: Env, force = false): Promise<string | null> {
+  if (!force) {
+    const c = (await env.KV.get(TOKEN_KEY, "json").catch(() => null)) as { t: string } | null;
+    if (c?.t) return c.t;
+  }
+  const c = cfg(env);
+  const r = await fetch(`${DP_API}/oauth/token`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      ...DP_HEADERS,
+      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+      authorization: `Basic ${btoa(`${c.clientId}:${c.clientSecret}`)}`,
+    },
+    body: new URLSearchParams({ grant_type: "password", username: c.username, password: c.password }).toString(),
     signal: AbortSignal.timeout(15_000),
+  }).catch((e) => { console.error("digipay auth", e); return null; });
+  const d = (await r?.json().catch(() => null)) as any;
+  const token = r?.ok ? (d?.access_token as string | undefined) : undefined;
+  if (!token) { console.error("digipay auth failed", r?.status, JSON.stringify(d).slice(0, 300)); return null; }
+  const ttl = Math.max(60, Math.min(Number(d?.expires_in) || 3600, 86_400) - 120);
+  await env.KV.put(TOKEN_KEY, JSON.stringify({ t: token }), { expirationTtl: ttl }).catch(() => {});
+  return token;
+}
+
+/** فراخوانی API دیجی‌پی (JSON)؛ در صورت 401 یک‌بار توکن را تازه می‌کند */
+async function dp(env: Env, endpoint: string, body: Record<string, unknown>, retry = true): Promise<any> {
+  const token = await dpToken(env, !retry);
+  if (!token) return null;
+  const r = await fetch(`${DP_API}/${endpoint}`, {
+    method: "POST",
+    headers: { ...DP_HEADERS, "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
   });
+  if (r.status === 401 && retry) return dp(env, endpoint, body, false);
   return r.json().catch(() => null);
 }
-const ok = (code: unknown) => code === 0 || code === "0" || code === "00";
+const dpOk = (res: any) => res?.result?.status === 0 || res?.result?.status === "0";
 
-/** شماره‌ی سفارش عددی و یکتا (۱۳ رقم زمان + ۲ رقم تصادفی) */
-const newOrderId = () => String(Date.now()) + String(Math.floor(Math.random() * 100)).padStart(2, "0");
+/** شماره‌ی سفارش یکتا (providerId) */
+const newOrderId = () => `pp${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const ORDER_RE = /^pp\d{13,17}$/;
 
 /** POST /api/pay/start  { plan } → { url }  (کاربر باید وارد شده باشد) */
 export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
-  const key = parseSizKey(env.SIZPAY_KEY);
-  if (!key) return json({ error: "پرداخت آنلاین هنوز فعال نشده است." }, 503);
+  if (!payEnabled(env)) return json({ error: "پرداخت آنلاین هنوز فعال نشده است." }, 503);
   const plan = PLANS.find((p) => p.id === b?.plan);
   if (!plan) return json({ error: "بسته‌ی انتخابی نامعتبر است." }, 400);
   if (await hitLimit(env, `payrl:${user.id}`, 20, 3600)) return json({ error: "تعداد درخواست پرداخت زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
 
   const amount = plan.price * 1000 * 10; // تومان → ریال
   const order = newOrderId();
-  const res = await siz("GetTokenSimple", {
-    Username: key.username, Password: key.password, MerchantID: key.merchant, TerminalID: key.terminal,
-    DocDate: "", ReturnURL: `${url.origin}/api/pay/callback`, ExtraInf: "",
-    Amount: String(amount), OrderID: order, InvoiceNo: order,
-    AppExtraInf: { PayerNm: user.name ?? "", PayerMobile: "", PayerEmail: user.email, Descr: `اشتراک ماهانه پلن ${plan.name} (${plan.credits} اعتبار)`, PayerIP: "", PayTitle: "" },
-    SignData: "",
-  }).catch((e) => { console.error("sizpay token", e); return null; });
+  const res = await dp(env, `tickets/business?type=${DP_TYPE}`, {
+    amount,
+    providerId: order,
+    callbackUrl: `${url.origin}/api/pay/callback?o=${order}`,
+  }).catch((e) => { console.error("digipay ticket", e); return null; });
 
-  const token = res?.Token as string | undefined;
-  if (!ok(res?.ResCod) || !token || !/^[A-Za-z0-9+/=_-]{6,200}$/.test(token)) {
-    console.error("sizpay token failed", JSON.stringify({ c: res?.ResCod, m: res?.Message }).slice(0, 300));
+  const redirect = res?.redirectUrl as string | undefined;
+  if (!dpOk(res) || !redirect || !/^https:\/\/[a-z0-9.-]*mydigipay\.(com|info)\//i.test(redirect)) {
+    console.error("digipay ticket failed", JSON.stringify({ s: res?.result?.status, m: res?.result?.message }).slice(0, 300));
     return json({ error: "اتصال به درگاه پرداخت ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن." }, 502);
   }
-  const rec: PayRecord = { uid: user.id, plan: plan.id, count: plan.credits, amount, order, state: "pending", t: Date.now() };
-  await env.KV.put(`pay:${token}`, JSON.stringify(rec), { expirationTtl: TTL });
-  return json({ url: `/api/pay/go?t=${encodeURIComponent(token)}` });
+  const rec: PayRecord = { uid: user.id, plan: plan.id, count: plan.credits, amount, order, state: "pending", t: Date.now(), redirect };
+  await env.KV.put(`pay:${order}`, JSON.stringify(rec), { expirationTtl: TTL });
+  return json({ url: `/api/pay/go?t=${encodeURIComponent(order)}` });
 }
 
-const esc = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
-/** GET /api/pay/go?t=توکن — صفحه‌ی کوچکی که کاربر را با POST به درگاه سیزپی می‌فرستد (درگاه فقط POST می‌پذیرد) */
+/** GET /api/pay/go?t=سفارش — انتقال کاربر به صفحه‌ی پرداخت دیجی‌پی */
 export async function paymentGo(env: Env, url: URL): Promise<Response> {
-  const key = parseSizKey(env.SIZPAY_KEY);
-  const token = url.searchParams.get("t") ?? "";
-  const rec = key && token ? ((await env.KV.get(`pay:${token}`, "json")) as PayRecord | null) : null;
-  if (!key || !rec || rec.state !== "pending") return Response.redirect(`${url.origin}/?pay=fail`, 303);
-  const html = `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>انتقال به درگاه پرداخت</title></head>
-<body style="font-family:Tahoma,sans-serif;text-align:center;padding:60px 16px;color:#0f1b33">
-<p>در حال انتقال به درگاه امن پرداخت…</p>
-<form id="f" method="POST" action="${ROUTE}">
-<input type="hidden" name="MerchantID" value="${esc(key.merchant)}"><input type="hidden" name="TerminalID" value="${esc(key.terminal)}"><input type="hidden" name="Token" value="${esc(token)}">
-<noscript><button type="submit">ادامه به درگاه پرداخت</button></noscript>
-</form>
-<script>document.getElementById("f").submit()</script>
-</body></html>`;
-  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" } });
+  const order = url.searchParams.get("t") ?? "";
+  const rec = ORDER_RE.test(order) ? ((await env.KV.get(`pay:${order}`, "json")) as PayRecord | null) : null;
+  if (!rec || rec.state !== "pending" || !rec.redirect) return Response.redirect(`${url.origin}/?pay=fail`, 303);
+  return new Response(null, { status: 303, headers: { location: rec.redirect, "cache-control": "no-store", "referrer-policy": "no-referrer" } });
 }
 
-/** POST /api/pay/callback — بازگشت کاربر از درگاه (ReturnURL، متد POST)؛ پرداخت را تایید (ConfirmSimple) و اعتبار را اضافه می‌کند */
+/** POST /api/pay/callback — بازگشت کاربر از دیجی‌پی؛ پرداخت را تایید (purchases/verify) و پلن را فعال می‌کند */
 export async function paymentCallback(env: Env, req: Request, url: URL): Promise<Response> {
   const go = (q: string) => Response.redirect(`${url.origin}/?${q}`, 303);
-  const key = parseSizKey(env.SIZPAY_KEY);
-  if (!key || req.method !== "POST") return go("pay=fail");
+  if (!payEnabled(env)) return go("pay=fail");
 
-  const form = await req.formData().catch(() => null);
+  const form = req.method === "POST" ? await req.formData().catch(() => null) : null;
   const field = (n: string) => String(form?.get(n) ?? "");
-  const token = field("Token");
-  if (!/^[A-Za-z0-9+/=_-]{6,200}$/.test(token)) return go("pay=fail");
+  const order = url.searchParams.get("o") || field("providerId");
+  if (!ORDER_RE.test(order)) return go("pay=fail");
 
-  const rec = (await env.KV.get(`pay:${token}`, "json")) as PayRecord | null;
+  const rec = (await env.KV.get(`pay:${order}`, "json")) as PayRecord | null;
   if (!rec) return go("pay=fail");
   const okQ = `pay=ok&n=${rec.count}${rec.plan ? `&p=${encodeURIComponent(rec.plan)}` : ""}`;
   if (rec.state === "paid") return go(okQ);
-  if (!ok(field("ResCod"))) {
-    await env.KV.put(`pay:${token}`, JSON.stringify({ ...rec, state: "failed" }), { expirationTtl: TTL });
+
+  const trackingCode = field("trackingCode");
+  const type = /^\d{1,3}$/.test(field("type")) ? field("type") : DP_TYPE;
+  if (field("result") !== "SUCCESS" || !trackingCode) {
+    await env.KV.put(`pay:${order}`, JSON.stringify({ ...rec, state: "failed" }), { expirationTtl: TTL });
     return go("pay=cancel");
   }
-
-  const res = await siz("ConfirmSimple", {
-    UserName: key.username, Password: key.password, MerchantID: key.merchant, TerminalID: key.terminal, Token: token, SignData: "",
-  }).catch((e) => { console.error("sizpay confirm", e); return null; });
-
-  if (!res) return go("pay=error"); // خطای شبکه: وضعیت pending می‌ماند تا تایید دوباره
-  const amountOk = res.Amount === undefined || res.Amount === null || Number(res.Amount) === rec.amount;
-  const orderOk = res.OrderID === undefined || res.OrderID === null || String(res.OrderID) === rec.order;
-  if (!ok(res.ResCod) || !amountOk || !orderOk) {
-    console.error("sizpay confirm failed", JSON.stringify({ c: res.ResCod, m: res.Message, a: res.Amount, o: res.OrderID }).slice(0, 300));
+  if (Number(field("amount")) !== rec.amount) {
+    console.error("digipay amount mismatch", order, field("amount"), rec.amount);
     return go("pay=fail");
   }
 
-  // ابتدا پرداخت‌شده علامت می‌خورد، بعد اعتبار اضافه می‌شود (جلوگیری از افزودن دوباره با رفرش)
-  const fresh = (await env.KV.get(`pay:${token}`, "json")) as PayRecord | null;
+  // تایید پرداخت؛ وضعیت 9011 یعنی هنوز در حال پردازش است و چند بار دوباره تلاش می‌شود
+  let res: any = null;
+  for (let i = 0; i < 4; i++) {
+    res = await dp(env, `purchases/verify?type=${type}`, { trackingCode, providerId: order }).catch((e) => { console.error("digipay verify", e); return null; });
+    if (!res) return go("pay=error"); // خطای شبکه: وضعیت pending می‌ماند تا تایید دوباره
+    if (String(res?.result?.status) !== "9011") break;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  if (!dpOk(res)) {
+    console.error("digipay verify failed", JSON.stringify({ s: res?.result?.status, m: res?.result?.message }).slice(0, 300));
+    return go("pay=fail");
+  }
+
+  // ابتدا پرداخت‌شده علامت می‌خورد، بعد پلن فعال می‌شود (جلوگیری از افزودن دوباره با رفرش)
+  const fresh = (await env.KV.get(`pay:${order}`, "json")) as PayRecord | null;
   if (fresh?.state !== "paid") {
-    await env.KV.put(`pay:${token}`, JSON.stringify({ ...rec, state: "paid", ref: String(res.RefNo ?? "") }), { expirationTtl: TTL * 6 });
+    await env.KV.put(`pay:${order}`, JSON.stringify({ ...rec, state: "paid", ref: trackingCode }), { expirationTtl: TTL * 6 });
     const plan = rec.plan ? PLANS.find((p) => p.id === rec.plan) : undefined;
     if (plan) await activatePlan(env, rec.uid, plan);
     else await setBonus(env, rec.uid, (await getBonus(env, rec.uid)) + rec.count); // رکوردهای قدیمیِ بسته‌ی اعتباری (پیش از پلن‌ها)
-    console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, res.RefNo);
+    console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode);
   }
   return go(okQ);
 }
