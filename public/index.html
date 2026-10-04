@@ -407,6 +407,11 @@ address{font-style:normal}
   <h2 style="margin-top:0;font-size:1.15rem">👑 پلن‌های پاورپوینت‌ساز</h2>
   <p class="msg info" id="buyWhy" style="margin:8px 0" hidden></p>
   <p id="creditDetail" style="margin:8px 0 0"></p>
+  <div id="mobRow" style="margin:12px 0 0" hidden>
+    <label for="fMobile">شماره‌ی موبایل برای پرداخت</label>
+    <input class="ltr" type="text" id="fMobile" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="09123456789">
+    <div id="mobMsg" class="msg err" role="alert" hidden></div>
+  </div>
   <div class="plans" id="plans"></div>
   <p class="muted" id="buyNote" style="margin-bottom:0"></p>
 </dialog>
@@ -618,6 +623,8 @@ function renderBuy() {
   if (!(me && me.plan) && !(c && c.unlimited)) d.push(`حداکثر ${fa(cfg.freeMaxSlides)} اسلاید در هر ارائه.`);
   else if (me && me.maxSlides && !(c && c.unlimited)) d.push(`حداکثر ${fa(me.maxSlides)} اسلاید در هر ارائه.`);
   $("#creditDetail").textContent = d.join(" ");
+  show($("#mobRow"), !!(me && cfg.payEnabled));
+  if (!$("#fMobile").value) { try { $("#fMobile").value = localStorage.getItem("dpMobile") || ""; } catch {} }
   $("#plans").replaceChildren(...list.map((p) => {
     const best = p.id === "pro", mine = me && me.plan && me.plan.id === p.id;
     return h("div", { class: "plan" + (best ? " best" : "") },
@@ -637,6 +644,7 @@ function openBuy(why = "") {
   renderBuy();
   if (!$("#buy").open) $("#buy").showModal();
 }
+$("#fMobile").addEventListener("input", () => show($("#mobMsg"), false));
 $("#creditChip").onclick = () => openBuy();
 $("#upgradeBtn").onclick = () => openBuy();
 async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderCredit(); } } catch {} }
@@ -645,22 +653,17 @@ async function buyPlan(id) {
   if (!me) { $("#buy").close(); openAuth("register", "برای خرید پلن، ابتدا وارد شو یا ثبت‌نام کن."); return; }
   const plan = me.plans.find((p) => p.id === id); if (!plan) return;
   if (!cfg.payEnabled) { window.open(plan.url, "_blank", "noopener"); return; }
-  // دیجی‌پی شماره‌ی موبایل خریدار را الزامی می‌کند؛ یک بار می‌پرسیم و در مرورگر نگه می‌داریم
-  let mobile = ""; try { mobile = localStorage.getItem("dpMobile") || ""; } catch {}
-  const ask = () => (prompt("شماره‌ی موبایل خود را برای پرداخت وارد کن (مثل 09123456789):", mobile) || "").trim();
-  if (!mobile) mobile = ask();
-  if (!mobile) return;
+  // دیجی‌پی شماره‌ی موبایل خریدار را الزامی می‌کند؛ از فیلد داخل پنجره‌ی پلن‌ها خوانده می‌شود
+  const inp = $("#fMobile"), msg = $("#mobMsg");
+  const mobile = inp.value.trim().replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/[\s\-()]/g, "").replace(/^(\+98|0098|98)/, "0");
+  const bad = (t) => { msg.textContent = t; show(msg, true); inp.focus(); };
+  if (!/^09\d{9}$/.test(mobile)) return bad("شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.");
+  show(msg, false);
   try {
-    let r;
-    try { r = await api("/api/pay/start", { method: "POST", body: { plan: id, mobile } }); }
-    catch (e) {
-      if (!(e.data && e.data.needMobile)) throw e;
-      toast(e.message); mobile = ask(); if (!mobile) return;
-      r = await api("/api/pay/start", { method: "POST", body: { plan: id, mobile } });
-    }
+    const r = await api("/api/pay/start", { method: "POST", body: { plan: id, mobile } });
     try { localStorage.setItem("dpMobile", mobile); } catch {}
     location.href = r.url;
-  } catch (e) { toast(e.message); }
+  } catch (e) { if (e.data && e.data.needMobile) bad(e.message); else toast(e.message); }
 }
 function handlePayReturn() {
   const q = new URLSearchParams(location.search), p = q.get("pay");
