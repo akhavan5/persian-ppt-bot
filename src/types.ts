@@ -50,6 +50,8 @@ export interface DeckParams {
   channel?: "telegram" | "web";
   topic: string;
   settings: Settings;
+  /** سقف تعداد تصویر این ارائه (وب: طبق پلن؛ تلگرام: خالی = ۱) */
+  maxImages?: number;
   /** اعتبار از کجا کم شده؛ برای برگشت در صورت خطا */
   credit: "daily" | "plan" | "bonus" | "none";
   /** روز (UTC) شمارنده‌ی روزانه‌ای که کم شده */

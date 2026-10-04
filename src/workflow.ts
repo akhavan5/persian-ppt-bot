@@ -31,7 +31,8 @@ function safeFilename(title: string): string {
 export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
     const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
-    const contentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions };
+    const maxImages = Math.max(1, event.payload.maxImages ?? 1); // تلگرام: ۱ تصویر؛ وب: طبق پلن
+    const contentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, maxImages: settings.images ? maxImages : 0 };
     const web = event.payload.channel === "web";
     // تلگرام: ویرایش پیام وضعیت؛ وب: متن پیشرفت در KV (صفحه‌ی وب هر چند ثانیه می‌خواند)
     const status = (t: string) => (web
@@ -57,7 +58,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         { retries: { limit: 1, delay: "5 seconds" }, timeout: "3 minutes" },
         async () => {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
-          const images = settings.images ? await fetchImages(this.env, deck.slides, undefined, web) : new Map();
+          const images = settings.images ? await fetchImages(this.env, deck.slides, maxImages, web) : new Map();
           const bytes = await buildPptx(deck, {
             theme: settings.theme, font: settings.font, persianDigits: settings.digits, images,
           });

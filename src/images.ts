@@ -1,5 +1,5 @@
 /** تصویر اسلاید: با Workers AI (مدل FLUX) ساخته می‌شود؛ بدون binding «AI» و با داشتن PEXELS_API_KEY از Pexels جستجو می‌شود.
- *  فعلاً در هر ارائه فقط یک تصویر ساخته می‌شود (MAX_IMAGES). */
+ *  تعداد تصویر هر ارائه از بیرون می‌آید (وب: رایگان ۱، پلاس ۳، پرو ۶ — تلگرام: MAX_IMAGES = ۱). */
 import type { Env } from "./env";
 import type { Slide } from "./types";
 import { IMAGE_BOX } from "./pptx";

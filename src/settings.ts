@@ -14,6 +14,10 @@ export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 export const FREE_MAX_SLIDES = 8;
 export const ABS_MAX_SLIDES = 35;
 export const PLAN_MAX_SLIDES: Record<string, number> = { plus: 20, pro: 35 };
+// ---------- سقف تصویر در هر ارائه (فقط وب): رایگان ۱، پلاس ۳، پرو ۶ (ربات تلگرام همچنان ۱ تصویر) ----------
+export const FREE_MAX_IMAGES = 1;
+export const ABS_MAX_IMAGES = 6;
+export const PLAN_MAX_IMAGES: Record<string, number> = { plus: 3, pro: 6 };
 /** گزینه‌های انتخاب تعداد اسلاید در وب (گزینه‌های بالاتر از سقف پلن کاربر قفل نمایش داده می‌شوند) */
 export const WEB_SLIDE_CHOICES = [5, 6, 8, 10, 12, 15, 20, 25, 30, 35];
 
@@ -130,6 +134,13 @@ export async function maxSlidesFor(env: Env, userId: Uid): Promise<number> {
   if (isAdmin(env, userId)) return ABS_MAX_SLIDES;
   const sub = await getSub(env, userId);
   return sub ? (PLAN_MAX_SLIDES[sub.plan] ?? FREE_MAX_SLIDES) : FREE_MAX_SLIDES;
+}
+
+/** سقف تعداد تصویر هر ارائه‌ی وب: مدیر ۶؛ عضو پلن فعال طبق پلن (پلاس ۳، پرو ۶)؛ بقیه ۱ */
+export async function maxImagesFor(env: Env, userId: Uid): Promise<number> {
+  if (isAdmin(env, userId)) return ABS_MAX_IMAGES;
+  const sub = await getSub(env, userId);
+  return sub ? (PLAN_MAX_IMAGES[sub.plan] ?? FREE_MAX_IMAGES) : FREE_MAX_IMAGES;
 }
 
 export type CreditSource = "daily" | "plan" | "bonus" | "none";

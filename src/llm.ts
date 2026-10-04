@@ -233,7 +233,7 @@ export function normalizeOutline(data: any, topic: string): Outline {
 }
 
 // ---------- تولید ----------
-export interface ContentOpts { model?: string; audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean }
+export interface ContentOpts { model?: string; audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean; maxImages?: number }
 const wantSources = (o: ContentOpts) => o.mode === "student" || !!o.sources;
 const wantQuestions = (o: ContentOpts) => !!o.questions;
 
@@ -285,11 +285,15 @@ export async function makeDeck(env: Env, topic: string, title: string, outline: 
   if (outline.length <= 6) batches.push([0, outline.length]);
   else for (let a = 0; a < outline.length; a += size) batches.push([a, Math.min(outline.length, a + size)]);
   const nb = batches.length;
+  // تعداد تصویر: پیش‌فرض ۱؛ ۰ = بدون تصویر؛ هرگز بیشتر از (تعداد اسلایدها − ۲)
+  const wantImages = Math.max(0, Math.min(o.maxImages ?? 1, Math.max(1, outline.length - 2)));
   const ctx = outline.map((x, i) => `${i + 1}. ${x.title}`).join(" | ");
 
   const parts = await Promise.all(batches.map(async ([a, z], bi) => {
     const slice = outline.slice(a, z);
-    const tableOk = nb === 1 || bi % 2 === 0, chartOk = bi === Math.min(1, nb - 1), imageOk = bi === 0;
+    const tableOk = nb === 1 || bi % 2 === 0, chartOk = bi === Math.min(1, nb - 1);
+    // سهم این دسته از تصاویر: تصاویر به‌طور مساوی بین دسته‌ها پخش می‌شوند (اسلاید عنوان/پایانی تصویر نمی‌گیرند)
+    const imgQuota = Math.min(Math.floor(wantImages / nb) + (bi < wantImages % nb ? 1 : 0), Math.max(0, slice.length - (a === 0 ? 1 : 0) - (z === outline.length ? 1 : 0)));
     const scope = nb === 1 ? "" : `\nThe deck has ${outline.length} slides in total: ${ctx}\nWrite ONLY slides ${a + 1} to ${z} (${slice.length} slides) — return exactly ${slice.length} slide objects, in this order.\n`;
     const edges = [a === 0 ? `- the first slide is "title" (title + subtitle).` : "", z === outline.length ? `- the last slide is "closing" (short thanks/CTA in title, optional bullets).` : ""].filter(Boolean).join("\n");
     const data = await askRetry(env, `Write the full content of this Persian presentation.
@@ -312,7 +316,7 @@ Return JSON: {"title": "...", "slides": [{
 
 Layout rules:
 ${edges}
-- "bullets": ${student ? "4-6 bullets (up to ~18 words each; define terms, add a concrete example where useful)" : "3-5 bullets"}. "image_text": 3-4 bullets + image_query. ${imageOk ? 'Use it EXACTLY ONCE here, on the most concrete, visual topic (never on the title/closing slide); every deck gets one picture.' : 'Do NOT use "image_text" in this part.'}
+- "bullets": ${student ? "4-6 bullets (up to ~18 words each; define terms, add a concrete example where useful)" : "3-5 bullets"}. "image_text": 3-4 bullets + image_query. ${imgQuota > 0 ? `Use it EXACTLY ${imgQuota} time${imgQuota > 1 ? "s" : ""} here, on the most concrete, visual topics (never on the title/closing slide), each with a different image_query depicting a different scene${imgQuota > 1 ? "; do not put two image slides next to each other" : ""}.` : 'Do NOT use "image_text" in this part.'}
 - "two_column": exactly 2 columns (comparison, pros/cons), 2-4 bullets each.
 - "stats": 2-4 items ONLY if the numbers are well-known and reliable, otherwise use another layout.
 - "table": 2-4 columns, 3-6 rows, very short cells (max 6 words). Use for comparisons, classifications or timelines. ${tableOk ? "Use at most once here." : 'Do NOT use "table" in this part.'}
@@ -329,10 +333,16 @@ ${edges}
 
   const deck: Deck = { title: title || topic, slides: parts.flat() };
   deck.slides.forEach((sl, i) => { const k = outline[i]?.kind; if (k) sl.layout = k; }); // چیدمان اسلایدهای ویژه ثابت است
-  // اگر مدل هیچ اسلاید تصویری نساخت، اولین اسلاید «bullets» که image_query دارد به تصویری تبدیل می‌شود (فعلاً فقط یک تصویر در هر ارائه)
-  if (!deck.slides.some((s) => s.layout === "image_text" && s.image_query)) {
-    const c = deck.slides.find((s, i) => i > 0 && i < deck.slides.length - 1 && s.layout === "bullets" && s.image_query && !outline[i]?.kind);
-    if (c) { c.layout = "image_text"; c.bullets = c.bullets.slice(0, 4); }
+  // تعداد اسلایدهای تصویری باید دقیقاً wantImages باشد: اضافه‌ها به bullets برمی‌گردند و کمبود از اسلایدهای bullets دارای image_query جبران می‌شود
+  let have = 0;
+  for (const sl of deck.slides) {
+    if (sl.layout !== "image_text") continue;
+    if (sl.image_query && have < wantImages) have++;
+    else sl.layout = "bullets";
+  }
+  for (let i = 1; i < deck.slides.length - 1 && have < wantImages; i++) {
+    const c = deck.slides[i];
+    if (c.layout === "bullets" && c.image_query && !outline[i]?.kind) { c.layout = "image_text"; c.bullets = c.bullets.slice(0, 4); have++; }
   }
   return deck;
 }

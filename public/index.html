@@ -276,7 +276,7 @@ address{font-style:normal}
         </div>
         <div style="margin-top:8px">
           <label class="sw"><span>حالت دانشجویی<small>فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع</small></span><input type="checkbox" id="mode"></label>
-          <label class="sw"><span>تصویر خودکار<small>برای اسلایدهای «تصویر و متن»</small></span><input type="checkbox" id="images"></label>
+          <label class="sw"><span>تصویر خودکار<small id="imgHint">برای اسلایدهای «تصویر و متن»</small></span><input type="checkbox" id="images"></label>
           <label class="sw"><span>ارقام فارسی</span><input type="checkbox" id="digits"></label>
           <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
           <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
@@ -467,6 +467,7 @@ function renderCommon() {
 // ---------- تعداد اسلاید (سقف بر اساس پلن: رایگان ۸، پلاس ۲۰، پرو ۳۵) ----------
 let lastSlides = 8;
 const slideMax = () => (me && me.maxSlides) || cfg.freeMaxSlides || 8;
+const imgMax = () => (me && me.maxImages) || cfg.freeMaxImages || 1;
 const planSlides = (id) => ((cfg.plans || []).find((p) => p.id === id) || {}).maxSlides || 0;
 function renderSlides() {
   if (!cfg) return;
@@ -550,6 +551,7 @@ function syncSettings() {
   $("#tone").value = s.tone; $("#font").value = s.font;
   $("#mode").checked = s.mode === "student";
   for (const k of ["images", "digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
+  $("#imgHint").textContent = `تا ${fa(imgMax())} تصویر در هر ارائه، برای اسلایدهای «تصویر و متن»`;
   $("#sources").disabled = s.mode === "student";
   renderModels();
   $("#themes").replaceChildren(...cfg.themes.map((t) =>
@@ -622,6 +624,7 @@ function renderBuy() {
   }
   if (!(me && me.plan) && !(c && c.unlimited)) d.push(`حداکثر ${fa(cfg.freeMaxSlides)} اسلاید در هر ارائه.`);
   else if (me && me.maxSlides && !(c && c.unlimited)) d.push(`حداکثر ${fa(me.maxSlides)} اسلاید در هر ارائه.`);
+  d.push(`تا ${fa(imgMax())} تصویر در هر ارائه.`);
   $("#creditDetail").textContent = d.join(" ");
   show($("#mobRow"), !!(me && cfg.payEnabled));
   if (!$("#fMobile").value) { try { $("#fMobile").value = localStorage.getItem("dpMobile") || ""; } catch {} }
@@ -631,7 +634,7 @@ function renderBuy() {
       best ? h("span", { class: "ribbon" }, "بیشترین اسلاید") : null,
       h("h3", {}, `👑 پلن ${p.name}`),
       h("div", { class: "pp" }, fa(p.price), h("small", {}, " هزار تومان / ماه")),
-      h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, `تا ${fa(p.maxSlides)} اسلاید در هر ارائه`), h("li", {}, `هر ارائه حدود ${perPpt(p)} تومان`)),
+      h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, `تا ${fa(p.maxSlides)} اسلاید در هر ارائه`), h("li", {}, `تا ${fa(p.maxImages)} تصویر در هر ارائه`), h("li", {}, `هر ارائه حدود ${perPpt(p)} تومان`)),
       h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: () => buyPlan(p.id) }, mine ? `تمدید ${fa(p.days)} روزه` : `خرید پلن ${p.name}`));
   }));
   $("#buyNote").textContent = (cfg.payEnabled

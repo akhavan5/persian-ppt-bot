@@ -3,8 +3,8 @@ import type { Env } from "./env";
 import type { DeckParams, Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
 import {
-  FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, acquireLock, bumpStat, clampSlides, getCredit, getSettings, getSub,
-  isAdmin, isAllowed, isBanned, isLocked, maxSlidesFor, planLink, refundCredit, releaseLock, saveSettings, spendCredit,
+  FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, acquireLock, bumpStat, clampSlides, getCredit, getSettings, getSub,
+  isAdmin, isAllowed, isBanned, isLocked, maxImagesFor, maxSlidesFor, planLink, refundCredit, releaseLock, saveSettings, spendCredit,
 } from "./settings";
 import { toFa } from "./util";
 import { modelList } from "./llm";
@@ -69,6 +69,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       fonts: FONTS,
       slideChoices: WEB_SLIDE_CHOICES,
       freeMaxSlides: FREE_MAX_SLIDES,
+      freeMaxImages: FREE_MAX_IMAGES,
       // همه‌ی مدل‌ها برای همه رایگان است
       models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: true })),
       plans: PLANS,
@@ -142,7 +143,7 @@ async function login(req: Request, env: Env): Promise<Response> {
 
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
-  const [c, settings, locked, sub, maxSlides] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), isLocked(env, user.id), getSub(env, user.id), maxSlidesFor(env, user.id)]);
+  const [c, settings, locked, sub, maxSlides, maxImages] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), isLocked(env, user.id), getSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id)]);
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
   const activeJob = locked ? await env.KV.get(`wj:${user.id}`) : null;
@@ -153,6 +154,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
       : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: c.limit, bonus: c.bonus, plan: c.plan },
     premium,
     maxSlides,
+    maxImages,
     plan: sub ? { id: sub.plan, exp: sub.exp, credits: sub.credits } : null,
     settings,
     activeJob,
@@ -215,7 +217,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   const jobId = `${user.id}-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
   const params: DeckParams = {
     chatId: 0, statusMessageId: 0, userId: user.id, channel: "web",
-    topic, settings, credit: quota.source, day: quota.day,
+    topic, settings, maxImages: await maxImagesFor(env, user.id), credit: quota.source, day: quota.day,
   };
   try {
     await env.KV.put(`job:${jobId}`, "⏳ در صف…", { expirationTtl: 3600 });

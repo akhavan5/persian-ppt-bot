@@ -1,17 +1,17 @@
 /** درگاه پرداخت دیجی‌پی (UPG — درگاه یکپارچه، OAuth + tickets/business + purchases/verify) — فقط نسخه‌ی وب. پس از پرداخت موفق، پلن کاربر فعال/تمدید می‌شود. */
 import type { Env } from "./env";
-import { PLAN_MAX_SLIDES, getBonus, getSub, putSub, setBonus } from "./settings";
+import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getBonus, getSub, putSub, setBonus } from "./settings";
 import { hitLimit, type WebUser } from "./auth";
 
 /**
  * پلن‌های ماهانه (price: هزار تومان). هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
  * همه‌ی مدل‌ها برای همه رایگان است؛ پلن‌ها فقط اعتبار می‌فروشند و سقف اسلاید هر ارائه را بالا می‌برند
- * (رایگان ۸، پلاس ۲۰، پرو ۳۵ اسلاید).
+ * (رایگان ۸، پلاس ۲۰، پرو ۳۵ اسلاید) و تعداد تصویر هر ارائه را (رایگان ۱، پلاس ۳، پرو ۶).
  */
-export interface Plan { id: string; name: string; price: number; credits: number; days: number; maxSlides: number }
+export interface Plan { id: string; name: string; price: number; credits: number; days: number; maxSlides: number; maxImages: number }
 export const PLANS: Plan[] = [
-  { id: "plus", name: "پلاس", price: 99, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.plus },
-  { id: "pro", name: "پرو", price: 199, credits: 20, days: 30, maxSlides: PLAN_MAX_SLIDES.pro },
+  { id: "plus", name: "پلاس", price: 99, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
+  { id: "pro", name: "پرو", price: 199, credits: 20, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
 ];
 const RANK: Record<string, number> = { plus: 1, pro: 2 };
 
