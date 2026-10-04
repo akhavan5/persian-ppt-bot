@@ -11,9 +11,9 @@ import { modelList } from "./llm";
 import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect } from "./files";
 import {
-  authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, getUserByEmail, getUserByMobile, googleCallback,
-  googleEnabled, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
-  sessionCookie, validEmail, verifyPassword, type WebUser,
+  authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, getUserByMobile, googleCallback,
+  googleEnabled, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
+  sessionCookie, type WebUser,
 } from "./auth";
 
 const SEC_HEADERS = {
@@ -82,8 +82,6 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   if (path === "/api/auth/otp/send" && method === "POST") return otpSend(req, env);
   if (path === "/api/auth/otp/verify" && method === "POST") return otpVerify(req, env);
-  if (path === "/api/auth/register" && method === "POST") return err("ثبت‌نام با ایمیل و رمز غیرفعال شده است؛ با گوگل یا شماره‌ی موبایل وارد شو.", 410);
-  if (path === "/api/auth/login" && method === "POST") return login(req, env);
   if (path === "/api/auth/logout" && method === "POST") {
     await destroySession(env, req);
     return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
@@ -116,7 +114,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   return err("پیدا نشد", 404);
 }
 
-// ---------- ثبت‌نام و ورود ----------
+// ---------- ورود و ثبت‌نام یکپارچه (پیامک یک‌بارمصرف / گوگل) ----------
 async function otpSend(req: Request, env: Env): Promise<Response> {
   const b = await readBody(req);
   const mobile = normMobile(b?.mobile);
@@ -167,25 +165,6 @@ async function linkMobile(req: Request, env: Env, user: WebUser): Promise<Respon
   await saveWebUser(env, user);
   await env.KV.put(`wm:${mobile}`, user.id);
   return json({ user: publicUser(user) });
-}
-
-async function login(req: Request, env: Env): Promise<Response> {
-  const b = await readBody(req);
-  const email = normEmail(b?.email), password = String(b?.password ?? "");
-  if (!validEmail(email) || !password || password.length > 128) return err("ایمیل یا رمز عبور درست نیست.", 401);
-
-  const failKey = `lgf:${email}`;
-  if ((Number(await env.KV.get(failKey)) || 0) >= 8) return err("تلاش‌های ناموفق زیاد بود؛ ۱۵ دقیقه بعد دوباره امتحان کن.", 429);
-
-  const user = await getUserByEmail(env, email);
-  const ok = await verifyPassword(password, user?.hash); // برای کاربر ناموجود هم محاسبه می‌شود (زمان یکسان)
-  if (!user || !ok) {
-    await hitLimit(env, failKey, 8, 900);
-    return err(user && !user.hash ? "این حساب با گوگل ساخته شده است؛ با دکمه‌ی گوگل وارد شو." : "ایمیل یا رمز عبور درست نیست.", 401);
-  }
-  await env.KV.delete(failKey);
-  const token = await createSession(env, user.id);
-  return json({ user: publicUser(user) }, 200, { "set-cookie": sessionCookie(token) });
 }
 
 // ---------- وضعیت کاربر ----------

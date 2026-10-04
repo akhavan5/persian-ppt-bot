@@ -1,6 +1,5 @@
 /**
  * سیستم کاربری نسخه‌ی وب؛ کاملاً جدا از تلگرام.
- * - ثبت‌نام/ورود با ایمیل و رمز (PBKDF2-SHA256 با Web Crypto؛ سقف تکرار در Workers ‏۱۰۰٬۰۰۰ است)
  * - ورود با گوگل (OAuth 2.0 Authorization Code، سمت سرور)
  * - ورود/ثبت‌نام یکپارچه با پیامک یک‌بارمصرف (OTP): اگر حسابی با آن شماره بود وارد می‌شود، وگرنه ساخته می‌شود
  * - نشست‌ها: توکن تصادفی در کوکی HttpOnly؛ در KV فقط هشِ توکن نگه داشته می‌شود
@@ -15,21 +14,18 @@ export interface WebUser {
   mobile?: string; // 09XXXXXXXXX
   name: string;
   picture?: string;
-  hash?: string; // خالی = حساب فقط-گوگل
   google?: string; // شناسه‌ی sub گوگل
   verified: boolean; // ایمیل تایید شده؟ (فقط با گوگل true می‌شود)
   created: number;
 }
 
 const enc = new TextEncoder();
-const ITER = 100_000;
 const SESSION_TTL = 60 * 60 * 24 * 30; // ۳۰ روز
 export const SESSION_COOKIE = "sid";
 
 // ---------- ابزارها ----------
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 export const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const unb64u = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 export const randomToken = (bytes = 32) => b64u(crypto.getRandomValues(new Uint8Array(bytes)));
 const sha256hex = async (s: string) => hex(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(s))));
 
@@ -50,28 +46,6 @@ export const setCookie = (name: string, value: string, maxAge: number, path = "/
 export const normEmail = (e: unknown) => String(e ?? "").trim().toLowerCase();
 export const validEmail = (e: string) => e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 
-// ---------- رمز عبور ----------
-async function derive(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
-  return new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, key, 256));
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  return `pbkdf2$${ITER}$${b64u(salt)}$${b64u(await derive(password, salt, ITER))}`;
-}
-
-// برای یکسان بودن زمان پاسخ وقتی کاربر وجود ندارد (جلوگیری از شناسایی ایمیل‌ها با زمان‌سنجی)
-const DUMMY = "pbkdf2$100000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-
-export async function verifyPassword(password: string, stored?: string): Promise<boolean> {
-  const [alg, it, salt, hash] = (stored || DUMMY).split("$");
-  const iterations = Number(it);
-  if (alg !== "pbkdf2" || !Number.isInteger(iterations) || iterations < 1000 || iterations > ITER) return false;
-  const got = await derive(password, unb64u(salt), iterations);
-  return safeEqual(got, unb64u(hash)) && !!stored;
-}
-
 // ---------- کاربران ----------
 export const getUserById = (env: Env, id: string) => env.KV.get(`wu:${id}`, "json") as Promise<WebUser | null>;
 export async function getUserByEmail(env: Env, email: string): Promise<WebUser | null> {
@@ -80,10 +54,10 @@ export async function getUserByEmail(env: Env, email: string): Promise<WebUser |
 }
 const saveUser = (env: Env, u: WebUser) => env.KV.put(`wu:${u.id}`, JSON.stringify(u));
 
-export async function createUser(env: Env, p: { email?: string; mobile?: string; name: string; hash?: string; google?: string; picture?: string }): Promise<WebUser> {
+export async function createUser(env: Env, p: { email?: string; mobile?: string; name: string; google?: string; picture?: string }): Promise<WebUser> {
   const u: WebUser = {
     id: "w_" + hex(crypto.getRandomValues(new Uint8Array(8))),
-    email: p.email ?? "", mobile: p.mobile, name: p.name.slice(0, 64), picture: p.picture, hash: p.hash, google: p.google,
+    email: p.email ?? "", mobile: p.mobile, name: p.name.slice(0, 64), picture: p.picture, google: p.google,
     verified: !!p.google || !!p.mobile, created: Date.now(),
   };
   await saveUser(env, u);
@@ -270,10 +244,7 @@ export async function googleCallback(env: Env, req: Request, url: URL): Promise<
     if (!user) {
       user = await getUserByEmail(env, email);
       if (user) {
-        // ایمیل را گوگل تایید کرده است ⇒ حساب موجود به گوگل وصل می‌شود.
-        // اگر آن حساب با رمز ساخته شده و ایمیلش تایید نشده بود، رمزش حذف می‌شود
-        // (جلوگیری از ثبت‌نام قبلیِ شخص دیگر با ایمیلِ شما)
-        if (user.hash && !user.verified) delete user.hash;
+        // ایمیل را گوگل تایید کرده است ⇒ حساب موجود با همان ایمیل به گوگل وصل می‌شود
         user.google = info.sub;
         user.verified = true;
         user.picture ||= info.picture;

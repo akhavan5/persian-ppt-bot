@@ -402,15 +402,6 @@ address{font-style:normal}
     <div id="authMsg" class="msg err" role="alert" hidden></div>
     <button class="btn block" id="authSubmit" type="submit" style="margin-top:16px">ارسال کد</button>
   </form>
-  <details id="legacy" style="margin-top:16px">
-    <summary class="muted" style="cursor:pointer;font-size:.88rem">ورود با ایمیل و رمز (حساب‌های قبلی)</summary>
-    <form id="authForm" novalidate>
-      <label for="fEmail">ایمیل</label><input class="ltr" type="email" id="fEmail" autocomplete="email" inputmode="email" required>
-      <label for="fPass">رمز عبور</label><input class="ltr" type="password" id="fPass" autocomplete="current-password" required>
-      <div id="legacyMsg" class="msg err" role="alert" hidden></div>
-      <button class="btn block ghost" id="legacySubmit" type="submit" style="margin-top:12px">ورود</button>
-    </form>
-  </details>
 </dialog>
 
 <!-- پروفایل -->
@@ -555,15 +546,14 @@ function otpReset() {
   $("#authSubmit").textContent = "ارسال کد"; $("#authSubmit").disabled = false;
 }
 function openAuth(m, note = "", err = "") {
-  otpReset(); show($("#authMsg"), false); show($("#legacyMsg"), false);
+  otpReset(); show($("#authMsg"), false);
   const n = $("#authNote"); n.textContent = note; show(n, !!note);
-  if (err) { const msg = cfg.otp ? $("#authMsg") : $("#legacyMsg"); msg.textContent = err; show(msg, true); }
+  if (err) { const msg = $("#authMsg"); msg.textContent = err; show(msg, true); }
   if (!$("#authDlg").open) $("#authDlg").showModal();
 }
 function renderAuthBtn() {
   show($("#googleBtn"), cfg.google); show($("#otpForm"), cfg.otp);
   show($("#sep"), cfg.google && (cfg.otp));
-  $("#legacy").open = !cfg.otp && !cfg.google;
   const q = new URLSearchParams(location.search).get("login_error");
   if (q) { history.replaceState(null, "", "/"); openAuth("login", "", LOGIN_ERRORS[q] || "ورود ناموفق بود."); }
 }
@@ -603,18 +593,6 @@ $("#otpResend").onclick = async () => {
   catch (e) { msg.textContent = e.message; show(msg, true); }
 };
 $("#otpEdit").onclick = otpReset;
-
-$("#authForm").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const btn = $("#legacySubmit"), msg = $("#legacyMsg");
-  show(msg, false); btn.disabled = true;
-  try {
-    await api("/api/auth/login", { method: "POST", body: { email: $("#fEmail").value, password: $("#fPass").value } });
-    $("#fPass").value = "";
-    await boot();
-  } catch (e) { msg.textContent = e.message; show(msg, true); }
-  btn.disabled = false;
-});
 
 // ---------- پروفایل ----------
 function renderPfMobile() {
