@@ -167,13 +167,30 @@ async function linkMobile(req: Request, env: Env, user: WebUser): Promise<Respon
   return json({ user: publicUser(user) });
 }
 
+// قفل «در حال ساخت» در KV نگه داشته می‌شود و KV سازگاری نهایی دارد: حذف قفل (که Workflow پس از اتمام انجام می‌دهد) تا حدود یک دقیقه
+// در بعضی نقاط هنوز دیده می‌شود و پیام «ارائه‌ی قبلی هنوز در حال ساخته شدن است» اشتباهی می‌آید. وضعیت قطعی از خود Workflow
+// (سازگاری قوی) خوانده می‌شود: اگر کار قبلی تمام/خطادار شده باشد، قفل باقی‌مانده نادیده گرفته می‌شود.
+async function runningJob(env: Env, userId: string): Promise<{ busy: boolean; jobId: string | null }> {
+  if (!(await isLocked(env, userId))) return { busy: false, jobId: null };
+  const jobId = await env.KV.get(`wj:${userId}`);
+  if (jobId) {
+    const inst = await env.DECK_WORKFLOW.get(jobId).catch(() => null);
+    const st = inst ? await inst.status().catch(() => null) : null;
+    if (st && (st.status === "complete" || st.status === "errored" || st.status === "terminated")) {
+      await releaseLock(env, userId).catch(() => {});
+      return { busy: false, jobId: null };
+    }
+  }
+  return { busy: true, jobId };
+}
+
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
-  const [c, settings, locked, sub, maxSlides, maxImages] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), isLocked(env, user.id), getSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id)]);
+  const [c, settings, running, sub, maxSlides, maxImages] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id)]);
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
   settings.imageCount = Math.min(settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0), maxImages);
-  const activeJob = locked ? await env.KV.get(`wj:${user.id}`) : null;
+  const activeJob = running.busy ? running.jobId : null;
   return json({
     user: publicUser(user),
     credit: c.unlimited
@@ -237,7 +254,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
     return json({ error: imagesLimitMsg(maxImg), needPlan: true }, 403);
   }
 
-  if (await isLocked(env, user.id)) return err("ارائه‌ی قبلی هنوز در حال ساخته شدن است؛ کمی صبر کن.", 409);
+  if ((await runningJob(env, user.id)).busy) return err("ارائه‌ی قبلی هنوز در حال ساخته شدن است؛ کمی صبر کن.", 409);
 
   const quota = await spendCredit(env, user.id);
   if (!quota.ok) return json({ error: "اعتبارت تمام شده است.", noCredit: true }, 402);
