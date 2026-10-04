@@ -92,6 +92,8 @@ textarea{min-height:110px;resize:vertical}
 .tabs{display:grid;grid-template-columns:1fr 1fr;background:var(--soft);border-radius:12px;padding:4px;margin-bottom:10px}
 .tabs button{border:0;background:transparent;padding:9px;border-radius:9px;font-weight:700;cursor:pointer;color:var(--muted)}
 .tabs button[aria-selected=true]{background:#fff;color:var(--primary);box-shadow:var(--shadow)}
+.lnk{background:none;border:0;color:var(--primary);cursor:pointer;font:inherit;font-weight:700;padding:0}.lnk:disabled{color:var(--muted);cursor:default}
+.av{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--soft);color:var(--primary);font-weight:800;font-size:1.1rem;flex:none}
 .sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.85rem;margin:14px 0}
 .sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--line)}
 .msg{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:.92rem}
@@ -216,14 +218,12 @@ address{font-style:normal}
     <a class="brand" href="/" aria-label="پاورپوینت‌ساز فارسی"><i>📊</i><span>پاورپوینت‌ساز فارسی</span></a>
     <nav class="links" aria-label="منوی اصلی"><a href="#features">ویژگی‌ها</a><a href="#how">نحوه‌ی کار</a><a href="#pricing">تعرفه</a><a href="#faq">پرسش‌ها</a><a href="#about">درباره‌ی ما</a><a href="#contact">تماس با ما</a></nav>
     <div class="row" id="guestBar" hidden>
-      <button class="btn ghost sm" id="openLogin" type="button">ورود</button>
-      <button class="btn sm" id="openReg" type="button">ثبت‌نام رایگان</button>
+      <button class="btn sm" id="openLogin" type="button">ورود / ثبت‌نام</button>
     </div>
     <div class="row" id="userbar" hidden>
       <button class="btn gold sm" id="upgradeBtn" type="button" hidden>👑 ارتقا</button>
       <button class="chip" id="creditChip" type="button" aria-label="اعتبار و پلن‌ها"></button>
-      <span class="muted" id="userName"></span>
-      <button class="btn ghost sm" id="logout" type="button">خروج</button>
+      <button class="chip" id="userName" type="button" aria-label="پروفایل"></button>
     </div>
   </div>
 </header>
@@ -381,24 +381,55 @@ address{font-style:normal}
 <dialog id="authDlg" aria-labelledby="authTitle">
   <button class="x" type="button" id="authClose" aria-label="بستن">×</button>
   <h2 id="authTitle" style="font-size:1.15rem;margin-bottom:4px">ورود یا ثبت‌نام</h2>
+  <p class="muted" style="margin:0 0 6px;font-size:.88rem">اگر حساب داشته باشی وارد می‌شوی، وگرنه حساب ساخته می‌شود.</p>
   <p class="msg info" id="authNote" style="margin:8px 0 12px" hidden></p>
-  <div class="tabs" role="tablist">
-    <button type="button" role="tab" id="tabLogin" aria-selected="true">ورود</button>
-    <button type="button" role="tab" id="tabReg" aria-selected="false">ثبت‌نام</button>
-  </div>
   <a class="btn google" id="googleBtn" href="/api/auth/google" hidden>
     <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 010-9.4l-7.9-6.1a24 24 0 000 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
     ادامه با حساب گوگل
   </a>
-  <div class="sep" id="sep" hidden>یا با ایمیل</div>
-  <form id="authForm" novalidate>
-    <div id="nameRow" hidden><label for="fName">نام</label><input type="text" id="fName" autocomplete="name" maxlength="64"></div>
-    <label for="fEmail">ایمیل</label><input class="ltr" type="email" id="fEmail" autocomplete="email" inputmode="email" required>
-    <label for="fPass">رمز عبور</label><input class="ltr" type="password" id="fPass" autocomplete="current-password" required>
-    <div class="muted" id="passHint" hidden style="margin-top:6px">حداقل ۸ نویسه.</div>
+  <div class="sep" id="sep" hidden>یا با شماره‌ی موبایل</div>
+  <form id="otpForm" novalidate hidden>
+    <div id="otpStep1">
+      <label for="fMob">شماره‌ی موبایل</label>
+      <input class="ltr" type="text" id="fMob" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="09123456789">
+    </div>
+    <div id="otpStep2" hidden>
+      <p class="muted" id="otpSent" style="margin:0 0 4px"></p>
+      <label for="fCode">کد ۶ رقمی پیامک‌شده</label>
+      <input class="ltr" type="text" id="fCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="······">
+      <div class="row" style="justify-content:space-between;margin-top:8px"><button class="lnk" type="button" id="otpResend">ارسال دوباره</button><button class="lnk" type="button" id="otpEdit">تغییر شماره</button></div>
+    </div>
     <div id="authMsg" class="msg err" role="alert" hidden></div>
-    <button class="btn block" id="authSubmit" type="submit" style="margin-top:16px">ورود</button>
+    <button class="btn block" id="authSubmit" type="submit" style="margin-top:16px">ارسال کد</button>
   </form>
+  <details id="legacy" style="margin-top:16px">
+    <summary class="muted" style="cursor:pointer;font-size:.88rem">ورود با ایمیل و رمز (حساب‌های قبلی)</summary>
+    <form id="authForm" novalidate>
+      <label for="fEmail">ایمیل</label><input class="ltr" type="email" id="fEmail" autocomplete="email" inputmode="email" required>
+      <label for="fPass">رمز عبور</label><input class="ltr" type="password" id="fPass" autocomplete="current-password" required>
+      <div id="legacyMsg" class="msg err" role="alert" hidden></div>
+      <button class="btn block ghost" id="legacySubmit" type="submit" style="margin-top:12px">ورود</button>
+    </form>
+  </details>
+</dialog>
+
+<!-- پروفایل -->
+<dialog id="profileDlg" aria-labelledby="pfTitle">
+  <button class="x" type="button" id="pfClose" aria-label="بستن">×</button>
+  <h2 id="pfTitle" style="font-size:1.15rem;margin:0 0 12px">پروفایل</h2>
+  <div class="row" style="gap:12px;margin-bottom:6px"><span class="av" id="pfAv"></span><span class="muted" id="pfPlan"></span></div>
+  <label for="pfName">نام</label>
+  <div class="row" style="gap:8px"><input type="text" id="pfName" maxlength="64" autocomplete="name" style="flex:1"><button class="btn sm" id="pfSave" type="button">ذخیره</button></div>
+  <label>ایمیل</label>
+  <div class="ltr muted" id="pfEmail" style="padding:6px 2px"></div>
+  <label>شماره‌ی موبایل</label>
+  <div class="ltr muted" id="pfMobSet" style="padding:6px 2px" hidden></div>
+  <div id="pfMobAdd" hidden>
+    <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfMob" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="09123456789" style="flex:1"><button class="btn ghost sm" id="pfMobSend" type="button">ارسال کد</button></div>
+    <div class="row" id="pfCodeRow" style="gap:8px;margin-top:8px" hidden><input class="ltr" type="text" id="pfCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد ۶ رقمی" style="flex:1"><button class="btn sm" id="pfMobVerify" type="button">تایید</button></div>
+  </div>
+  <div id="pfMsg" class="msg err" role="alert" hidden></div>
+  <button class="btn ghost block" id="logout" type="button" style="margin-top:18px">خروج از حساب</button>
 </dialog>
 
 <!-- اعتبار و خرید -->
@@ -507,50 +538,120 @@ const LOGIN_ERRORS = {
   google_state: "نشست ورود منقضی شد؛ دوباره امتحان کن.", google_token: "ورود با گوگل ناموفق بود؛ دوباره امتحان کن.",
   google_email: "ایمیل حساب گوگل تایید‌شده نیست.",
 };
-function setMode(m) {
-  mode = m;
-  $("#tabLogin").setAttribute("aria-selected", m === "login");
-  $("#tabReg").setAttribute("aria-selected", m === "register");
-  show($("#nameRow"), m === "register"); show($("#passHint"), m === "register");
-  $("#authSubmit").textContent = m === "login" ? "ورود" : "ساخت حساب";
-  $("#fPass").autocomplete = m === "login" ? "current-password" : "new-password";
-  show($("#authMsg"), false);
+const normMob = (v) => {
+  let m = String(v || "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/[\s\-()]/g, "").replace(/^(\+98|0098|98)/, "0");
+  if (/^9\d{9}$/.test(m)) m = "0" + m;
+  return /^09\d{9}$/.test(m) ? m : null;
+};
+function countdown(btn, secs, label) {
+  clearInterval(btn._t); let t = secs;
+  const tick = () => { btn.disabled = t > 0; btn.textContent = t > 0 ? `${label} (${fa(t)})` : label; if (t-- <= 0) clearInterval(btn._t); };
+  tick(); btn._t = setInterval(tick, 1000);
 }
-function openAuth(m = "register", note = "", err = "") {
-  setMode(m);
+let otpMobile = "";
+function otpReset() {
+  otpMobile = ""; $("#fCode").value = "";
+  show($("#otpStep1"), true); show($("#otpStep2"), false);
+  $("#authSubmit").textContent = "ارسال کد"; $("#authSubmit").disabled = false;
+}
+function openAuth(m, note = "", err = "") {
+  otpReset(); show($("#authMsg"), false); show($("#legacyMsg"), false);
   const n = $("#authNote"); n.textContent = note; show(n, !!note);
-  if (err) { const msg = $("#authMsg"); msg.textContent = err; show(msg, true); }
+  if (err) { const msg = cfg.otp ? $("#authMsg") : $("#legacyMsg"); msg.textContent = err; show(msg, true); }
   if (!$("#authDlg").open) $("#authDlg").showModal();
 }
 function renderAuthBtn() {
-  show($("#googleBtn"), cfg.google); show($("#sep"), cfg.google);
+  show($("#googleBtn"), cfg.google); show($("#otpForm"), cfg.otp);
+  show($("#sep"), cfg.google && (cfg.otp));
+  $("#legacy").open = !cfg.otp && !cfg.google;
   const q = new URLSearchParams(location.search).get("login_error");
   if (q) { history.replaceState(null, "", "/"); openAuth("login", "", LOGIN_ERRORS[q] || "ورود ناموفق بود."); }
 }
-$("#tabLogin").onclick = () => setMode("login");
-$("#tabReg").onclick = () => setMode("register");
-$("#openLogin").onclick = () => openAuth("login");
-$("#openReg").onclick = () => openAuth("register");
+$("#openLogin").onclick = () => openAuth();
 $("#authClose").onclick = () => $("#authDlg").close();
 $("#buyClose").onclick = () => $("#buy").close();
-for (const d of ["#authDlg", "#buy"]) $(d).addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
-document.querySelectorAll("[data-auth]").forEach((b) => b.onclick = () => openAuth(b.dataset.auth, "ثبت‌نام کن؛ سهمیه‌ی رایگان روزانه به حسابت اضافه می‌شود."));
+$("#pfClose").onclick = () => $("#profileDlg").close();
+for (const d of ["#authDlg", "#buy", "#profileDlg"]) $(d).addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+document.querySelectorAll("[data-auth]").forEach((b) => b.onclick = () => openAuth("register", "ثبت‌نام کن؛ سهمیه‌ی رایگان روزانه به حسابت اضافه می‌شود."));
 document.querySelectorAll("[data-plan]").forEach((b) => b.onclick = () => buyPlan(b.dataset.plan));
 
-$("#authForm").addEventListener("submit", async (ev) => {
+async function sendCode(mobile) { await api("/api/auth/otp/send", { method: "POST", body: { mobile } }); }
+$("#otpForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const btn = $("#authSubmit"), msg = $("#authMsg");
   show(msg, false); btn.disabled = true;
   try {
-    await api(mode === "login" ? "/api/auth/login" : "/api/auth/register", {
-      method: "POST", body: { email: $("#fEmail").value, password: $("#fPass").value, name: $("#fName").value },
-    });
+    if (!otpMobile) {
+      const m = normMob($("#fMob").value);
+      if (!m) throw new Error("شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.");
+      await sendCode(m);
+      otpMobile = m;
+      show($("#otpStep1"), false); show($("#otpStep2"), true);
+      $("#otpSent").textContent = `کد ۶ رقمی به ${fa(m)} پیامک شد.`;
+      btn.textContent = "ورود"; countdown($("#otpResend"), 60, "ارسال دوباره"); $("#fCode").focus();
+    } else {
+      const r = await api("/api/auth/otp/verify", { method: "POST", body: { mobile: otpMobile, code: $("#fCode").value } });
+      if (r.created) toast("حساب ساخته شد؛ خوش آمدی 🎉");
+      await boot();
+    }
+  } catch (e) { msg.textContent = e.message; show(msg, true); }
+  btn.disabled = false;
+});
+$("#otpResend").onclick = async () => {
+  const msg = $("#authMsg"); show(msg, false);
+  try { await sendCode(otpMobile); countdown($("#otpResend"), 60, "ارسال دوباره"); toast("کد دوباره ارسال شد"); }
+  catch (e) { msg.textContent = e.message; show(msg, true); }
+};
+$("#otpEdit").onclick = otpReset;
+
+$("#authForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const btn = $("#legacySubmit"), msg = $("#legacyMsg");
+  show(msg, false); btn.disabled = true;
+  try {
+    await api("/api/auth/login", { method: "POST", body: { email: $("#fEmail").value, password: $("#fPass").value } });
     $("#fPass").value = "";
     await boot();
   } catch (e) { msg.textContent = e.message; show(msg, true); }
   btn.disabled = false;
 });
-$("#logout").onclick = async () => { try { await api("/api/auth/logout", { method: "POST" }); } catch {} tracking++; me = null; jobView(null); $("#go").disabled = false; await boot(); };
+
+// ---------- پروفایل ----------
+function renderPfMobile() {
+  const u = me.user;
+  $("#pfMobSet").textContent = u.mobile || ""; show($("#pfMobSet"), !!u.mobile);
+  show($("#pfMobAdd"), !u.mobile && !!cfg.otp);
+  if (!u.mobile && !cfg.otp) { $("#pfMobSet").textContent = "—"; show($("#pfMobSet"), true); }
+  show($("#pfCodeRow"), false); $("#pfMob").value = ""; $("#pfCode").value = ""; $("#pfMobSend").disabled = false; $("#pfMobSend").textContent = "ارسال کد";
+}
+function openProfile() {
+  const u = me.user;
+  $("#pfName").value = u.name; $("#pfEmail").textContent = u.email || "—";
+  $("#pfAv").textContent = (u.name || "?").trim().charAt(0);
+  const pl = me.plan && (me.plans.find((x) => x.id === me.plan.id) || {}).name;
+  $("#pfPlan").textContent = me.plan ? `👑 پلن ${pl || ""} تا ${new Date(me.plan.exp).toLocaleDateString("fa-IR", { year: "numeric", month: "long", day: "numeric" })}` : "پلن رایگان";
+  show($("#pfMsg"), false); renderPfMobile();
+  $("#profileDlg").showModal();
+}
+$("#userName").onclick = openProfile;
+$("#pfSave").onclick = async () => {
+  const msg = $("#pfMsg"); show(msg, false);
+  try { const r = await api("/api/profile", { method: "PUT", body: { name: $("#pfName").value } }); me.user = r.user; $("#userName").textContent = me.user.name; $("#pfAv").textContent = me.user.name.trim().charAt(0); toast("ذخیره شد ✓"); }
+  catch (e) { msg.textContent = e.message; show(msg, true); }
+};
+$("#pfMobSend").onclick = async () => {
+  const msg = $("#pfMsg"); show(msg, false);
+  const m = normMob($("#pfMob").value);
+  if (!m) { msg.textContent = "شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن."; show(msg, true); return; }
+  try { await sendCode(m); show($("#pfCodeRow"), true); $("#pfCode").focus(); countdown($("#pfMobSend"), 60, "ارسال دوباره"); }
+  catch (e) { msg.textContent = e.message; show(msg, true); }
+};
+$("#pfMobVerify").onclick = async () => {
+  const msg = $("#pfMsg"); show(msg, false);
+  try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); toast("شماره‌ی موبایل ثبت شد ✓"); }
+  catch (e) { msg.textContent = e.message; show(msg, true); }
+};
+$("#logout").onclick = async () => { $("#profileDlg").close(); try { await api("/api/auth/logout", { method: "POST" }); } catch {} tracking++; me = null; jobView(null); $("#go").disabled = false; await boot(); };
 
 // ---------- بخش کاربر واردشده ----------
 function renderApp() {
@@ -642,6 +743,7 @@ function renderBuy() {
   d.push(`تا ${fa(imgMax())} تصویر در هر ارائه.`);
   $("#creditDetail").textContent = d.join(" ");
   show($("#mobRow"), !!(me && cfg.payEnabled));
+  if (!$("#fMobile").value && me && me.user.mobile) $("#fMobile").value = me.user.mobile;
   if (!$("#fMobile").value) { try { $("#fMobile").value = localStorage.getItem("dpMobile") || ""; } catch {} }
   $("#plans").replaceChildren(...list.map((p) => {
     const best = p.id === "pro", mine = me && me.plan && me.plan.id === p.id;

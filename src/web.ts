@@ -11,9 +11,9 @@ import { modelList } from "./llm";
 import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect } from "./files";
 import {
-  authUser, clearSessionCookie, createSession, createUser, destroySession, getUserByEmail, googleCallback,
-  googleEnabled, googleStart, hashPassword, hitLimit, normEmail, publicUser, randomToken, sessionCookie,
-  validEmail, verifyPassword, type WebUser,
+  authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, getUserByEmail, getUserByMobile, googleCallback,
+  googleEnabled, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
+  sessionCookie, validEmail, verifyPassword, type WebUser,
 } from "./auth";
 
 const SEC_HEADERS = {
@@ -66,6 +66,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/config" && method === "GET") {
     return json({
       google: googleEnabled(env),
+      otp: otpEnabled(env),
       payEnabled: payEnabled(env),
       themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent })),
       tones: TONES,
@@ -79,7 +80,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     });
   }
 
-  if (path === "/api/auth/register" && method === "POST") return register(req, env);
+  if (path === "/api/auth/otp/send" && method === "POST") return otpSend(req, env);
+  if (path === "/api/auth/otp/verify" && method === "POST") return otpVerify(req, env);
+  if (path === "/api/auth/register" && method === "POST") return err("ثبت‌نام با ایمیل و رمز غیرفعال شده است؛ با گوگل یا شماره‌ی موبایل وارد شو.", 410);
   if (path === "/api/auth/login" && method === "POST") return login(req, env);
   if (path === "/api/auth/logout" && method === "POST") {
     await destroySession(env, req);
@@ -87,9 +90,17 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
 
   const user = await authUser(env, req);
-  if (path === "/api/me" && method === "GET") return user ? me(env, user) : json({ user: null });
+  if (path === "/api/me" && method === "GET") {
+    if (!user) return json({ user: null });
+    const res = await me(env, user);
+    const c = await renewSession(env, req).catch(() => null); // نشست ۳۰ روزه‌ی لغزان
+    if (c) res.headers.append("set-cookie", c);
+    return res;
+  }
   if (!user) return err("ابتدا وارد شو.", 401);
 
+  if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
+  if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
   if (path === "/api/generate" && method === "POST") return generate(req, env, user);
   if (path === "/api/pay/start" && method === "POST") return startPayment(env, url, user, await readBody(req));
@@ -106,23 +117,56 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 }
 
 // ---------- ثبت‌نام و ورود ----------
-async function register(req: Request, env: Env): Promise<Response> {
+async function otpSend(req: Request, env: Env): Promise<Response> {
   const b = await readBody(req);
-  const email = normEmail(b?.email), password = String(b?.password ?? ""), name = String(b?.name ?? "").trim();
-  if (!validEmail(email)) return err("ایمیل معتبر نیست.");
-  if (password.length < 8 || password.length > 128) return err("رمز عبور باید بین ۸ تا ۱۲۸ نویسه باشد.");
-  if (name.length < 2 || name.length > 64) return err("نام را وارد کن (۲ تا ۶۴ نویسه).");
+  const mobile = normMobile(b?.mobile);
+  if (!mobile) return err("شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.");
+  const e = await sendOtp(env, clientIp(req), mobile);
+  return e ? err(e.error, e.status) : json({ ok: true });
+}
 
-  // جلوگیری از ساخت انبوه حساب برای گرفتن سهمیه‌ی رایگان
-  const day = new Date().toISOString().slice(0, 10);
-  if (await hitLimit(env, `rg:${clientIp(req)}:${day}`, 5, 172_800)) return err("تعداد ثبت‌نام از این شبکه امروز به سقف رسیده است.", 429);
+/** ورود/ثبت‌نام یکپارچه: حساب موجود ⇒ ورود؛ وگرنه حساب جدید با همین شماره ساخته می‌شود */
+async function otpVerify(req: Request, env: Env): Promise<Response> {
+  const b = await readBody(req);
+  const mobile = normMobile(b?.mobile), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
+  if (!mobile) return err("شماره‌ی موبایل معتبر نیست.");
+  const bad = await checkOtp(env, mobile, code);
+  if (bad) return err(bad, 401);
 
-  const exist = await getUserByEmail(env, email);
-  if (exist) return err(exist.hash ? "این ایمیل قبلاً ثبت شده است؛ وارد شو." : "این ایمیل با گوگل ثبت شده است؛ با دکمه‌ی گوگل وارد شو.", 409);
-
-  const user = await createUser(env, { email, name, hash: await hashPassword(password) });
+  let user = await getUserByMobile(env, mobile);
+  if (!user) {
+    // جلوگیری از ساخت انبوه حساب برای گرفتن سهمیه‌ی رایگان
+    const day = new Date().toISOString().slice(0, 10);
+    if (await hitLimit(env, `rg:${clientIp(req)}:${day}`, 5, 172_800)) return err("تعداد ثبت‌نام از این شبکه امروز به سقف رسیده است.", 429);
+    user = await createUser(env, { mobile, name: `کاربر ${mobile.slice(-4)}` });
+  }
   const token = await createSession(env, user.id);
-  return json({ user: publicUser(user) }, 200, { "set-cookie": sessionCookie(token) });
+  return json({ user: publicUser(user), created: Date.now() - user.created < 5000 }, 200, { "set-cookie": sessionCookie(token) });
+}
+
+async function putProfile(req: Request, env: Env, user: WebUser): Promise<Response> {
+  const b = await readBody(req);
+  const name = String(b?.name ?? "").replace(/\s+/g, " ").trim();
+  if (name.length < 2 || name.length > 64) return err("نام را وارد کن (۲ تا ۶۴ نویسه).");
+  user.name = name;
+  await saveWebUser(env, user);
+  return json({ user: publicUser(user) });
+}
+
+/** افزودن شماره‌ی موبایل به حساب فعلی (مثلاً حساب گوگل) با تایید کد پیامکی */
+async function linkMobile(req: Request, env: Env, user: WebUser): Promise<Response> {
+  const b = await readBody(req);
+  const mobile = normMobile(b?.mobile), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
+  if (!mobile) return err("شماره‌ی موبایل معتبر نیست.");
+  if (user.mobile) return err("برای حساب شما شماره‌ی موبایل ثبت شده است.", 409);
+  const other = await getUserByMobile(env, mobile);
+  if (other && other.id !== user.id) return err("این شماره برای حساب دیگری ثبت شده است.", 409);
+  const bad = await checkOtp(env, mobile, code);
+  if (bad) return err(bad, 401);
+  user.mobile = mobile;
+  await saveWebUser(env, user);
+  await env.KV.put(`wm:${mobile}`, user.id);
+  return json({ user: publicUser(user) });
 }
 
 async function login(req: Request, env: Env): Promise<Response> {

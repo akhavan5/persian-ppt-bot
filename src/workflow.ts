@@ -77,7 +77,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           }
           // ثبت در گزارش مدیر (/decks)؛ خطا نباید گام را شکست بدهد
           const seen = web
-            ? await getUserById(this.env, String(userId)).then((w) => (w ? { n: w.name || w.email, u: null } : null)).catch(() => null)
+            ? await getUserById(this.env, String(userId)).then((w) => (w ? { n: w.name || w.email || w.mobile || "", u: null } : null)).catch(() => null)
             : await getUserSeen(this.env, userId as number).catch(() => null);
           await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now() })
             .catch((err) => console.error("logDeck", err));

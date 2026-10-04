@@ -49,6 +49,12 @@ export interface Env {
   DIGIPAY_CLIENT_SECRET?: string;
   DIGIPAY_USERNAME?: string;
   DIGIPAY_PASSWORD?: string;
+  /** ورود با پیامک یک‌بارمصرف (OTP) از وب‌سرویس s.api.ir؛ بدون SMS_API_TOKEN ورود با شماره‌ی موبایل غیرفعال است */
+  SMS_API_TOKEN?: string;
+  /** اختیاری: آدرس وب‌سرویس (پیش‌فرض https://s.api.ir/api/sw1/SmsOTP) */
+  SMS_API_URL?: string;
+  /** اختیاری: نوع قالب پیامک: کد=0، کد ورود=1 (پیش‌فرض)، کد تایید=2، رمز=3، رمز ورود=4 */
+  SMS_TEMPLATE?: string;
   /** آدرس اصلی سایت برای canonical/sitemap/OG (پیش‌فرض https://pptsaz.ir) */
   SITE_URL?: string;
 }

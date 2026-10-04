@@ -2,6 +2,7 @@
  * سیستم کاربری نسخه‌ی وب؛ کاملاً جدا از تلگرام.
  * - ثبت‌نام/ورود با ایمیل و رمز (PBKDF2-SHA256 با Web Crypto؛ سقف تکرار در Workers ‏۱۰۰٬۰۰۰ است)
  * - ورود با گوگل (OAuth 2.0 Authorization Code، سمت سرور)
+ * - ورود/ثبت‌نام یکپارچه با پیامک یک‌بارمصرف (OTP): اگر حسابی با آن شماره بود وارد می‌شود، وگرنه ساخته می‌شود
  * - نشست‌ها: توکن تصادفی در کوکی HttpOnly؛ در KV فقط هشِ توکن نگه داشته می‌شود
  * همه‌چیز روی همان KV فعلی است؛ هیچ منبع جدیدی لازم نیست.
  */
@@ -10,7 +11,8 @@ import { bumpStat } from "./settings";
 
 export interface WebUser {
   id: string; // w_ + ۱۶ نویسه‌ی هگز
-  email: string;
+  email: string; // ممکن است خالی باشد (حساب ساخته‌شده با موبایل)
+  mobile?: string; // 09XXXXXXXXX
   name: string;
   picture?: string;
   hash?: string; // خالی = حساب فقط-گوگل
@@ -78,20 +80,26 @@ export async function getUserByEmail(env: Env, email: string): Promise<WebUser |
 }
 const saveUser = (env: Env, u: WebUser) => env.KV.put(`wu:${u.id}`, JSON.stringify(u));
 
-export async function createUser(env: Env, p: { email: string; name: string; hash?: string; google?: string; picture?: string }): Promise<WebUser> {
+export async function createUser(env: Env, p: { email?: string; mobile?: string; name: string; hash?: string; google?: string; picture?: string }): Promise<WebUser> {
   const u: WebUser = {
     id: "w_" + hex(crypto.getRandomValues(new Uint8Array(8))),
-    email: p.email, name: p.name.slice(0, 64), picture: p.picture, hash: p.hash, google: p.google,
-    verified: !!p.google, created: Date.now(),
+    email: p.email ?? "", mobile: p.mobile, name: p.name.slice(0, 64), picture: p.picture, hash: p.hash, google: p.google,
+    verified: !!p.google || !!p.mobile, created: Date.now(),
   };
   await saveUser(env, u);
-  await env.KV.put(`we:${u.email}`, u.id);
+  if (u.email) await env.KV.put(`we:${u.email}`, u.id);
+  if (u.mobile) await env.KV.put(`wm:${u.mobile}`, u.id);
   if (u.google) await env.KV.put(`wg:${u.google}`, u.id);
   await bumpStat(env, "newusers").catch(() => {});
   return u;
 }
 
-export const publicUser = (u: WebUser) => ({ id: u.id, email: u.email, name: u.name, picture: u.picture ?? null });
+export const publicUser = (u: WebUser) => ({ id: u.id, email: u.email, mobile: u.mobile ?? null, name: u.name, picture: u.picture ?? null });
+export const saveWebUser = saveUser;
+export async function getUserByMobile(env: Env, mobile: string): Promise<WebUser | null> {
+  const id = await env.KV.get(`wm:${mobile}`);
+  return id ? getUserById(env, id) : null;
+}
 
 // ---------- نشست ----------
 export async function createSession(env: Env, userId: string): Promise<string> {
@@ -107,6 +115,19 @@ export async function destroySession(env: Env, req: Request) {
   if (token) await env.KV.delete(`ws:${await sha256hex(token)}`);
 }
 
+/** نشست لغزان: هر کاربر فعال حداکثر روزی یک بار ۳۰ روز تمدید می‌شود تا مجبور به ورود و خروج مکرر نباشد. کوکی جدید برمی‌گرداند (یا null). */
+export async function renewSession(env: Env, req: Request): Promise<string | null> {
+  const token = getCookie(req, SESSION_COOKIE);
+  if (!token || token.length > 100) return null;
+  const h = await sha256hex(token);
+  if (await env.KV.get(`wsr:${h}`)) return null;
+  const id = await env.KV.get(`ws:${h}`);
+  if (!id) return null;
+  await env.KV.put(`ws:${h}`, id, { expirationTtl: SESSION_TTL });
+  await env.KV.put(`wsr:${h}`, "1", { expirationTtl: 86_400 });
+  return sessionCookie(token);
+}
+
 export async function authUser(env: Env, req: Request): Promise<WebUser | null> {
   const token = getCookie(req, SESSION_COOKIE);
   if (!token || token.length > 100) return null;
@@ -120,6 +141,73 @@ export async function hitLimit(env: Env, key: string, max: number, ttl: number):
   if (n >= max) return true;
   await env.KV.put(key, String(n + 1), { expirationTtl: ttl });
   return false;
+}
+
+// ---------- ورود با پیامک یک‌بارمصرف (OTP) ----------
+export const otpEnabled = (env: Env) => !!(env.SMS_API_TOKEN ?? "").trim();
+const OTP_TTL = 300; // ثانیه
+const OTP_MAX_TRIES = 5;
+
+/** شماره‌ی موبایل ایران → 09XXXXXXXXX (ارقام فارسی/عربی، +98 و 0098 هم پذیرفته می‌شود)؛ نامعتبر → null */
+export function normMobile(v: unknown): string | null {
+  let m = String(v ?? "")
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\s\-()]/g, "");
+  m = m.replace(/^(\+98|0098|98)/, "0");
+  if (/^9\d{9}$/.test(m)) m = "0" + m;
+  return /^09\d{9}$/.test(m) ? m : null;
+}
+
+const otpHash = (code: string, mobile: string) => sha256hex(`otp:${mobile}:${code}`);
+
+/** ارسال کد ۶ رقمی. خروجی: null = موفق، وگرنه {error, status}. */
+export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ error: string; status: number } | null> {
+  if (!otpEnabled(env)) return { error: "ورود با پیامک فعال نیست.", status: 503 };
+  // محدودیت: ۶۰ ثانیه فاصله بین دو ارسال به یک شماره، ۵ پیامک در ساعت برای هر شماره، ۱۵ در ساعت برای هر شبکه
+  if (await env.KV.get(`oc:${mobile}`)) return { error: "کد قبلاً ارسال شده است؛ تا یک دقیقه صبر کن و دوباره بخواه.", status: 429 };
+  if (await hitLimit(env, `os:m:${mobile}`, 5, 3600)) return { error: "تعداد درخواست کد برای این شماره زیاد بود؛ یک ساعت بعد دوباره امتحان کن.", status: 429 };
+  if (await hitLimit(env, `os:ip:${ip}`, 15, 3600)) return { error: "تعداد درخواست کد از این شبکه زیاد بود؛ کمی بعد دوباره امتحان کن.", status: 429 };
+
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
+  const code = String(n).padStart(6, "0");
+  const exp = Math.floor(Date.now() / 1000) + OTP_TTL;
+  await env.KV.put(`ot:${mobile}`, JSON.stringify({ h: await otpHash(code, mobile), tries: 0, exp }), { expiration: exp });
+  await env.KV.put(`oc:${mobile}`, "1", { expirationTtl: 60 });
+
+  const token = (env.SMS_API_TOKEN ?? "").trim().replace(/^Bearer\s+/i, "");
+  const template = Number.isFinite(Number(env.SMS_TEMPLATE)) && String(env.SMS_TEMPLATE ?? "").trim() !== "" ? Number(env.SMS_TEMPLATE) : 1;
+  try {
+    const r = await fetch((env.SMS_API_URL || "https://s.api.ir/api/sw1/SmsOTP").trim(), {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ code, mobile, template }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    const j = (await r.json().catch(() => null)) as { success?: boolean; data?: boolean; message?: string | null } | null;
+    if (r.ok && (j?.success === true || j?.data === true)) return null;
+    console.error("sms otp failed", r.status, JSON.stringify(j).slice(0, 300));
+  } catch (e) {
+    console.error("sms otp error", String(e).slice(0, 200));
+  }
+  await env.KV.delete(`ot:${mobile}`);
+  await env.KV.delete(`oc:${mobile}`);
+  return { error: "ارسال پیامک ناموفق بود؛ چند دقیقه بعد دوباره امتحان کن.", status: 502 };
+}
+
+/** بررسی کد. موفق ⇒ کد مصرف می‌شود (یک‌بار مصرف). خروجی: null = درست، وگرنه پیام خطا. */
+export async function checkOtp(env: Env, mobile: string, code: string): Promise<string | null> {
+  if (!/^\d{6}$/.test(code)) return "کد باید ۶ رقم باشد.";
+  const rec = (await env.KV.get(`ot:${mobile}`, "json")) as { h: string; tries: number; exp: number } | null;
+  if (!rec) return "کد منقضی شده است؛ دوباره کد بگیر.";
+  if (rec.tries >= OTP_MAX_TRIES) { await env.KV.delete(`ot:${mobile}`); return "تعداد تلاش‌های ناموفق زیاد بود؛ دوباره کد بگیر."; }
+  const ok = safeEqual(enc.encode(await otpHash(code, mobile)), enc.encode(rec.h));
+  if (!ok) {
+    await env.KV.put(`ot:${mobile}`, JSON.stringify({ ...rec, tries: rec.tries + 1 }), { expiration: Math.max(rec.exp, Math.floor(Date.now() / 1000) + 60) });
+    return "کد درست نیست.";
+  }
+  await env.KV.delete(`ot:${mobile}`);
+  return null;
 }
 
 // ---------- ورود با گوگل ----------

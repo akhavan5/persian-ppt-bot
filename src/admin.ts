@@ -143,7 +143,8 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
       return reply(
         `🌐 <b>کاربر وب</b> <code>${id}</code>\n` +
         `نام: ${web?.name ? esc(web.name) : "—"}\n` +
-        `ایمیل: ${web ? esc(web.email) : "—"}\n` +
+        `ایمیل: ${web?.email ? esc(web.email) : "—"}\n` +
+        `موبایل: ${web?.mobile ? esc(web.mobile) : "—"}\n` +
         `ثبت‌نام: ${web ? new Date(web.created).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "ناموجود"}\n` +
         `اعتبار: ${credit}\n` +
         `وضعیت: ${banned ? "⛔️ مسدود" : "فعال"}`);
