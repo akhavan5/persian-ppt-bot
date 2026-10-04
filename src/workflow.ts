@@ -57,7 +57,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         { retries: { limit: 1, delay: "5 seconds" }, timeout: "3 minutes" },
         async () => {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
-          const images = settings.images ? await fetchImages(this.env, deck.slides) : new Map();
+          const images = settings.images ? await fetchImages(this.env, deck.slides, undefined, web) : new Map();
           const bytes = await buildPptx(deck, {
             theme: settings.theme, font: settings.font, persianDigits: settings.digits, images,
           });

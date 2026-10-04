@@ -53,12 +53,41 @@ async function pexels(key: string, query: string): Promise<Uint8Array | null> {
   }
 }
 
+/** نسخه‌ی وب: تصویر از همان API سازگار با OpenAI (همان OPENAI_BASE_URL و OPENAI_API_KEY) گرفته می‌شود، نه از Workers AI/Pexels.
+ *  مدل با OPENAI_IMAGE_MODEL (پیش‌فرض dall-e-3) و اندازه با OPENAI_IMAGE_SIZE (اختیاری) تنظیم می‌شود. */
+async function viaApi(env: Env, query: string): Promise<Uint8Array | null> {
+  const base = (env.OPENAI_BASE_URL || "https://api.gapgpt.app/v1").replace(/\/+$/, "");
+  const model = env.OPENAI_IMAGE_MODEL || "dall-e-3";
+  const size = env.OPENAI_IMAGE_SIZE || (/gpt-image/i.test(model) ? "1536x1024" : "1792x1024");
+  try {
+    const r = await fetch(`${base}/images/generations`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` },
+      body: JSON.stringify({ model, prompt: query + STYLE, n: 1, size }),
+      signal: AbortSignal.timeout(90_000),
+    });
+    if (!r.ok) { console.error("image api", r.status, (await r.text()).slice(0, 200)); return null; }
+    const d = ((await r.json()) as any)?.data?.[0];
+    let b: Uint8Array | null = null;
+    if (typeof d?.b64_json === "string") b = fromBase64(d.b64_json);
+    else if (typeof d?.url === "string") {
+      const img = await fetch(d.url, { signal: AbortSignal.timeout(30_000) });
+      if (img.ok) b = new Uint8Array(await img.arrayBuffer());
+    }
+    return b && b.length > 1000 ? b : null;
+  } catch (e) {
+    console.error("image api failed", String(e).slice(0, 200));
+    return null;
+  }
+}
+
 /** {شماره‌ی اسلاید → بایت‌های تصویر} برای اسلایدهای image_text (حداکثر MAX_IMAGES تا) */
-export async function fetchImages(env: Env, slides: Slide[], max = MAX_IMAGES): Promise<Map<number, Uint8Array>> {
+export async function fetchImages(env: Env, slides: Slide[], max = MAX_IMAGES, useApi = false): Promise<Map<number, Uint8Array>> {
   const out = new Map<number, Uint8Array>();
   const idx = slides.flatMap((s, i) => (s.layout === "image_text" && s.image_query ? [i] : [])).slice(0, max);
   const res = await Promise.all(idx.map(async (i) => {
     const q = slides[i].image_query!;
+    if (useApi && env.OPENAI_API_KEY) return viaApi(env, q);
     if (env.AI) return (await generate(env, MODEL_MAIN, q)) ?? (await generate(env, MODEL_BACKUP, q));
     return env.PEXELS_API_KEY ? pexels(env.PEXELS_API_KEY, q) : null;
   }));

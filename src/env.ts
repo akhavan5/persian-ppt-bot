@@ -21,6 +21,9 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;
   LLM_PROVIDER?: string;
+  /** تصویر نسخه‌ی وب از همان API (OPENAI_BASE_URL) گرفته می‌شود؛ مدل تصویر (پیش‌فرض dall-e-3) و اندازه (اختیاری، مثل 1536x1024) */
+  OPENAI_IMAGE_MODEL?: string;
+  OPENAI_IMAGE_SIZE?: string;
   PEXELS_API_KEY?: string;
   /** Workers AI (تولید تصویر)؛ در wrangler.jsonc با «ai» تعریف می‌شود و کلید جدا ندارد */
   AI?: Ai;
