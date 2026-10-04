@@ -97,6 +97,17 @@ async function dp(env: Env, endpoint: string, body: Record<string, unknown>, ret
 }
 const dpOk = (res: any) => res?.result?.status === 0 || res?.result?.status === "0";
 
+/** شماره‌ی موبایل ایران → قالب 09XXXXXXXXX (ارقام فارسی/عربی، +98 و 0098 هم پذیرفته می‌شود)؛ نامعتبر → null */
+function normalizeMobile(v: unknown): string | null {
+  let m = String(v ?? "")
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\s\-()]/g, "");
+  m = m.replace(/^(\+98|0098|98)/, "0");
+  if (/^9\d{9}$/.test(m)) m = "0" + m;
+  return /^09\d{9}$/.test(m) ? m : null;
+}
+
 /** شماره‌ی سفارش یکتا (providerId) */
 const newOrderId = () => `pp${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const ORDER_RE = /^pp\d{13,17}$/;
@@ -108,10 +119,16 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
   if (!plan) return json({ error: "بسته‌ی انتخابی نامعتبر است." }, 400);
   if (await hitLimit(env, `payrl:${user.id}`, 20, 3600)) return json({ error: "تعداد درخواست پرداخت زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
 
+  // شماره‌ی موبایل خریدار: طبق مستند دیجی‌پی (و افزونه‌ی رسمی) فیلد cellNumber در تیکت اجباری است؛
+  // نبودنش باعث خطای 1103 «فیچر یافت نشد» می‌شود
+  const mobile = normalizeMobile(b?.mobile);
+  if (!mobile) return json({ error: "شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.", needMobile: true }, 400);
+
   const amount = plan.price * 1000 * 10; // تومان → ریال
   const order = newOrderId();
   const base = {
     amount,
+    cellNumber: mobile,
     providerId: order,
     callbackUrl: `${url.origin}/api/pay/callback?o=${order}`,
     ...(DP_GATEWAY === null ? {} : { additionalInfo: { preferredGateway: DP_GATEWAY } }),
@@ -128,6 +145,11 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
   if (String(res?.result?.status) === "1103") {
     console.error("digipay ticket 1103 with basket — retrying without basket");
     res = await ticket(base);
+  }
+  // هنوز 1103: احتمالاً فقط درگاه کارتی (IPG) روی حساب فعال است؛ مستقیم به IPG می‌فرستیم (preferredGateway=2)
+  if (String(res?.result?.status) === "1103" && DP_GATEWAY === null) {
+    console.error("digipay ticket 1103 without basket — retrying direct IPG");
+    res = await ticket({ ...base, additionalInfo: { preferredGateway: 2 } });
   }
 
   const redirect = res?.redirectUrl as string | undefined;

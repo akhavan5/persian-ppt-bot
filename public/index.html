@@ -645,8 +645,22 @@ async function buyPlan(id) {
   if (!me) { $("#buy").close(); openAuth("register", "برای خرید پلن، ابتدا وارد شو یا ثبت‌نام کن."); return; }
   const plan = me.plans.find((p) => p.id === id); if (!plan) return;
   if (!cfg.payEnabled) { window.open(plan.url, "_blank", "noopener"); return; }
-  try { location.href = (await api("/api/pay/start", { method: "POST", body: { plan: id } })).url; }
-  catch (e) { toast(e.message); }
+  // دیجی‌پی شماره‌ی موبایل خریدار را الزامی می‌کند؛ یک بار می‌پرسیم و در مرورگر نگه می‌داریم
+  let mobile = ""; try { mobile = localStorage.getItem("dpMobile") || ""; } catch {}
+  const ask = () => (prompt("شماره‌ی موبایل خود را برای پرداخت وارد کن (مثل 09123456789):", mobile) || "").trim();
+  if (!mobile) mobile = ask();
+  if (!mobile) return;
+  try {
+    let r;
+    try { r = await api("/api/pay/start", { method: "POST", body: { plan: id, mobile } }); }
+    catch (e) {
+      if (!(e.data && e.data.needMobile)) throw e;
+      toast(e.message); mobile = ask(); if (!mobile) return;
+      r = await api("/api/pay/start", { method: "POST", body: { plan: id, mobile } });
+    }
+    try { localStorage.setItem("dpMobile", mobile); } catch {}
+    location.href = r.url;
+  } catch (e) { toast(e.message); }
 }
 function handlePayReturn() {
   const q = new URLSearchParams(location.search), p = q.get("pay");
