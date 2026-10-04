@@ -134,14 +134,9 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
     ...(DP_GATEWAY === null ? {} : { additionalInfo: { preferredGateway: DP_GATEWAY } }),
   };
   // سبد خرید: طبق مستند دیجی‌پی برای نمایش پرداخت اعتباری/اقساطی اجباری است (افزونه‌ی رسمی هم همیشه می‌فرستد)
-  // ⚠️ فقط برای تست: نوع کالای سبد برای هر پلن فرق دارد تا ببینیم کدام یک گزینه‌ی پرداخت ماهانه (BNPL) را نشان می‌دهد
-  // نوع کالا: ۱ بادوام، ۲ مصرفی، ۳ خدمات، ۴ مصرفی بادوام. بعد از تست، فقط مقدار برنده را برای هر دو پلن بگذار.
-  const TEST_PRODUCT_TYPE: Record<string, number> = { plus: 1, pro: 2 };
-  const productType = TEST_PRODUCT_TYPE[plan.id] ?? 3;
-  console.log("digipay basket productType", plan.id, productType);
   const basket = {
     basketId: order,
-    items: [{ sellerId: "1", supplierId: "1", productCode: plan.id, brand: "", productType, count: 1, categoryId: "0" }],
+    items: [{ sellerId: "1", supplierId: "1", productCode: plan.id, brand: "", productType: 3, count: 1, categoryId: "0" }],
   };
   const ticket = (body: Record<string, unknown>) =>
     dp(env, `tickets/business?type=${DP_TICKET_TYPE}`, body).catch((e) => { console.error("digipay ticket", e); return null; });
