@@ -408,6 +408,7 @@ address{font-style:normal}
 <dialog id="profileDlg" aria-labelledby="pfTitle">
   <button class="x" type="button" id="pfClose" aria-label="بستن">×</button>
   <h2 id="pfTitle" style="font-size:1.15rem;margin:0 0 12px">پروفایل</h2>
+  <p class="msg info" id="pfNote" style="margin:0 0 12px" hidden></p>
   <div class="row" style="gap:12px;margin-bottom:6px"><span class="av" id="pfAv"></span><span class="muted" id="pfPlan"></span></div>
   <label for="pfName">نام</label>
   <div class="row" style="gap:8px"><input type="text" id="pfName" maxlength="64" autocomplete="name" style="flex:1"><button class="btn sm" id="pfSave" type="button">ذخیره</button></div>
@@ -429,11 +430,6 @@ address{font-style:normal}
   <h2 style="margin-top:0;font-size:1.15rem">👑 پلن‌های پاورپوینت‌ساز</h2>
   <p class="msg info" id="buyWhy" style="margin:8px 0" hidden></p>
   <p id="creditDetail" style="margin:8px 0 0"></p>
-  <div id="mobRow" style="margin:12px 0 0" hidden>
-    <label for="fMobile">شماره‌ی موبایل برای پرداخت</label>
-    <input class="ltr" type="text" id="fMobile" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="09123456789">
-    <div id="mobMsg" class="msg err" role="alert" hidden></div>
-  </div>
   <div class="plans" id="plans"></div>
   <p class="muted" id="buyNote" style="margin-bottom:0"></p>
 </dialog>
@@ -561,6 +557,7 @@ $("#openLogin").onclick = () => openAuth();
 $("#authClose").onclick = () => $("#authDlg").close();
 $("#buyClose").onclick = () => $("#buy").close();
 $("#pfClose").onclick = () => $("#profileDlg").close();
+$("#profileDlg").addEventListener("close", () => { pendingPlan = null; }); // بستن پنجره = انصراف از خرید در انتظار
 for (const d of ["#authDlg", "#buy", "#profileDlg"]) $(d).addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 document.querySelectorAll("[data-auth]").forEach((b) => b.onclick = () => openAuth("register", "ثبت‌نام کن؛ سهمیه‌ی رایگان روزانه به حسابت اضافه می‌شود."));
 document.querySelectorAll("[data-plan]").forEach((b) => b.onclick = () => buyPlan(b.dataset.plan));
@@ -602,8 +599,10 @@ function renderPfMobile() {
   if (!u.mobile && !cfg.otp) { $("#pfMobSet").textContent = "—"; show($("#pfMobSet"), true); }
   show($("#pfCodeRow"), false); $("#pfMob").value = ""; $("#pfCode").value = ""; $("#pfMobSend").disabled = false; $("#pfMobSend").textContent = "ارسال کد";
 }
-function openProfile() {
+function openProfile(note = "") {
   const u = me.user;
+  if (typeof note !== "string") note = ""; // onclick رویداد می‌فرستد
+  $("#pfNote").textContent = note; show($("#pfNote"), !!note);
   $("#pfName").value = u.name; $("#pfEmail").textContent = u.email || "—";
   $("#pfAv").textContent = (u.name || "?").trim().charAt(0);
   const pl = me.plan && (me.plans.find((x) => x.id === me.plan.id) || {}).name;
@@ -626,7 +625,8 @@ $("#pfMobSend").onclick = async () => {
 };
 $("#pfMobVerify").onclick = async () => {
   const msg = $("#pfMsg"); show(msg, false);
-  try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); toast("شماره‌ی موبایل ثبت شد ✓"); }
+  try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); toast("شماره‌ی موبایل ثبت شد ✓");
+    if (pendingPlan) { const id = pendingPlan; pendingPlan = null; $("#profileDlg").close(); buyPlan(id); } }
   catch (e) { msg.textContent = e.message; show(msg, true); }
 };
 $("#logout").onclick = async () => { $("#profileDlg").close(); try { await api("/api/auth/logout", { method: "POST" }); } catch {} tracking++; me = null; jobView(null); $("#go").disabled = false; await boot(); };
@@ -720,9 +720,6 @@ function renderBuy() {
   else if (me && me.maxSlides && !(c && c.unlimited)) d.push(`حداکثر ${fa(me.maxSlides)} اسلاید در هر ارائه.`);
   d.push(`تا ${fa(imgMax())} تصویر در هر ارائه.`);
   $("#creditDetail").textContent = d.join(" ");
-  show($("#mobRow"), !!(me && cfg.payEnabled && !me.user.mobile)); // کاربر با شماره‌ی ثبت‌شده نیازی به وارد کردن شماره ندارد
-  if (!$("#fMobile").value && me && me.user.mobile) $("#fMobile").value = me.user.mobile;
-  if (!$("#fMobile").value) { try { $("#fMobile").value = localStorage.getItem("dpMobile") || ""; } catch {} }
   $("#plans").replaceChildren(...list.map((p) => {
     const best = p.id === "pro", mine = me && me.plan && me.plan.id === p.id;
     return h("div", { class: "plan" + (best ? " best" : "") },
@@ -742,30 +739,21 @@ function openBuy(why = "") {
   renderBuy();
   if (!$("#buy").open) $("#buy").showModal();
 }
-$("#fMobile").addEventListener("input", () => show($("#mobMsg"), false));
 $("#creditChip").onclick = () => openBuy();
 $("#upgradeBtn").onclick = () => openBuy();
 async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderCredit(); } } catch {} }
 
+let pendingPlan = null;
 async function buyPlan(id) {
   if (!me) { $("#buy").close(); openAuth("register", "برای خرید پلن، ابتدا وارد شو یا ثبت‌نام کن."); return; }
   const plan = me.plans.find((p) => p.id === id); if (!plan) return;
   if (!cfg.payEnabled) { window.open(plan.url, "_blank", "noopener"); return; }
-  // دیجی‌پی شماره‌ی موبایل خریدار را الزامی می‌کند؛ از فیلد داخل پنجره‌ی پلن‌ها خوانده می‌شود
-  if (me.user.mobile) { // شماره از حساب خوانده می‌شود (سرور هم همان را به درگاه می‌دهد)
-    try { const r = await api("/api/pay/start", { method: "POST", body: { plan: id } }); location.href = r.url; } catch (e) { toast(e.message); }
-    return;
-  }
-  const inp = $("#fMobile"), msg = $("#mobMsg");
-  const mobile = inp.value.trim().replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/[\s\-()]/g, "").replace(/^(\+98|0098|98)/, "0");
-  const bad = (t) => { msg.textContent = t; show(msg, true); inp.focus(); };
-  if (!/^09\d{9}$/.test(mobile)) return bad("شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.");
-  show(msg, false);
+  // درگاه شماره‌ی موبایل خریدار را الزامی می‌کند؛ اگر حساب شماره ندارد (مثلاً ورود با گوگل)، پنجره‌ی پروفایل برای تایید شماره باز می‌شود و بعد از تایید، خرید ادامه پیدا می‌کند
+  if (!me.user.mobile && cfg.otp) { pendingPlan = id; $("#buy").close(); openProfile("برای پرداخت، شماره‌ی موبایلت را تایید کن؛ بعد از تایید به درگاه می‌روی."); return; }
   try {
-    const r = await api("/api/pay/start", { method: "POST", body: { plan: id, mobile } });
-    try { localStorage.setItem("dpMobile", mobile); } catch {}
+    const r = await api("/api/pay/start", { method: "POST", body: { plan: id } });
     location.href = r.url;
-  } catch (e) { if (e.data && e.data.needMobile) bad(e.message); else toast(e.message); }
+  } catch (e) { toast(e.message); }
 }
 function handlePayReturn() {
   const q = new URLSearchParams(location.search), p = q.get("pay");
