@@ -14,6 +14,13 @@ function safeEqual(a: string, b: string): boolean {
   return d === 0;
 }
 
+// سئو: پاسخ‌های API و مسیرهای مدیریتی هرگز نباید ایندکس شوند
+function noindex(res: Response): Response {
+  const r = new Response(res.body, res);
+  r.headers.set("x-robots-tag", "noindex, nofollow");
+  return r;
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
@@ -25,7 +32,7 @@ export default {
     }
 
     // API نسخه‌ی وب (ثبت‌نام، ورود، ساخت ارائه، دانلود)
-    if (url.pathname.startsWith("/api/")) return handleWeb(req, env, url);
+    if (url.pathname.startsWith("/api/")) return noindex(await handleWeb(req, env, url));
 
     // وبهوک تلگرام — تلگرام هدر محرمانه را روی هر درخواست می‌فرستد
     if (url.pathname === "/telegram" && req.method === "POST") {
@@ -70,14 +77,14 @@ export default {
       return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /setup\nDisallow: /telegram\n\nSitemap: ${SITE}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     if (url.pathname === "/sitemap.xml") {
-      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${SITE}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"><url><loc>${SITE}/</loc><changefreq>weekly</changefreq><priority>1.0</priority><image:image><image:loc>${SITE}/og-image.png</image:loc><image:title>ساخت پاورپوینت فارسی با هوش مصنوعی</image:title></image:image></url></urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     // صفحه‌ی اصلی: نشانه‌ی __ORIGIN__ (canonical، og:url، داده‌ی ساختاریافته) با دامنه‌ی واقعی جایگزین می‌شود
-    if (url.pathname === "/" && req.method === "GET") {
+    if (url.pathname === "/" && (req.method === "GET" || req.method === "HEAD")) {
       const res = await env.ASSETS.fetch(req);
       if (!res.ok) return res;
       const h = new Headers(res.headers);
-      h.delete("content-length"); h.set("cache-control", "public, max-age=300");
+      h.delete("content-length"); h.set("cache-control", "public, max-age=300"); h.set("content-type", "text/html; charset=utf-8"); h.set("content-language", "fa"); h.set("vary", "Accept-Encoding");
       return new Response((await res.text()).replaceAll("__ORIGIN__", SITE), { status: 200, headers: h });
     }
 
