@@ -19,6 +19,9 @@ const SYSTEM =
   "Never invent statistics, quotes or sources; if you are not confident about a number, do not use it. " +
   "Return ONLY one valid JSON object, no markdown fences, no commentary.";
 
+/** مدل‌هایی که پیش‌فرض «فکر» می‌کنند و باید برای خروجی JSON خاموش شوند */
+const THINKERS = /qwen3|qwen-3|glm|gemma-?4/i;
+
 function useOpenAI(env: Env): boolean {
   const p = (env.LLM_PROVIDER || "").toLowerCase();
   return p === "openai" || (!!env.OPENAI_API_KEY && p !== "anthropic");
@@ -81,13 +84,14 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     const base = (env.OPENAI_BASE_URL || "https://api.gapgpt.app/v1").replace(/\/+$/, "");
     const body: Record<string, unknown> = {
       model: resolveModel(env, modelId).model,
-      max_tokens: Math.min(maxTokens, 8000),
+      // مدل‌های «استدلالی» (GLM، Gemma 4، Qwen3) بخشی از توکن‌ها را صرف فکر کردن می‌کنند؛ با سقف کم، پاسخ نیمه‌کاره/خالی می‌ماند
+      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) ? maxTokens * 2 : maxTokens, 8000),
       temperature: 0.5,
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
     };
-    // Qwen3 به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کند و روی درخواست‌های بلند تایم‌اوت می‌شود؛ برای تولید JSON لازم نیست
-    if (/qwen3|qwen-3/i.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
+    // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
+    if (THINKERS.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
     const headers = { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` };
     const call = () => fetch(`${base}/chat/completions`, {
       method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(180_000),
@@ -100,7 +104,15 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     }
     if (!r.ok) await failFrom(r, "LLM");
     const j = (await r.json()) as any;
-    return j?.choices?.[0]?.message?.content ?? "";
+    const ch = j?.choices?.[0], msg = ch?.message;
+    const part = (c: unknown) => (typeof c === "string" ? c : Array.isArray(c) ? c.map((x: any) => x?.text ?? "").join("") : "");
+    let text = part(msg?.content);
+    // برخی مدل‌های استدلالی پاسخ را در reasoning_content/reasoning می‌گذارند و content خالی می‌ماند
+    if (!text.trim()) text = part(msg?.reasoning_content) || part(msg?.reasoning);
+    if (!text.trim() || !text.includes("{")) {
+      console.error("llm empty/non-json output", body.model, "finish:", ch?.finish_reason, "usage:", JSON.stringify(j?.usage ?? {}), "text:", text.slice(0, 200));
+    }
+    return text;
   }
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -126,7 +138,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
 export function parseJson(text: string): any {
   const t = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```(?:json)?/g, "").trim();
   const a = t.indexOf("{"), b = t.lastIndexOf("}");
-  if (a < 0 || b < 0) throw new Error("no JSON in model output");
+  if (a < 0 || b < 0) throw new Error(`no JSON in model output (${t ? "«" + t.slice(0, 120).replace(/\s+/g, " ") + "»" : "خروجی خالی"})`);
   return JSON.parse(t.slice(a, b + 1));
 }
 
