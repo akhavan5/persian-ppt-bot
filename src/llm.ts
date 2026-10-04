@@ -21,6 +21,8 @@ const SYSTEM =
 
 /** مدل‌هایی که پیش‌فرض «فکر» می‌کنند و باید برای خروجی JSON خاموش شوند */
 const THINKERS = /qwen3|qwen-3|glm|gemma-?4/i;
+/** مدل‌هایی که فکر کردنشان خاموش نمی‌شود (فقط توکن بیشتر می‌خواهند): DeepSeek-R1 با تگ <think>، gpt-oss با reasoning_effort */
+const ALWAYS_THINK = /deepseek-r1|gpt-oss|\bo\d/i;
 
 function useOpenAI(env: Env): boolean {
   const p = (env.LLM_PROVIDER || "").toLowerCase();
@@ -85,13 +87,14 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     const body: Record<string, unknown> = {
       model: resolveModel(env, modelId).model,
       // مدل‌های «استدلالی» (GLM، Gemma 4، Qwen3) بخشی از توکن‌ها را صرف فکر کردن می‌کنند؛ با سقف کم، پاسخ نیمه‌کاره/خالی می‌ماند
-      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) ? maxTokens * 2 : maxTokens, 8000),
+      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) ? maxTokens * 2 : maxTokens, 8000),
       temperature: 0.5,
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
     };
     // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
     if (THINKERS.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
+    if (/gpt-oss/i.test(String(body.model))) body.reasoning_effort = "low"; // کم‌فکر ⇒ سریع‌تر و پاسخ کامل‌تر
     const headers = { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` };
     const call = () => fetch(`${base}/chat/completions`, {
       method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(180_000),
@@ -100,6 +103,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     if (r.status === 400) { // برخی سرویس‌ها response_format را نمی‌پذیرند
       delete body.response_format; // برخی سرویس‌ها response_format یا chat_template_kwargs را نمی‌پذیرند
       delete body.chat_template_kwargs;
+      delete body.reasoning_effort;
       r = await call();
     }
     if (!r.ok) await failFrom(r, "LLM");
@@ -136,7 +140,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
 }
 
 export function parseJson(text: string): any {
-  const t = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/```(?:json)?/g, "").trim();
+  const t = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^[\s\S]*<\/think>/i, "").replace(/```(?:json)?/g, "").trim();
   const a = t.indexOf("{"), b = t.lastIndexOf("}");
   if (a < 0 || b < 0) throw new Error(`no JSON in model output (${t ? "«" + t.slice(0, 120).replace(/\s+/g, " ") + "»" : "خروجی خالی"})`);
   return JSON.parse(t.slice(a, b + 1));
