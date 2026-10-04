@@ -39,7 +39,12 @@ const cfg = (env: Env) => ({
   password: (env.DIGIPAY_PASSWORD ?? "").trim(),
 });
 const DP_API = "https://api.mydigipay.com/digipay/api";
-const DP_TYPE = "0"; // 0 = درگاه کارتی (IPG)
+/** طبق مستند رسمی: نوع تیکت برای «تمام فیچرهای UPG» همیشه ۱۱ است (نوع واقعی پرداخت — ۰ کارتی، ۱۱ کیف پول، ۵/۱۳ اعتباری — در callback برمی‌گردد) */
+const DP_TICKET_TYPE = "11";
+/** درگاه ترجیحی: ۲ = مستقیم به درگاه کارتی (IPG)، ۰ = مستقیم کیف پول، null = نمایش صفحه‌ی انتخاب ابزار پرداخت دیجی‌پی */
+const DP_GATEWAY: number | null = 2;
+/** نوع پیش‌فرض تایید اگر callback نوع را نفرستاد (IPG) */
+const DP_VERIFY_FALLBACK = "0";
 
 export const payEnabled = (env: Env) => { const c = cfg(env); return Boolean(c.clientId && c.clientSecret && c.username && c.password); };
 
@@ -116,11 +121,12 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
 
   const amount = plan.price * 1000 * 10; // تومان → ریال
   const order = newOrderId();
-  const res = await dp(env, `tickets/business?type=${DP_TYPE}`, {
+  const res = await dp(env, `tickets/business?type=${DP_TICKET_TYPE}`, {
     amount,
     cellNumber: mobile,
     providerId: order,
     callbackUrl: `${url.origin}/api/pay/callback?o=${order}`,
+    ...(DP_GATEWAY === null ? {} : { additionalInfo: { preferredGateway: DP_GATEWAY } }),
   }).catch((e) => { console.error("digipay ticket", e); return null; });
 
   const redirect = res?.redirectUrl as string | undefined;
@@ -146,10 +152,15 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   const go = (q: string) => Response.redirect(`${url.origin}/?${q}`, 303);
   if (!payEnabled(env)) return go("pay=fail");
 
-  const form = req.method === "POST" ? await req.formData().catch(() => null) : null;
-  const field = (n: string) => String(form?.get(n) ?? "");
+  // نتیجه‌ی پرداخت با POST می‌آید (فرم یا JSON)؛ هر دو قالب پشتیبانی می‌شود
+  let body: Record<string, unknown> = {};
+  if (req.method === "POST") {
+    if ((req.headers.get("content-type") ?? "").includes("json")) body = ((await req.json().catch(() => null)) as Record<string, unknown>) ?? {};
+    else { const f = await req.formData().catch(() => null); if (f) for (const [k, v] of f.entries()) body[k] = String(v); }
+  }
+  const field = (n: string) => String(body[n] ?? "");
   const order = url.searchParams.get("o") || field("providerId");
-  if (!ORDER_RE.test(order)) return go("pay=fail");
+  if (!ORDER_RE.test(order) || (field("providerId") && field("providerId") !== order)) return go("pay=fail");
 
   const rec = (await env.KV.get(`pay:${order}`, "json")) as PayRecord | null;
   if (!rec) return go("pay=fail");
@@ -157,7 +168,7 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   if (rec.state === "paid") return go(okQ);
 
   const trackingCode = field("trackingCode");
-  const type = /^\d{1,3}$/.test(field("type")) ? field("type") : DP_TYPE;
+  const type = /^\d{1,3}$/.test(field("type")) ? field("type") : DP_VERIFY_FALLBACK;
   if (field("result") !== "SUCCESS" || !trackingCode) {
     await env.KV.put(`pay:${order}`, JSON.stringify({ ...rec, state: "failed" }), { expirationTtl: TTL });
     return go("pay=cancel");
@@ -174,6 +185,10 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
     if (!res) return go("pay=error"); // خطای شبکه: وضعیت pending می‌ماند تا تایید دوباره
     if (String(res?.result?.status) !== "9011") break;
     await new Promise((r) => setTimeout(r, 2000));
+  }
+  if (dpOk(res) && res?.amount != null && Number(res.amount) !== rec.amount) {
+    console.error("digipay verify amount mismatch", order, res.amount, rec.amount);
+    return go("pay=fail");
   }
   if (!dpOk(res)) {
     console.error("digipay verify failed", JSON.stringify({ s: res?.result?.status, m: res?.result?.message }).slice(0, 300));
