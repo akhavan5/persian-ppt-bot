@@ -4,14 +4,14 @@ import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getActiveSub, getBonus, putSub, setBo
 import { hitLimit, type WebUser } from "./auth";
 
 /**
- * پلن‌های ماهانه (price: هزار تومان). فعلاً برای تست هر دو پلن ۱ هزار تومان است؛ بعد از تست ۹۹ و ۱۹۹ را برگردان. هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
+ * پلن‌های ماهانه (price: هزار تومان): پلاس ۹۹ و پرو ۱۹۹. هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
  * همه‌ی مدل‌ها برای همه رایگان است؛ پلن‌ها فقط اعتبار می‌فروشند و سقف اسلاید هر ارائه را بالا می‌برند
  * (رایگان ۸، پلاس ۲۰، پرو ۳۵ اسلاید) و تعداد تصویر هر ارائه را (رایگان ۱، پلاس ۳، پرو ۶).
  */
 export interface Plan { id: string; name: string; price: number; credits: number; days: number; maxSlides: number; maxImages: number }
 export const PLANS: Plan[] = [
-  { id: "plus", name: "پلاس", price: 1, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
-  { id: "pro", name: "پرو", price: 1, credits: 20, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
+  { id: "plus", name: "پلاس", price: 99, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
+  { id: "pro", name: "پرو", price: 199, credits: 20, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
 ];
 
 /**
