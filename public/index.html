@@ -720,7 +720,7 @@ function renderBuy() {
   else if (me && me.maxSlides && !(c && c.unlimited)) d.push(`حداکثر ${fa(me.maxSlides)} اسلاید در هر ارائه.`);
   d.push(`تا ${fa(imgMax())} تصویر در هر ارائه.`);
   $("#creditDetail").textContent = d.join(" ");
-  show($("#mobRow"), !!(me && cfg.payEnabled));
+  show($("#mobRow"), !!(me && cfg.payEnabled && !me.user.mobile)); // کاربر با شماره‌ی ثبت‌شده نیازی به وارد کردن شماره ندارد
   if (!$("#fMobile").value && me && me.user.mobile) $("#fMobile").value = me.user.mobile;
   if (!$("#fMobile").value) { try { $("#fMobile").value = localStorage.getItem("dpMobile") || ""; } catch {} }
   $("#plans").replaceChildren(...list.map((p) => {
@@ -752,6 +752,10 @@ async function buyPlan(id) {
   const plan = me.plans.find((p) => p.id === id); if (!plan) return;
   if (!cfg.payEnabled) { window.open(plan.url, "_blank", "noopener"); return; }
   // دیجی‌پی شماره‌ی موبایل خریدار را الزامی می‌کند؛ از فیلد داخل پنجره‌ی پلن‌ها خوانده می‌شود
+  if (me.user.mobile) { // شماره از حساب خوانده می‌شود (سرور هم همان را به درگاه می‌دهد)
+    try { const r = await api("/api/pay/start", { method: "POST", body: { plan: id } }); location.href = r.url; } catch (e) { toast(e.message); }
+    return;
+  }
   const inp = $("#fMobile"), msg = $("#mobMsg");
   const mobile = inp.value.trim().replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/[\s\-()]/g, "").replace(/^(\+98|0098|98)/, "0");
   const bad = (t) => { msg.textContent = t; show(msg, true); inp.focus(); };

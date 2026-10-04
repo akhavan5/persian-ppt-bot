@@ -121,7 +121,7 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
 
   // شماره‌ی موبایل خریدار: طبق مستند دیجی‌پی (و افزونه‌ی رسمی) فیلد cellNumber در تیکت اجباری است؛
   // نبودنش باعث خطای 1103 «فیچر یافت نشد» می‌شود
-  const mobile = normalizeMobile(b?.mobile);
+  const mobile = normalizeMobile(user.mobile) ?? normalizeMobile(b?.mobile); // شماره‌ی حساب (ورود با پیامک) در اولویت است
   if (!mobile) return json({ error: "شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.", needMobile: true }, 400);
 
   const amount = plan.price * 1000 * 10; // تومان → ریال
