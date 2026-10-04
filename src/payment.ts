@@ -45,9 +45,9 @@ const DP_TICKET_TYPE = "11";
 const DP_GATEWAY: number | null = null;
 /** نوع پیش‌فرض تایید اگر callback نوع را نفرستاد (IPG) */
 const DP_VERIFY_FALLBACK = "0";
-/** واحد مبلغی که به دیجی‌پی فرستاده می‌شود: "toman" (۱ هزار تومان ⇒ 1000) یا "rial" (⇒ 10000).
- *  اگر در صفحه‌ی درگاه مبلغ ۱۰ برابر نشان داده شد، روی "toman" بماند؛ اگر ۱۰ برابر کمتر شد، "rial" کن. */
-const DP_AMOUNT_UNIT: "toman" | "rial" = "toman";
+/** واحد مبلغی که به دیجی‌پی فرستاده می‌شود: "rial" (۱ هزار تومان ⇒ 10000؛ مقدار درست و استاندارد) یا "toman" (⇒ 1000).
+ *  توجه: خود درگاه حداقل مبلغ دارد؛ مبلغ‌های پایین‌تر از آن به‌صورت خودکار بالا برده می‌شوند. */
+const DP_AMOUNT_UNIT: "toman" | "rial" = "rial";
 
 export const payEnabled = (env: Env) => { const c = cfg(env); return Boolean(c.clientId && c.clientSecret && c.username && c.password); };
 
