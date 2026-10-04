@@ -3,6 +3,7 @@
 import type { Env } from "./env";
 import type { Slide } from "./types";
 import { IMAGE_BOX } from "./pptx";
+import { fetchWithAccounts, parseAccounts } from "./accounts";
 
 export const MAX_IMAGES = 1;
 const MODEL_MAIN = "@cf/black-forest-labs/flux-1-schnell";
@@ -56,28 +57,26 @@ async function pexels(key: string, query: string): Promise<Uint8Array | null> {
 /** نسخه‌ی وب: تصویر از همان API سازگار با OpenAI (همان OPENAI_BASE_URL و OPENAI_API_KEY) گرفته می‌شود، نه از Workers AI/Pexels.
  *  مدل با OPENAI_IMAGE_MODEL (پیش‌فرض dall-e-3) و اندازه با OPENAI_IMAGE_SIZE (اختیاری) تنظیم می‌شود. */
 async function viaApi(env: Env, query: string): Promise<Uint8Array | null> {
-  const base = (env.OPENAI_BASE_URL || "https://api.gapgpt.app/v1").replace(/\/+$/, "");
-  const headers = { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` };
+  const pool = parseAccounts(env); // OPENAI_API_KEY ممکن است فهرستی از حساب‌ها باشد؛ چرخش مثل LLM
+  if (!pool.length) return null;
   // اگر آدرس API از نوع OpenAI-compatible کلودفلر باشد (…/accounts/ID/ai/v1)، آن /images/generations را ندارد؛
   // تصویر باید از مسیر …/ai/run/<model> گرفته شود (خروجی: {result:{image:base64}} یا خود تصویر)
-  const runBase = (env.OPENAI_IMAGE_BASE_URL || "").trim().replace(/\/+$/, "");
-  const cf = !!runBase || /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai\/v1$/.test(base);
   try {
-    if (cf) {
+    if (pool[0].cf) {
       const model = env.OPENAI_IMAGE_MODEL || MODEL_MAIN;
-      const url = `${runBase || base.replace(/\/v1$/, "/run")}/${model}`;
-      let r: Response;
-      if (/flux-2/i.test(model)) {
-        // خانواده‌ی FLUX.2 ورودی را فقط به‌صورت multipart/form-data می‌پذیرد
-        const f = new FormData();
-        f.append("prompt", query + STYLE);
-        f.append("width", "1024");
-        f.append("height", "832");
-        r = await fetch(url, { method: "POST", headers: { authorization: headers.authorization }, body: f, signal: AbortSignal.timeout(90_000) });
-      } else {
+      const r = await fetchWithAccounts(env, (a) => {
+        const url = `${a.runBase}/${model}`;
+        if (/flux-2/i.test(model)) {
+          // خانواده‌ی FLUX.2 ورودی را فقط به‌صورت multipart/form-data می‌پذیرد
+          const f = new FormData();
+          f.append("prompt", query + STYLE);
+          f.append("width", "1024");
+          f.append("height", "832");
+          return fetch(url, { method: "POST", headers: { authorization: `Bearer ${a.token}` }, body: f, signal: AbortSignal.timeout(90_000) });
+        }
         const input = /flux/i.test(model) ? { prompt: query + STYLE, steps: 4 } : { prompt: query + STYLE, num_steps: 8 };
-        r = await fetch(url, { method: "POST", headers, body: JSON.stringify(input), signal: AbortSignal.timeout(60_000) });
-      }
+        return fetch(url, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${a.token}` }, body: JSON.stringify(input), signal: AbortSignal.timeout(60_000) });
+      });
       if (!r.ok) { console.error("image api", r.status, (await r.text()).slice(0, 200)); return null; }
       if ((r.headers.get("content-type") || "").startsWith("image/")) return await toBytes(new Uint8Array(await r.arrayBuffer()));
       const j = (await r.json()) as any;
@@ -85,10 +84,10 @@ async function viaApi(env: Env, query: string): Promise<Uint8Array | null> {
     }
     const model = env.OPENAI_IMAGE_MODEL || "dall-e-3";
     const size = env.OPENAI_IMAGE_SIZE || (/gpt-image/i.test(model) ? "1536x1024" : "1792x1024");
-    const r = await fetch(`${base}/images/generations`, {
-      method: "POST", headers, body: JSON.stringify({ model, prompt: query + STYLE, n: 1, size }),
-      signal: AbortSignal.timeout(90_000),
-    });
+    const r = await fetchWithAccounts(env, (a) => fetch(`${a.base}/images/generations`, {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${a.token}` },
+      body: JSON.stringify({ model, prompt: query + STYLE, n: 1, size }), signal: AbortSignal.timeout(90_000),
+    }));
     if (!r.ok) { console.error("image api", r.status, (await r.text()).slice(0, 200)); return null; }
     const d = ((await r.json()) as any)?.data?.[0];
     let b: Uint8Array | null = null;

@@ -11,6 +11,7 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
 
+  /** کلید API؛ می‌تواند فهرست چند حساب باشد (هر خط یا «;»): ACCOUNT_ID|API_TOKEN برای حساب کلودفلر، یا کلید ساده با OPENAI_BASE_URL. با ۴۲۹ (سقف نورون) به حساب بعدی می‌رود */
   OPENAI_API_KEY?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_MODEL?: string;

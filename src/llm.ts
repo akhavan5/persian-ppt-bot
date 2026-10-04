@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import type { Deck, Outline, OutlineItem, Slide, Layout, Table, Chart, SlideKind } from "./types";
 import { TONES } from "./themes";
 import { toEn } from "./util";
+import { PoolExhausted, fetchWithAccounts } from "./accounts";
 
 export const LAYOUTS: Layout[] = ["title", "section", "bullets", "image_text", "two_column", "stats", "table", "chart", "sources", "questions", "closing"];
 
@@ -83,7 +84,6 @@ async function failFrom(r: Response, who: string): Promise<never> {
 
 async function complete(env: Env, prompt: string, maxTokens: number, modelId?: string): Promise<string> {
   if (useOpenAI(env)) {
-    const base = (env.OPENAI_BASE_URL || "https://api.gapgpt.app/v1").replace(/\/+$/, "");
     const body: Record<string, unknown> = {
       model: resolveModel(env, modelId).model,
       // مدل‌های «استدلالی» (GLM، Gemma 4، Qwen3) بخشی از توکن‌ها را صرف فکر کردن می‌کنند؛ با سقف کم، پاسخ نیمه‌کاره/خالی می‌ماند
@@ -95,10 +95,19 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
     if (THINKERS.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
     if (/gpt-oss/i.test(String(body.model))) body.reasoning_effort = "low"; // کم‌فکر ⇒ سریع‌تر و پاسخ کامل‌تر
-    const headers = { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` };
-    const call = () => fetch(`${base}/chat/completions`, {
-      method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(180_000),
-    });
+    // OPENAI_API_KEY می‌تواند فهرستی از حساب‌ها باشد: از آخرین حساب سالم شروع می‌شود و با ۴۲۹ (سقف نورون) به حساب بعدی می‌رود
+    const call = async () => {
+      try {
+        return await fetchWithAccounts(env, (a) => fetch(`${a.base}/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${a.token}` },
+          body: JSON.stringify(body), signal: AbortSignal.timeout(180_000),
+        }));
+      } catch (e) {
+        if (e instanceof PoolExhausted) throw new LlmError(`LLM 429: ${e.message}`, false); // یک دور کامل شکست خورد؛ ورکفلو بعداً دوباره تلاش می‌کند
+        throw e;
+      }
+    };
     let r = await call();
     if (r.status === 400) { // برخی سرویس‌ها response_format را نمی‌پذیرند
       delete body.response_format; // برخی سرویس‌ها response_format یا chat_template_kwargs را نمی‌پذیرند
