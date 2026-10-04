@@ -13,17 +13,18 @@ export const PLANS: Plan[] = [
   { id: "plus", name: "پلاس", price: 1, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
   { id: "pro", name: "پرو", price: 1, credits: 20, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
 ];
-const RANK: Record<string, number> = { plus: 1, pro: 2 };
 
 /**
  * فعال‌سازی / تمدید پلن بعد از پرداخت موفق:
  * - بدون پلن فعال (هرگز نخریده، منقضی شده، یا اعتبارش تمام شده): از همین الان ۳۰ روز با اعتبار جدید؛ روزهای باقی‌مانده‌ی پلنِ بی‌اعتبار حساب نمی‌شود.
- * - با پلن فعال: ۳۰ روز به پایان پلن فعلی اضافه می‌شود و اعتبار جدید روی اعتبار باقی‌مانده‌ی پلن جمع می‌شود.
- * - پلن نمایش‌داده‌شده همیشه بالاترین سطحِ بین پلن فعلی و پلن خریداری‌شده است.
+ * - تمدید همان پلن فعال (پلاس←پلاس یا پرو←پرو): ۳۰ روز به پایان پلن فعلی اضافه می‌شود و اعتبار جدید روی اعتبار باقی‌مانده جمع می‌شود.
+ * - خرید پلنِ دیگر (پلاس←پرو یا پرو←پلاس): پلن قبلی با روز و اعتبار باقی‌مانده‌اش منقضی می‌شود و پلن جدید مثل پلن رایگان از همین لحظه با ۳۰ روز و اعتبار جدید شروع می‌شود.
  */
 export async function activatePlan(env: Env, uid: string, p: Plan) {
-  const cur = await getActiveSub(env, uid); // پلنِ منقضی یا بدون اعتبار = پلن رایگان؛ خرید جدید از نو شروع می‌شود
-  const plan = cur && (RANK[cur.plan] ?? 0) > (RANK[p.id] ?? 0) ? cur.plan : p.id;
+  let cur = await getActiveSub(env, uid); // پلنِ منقضی یا بدون اعتبار = پلن رایگان؛ خرید جدید از نو شروع می‌شود
+  // خرید پلنِ دیگر (پلاس ← پرو یا پرو ← پلاس): پلن قبلی منقضی می‌شود و پلنِ جدید مثل کاربر رایگان از همین لحظه شروع می‌شود
+  if (cur && cur.plan !== p.id) cur = null;
+  const plan = p.id;
   await putSub(env, uid, { plan, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits });
 }
 
