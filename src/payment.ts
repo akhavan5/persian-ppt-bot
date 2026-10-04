@@ -32,11 +32,12 @@ export async function activatePlan(env: Env, uid: string, p: Plan) {
  * DIGIPAY_CLIENT_ID, DIGIPAY_CLIENT_SECRET, DIGIPAY_USERNAME, DIGIPAY_PASSWORD
  * تا هر چهار مقدار تنظیم نشوند، پرداخت آنلاین غیرفعال است و دکمه‌ی خرید کاربر را به پشتیبان تلگرام می‌فرستد.
  */
+const clean = (v?: string) => (v ?? "").trim().replace(/^(["'])(.*)\1$/s, "$2").trim();
 const cfg = (env: Env) => ({
-  clientId: (env.DIGIPAY_CLIENT_ID ?? "").trim(),
-  clientSecret: (env.DIGIPAY_CLIENT_SECRET ?? "").trim(),
-  username: (env.DIGIPAY_USERNAME ?? "").trim(),
-  password: (env.DIGIPAY_PASSWORD ?? "").trim(),
+  clientId: clean(env.DIGIPAY_CLIENT_ID),
+  clientSecret: clean(env.DIGIPAY_CLIENT_SECRET),
+  username: clean(env.DIGIPAY_USERNAME),
+  password: clean(env.DIGIPAY_PASSWORD),
 });
 const DP_API = "https://api.mydigipay.com/digipay/api";
 /** طبق مستند رسمی: نوع تیکت برای «تمام فیچرهای UPG» همیشه ۱۱ است (نوع واقعی پرداخت — ۰ کارتی، ۱۱ کیف پول، ۵/۱۳ اعتباری — در callback برمی‌گردد) */
@@ -76,7 +77,13 @@ async function dpToken(env: Env, force = false): Promise<string | null> {
   }).catch((e) => { console.error("digipay auth", e); return null; });
   const d = (await r?.json().catch(() => null)) as any;
   const token = r?.ok ? (d?.access_token as string | undefined) : undefined;
-  if (!token) { console.error("digipay auth failed", r?.status, JSON.stringify(d).slice(0, 300)); return null; }
+  if (!token) {
+    // اطلاعات عیب‌یابی بدون افشای مقدارها: فقط طول‌ها و اینکه مقدارها اشتباهی با هم یکی نباشند
+    console.error("digipay auth failed", r?.status, JSON.stringify(d).slice(0, 300),
+      JSON.stringify({ len: { cid: c.clientId.length, cs: c.clientSecret.length, u: c.username.length, p: c.password.length },
+        userIsClientId: c.username === c.clientId, passIsClientSecret: c.password === c.clientSecret, userLooksMobile: /^(\+?98|0)?9\d{9}$/.test(c.username) }));
+    return null;
+  }
   const ttl = Math.max(60, Math.min(Number(d?.expires_in) || 3600, 86_400) - 120);
   await env.KV.put(TOKEN_KEY, JSON.stringify({ t: token }), { expirationTtl: ttl }).catch(() => {});
   return token;
