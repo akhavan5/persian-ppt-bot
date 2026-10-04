@@ -57,13 +57,26 @@ async function pexels(key: string, query: string): Promise<Uint8Array | null> {
  *  مدل با OPENAI_IMAGE_MODEL (پیش‌فرض dall-e-3) و اندازه با OPENAI_IMAGE_SIZE (اختیاری) تنظیم می‌شود. */
 async function viaApi(env: Env, query: string): Promise<Uint8Array | null> {
   const base = (env.OPENAI_BASE_URL || "https://api.gapgpt.app/v1").replace(/\/+$/, "");
-  const model = env.OPENAI_IMAGE_MODEL || "dall-e-3";
-  const size = env.OPENAI_IMAGE_SIZE || (/gpt-image/i.test(model) ? "1536x1024" : "1792x1024");
+  const headers = { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` };
+  // اگر آدرس API از نوع OpenAI-compatible کلودفلر باشد (…/accounts/ID/ai/v1)، آن /images/generations را ندارد؛
+  // تصویر باید از مسیر …/ai/run/<model> گرفته شود (خروجی: {result:{image:base64}} یا خود تصویر)
+  const cf = /api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai\/v1$/.test(base);
   try {
+    if (cf) {
+      const model = env.OPENAI_IMAGE_MODEL || MODEL_MAIN;
+      const input = /flux/i.test(model) ? { prompt: query + STYLE, steps: 4 } : { prompt: query + STYLE, num_steps: 8 };
+      const r = await fetch(`${base.replace(/\/v1$/, "")}/run/${model}`, {
+        method: "POST", headers, body: JSON.stringify(input), signal: AbortSignal.timeout(60_000),
+      });
+      if (!r.ok) { console.error("image api", r.status, (await r.text()).slice(0, 200)); return null; }
+      if ((r.headers.get("content-type") || "").startsWith("image/")) return await toBytes(new Uint8Array(await r.arrayBuffer()));
+      const j = (await r.json()) as any;
+      return await toBytes({ image: j?.result?.image ?? j?.image });
+    }
+    const model = env.OPENAI_IMAGE_MODEL || "dall-e-3";
+    const size = env.OPENAI_IMAGE_SIZE || (/gpt-image/i.test(model) ? "1536x1024" : "1792x1024");
     const r = await fetch(`${base}/images/generations`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` },
-      body: JSON.stringify({ model, prompt: query + STYLE, n: 1, size }),
+      method: "POST", headers, body: JSON.stringify({ model, prompt: query + STYLE, n: 1, size }),
       signal: AbortSignal.timeout(90_000),
     });
     if (!r.ok) { console.error("image api", r.status, (await r.text()).slice(0, 200)); return null; }
@@ -87,7 +100,7 @@ export async function fetchImages(env: Env, slides: Slide[], max = MAX_IMAGES, u
   const idx = slides.flatMap((s, i) => (s.layout === "image_text" && s.image_query ? [i] : [])).slice(0, max);
   const res = await Promise.all(idx.map(async (i) => {
     const q = slides[i].image_query!;
-    if (useApi && env.OPENAI_API_KEY) return viaApi(env, q);
+    if (useApi && env.OPENAI_API_KEY) { const r = await viaApi(env, q); if (r) return r; } // اگر API تصویر نداد، به Workers AI/Pexels برمی‌گردد
     if (env.AI) return (await generate(env, MODEL_MAIN, q)) ?? (await generate(env, MODEL_BACKUP, q));
     return env.PEXELS_API_KEY ? pexels(env.PEXELS_API_KEY, q) : null;
   }));
