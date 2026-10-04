@@ -45,6 +45,9 @@ const DP_TICKET_TYPE = "11";
 const DP_GATEWAY: number | null = null;
 /** نوع پیش‌فرض تایید اگر callback نوع را نفرستاد (IPG) */
 const DP_VERIFY_FALLBACK = "0";
+/** واحد مبلغی که به دیجی‌پی فرستاده می‌شود: "toman" (۱ هزار تومان ⇒ 1000) یا "rial" (⇒ 10000).
+ *  اگر در صفحه‌ی درگاه مبلغ ۱۰ برابر نشان داده شد، روی "toman" بماند؛ اگر ۱۰ برابر کمتر شد، "rial" کن. */
+const DP_AMOUNT_UNIT: "toman" | "rial" = "toman";
 
 export const payEnabled = (env: Env) => { const c = cfg(env); return Boolean(c.clientId && c.clientSecret && c.username && c.password); };
 
@@ -124,7 +127,7 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
   const mobile = normalizeMobile(user.mobile); // شماره‌ی تاییدشده‌ی حساب؛ بدون آن پرداخت ممکن نیست
   if (!mobile) return json({ error: "برای پرداخت، ابتدا شماره‌ی موبایلت را در پروفایل تایید کن.", needMobile: true }, 400);
 
-  const amount = plan.price * 1000 * 10; // تومان → ریال
+  const amount = plan.price * 1000 * (DP_AMOUNT_UNIT === "rial" ? 10 : 1); // price: هزار تومان
   const order = newOrderId();
   const base = {
     amount,
