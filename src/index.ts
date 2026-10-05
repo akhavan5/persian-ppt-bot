@@ -4,6 +4,7 @@ import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { adminIds } from "./settings";
 import { handleWeb } from "./web";
 import { findLanding, landingSitemapEntries, renderLanding } from "./landing";
+import { blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
 
 export { DeckWorkflow } from "./workflow";
 export { BroadcastWorkflow } from "./broadcast";
@@ -85,7 +86,7 @@ export default {
       return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /setup\nDisallow: /telegram\n\nSitemap: ${SITE}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     if (url.pathname === "/sitemap.xml") {
-      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n${landingSitemapEntries(SITE)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n${landingSitemapEntries(SITE)}${blogSitemapEntries(SITE)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     // صفحه‌های سئو (دانشجویی، دفاع پایان‌نامه، معلمان، ...): HTML از landing.ts ساخته می‌شود
     const landing = findLanding(url.pathname);
@@ -93,6 +94,19 @@ export default {
       if (landing.trailingSlash) return Response.redirect(`${SITE}/${landing.page.slug}${url.search}`, 301);
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
       const html = renderLanding(landing.page, SITE);
+      return new Response(req.method === "HEAD" ? null : html, {
+        headers: {
+          "content-type": "text/html; charset=utf-8", "content-language": "fa", "cache-control": "public, max-age=300", vary: "Accept-Encoding",
+          "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "strict-origin-when-cross-origin",
+        },
+      });
+    }
+    // وبلاگ: فهرست /blog و مقاله‌ها /blog/<slug> (HTML از blog.ts ساخته می‌شود)
+    const blog = findBlog(url.pathname);
+    if (blog) {
+      if (blog.kind === "trailing") return Response.redirect(`${SITE}${blog.to}${url.search}`, 301);
+      if (req.method !== "GET" && req.method !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
+      const html = blog.kind === "index" ? renderBlogIndex(SITE) : renderPost(blog.post, SITE);
       return new Response(req.method === "HEAD" ? null : html, {
         headers: {
           "content-type": "text/html; charset=utf-8", "content-language": "fa", "cache-control": "public, max-age=300", vary: "Accept-Encoding",

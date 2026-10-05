@@ -16,6 +16,15 @@
 - [ساخت پاورپوینت رایگان](https://pptsaz.ir/free): امکانات پلن رایگان و مقایسه‌ی پلن‌ها
 - [pptساز چیست؟](https://pptsaz.ir/ppt-saz): معرفی سرویس و نام‌های مشابه آن
 
+## وبلاگ
+- [وبلاگ](https://pptsaz.ir/blog): راهنماهای ساخت و ارائه‌ی پاورپوینت فارسی
+- [ساختار پاورپوینت دفاع پایان‌نامه](https://pptsaz.ir/blog/thesis-defense-slides-guide): زمان‌بندی و محتوای اسلایدهای دفاعیه
+- [چند اسلاید برای ارائه؟](https://pptsaz.ir/blog/how-many-slides): جدول تعداد اسلاید بر اساس زمان
+- [نمونه موضوع پاورپوینت](https://pptsaz.ir/blog/presentation-topic-ideas): ۵۰ ایده‌ی موضوع
+- [طراحی پاورپوینت فارسی](https://pptsaz.ir/blog/persian-powerpoint-design): فونت، رنگ و راست‌به‌چپ
+- [ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-topic-tips): نوشتن موضوع و بررسی خروجی
+- [ارائه‌ی کلاسی بدون استرس](https://pptsaz.ir/blog/class-presentation-tips): تمرین، اجرا و پرسش و پاسخ
+
 ## نکات
 - زبان: فارسی؛ خروجی: PPTX سازگار با PowerPoint، LibreOffice و Google Slides
 - حالت دانشجویی: فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع

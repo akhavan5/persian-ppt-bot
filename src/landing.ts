@@ -1,13 +1,14 @@
 // رندر صفحه‌های سئو (کلیدواژه‌ای). داده‌ها در landing-data.ts هستند.
 import { PAGES, PAGE_BY_SLUG, type Page, type Section } from "./landing-data";
+import { POST_BY_SLUG } from "./blog-data";
 
-const BRAND = "پاورپوینت‌ساز فارسی";
+export const BRAND = "پاورپوینت‌ساز فارسی";
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // [متن](/مسیر) → لینک داخلی
-const inline = (s: string) => esc(s).replace(/\[([^\]]+)\]\((\/[a-z0-9\-#/]*)\)/g, '<a href="$2">$1</a>');
-const plain = (s: string) => s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
-const jsonLd = (o: unknown) => JSON.stringify(o).replace(/</g, "\\u003c");
+export const inline = (s: string) => esc(s).replace(/\[([^\]]+)\]\((\/[a-z0-9\-#/]*)\)/g, '<a href="$2">$1</a>');
+export const plain = (s: string) => s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+export const jsonLd = (o: unknown) => JSON.stringify(o).replace(/</g, "\\u003c");
 
 /** مسیر → صفحه‌ی سئو (با یا بدون اسلش پایانی). */
 export function findLanding(pathname: string): { page: Page; trailingSlash: boolean } | undefined {
@@ -24,7 +25,7 @@ export function landingSitemapEntries(site: string): string {
 
 export const LANDING_PATHS = PAGES.map((p) => `/${p.slug}`);
 
-const CSS = `@font-face{font-family:Vazirmatn;font-style:normal;font-weight:100 900;font-display:swap;src:url(https://fonts.gstatic.com/s/vazirmatn/v16/Dxxo8j6PP2D_kU2muijlGMWWMmk.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+export const CSS = `@font-face{font-family:Vazirmatn;font-style:normal;font-weight:100 900;font-display:swap;src:url(https://fonts.gstatic.com/s/vazirmatn/v16/Dxxo8j6PP2D_kU2muijlGMWWMmk.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
 :root{--bg:#f8faff;--card:#fff;--text:#0f1b33;--muted:#5b6b86;--line:#e3e9f5;--primary:#2563eb;--primary-2:#06b6d4;--soft:#eef4ff;--radius:16px;--shadow:0 1px 2px rgba(15,27,51,.05),0 10px 30px rgba(37,99,235,.08)}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:70px}
@@ -95,7 +96,7 @@ footer a{color:var(--muted);text-decoration:none}footer a:hover{color:var(--prim
 .copy{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}`;
 
-function renderSection(s: Section): string {
+export function renderSection(s: Section): string {
   let h = `<section><h2>${esc(s.h2)}</h2>`;
   for (const p of s.paras ?? []) h += `<p>${inline(p)}</p>`;
   if (s.steps) h += `<ol class="steps">${s.steps.map((x) => `<li><div><h3>${esc(x.t)}</h3><p>${inline(x.d)}</p></div></li>`).join("")}</ol>`;
@@ -109,9 +110,20 @@ function renderSection(s: Section): string {
   return h + `</section>`;
 }
 
+// مقاله‌های وبلاگ مرتبط با هر صفحه (برای لینک‌دهی داخلی)
+const ARTICLES_FOR: Record<string, string[]> = {
+  student: ["how-many-slides", "class-presentation-tips", "presentation-topic-ideas"],
+  "thesis-defense": ["thesis-defense-slides-guide", "how-many-slides", "class-presentation-tips"],
+  teacher: ["persian-powerpoint-design", "how-many-slides", "presentation-topic-ideas"],
+  business: ["persian-powerpoint-design", "how-many-slides", "ai-powerpoint-topic-tips"],
+  free: ["ai-powerpoint-topic-tips", "presentation-topic-ideas", "how-many-slides"],
+  "ppt-saz": ["ai-powerpoint-topic-tips", "persian-powerpoint-design", "presentation-topic-ideas"],
+};
+
 export function renderLanding(p: Page, SITE: string): string {
   const url = `${SITE}/${p.slug}`;
   const h1Text = p.h1.join("");
+  const articles = (ARTICLES_FOR[p.slug] ?? []).map((s) => POST_BY_SLUG.get(s)).filter((x) => !!x);
   const related = p.related.map((slug) => PAGE_BY_SLUG.get(slug)).filter((x): x is Page => !!x);
 
   const ld = {
@@ -138,8 +150,8 @@ export function renderLanding(p: Page, SITE: string): string {
     ],
   };
 
-  const nav = PAGES.filter((x) => x.slug !== "ppt-saz").map((x) => `<a href="/${x.slug}"${x.slug === p.slug ? ' aria-current="page"' : ""}>${esc(x.nav)}</a>`).join("") + `<a href="/#pricing">تعرفه</a>`;
-  const guides = PAGES.map((x) => `<li><a href="/${x.slug}">${esc(x.nav)}</a></li>`).join("");
+  const nav = PAGES.filter((x) => x.slug !== "ppt-saz").map((x) => `<a href="/${x.slug}"${x.slug === p.slug ? ' aria-current="page"' : ""}>${esc(x.nav)}</a>`).join("") + `<a href="/blog">وبلاگ</a><a href="/#pricing">تعرفه</a>`;
+  const guides = PAGES.map((x) => `<li><a href="/${x.slug}">${esc(x.nav)}</a></li>`).join("") + `<li><a href="/blog">وبلاگ</a></li>`;
 
   return `<!doctype html>
 <html lang="fa" dir="rtl">
@@ -206,7 +218,11 @@ ${p.sections.map(renderSection).join("\n")}
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
     </section>
-    <section>
+${articles.length ? `    <section>
+      <h2>مقاله‌های مرتبط در وبلاگ</h2>
+      <div class="rel">${articles.map((a) => `<a href="/blog/${a!.slug}">${esc(a!.nav)}<span>${esc(a!.category)}</span></a>`).join("")}</div>
+    </section>
+` : ""}    <section>
       <h2>راهنماهای مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/${r.slug}">${esc(r.nav)}<span>${esc(r.title.split("|")[0].trim())}</span></a>`).join("")}</div>
     </section>
