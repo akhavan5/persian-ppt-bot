@@ -18,7 +18,7 @@ import { ensureUid, resolveUid } from "./link";
 const HELP =
   "سلام! 👋\n" +
   "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
-  "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد <b>مدل، تعداد اسلاید و تصویر</b> را همان‌جا انتخاب می‌کنی و با یک دکمه ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
+  "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد مرحله‌به‌مرحله <b>مدل، تعداد اسلاید و تعداد تصویر</b> را انتخاب می‌کنی و ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت دانشجویی، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب\n" +
@@ -87,51 +87,101 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
   return { text: title, ...kb(rows) };
 }
 
-// ---------- کارت انتخاب قبل از ساخت (مدل / اسلاید / تصویر) ----------
-/** وضعیت کارتِ در انتظار: موضوع + انتخاب‌های فعلی. هر کاربر یک کارت فعال دارد؛ فقط پیام همان کارت معتبر است. */
-interface Pending { topic: string; mid: number; slides: number; imgs: number; model: string; note?: string }
+// ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← تعداد تصویر) ----------
+type Step = "model" | "slides" | "imgs";
+/** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
+interface Pending { topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
 const MIN_STUDENT_SLIDES = 8;
 
+/** مرحله‌ها به ترتیب: مدل (فقط اگر بیش از یکی باشد)، اسلاید (اگر کاربر در متن موضوع تعداد را نوشته باشد پرسیده نمی‌شود)، تصویر */
+const stepsOf = (env: Env, p: Pending): Step[] => [
+  ...(modelList(env).length > 1 ? (["model"] as Step[]) : []),
+  ...(p.fixed ? [] : (["slides"] as Step[])),
+  "imgs",
+];
+
 function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   const models = modelList(env);
   const model = models.find((m) => m.id === p.model) ?? models[0];
+  const steps = stepsOf(env, p);
+  const idx = Math.max(0, steps.indexOf(p.step));
   const mark = (on: boolean, t: string) => (on ? `✔️ ${t}` : t);
   const lock = (locked: boolean, t: string) => (locked ? `🔒 ${t}` : t);
-  const head = (t: string): Btn[] => [{ text: t, callback_data: "n:x" }]; // عنوان بخش (فقط نمایشی)
   const chunk = (arr: Btn[], n: number) => { const r: Btn[][] = []; for (let i = 0; i < arr.length; i += n) r.push(arr.slice(i, i + n)); return r; };
 
-  const rows: Btn[][] = [];
-  if (models.length > 1) {
-    rows.push(head("🤖 مدل هوش مصنوعی"));
-    rows.push(...chunk(models.map((m, i) => ({ text: mark(p.model === m.id, m.name), callback_data: `p:model:${i}` })), 2));
+  let ask = "", opts: Btn[][] = [];
+  if (p.step === "model") {
+    ask = "🤖 <b>مدل هوش مصنوعی</b> را انتخاب کن:";
+    opts = chunk(models.map((m, i) => ({ text: mark(p.model === m.id, m.name), callback_data: `p:model:${i}` })), 2);
+  } else if (p.step === "slides") {
+    ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (s.mode === "student" ? `\n<i>🎓 حالت دانشجویی حداقل ${toFa(String(MIN_STUDENT_SLIDES))} اسلاید می‌سازد.</i>` : "");
+    opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
+  } else {
+    ask = "🖼 <b>تعداد تصویر</b> را انتخاب کن:\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>";
+    opts = chunk(Array.from({ length: ABS_MAX_IMAGES + 1 }, (_, n) => ({
+      text: lock(n > caps.maxImg, mark(p.imgs === n, n === 0 ? "بدون تصویر" : toFa(String(n)))), callback_data: `p:imgs:${n}`,
+    })), 4);
   }
-  rows.push(head("📄 تعداد اسلاید"));
-  rows.push(...chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5));
-  rows.push(head("🖼 تعداد تصویر"));
-  rows.push(...chunk(Array.from({ length: ABS_MAX_IMAGES + 1 }, (_, n) => ({
-    text: lock(n > caps.maxImg, mark(p.imgs === n, n === 0 ? "بدون" : toFa(String(n)))), callback_data: `p:imgs:${n}`,
-  })), 4));
-  rows.push([{ text: "🚀 ساخت ارائه", callback_data: "p:go" }, { text: "✖️ لغو", callback_data: "p:cancel" }]);
+
+  const nav: Btn[] = [];
+  if (idx > 0) nav.push({ text: "◀️ مرحله‌ی قبل", callback_data: "p:back" });
+  nav.push({ text: "✖️ لغو", callback_data: "p:cancel" });
 
   const topicShown = p.topic.length > 200 ? p.topic.slice(0, 200) + "…" : p.topic;
-  const lines = [
+  // انتخاب‌های مرحله‌های قبل (جلوی چشم کاربر)
+  const done: string[] = [];
+  if (steps.indexOf("model") >= 0 && steps.indexOf("model") < idx) done.push(`🤖 مدل: <b>${esc(model.name)}</b>`);
+  if (p.fixed) done.push(`📄 اسلاید: <b>${toFa(String(p.slides))}</b>`);
+  else if (steps.indexOf("slides") >= 0 && steps.indexOf("slides") < idx) done.push(`📄 اسلاید: <b>${toFa(String(p.slides))}</b>`);
+  const text = [
     `📝 <b>موضوع:</b> ${esc(topicShown)}`,
+    ...(done.length ? ["", ...done] : []),
     "",
-    "گزینه‌ها را انتخاب کن، بعد «🚀 ساخت ارائه» را بزن:",
-    models.length > 1 ? `🤖 مدل: <b>${esc(model.name)}</b>` : "",
-    `📄 اسلاید: <b>${toFa(String(p.slides))}</b>`,
-    `🖼 تصویر: <b>${p.imgs ? toFa(String(p.imgs)) : "بدون تصویر"}</b>`,
-    s.mode === "student" && p.slides < MIN_STUDENT_SLIDES ? `🎓 <i>حالت دانشجویی حداقل ${toFa(String(MIN_STUDENT_SLIDES))} اسلاید می‌سازد.</i>` : "",
-    p.note ? `\n⚠️ <i>${esc(p.note)}</i>` : "",
-    "\n<i>تم، لحن، فونت و … از /settings تغییر می‌کند.</i>",
-  ].filter((l, i, a) => l !== "" || (i > 0 && a[i - 1] !== ""));
-  return { text: lines.join("\n"), ...kb(rows) };
+    `<i>مرحله‌ی ${toFa(String(idx + 1))} از ${toFa(String(steps.length))}</i>`,
+    ask,
+    ...(p.note ? [`\n⚠️ <i>${esc(p.note)}</i>`] : []),
+  ].join("\n");
+  return { text, ...kb([...opts, nav]) };
 }
 
-/** دکمه‌های کارت انتخاب (p:…) */
+/** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
+async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
+  const begin = await beginDeck(env, uid, p.topic, { slides: p.slides, imageCount: p.imgs });
+  if (!begin.ok) {
+    const d = begin.denied;
+    if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
+    if (d.noCredit) {
+      await answer();
+      return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, tgId));
+    }
+    if (d.needPlan) {
+      await answer();
+      return await sendMessage(env, chatId, `🔒 ${esc(d.error)}`, await buyKbFor(env, uid, tgId));
+    }
+    return await answer(d.error, true);
+  }
+  begin.settings.model = p.model; // انتخاب مدل در ویزارد (بدون وابستگی به خواندن KV)
+  try {
+    await env.KV.delete(pendKey(uid)).catch(() => {});
+    await answer();
+    const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
+    await editMessage(env, chatId, mid,
+      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`,
+      { reply_markup: { inline_keyboard: [] } });
+    const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId });
+    if (!ok) {
+      return await editMessage(env, chatId, mid, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.").catch(() => {});
+    }
+  } catch (e) {
+    await begin.undo();
+    throw e;
+  }
+}
+
+/** دکمه‌های ویزارد (p:…) */
 async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, a: string, b: string) {
   const answer = (text?: string, alert = false) =>
     tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
@@ -148,57 +198,39 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
   }
 
   const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);
+  const steps = stepsOf(env, p);
+  const render = async () => {
+    await putPending(env, uid, p);
+    await answer();
+    const { text, ...extra } = pendingView(env, p, s, caps);
+    await editMessage(env, chatId, mid, text, extra);
+  };
 
-  if (a === "go") {
-    const begin = await beginDeck(env, uid, p.topic, { slides: p.slides, imageCount: p.imgs });
-    if (!begin.ok) {
-      const d = begin.denied;
-      if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
-      if (d.noCredit) {
-        await answer();
-        return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, tgId));
-      }
-      if (d.needPlan) {
-        await answer();
-        return await sendMessage(env, chatId, `🔒 ${esc(d.error)}`, await buyKbFor(env, uid, tgId));
-      }
-      return await answer(d.error, true);
-    }
-    begin.settings.model = p.model; // انتخاب مدل روی همین کارت (بدون وابستگی به خواندن KV)
-    try {
-      await env.KV.delete(pendKey(uid)).catch(() => {});
-      await answer();
-      const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
-      // همین پیام به پیام وضعیت تبدیل می‌شود (دکمه‌ها برداشته می‌شوند)
-      await editMessage(env, chatId, mid,
-        `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`,
-        { reply_markup: { inline_keyboard: [] } });
-      const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId });
-      if (!ok) {
-        return await editMessage(env, chatId, mid, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.").catch(() => {});
-      }
-    } catch (e) {
-      await begin.undo();
-      throw e;
-    }
-    return;
+  if (a === "back") {
+    p.step = steps[Math.max(0, steps.indexOf(p.step) - 1)];
+    return await render();
   }
 
-  // تغییر انتخاب‌ها: هم روی کارت و هم روی تنظیمات ذخیره‌شده‌ی کاربر (پیش‌فرض دفعه‌ی بعد)
+  // انتخاب در مرحله‌ی جاری؛ هم روی ویزارد و هم روی تنظیمات ذخیره‌شده‌ی کاربر (پیش‌فرض دفعه‌ی بعد)
+  if (a !== p.step) return await answer(); // دکمه‌ی مرحله‌ی قبلی (بعد از پیشرفت) بی‌اثر است
   if (a === "model") {
     const m = modelList(env)[Number(b)];
-    if (m) { p.model = m.id; s.model = m.id; }
-  } else if (a === "slides" && Number(b) >= 3) {
+    if (!m) return await answer();
+    p.model = m.id; s.model = m.id;
+  } else if (a === "slides") {
+    if (!(Number(b) >= 3)) return await answer();
     if (Number(b) > caps.maxSlides) return await answer(slidesLimitMsg(caps.maxSlides), true);
     p.slides = clampSlides(Number(b), caps.maxSlides); s.slides = p.slides; p.note = undefined;
-  } else if (a === "imgs" && Number.isInteger(Number(b)) && Number(b) >= 0 && Number(b) <= ABS_MAX_IMAGES) {
+  } else if (a === "imgs") {
+    if (!(Number.isInteger(Number(b)) && Number(b) >= 0 && Number(b) <= ABS_MAX_IMAGES)) return await answer();
     if (Number(b) > caps.maxImg) return await answer(imagesLimitMsg(caps.maxImg), true);
     p.imgs = Number(b); s.imageCount = p.imgs; s.images = p.imgs > 0;
-  }
-  await Promise.all([putPending(env, uid, p), saveSettings(env, uid, s)]);
-  await answer();
-  const { text, ...extra } = pendingView(env, p, s, caps);
-  await editMessage(env, chatId, mid, text, extra);
+  } else return await answer();
+  await saveSettings(env, uid, s).catch((e) => console.error("saveSettings", e));
+
+  const next = steps[steps.indexOf(p.step) + 1];
+  if (next) { p.step = next; return await render(); }
+  return await launchFromPending(env, cq, uid, tgId, chatId, mid, p, answer); // آخرین مرحله ⇒ شروع ساخت
 }
 
 async function banned(env: Env, tgId: number, uid: Uid): Promise<boolean> {
@@ -384,8 +416,11 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     slides: Math.min(slides ?? s.slides, caps.maxSlides),
     imgs: imgCountOf(s, caps),
     model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,
+    step: "model",
+    fixed: slides !== undefined, // تعداد اسلاید در متن موضوع آمده؛ دوباره پرسیده نمی‌شود
     note: slides !== undefined && slides > caps.maxSlides ? slidesLimitMsg(caps.maxSlides) : undefined,
   };
+  pend.step = stepsOf(env, pend)[0];
   const { text: cardText, ...cardExtra } = pendingView(env, pend, s, caps);
   const card = await sendMessage(env, chatId, cardText, cardExtra);
   pend.mid = card.message_id;
