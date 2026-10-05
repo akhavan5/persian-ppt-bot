@@ -12,13 +12,13 @@ import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
-import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
+import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 
 const HELP =
   "سلام! 👋\n" +
   "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
-  "📝 فقط <b>موضوع ارائه</b> را بفرست؛ کمی بعد فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
+  "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد <b>مدل، تعداد اسلاید و تصویر</b> را همان‌جا انتخاب می‌کنی و با یک دکمه ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت دانشجویی، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب\n" +
@@ -87,6 +87,120 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
   return { text: title, ...kb(rows) };
 }
 
+// ---------- کارت انتخاب قبل از ساخت (مدل / اسلاید / تصویر) ----------
+/** وضعیت کارتِ در انتظار: موضوع + انتخاب‌های فعلی. هر کاربر یک کارت فعال دارد؛ فقط پیام همان کارت معتبر است. */
+interface Pending { topic: string; mid: number; slides: number; imgs: number; model: string; note?: string }
+const pendKey = (uid: Uid) => `pend:${uid}`;
+const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
+const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
+const MIN_STUDENT_SLIDES = 8;
+
+function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
+  const models = modelList(env);
+  const model = models.find((m) => m.id === p.model) ?? models[0];
+  const mark = (on: boolean, t: string) => (on ? `✔️ ${t}` : t);
+  const lock = (locked: boolean, t: string) => (locked ? `🔒 ${t}` : t);
+  const head = (t: string): Btn[] => [{ text: t, callback_data: "n:x" }]; // عنوان بخش (فقط نمایشی)
+  const chunk = (arr: Btn[], n: number) => { const r: Btn[][] = []; for (let i = 0; i < arr.length; i += n) r.push(arr.slice(i, i + n)); return r; };
+
+  const rows: Btn[][] = [];
+  if (models.length > 1) {
+    rows.push(head("🤖 مدل هوش مصنوعی"));
+    rows.push(...chunk(models.map((m, i) => ({ text: mark(p.model === m.id, m.name), callback_data: `p:model:${i}` })), 2));
+  }
+  rows.push(head("📄 تعداد اسلاید"));
+  rows.push(...chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5));
+  rows.push(head("🖼 تعداد تصویر"));
+  rows.push(...chunk(Array.from({ length: ABS_MAX_IMAGES + 1 }, (_, n) => ({
+    text: lock(n > caps.maxImg, mark(p.imgs === n, n === 0 ? "بدون" : toFa(String(n)))), callback_data: `p:imgs:${n}`,
+  })), 4));
+  rows.push([{ text: "🚀 ساخت ارائه", callback_data: "p:go" }, { text: "✖️ لغو", callback_data: "p:cancel" }]);
+
+  const topicShown = p.topic.length > 200 ? p.topic.slice(0, 200) + "…" : p.topic;
+  const lines = [
+    `📝 <b>موضوع:</b> ${esc(topicShown)}`,
+    "",
+    "گزینه‌ها را انتخاب کن، بعد «🚀 ساخت ارائه» را بزن:",
+    models.length > 1 ? `🤖 مدل: <b>${esc(model.name)}</b>` : "",
+    `📄 اسلاید: <b>${toFa(String(p.slides))}</b>`,
+    `🖼 تصویر: <b>${p.imgs ? toFa(String(p.imgs)) : "بدون تصویر"}</b>`,
+    s.mode === "student" && p.slides < MIN_STUDENT_SLIDES ? `🎓 <i>حالت دانشجویی حداقل ${toFa(String(MIN_STUDENT_SLIDES))} اسلاید می‌سازد.</i>` : "",
+    p.note ? `\n⚠️ <i>${esc(p.note)}</i>` : "",
+    "\n<i>تم، لحن، فونت و … از /settings تغییر می‌کند.</i>",
+  ].filter((l, i, a) => l !== "" || (i > 0 && a[i - 1] !== ""));
+  return { text: lines.join("\n"), ...kb(rows) };
+}
+
+/** دکمه‌های کارت انتخاب (p:…) */
+async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, a: string, b: string) {
+  const answer = (text?: string, alert = false) =>
+    tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
+  const p = await getPending(env, uid);
+  if (!p || p.mid !== mid) {
+    await answer("این درخواست منقضی شده است؛ موضوع را دوباره بفرست.", true);
+    return await tg(env, "editMessageReplyMarkup", { chat_id: chatId, message_id: mid, reply_markup: { inline_keyboard: [] } }).catch(() => {});
+  }
+
+  if (a === "cancel") {
+    await env.KV.delete(pendKey(uid)).catch(() => {});
+    await answer();
+    return await editMessage(env, chatId, mid, "✖️ لغو شد. هر وقت خواستی، موضوع جدید را بفرست.", { reply_markup: { inline_keyboard: [] } });
+  }
+
+  const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);
+
+  if (a === "go") {
+    const begin = await beginDeck(env, uid, p.topic, { slides: p.slides, imageCount: p.imgs });
+    if (!begin.ok) {
+      const d = begin.denied;
+      if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
+      if (d.noCredit) {
+        await answer();
+        return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, tgId));
+      }
+      if (d.needPlan) {
+        await answer();
+        return await sendMessage(env, chatId, `🔒 ${esc(d.error)}`, await buyKbFor(env, uid, tgId));
+      }
+      return await answer(d.error, true);
+    }
+    begin.settings.model = p.model; // انتخاب مدل روی همین کارت (بدون وابستگی به خواندن KV)
+    try {
+      await env.KV.delete(pendKey(uid)).catch(() => {});
+      await answer();
+      const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
+      // همین پیام به پیام وضعیت تبدیل می‌شود (دکمه‌ها برداشته می‌شوند)
+      await editMessage(env, chatId, mid,
+        `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`,
+        { reply_markup: { inline_keyboard: [] } });
+      const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId });
+      if (!ok) {
+        return await editMessage(env, chatId, mid, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.").catch(() => {});
+      }
+    } catch (e) {
+      await begin.undo();
+      throw e;
+    }
+    return;
+  }
+
+  // تغییر انتخاب‌ها: هم روی کارت و هم روی تنظیمات ذخیره‌شده‌ی کاربر (پیش‌فرض دفعه‌ی بعد)
+  if (a === "model") {
+    const m = modelList(env)[Number(b)];
+    if (m) { p.model = m.id; s.model = m.id; }
+  } else if (a === "slides" && Number(b) >= 3) {
+    if (Number(b) > caps.maxSlides) return await answer(slidesLimitMsg(caps.maxSlides), true);
+    p.slides = clampSlides(Number(b), caps.maxSlides); s.slides = p.slides; p.note = undefined;
+  } else if (a === "imgs" && Number.isInteger(Number(b)) && Number(b) >= 0 && Number(b) <= ABS_MAX_IMAGES) {
+    if (Number(b) > caps.maxImg) return await answer(imagesLimitMsg(caps.maxImg), true);
+    p.imgs = Number(b); s.imageCount = p.imgs; s.images = p.imgs > 0;
+  }
+  await Promise.all([putPending(env, uid, p), saveSettings(env, uid, s)]);
+  await answer();
+  const { text, ...extra } = pendingView(env, p, s, caps);
+  await editMessage(env, chatId, mid, text, extra);
+}
+
 async function banned(env: Env, tgId: number, uid: Uid): Promise<boolean> {
   if (isAdmin(env, tgId)) return false;
   return (await isBanned(env, tgId)) || (uid !== tgId && (await isBanned(env, uid)));
@@ -103,6 +217,8 @@ async function handleCallback(env: Env, cq: any) {
   const [act, a, b] = String(cq.data ?? "").split(":");
   if (act === "bc") return await handleBroadcastCallback(env, cq);
   if (act === "af") return await handleAdminFileCallback(env, cq);
+  if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
+  if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
   if (act === "f") {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
     const f = await loadFile(env, uid, a);
@@ -251,26 +367,27 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. /start را بزن.");
   if (!text) return await sendMessage(env, chatId, "لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست.");
 
-  // فرایند ساخت: همان سرویس مشترک نسخه‌ی وب (سقف پلن، اعتبار، قفل، برگشت اعتبار)
+  // به‌جای ساخت فوری، کارت انتخاب (مدل / اسلاید / تصویر) نشان داده می‌شود؛ اعتبار فقط با «🚀 ساخت ارائه» کم می‌شود
   const { topic, slides } = extractSlideCount(text);
-  const begin = await beginDeck(env, uid, topic, { slides });
-  if (!begin.ok) {
-    const d = begin.denied;
-    if (d.noCredit) return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, userId));
-    if (d.needPlan) return await sendMessage(env, chatId, `🔒 ${esc(d.error)}`, await buyKbFor(env, uid, userId));
-    return await sendMessage(env, chatId, d.busy ? "⏳ ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، موضوع بعدی را بفرست." : esc(d.error));
+  if (topic.length < 3) return await sendMessage(env, chatId, "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
+  if (topic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
+  if ((await runningJob(env, uid)).busy) {
+    return await sendMessage(env, chatId, "⏳ ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، موضوع بعدی را بفرست.");
   }
-
-  try {
-    const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
-    const status = await sendMessage(env, chatId,
-      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`);
-    const ok = await launchDeck(env, begin, uid, `d-${update.update_id}`, { chatId, statusMessageId: status.message_id, channel: "telegram", tgId: userId });
-    if (!ok) { // اعتبار و قفل را launchDeck برگردانده است
-      return await editMessage(env, chatId, status.message_id, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.").catch(() => {});
-    }
-  } catch (e) {
-    await begin.undo(); // مثلاً ارسال پیام وضعیت شکست خورد
-    throw e;
+  const [s, caps, credit] = await Promise.all([getSettings(env, uid), getCaps(env, uid), getCredit(env, uid)]);
+  if (!credit.unlimited && credit.total <= 0) {
+    return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, userId));
   }
+  const models = modelList(env);
+  const pend: Pending = {
+    topic, mid: 0,
+    slides: Math.min(slides ?? s.slides, caps.maxSlides),
+    imgs: imgCountOf(s, caps),
+    model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,
+    note: slides !== undefined && slides > caps.maxSlides ? slidesLimitMsg(caps.maxSlides) : undefined,
+  };
+  const { text: cardText, ...cardExtra } = pendingView(env, pend, s, caps);
+  const card = await sendMessage(env, chatId, cardText, cardExtra);
+  pend.mid = card.message_id;
+  await putPending(env, uid, pend);
 }
