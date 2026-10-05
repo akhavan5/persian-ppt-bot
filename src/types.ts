@@ -1,7 +1,13 @@
-export type Layout = "title" | "section" | "bullets" | "image_text" | "two_column" | "stats" | "table" | "chart" | "sources" | "questions" | "closing";
+export type Layout = "title" | "section" | "bullets" | "image_text" | "two_column" | "three_column" | "stats" | "table" | "chart" | "timeline" | "process" | "quote" | "icons" | "sources" | "questions" | "closing";
 
 export interface Column { heading: string; bullets: string[] }
 export interface Stat { value: string; label: string }
+/** مرحله‌ی «خط زمان» و «فرایند»: label = تاریخ/نام مرحله، text = توضیح کوتاه */
+export interface Step { label: string; text: string }
+/** نقل‌قول یا پیام کلیدی؛ author خالی = پیام کلیدی (بدون علامت نقل‌قول) */
+export interface Quote { text: string; author?: string }
+/** کارت آیکن‌دار؛ icon نام یکی از کلیدهای ICONS در themes.ts است */
+export interface IconItem { icon: string; heading: string; text: string }
 export interface Table { headers: string[]; rows: string[][] }
 export interface Chart { type: "bar" | "line" | "pie"; labels: string[]; series: { name: string; values: number[] }[] }
 
@@ -14,6 +20,9 @@ export interface Slide {
   stats: Stat[];
   table?: Table;
   chart?: Chart;
+  steps?: Step[];
+  quote?: Quote;
+  items?: IconItem[];
   image_query?: string;
   notes?: string;
 }

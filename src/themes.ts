@@ -19,3 +19,18 @@ export const TONES: Record<string, string> = {
 };
 
 export const FONTS = ["Vazirmatn", "Tahoma", "Arial"] as const;
+
+/** آیکن کارت‌ها: مدل فقط نام (کلید) را می‌نویسد و ایموجی از این جدول می‌آید؛ نام ناشناخته = ستاره */
+export const ICONS: Record<string, string> = {
+  idea: "💡", growth: "📈", people: "👥", security: "🔒", time: "⏰", money: "💰", target: "🎯", tech: "💻", book: "📚", global: "🌍",
+  health: "🩺", settings: "⚙️", check: "✅", warning: "⚠️", star: "⭐", chat: "💬", search: "🔍", shield: "🛡️", speed: "⚡", heart: "❤️",
+};
+export const iconOf = (name: string) => ICONS[String(name || "").trim().toLowerCase()] ?? ICONS.star;
+
+/** فونت Vazirmatn داخل فایل PPTX جاسازی نمی‌شود؛ روی دستگاهی که نصبش نکرده، PowerPoint فونت دیگری جایگزین می‌کند. */
+export const FONT_URL = "https://github.com/rastikerdar/vazirmatn/releases/latest";
+export const FONT_URL_ALT = "https://fonts.google.com/specimen/Vazirmatn";
+/** یادداشت نصب فونت برای کپشن تلگرام (HTML)؛ فقط وقتی فونت انتخابی Vazirmatn است */
+export const fontCaption = (font: string) => font === "Vazirmatn"
+  ? `\n\n🔤 برای نمایش درست، فونت <a href="${FONT_URL}">Vazirmatn</a> را روی دستگاهت نصب کن؛ یا در /settings فونت Tahoma را انتخاب کن.`
+  : "";

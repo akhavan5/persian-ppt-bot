@@ -10,7 +10,8 @@ import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { adminIds, bumpStat, getCredit, getUserSeen, refundCredit, releaseLock } from "./settings";
 import { BUY_SITE_NOTE, buyKbFor } from "./deck-service";
-import { logDeck, saveFile } from "./files";
+import { logDeck, saveFile, savePreview } from "./files";
+import { fontCaption } from "./themes";
 import { withStore } from "./store";
 
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
@@ -67,6 +68,10 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             theme: settings.theme, font: settings.font, persianDigits: settings.digits, images,
           });
           const filename = safeFilename(deck.title);
+          // متن اسلایدها برای پیش‌نمایش و PDF؛ خطا در ذخیره نباید ساخت ارائه را خراب کند
+          await savePreview(this.env, userId, event.instanceId, {
+            deck, theme: settings.theme, font: settings.font, digits: settings.digits, images: [...images.keys()],
+          }).catch((err) => console.error("savePreview", err));
           if (web) {
             // وب: فایل فقط در KV ذخیره می‌شود و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام باید شکست بخورد (تلاش مجدد/برگشت اعتبار)
             if (!(await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length))) {
@@ -74,7 +79,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             }
           } else {
             await sendDocument(this.env, chatId, bytes, filename,
-              `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید`);
+              `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}`);
             // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
             await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
               .catch((err) => console.error("saveFile", err));

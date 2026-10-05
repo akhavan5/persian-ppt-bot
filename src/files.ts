@@ -1,6 +1,8 @@
 /** نگه‌داری فایل‌های ساخته‌شده برای ۲۴ ساعت (بایت‌ها در KV واقعی با انقضای خودکار، فهرست در D1؛ بدون نیاز به R2). */
+import JSZip from "jszip";
 import type { Env } from "./env";
 import type { Uid } from "./settings";
+import type { Deck } from "./types";
 
 export interface FileEntry { id: string; name: string; title: string; slides: number; t: number }
 
@@ -42,6 +44,33 @@ export async function loadFile(env: Env, userId: Uid, id: string): Promise<{ ent
   if (!entry) return null;
   const data = await env.FILES.get(fileKey(userId, id), "arrayBuffer");
   return data ? { entry, data } : null;
+}
+
+// ---------- پیش‌نمایش در مرورگر (و خروجی PDF از روی همان صفحه) ----------
+// متن اسلایدها در D1 (از طریق env.KV) نگه داشته می‌شود: نوشتن D1 سهمیه‌ی ۱۰۰ هزار در روز دارد و به سهمیه‌ی ۱۰۰۰ نوشتنِ KV واقعی دست نمی‌زند.
+// تصویرها جدا ذخیره نمی‌شوند؛ از خود فایل PPTX (که در KV است) بیرون کشیده می‌شوند.
+export interface PreviewData { deck: Deck; theme: string; font: string; digits: boolean; /** شماره‌ی اسلایدهایی که تصویر دارند */ images: number[] }
+const previewKey = (userId: Uid, id: string) => `dk:${userId}:${id}`;
+
+export async function savePreview(env: Env, userId: Uid, id: string, p: PreviewData): Promise<void> {
+  const raw = JSON.stringify(p);
+  if (raw.length > 1_500_000) return; // سقف ردیف D1 دو مگابایت است
+  await env.KV.put(previewKey(userId, id), raw, { expirationTtl: TTL });
+}
+
+export async function loadPreview(env: Env, userId: Uid, id: string): Promise<PreviewData | null> {
+  const p = (await env.KV.get(previewKey(userId, id), "json")) as PreviewData | null;
+  return p && p.deck && Array.isArray(p.deck.slides) ? p : null;
+}
+
+/** تصویر اسلاید شماره‌ی slide (از صفر) را از داخل فایل PPTX برمی‌گرداند؛ PptxGenJS تصویر هر اسلاید را ppt/media/image-<شماره‌ی اسلاید از ۱>-<n>.<پسوند> ذخیره می‌کند. */
+export async function loadPreviewImage(env: Env, userId: Uid, id: string, slide: number): Promise<{ data: Uint8Array; type: string } | null> {
+  const f = await loadFileDirect(env, userId, id);
+  if (!f) return null;
+  const zip = await JSZip.loadAsync(f.data);
+  const name = Object.keys(zip.files).find((n) => n.startsWith(`ppt/media/image-${slide + 1}-`));
+  if (!name) return null;
+  return { data: await zip.files[name].async("uint8array"), type: /\.png$/i.test(name) ? "image/png" : "image/jpeg" };
 }
 
 // ---------- گزارش ۱۰ ارائه‌ی اخیر (برای مدیر) ----------

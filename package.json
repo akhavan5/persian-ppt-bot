@@ -9,6 +9,7 @@
     "sample": "tsx scripts/sample.ts"
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "pptxgenjs": "^4.0.1"
   },
   "devDependencies": {

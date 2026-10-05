@@ -120,7 +120,9 @@ textarea{min-height:110px;resize:vertical}
 details>summary{cursor:pointer;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center}
 details>summary::-webkit-details-marker{display:none}
 details>summary::after{content:"▾";color:var(--muted)} details[open]>summary::after{content:"▴"}
+.doneBtns{display:flex;flex-wrap:wrap;gap:8px}.fontNote{margin:12px 0 0;line-height:1.9}
 .file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.file .fa{display:flex;gap:6px;flex:none}
 .file:last-child{border-bottom:0} .file div{min-width:0} .file strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 dialog{border:1px solid var(--line);border-radius:20px;background:#fff;color:var(--text);max-width:440px;width:calc(100% - 32px);padding:24px;box-shadow:0 30px 80px rgba(15,27,51,.25)}
 dialog::backdrop{background:rgba(15,27,51,.5);backdrop-filter:blur(3px)}
@@ -256,7 +258,12 @@ address{font-style:normal}
     <div id="jobDone" hidden>
       <h2 style="font-size:1.1rem">✅ آماده شد</h2>
       <p style="margin:0 0 12px"><strong id="doneTitle"></strong><span class="muted" id="doneSlides"></span></p>
-      <button class="btn" id="doneDl" type="button">⬇️ دانلود فایل PPTX</button>
+      <div class="doneBtns">
+        <a class="btn ghost" id="doneView" href="#" target="_blank" rel="noopener">👁 پیش‌نمایش در مرورگر</a>
+        <a class="btn ghost" id="donePdf" href="#" target="_blank" rel="noopener">📄 خروجی PDF</a>
+        <button class="btn" id="doneDl" type="button">⬇️ دانلود فایل PPTX</button>
+      </div>
+      <p class="muted fontNote" id="doneFont" hidden>🔤 برای نمایش درست فایل PPTX روی دستگاهت، فونت <b>Vazirmatn</b> را نصب کن: <a href="https://github.com/rastikerdar/vazirmatn/releases/latest" target="_blank" rel="noopener">دانلود</a> · <a href="https://fonts.google.com/specimen/Vazirmatn" target="_blank" rel="noopener">Google Fonts</a>. پیش‌نمایش و PDF بدون نصب فونت درست دیده می‌شوند.</p>
     </div>
     <div id="jobErr" hidden><div class="msg err" id="jobErrText"></div></div>
   </section>
@@ -268,7 +275,7 @@ address{font-style:normal}
         <label>تم رنگی</label><div class="themes" id="themes"></div>
         <div class="grid2">
           <div><label for="tone">لحن</label><select id="tone"></select></div>
-          <div><label for="font">فونت</label><select id="font"></select></div>
+          <div><label for="font">فونت</label><select id="font"></select><div class="muted" id="fontHint" style="margin-top:6px;font-size:.82rem" hidden>Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد: <a href="https://github.com/rastikerdar/vazirmatn/releases/latest" target="_blank" rel="noopener">دانلود</a>. Tahoma و Arial همه‌جا کار می‌کنند.</div></div>
         </div>
         <div style="margin-top:8px">
           <label class="sw"><span>حالت دانشجویی<small>فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع</small></span><input type="checkbox" id="mode"></label>
@@ -660,7 +667,7 @@ function renderApp() {
 }
 function syncSettings() {
   const s = me.settings;
-  $("#tone").value = s.tone; $("#font").value = s.font;
+  $("#tone").value = s.tone; $("#font").value = s.font; $("#fontHint").hidden = s.font !== "Vazirmatn";
   $("#mode").checked = s.mode === "student";
   for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
   renderImages();
@@ -886,12 +893,17 @@ async function track(jobId) {
     if (s.state === "done") {
       $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = s.slides ? ` — ${fa(s.slides)} اسلاید` : "";
       $("#doneDl").onclick = (ev) => download(jobId, ev.currentTarget);
+      $("#doneView").href = $("#donePdf").href = previewUrl(jobId);
+      $("#doneFont").hidden = !(me && me.settings && me.settings.font === "Vazirmatn");
       jobView("done"); loadFiles();
     } else { $("#jobErrText").textContent = s.message; jobView("err"); }
     return;
   }
   if (my === tracking) { $("#go").disabled = false; jobView(null); }
 }
+
+// پیش‌نمایش HTML در تب جدید؛ همان صفحه دکمه‌ی «ذخیره PDF» دارد (چاپ مرورگر با مقصد Save as PDF)
+const previewUrl = (id) => "/api/files/" + encodeURIComponent(id) + "/preview";
 
 // فایل تازه ممکن است تا چند ثانیه برای همه‌ی نقاط شبکه‌ی KV دیده نشود؛ پس ۴۰۴ را چند بار دوباره امتحان می‌کنیم
 async function download(id, btn) {
@@ -925,7 +937,9 @@ async function loadFiles() {
     const hrs = Math.max(1, Math.ceil((f.t + 86400000 - Date.now()) / 3600000));
     return h("div", { class: "file" },
       h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${fa(f.slides)} اسلاید · تا ${fa(hrs)} ساعت دیگر`)),
-      h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => download(f.id, ev.currentTarget) }, "⬇️ دانلود"));
+      h("div", { class: "fa" },
+        h("a", { class: "btn ghost sm", href: previewUrl(f.id), target: "_blank", rel: "noopener" }, "👁 پیش‌نمایش / PDF"),
+        h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => download(f.id, ev.currentTarget) }, "⬇️ دانلود")));
   }));
 }
 

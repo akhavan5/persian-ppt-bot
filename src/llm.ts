@@ -1,11 +1,11 @@
 /** تولید سرفصل و محتوای اسلایدها با API سازگار با OpenAI یا Claude (یا حالت نمایشی بدون کلید). */
 import type { Env } from "./env";
-import type { Deck, Outline, OutlineItem, Slide, Layout, Table, Chart, SlideKind } from "./types";
-import { TONES } from "./themes";
+import type { Deck, Outline, OutlineItem, Slide, Layout, Table, Chart, SlideKind, Step, Quote, IconItem } from "./types";
+import { ICONS, TONES } from "./themes";
 import { toEn } from "./util";
 import { PoolExhausted, fetchWithAccounts } from "./accounts";
 
-export const LAYOUTS: Layout[] = ["title", "section", "bullets", "image_text", "two_column", "stats", "table", "chart", "sources", "questions", "closing"];
+export const LAYOUTS: Layout[] = ["title", "section", "bullets", "image_text", "two_column", "three_column", "stats", "table", "chart", "timeline", "process", "quote", "icons", "sources", "questions", "closing"];
 
 export class LlmError extends Error {
   constructor(message: string, public fatal = false) {
@@ -204,9 +204,35 @@ function coerceChart(c: any): Chart | undefined {
   return series.length ? { type, labels, series } : undefined;
 }
 
+function coerceSteps(v: unknown): Step[] {
+  return (Array.isArray(v) ? v : []).map((s: any) => ({ label: str(s?.label), text: str(s?.text) })).filter((s) => s.label || s.text).slice(0, 6);
+}
+function coerceQuote(q: any): Quote | undefined {
+  const text = str(typeof q === "string" ? q : q?.text);
+  return text ? { text, author: str(q?.author) || undefined } : undefined;
+}
+function coerceItems(v: unknown): IconItem[] {
+  return (Array.isArray(v) ? v : []).map((i: any) => ({ icon: str(i?.icon).toLowerCase(), heading: str(i?.heading), text: str(i?.text) }))
+    .filter((i) => i.heading || i.text).slice(0, 4);
+}
+
+/** چیدمانی که داده‌اش کم است (مثلاً timeline با یک مرحله) به چیدمان ساده‌تر برمی‌گردد و متن از دست نمی‌رود. */
+function finalizeLayout(sl: Slide): Slide {
+  const joined = (xs: { label?: string; heading?: string; text: string }[]) => xs.map((x) => [x.label ?? x.heading, x.text].filter(Boolean).join(": "));
+  const toBullets = (xs: string[]) => { if (!sl.bullets.length) sl.bullets = xs; sl.layout = "bullets"; };
+  switch (sl.layout) {
+    case "timeline": case "process": if ((sl.steps?.length ?? 0) < 2) toBullets(joined(sl.steps ?? [])); break;
+    case "icons": if ((sl.items?.length ?? 0) < 2) toBullets(joined(sl.items ?? [])); break;
+    case "quote": if (!sl.quote) toBullets([]); break;
+    case "three_column": if (sl.columns.length < 3) sl.layout = sl.columns.length === 2 ? "two_column" : "bullets"; break;
+    case "two_column": if (!sl.columns.length) sl.layout = "bullets"; break;
+  }
+  return sl;
+}
+
 function coerceSlide(x: any): Slide {
   const layout = LAYOUTS.includes(x?.layout) ? (x.layout as Layout) : "bullets";
-  return {
+  return finalizeLayout({
     layout,
     title: str(x?.title),
     subtitle: str(x?.subtitle) || undefined,
@@ -219,9 +245,12 @@ function coerceSlide(x: any): Slide {
       : [],
     table: coerceTable(x?.table),
     chart: coerceChart(x?.chart),
+    steps: coerceSteps(x?.steps),
+    quote: coerceQuote(x?.quote),
+    items: coerceItems(x?.items),
     image_query: str(x?.image_query) || undefined,
     notes: str(x?.notes) || undefined,
-  };
+  });
 }
 
 /** ترمیم خروجی‌های ناقص مدل‌های ضعیف‌تر (مثلاً اسلایدی که به‌جای شیء به لیست رشته‌ها تبدیل شده). */
@@ -329,13 +358,16 @@ Audience: ${o.audience || (student ? "university class" : "general")}${scope}
 Outline of the slides to write (keep this order and count): ${JSON.stringify(slice)}
 
 Return JSON: {"title": "...", "slides": [{
-  "layout": "title|section|bullets|image_text|two_column|stats|table|chart|sources|questions|closing",
+  "layout": "title|section|bullets|image_text|two_column|three_column|stats|table|chart|timeline|process|quote|icons|sources|questions|closing",
   "title": "...", "subtitle": "optional",
   "bullets": ["..."],
   "columns": [{"heading": "...", "bullets": ["..."]}, {"heading": "...", "bullets": ["..."]}],
   "stats": [{"value": "...", "label": "..."}],
   "table": {"headers": ["..."], "rows": [["..."]]},
   "chart": {"type": "bar|line|pie", "labels": ["..."], "series": [{"name": "...", "values": [1, 2]}]},
+  "steps": [{"label": "...", "text": "..."}],
+  "quote": {"text": "...", "author": "optional"},
+  "items": [{"icon": "...", "heading": "...", "text": "..."}],
   "image_query": "English description of ONE concrete visual scene for this slide (objects, setting; no abstract words), max 12 words. It must directly depict the subject of THIS presentation topic (e.g. solar panels and wind turbines for renewable energy); never generic landmarks, mosques, buildings or cultural stereotypes unless the topic itself is about them",
   "notes": "speaker notes in Persian"}]}
 
@@ -348,6 +380,12 @@ ${edges}
 - "chart": ONLY when you know real, widely reported figures (rounded is fine); labels 3-8; "pie" has exactly one series. Optionally 1-2 bullets with the takeaway. NEVER invent data: if unsure, use "table" or "bullets" instead. ${chartOk ? "Use at most once here." : 'Do NOT use "chart" in this part.'}
 - "sources" (only for outline items with kind "sources"): 3-6 entries in "bullets". Only real, well-known references you are highly confident exist (famous books with author, official organizations or their websites by name, widely known reports). No URLs, no page numbers, no invented titles; if unsure, write the organization or field name instead of a specific title.
 - "questions" (only for outline items with kind "questions"): 3-5 thought-provoking questions for the audience in "bullets", each one sentence ending with «؟».
+- "three_column": exactly 3 columns (e.g. three types, three pillars), each with a short heading and 2-3 bullets of max 8 words.
+- "timeline": 3-6 items in "steps" ordered in time; "label" = date or phase (max 3 words), "text" = one short sentence (max 12 words). Only for real chronology or history.
+- "process": 3-5 items in "steps" in execution order; "label" = step name (max 3 words), "text" = one short sentence (max 12 words). For methods, workflows, how-to.
+- "icons": 3-4 items in "items"; "icon" MUST be one of: ${Object.keys(ICONS).join(", ")}; "heading" max 3 words; "text" max 14 words. For key benefits, features or principles.
+- "quote": put ONE short sentence in "quote.text". Either a famous quote you are certain about, with "author"; or the key message of the deck (then leave "author" empty). Never invent quotes or attribute them to real people unless you are sure.
+- Use "three_column", "timeline", "process", "icons" and "quote" sparingly: each at most once in this part, never on special (sources/questions) slides, and only where the content naturally fits; otherwise use "bullets".
 - "section": only for a divider between big parts, and only in decks of 10+ slides.
 - Vary layouts; do not use the same one more than 3 times in a row.
 - Include "notes" for every slide: ${student ? "a full speaking script of 4-6 sentences" : "2-3 sentences"}.

@@ -8,7 +8,8 @@ import {
 } from "./settings";
 import { modelList } from "./llm";
 import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
-import { listFiles, loadFileDirect } from "./files";
+import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
+import { renderPreview } from "./preview";
 import {
   authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, getUserByMobile, googleCallback,
   googleEnabled, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
@@ -91,6 +92,13 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     const c = await renewSession(env, req).catch(() => null); // نشست ۳۰ روزه‌ی لغزان
     if (c) res.headers.append("set-cookie", c);
     return res;
+  }
+
+  // پیش‌نمایش در مرورگر (صفحه‌ی HTML؛ با «ذخیره PDF» همان صفحه چاپ می‌شود) و تصویر اسلایدهایش
+  const pv = method === "GET" ? path.match(/^\/api\/files\/([\w-]{1,100})\/(?:(preview)|img\/(\d{1,2}))$/) : null;
+  if (pv) {
+    if (!user) return pv[2] ? Response.redirect(`${url.origin}/`, 303) : err("ابتدا وارد شو.", 401);
+    return pv[2] ? preview(env, user, pv[1]) : previewImage(env, user, pv[1], Number(pv[3]));
   }
   if (!user) return err("ابتدا وارد شو.", 401);
 
@@ -282,4 +290,29 @@ async function download(env: Env, user: WebUser, id: string): Promise<Response> 
       ...SEC_HEADERS,
     },
   });
+}
+
+// ---------- پیش‌نمایش و PDF ----------
+const page = (body: string, status: number) => new Response(
+  `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:Tahoma,sans-serif;padding:32px;line-height:2">${body}<p><a href="/">بازگشت به سایت</a></p></body></html>`,
+  { status, headers: { "content-type": "text/html; charset=utf-8", ...SEC_HEADERS } });
+
+async function preview(env: Env, user: WebUser, id: string): Promise<Response> {
+  const p = await loadPreview(env, user.id, id);
+  if (!p) return page("پیش‌نمایش پیدا نشد یا منقضی شده است (ارائه‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
+  const nonce = randomToken(12);
+  return new Response(renderPreview(p.deck, { id, theme: p.theme, font: p.font, digits: p.digits, images: p.images, nonce }), {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      // اسکریپت فقط با nonce؛ فونت و استایل فقط از Google Fonts؛ تصویر فقط از همین سایت
+      "content-security-policy": `default-src 'none'; img-src 'self'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      ...SEC_HEADERS,
+    },
+  });
+}
+
+async function previewImage(env: Env, user: WebUser, id: string, slide: number): Promise<Response> {
+  const img = await loadPreviewImage(env, user.id, id, slide).catch(() => null);
+  if (!img) return err("پیدا نشد", 404);
+  return new Response(img.data, { headers: { "content-type": img.type, ...SEC_HEADERS, "cache-control": "private, max-age=3600" } });
 }

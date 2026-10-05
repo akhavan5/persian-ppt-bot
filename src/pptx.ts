@@ -1,7 +1,7 @@
 /** ساخت فایل PPTX فارسی (راست‌به‌چپ) با PptxGenJS؛ بازنویسی pptx_builder.py. */
 import PptxGenJS from "pptxgenjs";
 import type { Deck, Slide } from "./types";
-import { THEMES, type Theme } from "./themes";
+import { THEMES, iconOf, type Theme } from "./themes";
 import { toFa } from "./util";
 
 const W = 13.333, H = 7.5, M = 0.8; // اسلاید 16:9 و حاشیه (اینچ)
@@ -33,6 +33,8 @@ interface TextOpts {
   valign?: "top" | "middle" | "bottom";
   bullet?: boolean | "number";
   space?: number;
+  /** فونت جدا (مثلاً ایموجی)؛ پیش‌فرض فونت ارائه */
+  font?: string;
 }
 
 export interface BuildOptions {
@@ -92,7 +94,7 @@ class Builder {
         rtlMode: true, // جهت پاراگراف راست‌به‌چپ
         lang: "fa-IR",
         align: o.align ?? "right",
-        fontFace: this.font,
+        fontFace: o.font ?? this.font,
         fontSize: size,
         bold: !!o.bold,
         color,
@@ -169,16 +171,78 @@ class Builder {
     return s;
   }
 
-  private twoColumn(sd: Slide) {
+  /** ۲ یا ۳ ستون (مقایسه، سه محور)؛ ستون اول سمت راست */
+  private columns(sd: Slide, n: 2 | 3) {
     const s = this.slide(this.t.bg);
     this.title(s, sd.title);
-    const gap = 0.4, cw = (W - 2 * M - gap) / 2;
-    sd.columns.slice(0, 2).forEach((col, i) => {
-      const x = W - M - (i + 1) * cw - i * gap; // ستون اول سمت راست
+    const gap = n === 3 ? 0.3 : 0.4, cw = (W - 2 * M - gap * (n - 1)) / n, pad = n === 3 ? 0.25 : 0.35;
+    sd.columns.slice(0, n).forEach((col, i) => {
+      const x = W - M - (i + 1) * cw - i * gap;
       this.shape(s, x, 1.8, cw, 4.85, this.t.surface);
-      this.text(s, x + 0.35, 2.05, cw - 0.7, 0.7, [col.heading], 24, this.t.primary, { bold: true, valign: "middle" });
+      this.text(s, x + pad, 2.05, cw - 2 * pad, 0.7, [col.heading], n === 3 ? 22 : 24, this.t.primary, { bold: true, valign: "middle" });
       const b = col.bullets.length ? col.bullets : [""];
-      this.text(s, x + 0.35, 2.95, cw - 0.7, 3.4, b, fitSize(b, cw - 0.7, 3.4, 22, 14, true), this.t.text, { bullet: true });
+      this.text(s, x + pad, 2.95, cw - 2 * pad, 3.4, b, fitSize(b, cw - 2 * pad, 3.4, n === 3 ? 20 : 22, 14, true), this.t.text, { bullet: true });
+    });
+    return s;
+  }
+
+  /** خط زمان: مرحله‌ی اول سمت راست؛ تاریخ/عنوان بالای خط و توضیح زیر آن */
+  private timeline(sd: Slide) {
+    const s = this.slide(this.t.bg);
+    this.title(s, sd.title);
+    const st = sd.steps!.slice(0, 6), n = st.length, tw = W - 2 * M, cw = tw / n, ly = 3.4, w = cw - 0.2;
+    this.shape(s, M, ly - 0.03, tw, 0.06, this.t.muted);
+    st.forEach((x, i) => {
+      const cx = W - M - (i + 0.5) * cw;
+      this.shape(s, cx - 0.3, ly - 0.3, 0.6, 0.6, this.t.primary, "ellipse");
+      this.text(s, cx - 0.3, ly - 0.3, 0.6, 0.6, [String(i + 1)], 18, this.t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
+      this.text(s, cx - w / 2, 2.0, w, 0.85, [x.label], fitSize([x.label], w, 0.85, 22, 14, false, 0), this.t.primary, { bold: true, align: "center", valign: "bottom", space: 0 });
+      this.text(s, cx - w / 2, 3.95, w, 2.65, [x.text], fitSize([x.text], w, 2.65, 20, 13, false, 0), this.t.text, { align: "center", space: 0 });
+    });
+    return s;
+  }
+
+  /** فرایند: کارت‌های شماره‌دار با فلش به چپ (جهت خواندن فارسی) */
+  private process(sd: Slide) {
+    const s = this.slide(this.t.bg);
+    this.title(s, sd.title);
+    const st = sd.steps!.slice(0, 5), n = st.length, gap = 0.55, cw = (W - 2 * M - gap * (n - 1)) / n;
+    st.forEach((x, i) => {
+      const x0 = W - M - (i + 1) * cw - i * gap;
+      this.shape(s, x0, 2.0, cw, 3.9, this.t.surface);
+      this.shape(s, x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, this.t.primary, "ellipse");
+      this.text(s, x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, [String(i + 1)], 20, this.t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
+      this.text(s, x0 + 0.2, 3.1, cw - 0.4, 0.85, [x.label], fitSize([x.label], cw - 0.4, 0.85, 22, 14, false, 0), this.t.primary, { bold: true, align: "center", valign: "middle", space: 0 });
+      this.text(s, x0 + 0.2, 4.0, cw - 0.4, 1.7, [x.text], fitSize([x.text], cw - 0.4, 1.7, 18, 13, false, 0), this.t.text, { align: "center", space: 0 });
+      if (i < n - 1) s.addShape(this.p.ShapeType.leftArrow, { x: x0 - gap + 0.09, y: 3.7, w: gap - 0.18, h: 0.4, fill: { color: this.t.accent }, line: { type: "none" } as any });
+    });
+    return s;
+  }
+
+  /** نقل‌قول یا پیام کلیدی روی زمینه‌ی تیره */
+  private quote(sd: Slide) {
+    const s = this.slide(this.t.dark);
+    this.shape(s, 9.8, -2.2, 5.0, 5.0, this.t.primary, "ellipse", 45);
+    const q = sd.quote!, tw = W - 2 * M - 1.2;
+    this.text(s, M + 0.6, 0.6, tw, 0.6, [sd.title], 22, this.t.accent, { bold: true, space: 0 });
+    if (q.author) this.text(s, W - M - 2.6, 1.1, 2.0, 1.3, ["\u201C"], 90, this.t.accent, { bold: true, space: 0 });
+    this.text(s, M + 0.6, 2.3, tw, 2.9, [q.text], fitSize([q.text], tw, 2.9, 38, 22, false, 0), this.t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
+    if (q.author) this.text(s, M + 0.6, 5.4, tw, 0.7, ["\u2014 " + q.author], 22, this.t.onPrimary, { align: "center", space: 0 });
+    return s;
+  }
+
+  /** کارت‌های آیکن‌دار (۲ تا ۴ مورد)؛ آیکن ایموجی داخل دایره */
+  private icons(sd: Slide) {
+    const s = this.slide(this.t.bg);
+    this.title(s, sd.title);
+    const items = sd.items!.slice(0, 4), n = items.length, gap = 0.35, cw = (W - 2 * M - gap * (n - 1)) / n;
+    items.forEach((it, i) => {
+      const x0 = W - M - (i + 1) * cw - i * gap;
+      this.shape(s, x0, 1.9, cw, 4.3, this.t.surface);
+      this.shape(s, x0 + cw / 2 - 0.55, 2.2, 1.1, 1.1, this.t.primary, "ellipse");
+      this.text(s, x0 + cw / 2 - 0.55, 2.2, 1.1, 1.1, [iconOf(it.icon)], 34, this.t.onPrimary, { align: "center", valign: "middle", space: 0, font: "Segoe UI Emoji" });
+      this.text(s, x0 + 0.2, 3.55, cw - 0.4, 0.85, [it.heading], fitSize([it.heading], cw - 0.4, 0.85, 22, 14, false, 0), this.t.primary, { bold: true, align: "center", valign: "middle", space: 0 });
+      this.text(s, x0 + 0.25, 4.45, cw - 0.5, 1.55, [it.text], fitSize([it.text], cw - 0.5, 1.55, 18, 13, false, 0), this.t.text, { align: "center", space: 0 });
     });
     return s;
   }
@@ -275,7 +339,12 @@ class Builder {
       if (lay === "title" || lay === "closing") s = this.titleLike(sd, lay === "closing");
       else if (lay === "section") s = this.section(sd, ++sec);
       else if (lay === "image_text" && img) s = this.imageText(sd, img);
-      else if (lay === "two_column" && sd.columns.length) s = this.twoColumn(sd);
+      else if (lay === "three_column" && sd.columns.length >= 3) s = this.columns(sd, 3);
+      else if (lay === "two_column" && sd.columns.length) s = this.columns(sd, 2);
+      else if (lay === "timeline" && sd.steps?.length) s = this.timeline(sd);
+      else if (lay === "process" && sd.steps?.length) s = this.process(sd);
+      else if (lay === "quote" && sd.quote) s = this.quote(sd);
+      else if (lay === "icons" && sd.items?.length) s = this.icons(sd);
       else if (lay === "stats" && sd.stats.length) s = this.stats(sd);
       else if (lay === "table" && sd.table) s = this.table(sd);
       else if (lay === "chart" && sd.chart) s = this.chart(sd);
