@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { getBonus, getCredit, getRecentUsers, getStats, getUserSeen, isAdmin, isBanned, setBanned, setBonus, type Uid } from "./settings";
 import { getUserById } from "./auth";
+import { resolveUid } from "./link";
 import { getDeckLog, loadFile } from "./files";
 import { toEn, toFa } from "./util";
 
@@ -109,15 +110,17 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
   if (cmd === "/grant") {
     const n = Math.trunc(Number(toEn(args[1] ?? "")));
     if (!Number.isFinite(n) || n === 0 || Math.abs(n) > 1000) return reply("تعداد باید یک عدد صحیح غیر صفر و حداکثر ۱۰۰۰ باشد؛ مثلاً: <code>/grant " + id + " 10</code>");
-    const before = await getBonus(env, id);
+    // اعتبار هر کاربر ربات روی شناسه‌ی پروفایل وبش نگه‌داری می‌شود (نه شناسه‌ی عددی تلگرام)؛ مدیرها شناسه‌ی عددی می‌مانند
+    const acct = typeof id === "number" ? await resolveUid(env, id) : id;
+    const before = await getBonus(env, acct);
     const after = Math.max(0, before + n);
-    await setBonus(env, id, after);
-    let note = "";
+    await setBonus(env, acct, after);
+    let note = typeof id === "number" && isAdmin(env, id) ? "\nℹ️ این کاربر مدیر است و اعتبارش نامحدود؛ اعتبار اضافه برایش مصرف نمی‌شود." : "";
     if (n > 0 && typeof id === "number") { // کاربر وب پیام تلگرام نمی‌گیرد؛ اعتبارش را در صفحه می‌بیند
       try {
         await sendMessage(env, id, `🎁 ${toFa(String(n))} ارائه به اعتبار شما اضافه شد. برای دیدن اعتبار: /credit`);
       } catch {
-        note = "\n⚠️ پیام اطلاع‌رسانی به کاربر نرسید (احتمالاً هنوز ربات را شروع نکرده).";
+        note += "\n⚠️ پیام اطلاع‌رسانی به کاربر نرسید (احتمالاً هنوز ربات را شروع نکرده).";
       }
     }
     return reply(`✅ اعتبار اضافه‌ی <code>${id}</code>: ${toFa(String(before))} ← ${toFa(String(after))}${note}`);
@@ -135,10 +138,11 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
 
   if (cmd === "/user") {
     const web = typeof id === "string" ? await getUserById(env, id) : null;
-    const [seen, banned, c] = await Promise.all([typeof id === "number" ? getUserSeen(env, id) : Promise.resolve(null), isBanned(env, id), getCredit(env, id)]);
+    const acct = typeof id === "number" ? await resolveUid(env, id) : id; // اعتبار روی شناسه‌ی پروفایل وب است
+    const [seen, banned, c] = await Promise.all([typeof id === "number" ? getUserSeen(env, id) : Promise.resolve(null), isBanned(env, id), getCredit(env, acct)]);
     const credit = c.unlimited
       ? "نامحدود"
-      : `${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))} (امروز) + ${toFa(String(c.bonus))} اضافه`;
+      : `${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))} (امروز) + ${toFa(String(c.plan))} پلن + ${toFa(String(c.bonus))} اضافه`;
     if (typeof id === "string") {
       return reply(
         `🌐 <b>کاربر وب</b> <code>${id}</code>\n` +
