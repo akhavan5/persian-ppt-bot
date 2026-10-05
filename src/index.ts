@@ -3,6 +3,7 @@ import { handleUpdate } from "./bot";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { adminIds } from "./settings";
 import { handleWeb } from "./web";
+import { findLanding, landingSitemapEntries, renderLanding } from "./landing";
 
 export { DeckWorkflow } from "./workflow";
 export { BroadcastWorkflow } from "./broadcast";
@@ -20,6 +21,9 @@ function noindex(res: Response): Response {
   r.headers.set("x-robots-tag", "noindex, nofollow");
   return r;
 }
+
+// تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
+const SITEMAP_LASTMOD = "2026-10-05";
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -72,12 +76,29 @@ export default {
       return Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count });
     }
 
+    // تأیید مالکیت در وب‌مستر یاندکس (مستقیم از Worker تا ریدایرکت .html کلودفلر مانعش نشود)
+    if (url.pathname === "/yandex_85baee77d3c502ea.html") {
+      return new Response(`<html>\n    <head>\n        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">\n    </head>\n    <body>Verification: 85baee77d3c502ea</body>\n</html>\n`, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "public, max-age=3600" } });
+    }
     // سئو: robots و sitemap با دامنه‌ی واقعی سایت ساخته می‌شوند
     if (url.pathname === "/robots.txt") {
       return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /setup\nDisallow: /telegram\n\nSitemap: ${SITE}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     if (url.pathname === "/sitemap.xml") {
-      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"><url><loc>${SITE}/</loc><changefreq>weekly</changefreq><priority>1.0</priority><image:image><image:loc>${SITE}/og-image.png</image:loc><image:title>ساخت پاورپوینت فارسی با هوش مصنوعی</image:title></image:image></url></urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n${landingSitemapEntries(SITE)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+    }
+    // صفحه‌های سئو (دانشجویی، دفاع پایان‌نامه، معلمان، ...): HTML از landing.ts ساخته می‌شود
+    const landing = findLanding(url.pathname);
+    if (landing) {
+      if (landing.trailingSlash) return Response.redirect(`${SITE}/${landing.page.slug}${url.search}`, 301);
+      if (req.method !== "GET" && req.method !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
+      const html = renderLanding(landing.page, SITE);
+      return new Response(req.method === "HEAD" ? null : html, {
+        headers: {
+          "content-type": "text/html; charset=utf-8", "content-language": "fa", "cache-control": "public, max-age=300", vary: "Accept-Encoding",
+          "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "strict-origin-when-cross-origin",
+        },
+      });
     }
     // صفحه‌ی اصلی: نشانه‌ی __ORIGIN__ (canonical، og:url، داده‌ی ساختاریافته) با دامنه‌ی واقعی جایگزین می‌شود
     if (url.pathname === "/" && (req.method === "GET" || req.method === "HEAD")) {

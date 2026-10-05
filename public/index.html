@@ -194,7 +194,7 @@ address{font-style:normal}
 .ribbon{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff;font-size:.74rem;font-weight:800;line-height:1;padding:5px 12px;border-radius:99px;white-space:nowrap}
 .price{position:relative}
 /* پنجره‌ی پلن‌ها */
-#buy{max-width:580px}
+#buy,#tgBuy{max-width:580px}
 .plans{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;margin:18px 0 6px}
 @media(max-width:520px){.plans{grid-template-columns:1fr}}
 .plan{position:relative;border:2px solid var(--line);border-radius:16px;padding:18px 16px 16px;text-align:center;background:#fff}
@@ -361,6 +361,7 @@ address{font-style:normal}
         <a class="brand" href="/"><i>📊</i><span>پاورپوینت‌ساز فارسی</span></a>
         <p>از یک موضوع ساده تا ارائه‌ای کامل و آماده‌ی نمایش؛ فارسی، راست‌به‌چپ و قابل‌ویرایش.</p>
         <nav class="fnav" aria-label="پیوندهای سریع"><a href="/#features">ویژگی‌ها</a><a href="/#how">نحوه‌ی کار</a><a href="/#usecases">مخاطبان</a><a href="/#pricing">تعرفه</a><a href="/#faq">پرسش‌های متداول</a><a href="/#about">درباره‌ی ما</a><a href="/#contact">تماس با ما</a></nav>
+        <nav class="fnav" aria-label="راهنماها"><a href="/student">پاورپوینت دانشجویی</a><a href="/thesis-defense">دفاع پایان‌نامه</a><a href="/teacher">برای معلمان</a><a href="/business">اداری و کسب‌وکار</a><a href="/free">ساخت رایگان</a><a href="/ppt-saz">pptساز چیست؟</a></nav>
       </div>
       <div class="ft-seal">
         <div class="t"><b>اعتماد و پرداخت امن</b><small>برای بررسی اعتبار، روی نمادها کلیک کن.</small></div>
@@ -429,6 +430,23 @@ address{font-style:normal}
   <div class="plans" id="plans"></div>
   <p class="muted" id="buyNote" style="margin-bottom:0"></p>
 </dialog>
+
+<!-- خرید پلن برای ربات تلگرام (با لینک ربات؛ بدون ورود به حساب وب) -->
+<dialog id="tgBuy">
+  <button class="x" type="button" id="tgBuyClose" aria-label="بستن">×</button>
+  <h2 style="margin-top:0;font-size:1.15rem">👑 خرید پلن برای ربات تلگرام</h2>
+  <p class="muted" id="tgBuyNote" style="margin:4px 0 8px"></p>
+  <div id="tgBuyForm">
+    <label for="tgMobile">شماره‌ی موبایل (برای درگاه پرداخت)</label>
+    <input type="text" id="tgMobile" class="ltr" inputmode="tel" autocomplete="tel" placeholder="09123456789" maxlength="16">
+    <div class="plans" id="tgPlans"></div>
+    <p class="msg err" id="tgBuyErr" hidden></p>
+  </div>
+  <div id="tgBuyDone" hidden>
+    <p class="msg info" id="tgDoneMsg"></p>
+    <a class="btn block" id="tgBotLink" href="#" target="_blank" rel="noopener" style="margin-top:12px;text-align:center;text-decoration:none" hidden>بازگشت به ربات تلگرام</a>
+  </div>
+</dialog>
 <div class="toast"><span id="toast" role="status"></span></div>
 
 <script>
@@ -468,6 +486,7 @@ async function boot() {
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
   if (me) { if ($("#authDlg").open) $("#authDlg").close(); renderApp(); } else renderAuthBtn();
   handlePayReturn();
+  handleTgBuy();
   const saved = store.get("topic");
   if (saved && !$("#topic").value) $("#topic").value = saved;
   if (me && continueGen) { continueGen = false; $("#go").click(); }
@@ -552,9 +571,10 @@ function renderAuthBtn() {
 $("#openLogin").onclick = () => openAuth();
 $("#authClose").onclick = () => $("#authDlg").close();
 $("#buyClose").onclick = () => $("#buy").close();
+$("#tgBuyClose").onclick = () => $("#tgBuy").close();
 $("#pfClose").onclick = () => $("#profileDlg").close();
 $("#profileDlg").addEventListener("close", () => { pendingPlan = null; }); // بستن پنجره = انصراف از خرید در انتظار
-for (const d of ["#authDlg", "#buy", "#profileDlg"]) $(d).addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+for (const d of ["#authDlg", "#buy", "#profileDlg", "#tgBuy"]) $(d).addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 document.querySelectorAll("[data-auth]").forEach((b) => b.onclick = () => openAuth("register", "ثبت‌نام کن؛ سهمیه‌ی رایگان روزانه به حسابت اضافه می‌شود."));
 document.querySelectorAll("[data-plan]").forEach((b) => b.onclick = () => buyPlan(b.dataset.plan));
 
@@ -760,6 +780,7 @@ function handlePayReturn() {
   const q = new URLSearchParams(location.search), p = q.get("pay");
   if (!p) return;
   history.replaceState(null, "", "/");
+  if (q.get("tg")) { tgDone(p, q.get("p"), q.get("tg")); return; }
   const pl = me && me.plans.find((x) => x.id === q.get("p"));
   const T = {
     ok: pl ? `✅ پلن ${pl.name} فعال شد؛ ${fa(q.get("n") || pl.credits)} اعتبار ماهانه به حسابت اضافه شد.` : `✅ پرداخت موفق بود؛ ${fa(q.get("n") || "")} اعتبار به حسابت اضافه شد.`, cancel: "پرداخت لغو شد.",
@@ -768,6 +789,51 @@ function handlePayReturn() {
   };
   toast(T[p] || "");
   if (me) refreshMe();
+}
+
+// ---------- خرید پلن برای ربات تلگرام ----------
+let tgToken = null;
+function handleTgBuy() {
+  const t = new URLSearchParams(location.search).get("tgbuy");
+  if (!t) return;
+  history.replaceState(null, "", "/");
+  if (!/^[0-9a-f]{32}$/.test(t)) { toast("لینک خرید نامعتبر است؛ در ربات دوباره دکمه‌ی خرید را بزن."); return; }
+  if (!cfg.payEnabled) { toast("پرداخت آنلاین فعال نیست؛ از ربات به پشتیبانی پیام بده."); return; }
+  tgToken = t;
+  show($("#tgBuyForm"), true); show($("#tgBuyDone"), false); show($("#tgBuyErr"), false);
+  $("#tgBuyNote").textContent = "پلن برای حساب تلگرامت فعال می‌شود؛ نیازی به ورود یا ثبت‌نام در سایت نیست. شماره‌ی موبایل فقط برای درگاه پرداخت لازم است.";
+  $("#tgPlans").replaceChildren(...cfg.plans.map((p) => {
+    const best = p.id === "pro";
+    return h("div", { class: "plan" + (best ? " best" : "") },
+      best ? h("span", { class: "ribbon" }, "بیشترین اسلاید") : null,
+      h("h3", {}, `👑 پلن ${p.name}`),
+      h("div", { class: "pp" }, fa(p.price), h("small", {}, " هزار تومان / ماه")),
+      h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, `تا ${fa(p.maxSlides)} اسلاید در هر ارائه`), h("li", {}, `تا ${fa(p.maxImages)} تصویر در هر ارائه`)),
+      h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: () => tgPay(p.id) }, `خرید پلن ${p.name}`));
+  }));
+  $("#tgBuy").showModal();
+}
+async function tgPay(planId) {
+  const err = $("#tgBuyErr"); show(err, false);
+  try {
+    const r = await api("/api/pay/tg", { method: "POST", body: { token: tgToken, plan: planId, mobile: $("#tgMobile").value } });
+    location.href = r.url;
+  } catch (e) { err.textContent = e.message; show(err, true); }
+}
+function tgDone(p, planId, bot) {
+  const plan = (cfg.plans || []).find((x) => x.id === planId);
+  const T = {
+    ok: `✅ پرداخت موفق بود؛ پلن ${plan ? plan.name : ""} برای حساب تلگرامت فعال شد و پیام تأییدش در ربات ارسال شد.`,
+    cancel: "پرداخت لغو شد.",
+    error: "تأیید پرداخت با خطا روبه‌رو شد؛ چند دقیقه بعد در ربات دوباره دکمه‌ی خرید را بزن یا به پشتیبانی پیام بده.",
+  };
+  show($("#tgBuyForm"), false); show($("#tgBuyDone"), true);
+  $("#tgBuyNote").textContent = "";
+  const m = $("#tgDoneMsg"); m.className = "msg " + (p === "ok" ? "info" : "err");
+  m.textContent = T[p] || "پرداخت ناموفق بود؛ اگر مبلغی کسر شده باشد، بانک آن را برمی‌گرداند.";
+  const a = $("#tgBotLink"), valid = /^[A-Za-z0-9_]{3,64}$/.test(bot || "");
+  show(a, valid); if (valid) a.href = "https://t.me/" + bot;
+  $("#tgBuy").showModal();
 }
 
 // ---------- ساخت ارائه ----------
@@ -857,6 +923,21 @@ async function loadFiles() {
 }
 
 boot();
+
+// پرکردن کادر موضوع از لینک صفحه‌های راهنما (/?topic=...)
+(function () {
+  try {
+    const t = new URLSearchParams(location.search).get("topic");
+    if (!t) return;
+    const el = document.getElementById("topic");
+    if (!el) return;
+    el.value = t.trim().slice(0, 600);
+    history.replaceState(null, "", "/");
+    const box = document.querySelector(".maker");
+    if (box) box.scrollIntoView({ block: "center" });
+    el.focus({ preventScroll: true });
+  } catch (e) { /* بی‌اثر */ }
+})();
 </script>
 </body>
 </html>
