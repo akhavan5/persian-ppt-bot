@@ -11,6 +11,7 @@ import { toFa } from "./util";
 import { adminIds, bumpStat, getCredit, getUserSeen, refundCredit, releaseLock } from "./settings";
 import { BUY_SITE_NOTE, buyKbFor } from "./deck-service";
 import { logDeck, saveFile } from "./files";
+import { withStore } from "./store";
 
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
 
@@ -30,6 +31,8 @@ function safeFilename(title: string): string {
 }
 
 export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
+  constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
+
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
     const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
     const maxImages = Math.max(1, event.payload.maxImages ?? 1); // تلگرام: ۱ تصویر؛ وب: طبق پلن

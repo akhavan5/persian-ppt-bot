@@ -1,4 +1,4 @@
-/** نگه‌داری فایل‌های ساخته‌شده برای ۲۴ ساعت (در KV با انقضای خودکار؛ بدون نیاز به R2 یا تنظیم اضافه). */
+/** نگه‌داری فایل‌های ساخته‌شده برای ۲۴ ساعت (بایت‌ها در KV واقعی با انقضای خودکار، فهرست در D1؛ بدون نیاز به R2). */
 import type { Env } from "./env";
 import type { Uid } from "./settings";
 
@@ -21,17 +21,17 @@ export async function listFiles(env: Env, userId: Uid): Promise<FileEntry[]> {
 export async function saveFile(env: Env, userId: Uid, id: string, bytes: Uint8Array, name: string, title: string, slides: number): Promise<boolean> {
   if (bytes.byteLength > MAX_BYTES) return false;
   // متادیتا کنار خودِ فایل ذخیره می‌شود تا دانلود وب بدون خواندن فهرست (که ممکن است تا ۶۰ ثانیه قدیمی دیده شود) کار کند
-  await env.KV.put(fileKey(userId, id), bytes, { expirationTtl: TTL, metadata: { name, title: title.slice(0, 120), slides, t: Date.now() } });
+  await env.FILES.put(fileKey(userId, id), bytes, { expirationTtl: TTL, metadata: { name, title: title.slice(0, 120), slides, t: Date.now() } });
   const rest = (await listFiles(env, userId)).filter((f) => f.id !== id);
   const all = [{ id, name, title, slides, t: Date.now() }, ...rest];
-  for (const old of all.slice(KEEP)) await env.KV.delete(fileKey(userId, old.id)).catch(() => {});
+  for (const old of all.slice(KEEP)) await env.FILES.delete(fileKey(userId, old.id)).catch(() => {});
   await env.KV.put(listKey(userId), JSON.stringify(all.slice(0, KEEP)), { expirationTtl: TTL });
   return true;
 }
 
 /** دریافت مستقیم با شناسه‌ی فایل (بدون فهرست). مالکیت از خودِ کلید (شناسه‌ی کاربر) می‌آید. */
 export async function loadFileDirect(env: Env, userId: Uid, id: string): Promise<{ entry: FileEntry; data: ArrayBuffer } | null> {
-  const r = await env.KV.getWithMetadata<Omit<FileEntry, "id">>(fileKey(userId, id), "arrayBuffer");
+  const r = await env.FILES.getWithMetadata<Omit<FileEntry, "id">>(fileKey(userId, id), "arrayBuffer");
   if (!r.value || !r.metadata) return null;
   return { entry: { id, ...r.metadata }, data: r.value };
 }
@@ -40,7 +40,7 @@ export async function loadFileDirect(env: Env, userId: Uid, id: string): Promise
 export async function loadFile(env: Env, userId: Uid, id: string): Promise<{ entry: FileEntry; data: ArrayBuffer } | null> {
   const entry = (await listFiles(env, userId)).find((f) => f.id === id);
   if (!entry) return null;
-  const data = await env.KV.get(fileKey(userId, id), "arrayBuffer");
+  const data = await env.FILES.get(fileKey(userId, id), "arrayBuffer");
   return data ? { entry, data } : null;
 }
 

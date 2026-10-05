@@ -3,6 +3,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import type { Env } from "./env";
 import { esc, sendMessage } from "./telegram";
 import { toFa } from "./util";
+import { withStore } from "./store";
 
 export interface BroadcastParams { adminChatId: number; text: string }
 
@@ -40,6 +41,8 @@ async function sendOne(env: Env, id: number, text: string): Promise<boolean> {
 }
 
 export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> {
+  constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
+
   async run(event: WorkflowEvent<BroadcastParams>, step: WorkflowStep) {
     const { adminChatId, text } = event.payload;
     const ids = await step.do("collect", () => listUserIds(this.env));

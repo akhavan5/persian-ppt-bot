@@ -1,8 +1,14 @@
 import type { DeckParams } from "./types";
 import type { BroadcastParams } from "./broadcast";
+import type { Store } from "./store";
 
 export interface Env {
-  KV: KVNamespace;
+  /** پایگاه داده‌ی D1: همه‌ی داده‌های کوچک (کاربران، نشست‌ها، اعتبار، آمار، قفل‌ها) اینجا ذخیره می‌شود */
+  DB: D1Database;
+  /** KV واقعی: فقط برای بایت‌های فایل pptx (یک نوشتن برای هر ارائه، با انقضای خودکار) */
+  FILES: KVNamespace;
+  /** نمای سازگار با KV روی D1؛ در index.ts و Workflowها با withStore ساخته می‌شود و در wrangler تعریف نمی‌شود */
+  KV: Store;
   /** فایل‌های استاتیک نسخه‌ی وب (پوشه‌ی public) */
   ASSETS: Fetcher;
   DECK_WORKFLOW: Workflow<DeckParams>;

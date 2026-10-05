@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { handleUpdate } from "./bot";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { adminIds } from "./settings";
+import { withStore } from "./store";
 import { handleWeb } from "./web";
 import { findLanding, landingSitemapEntries, renderLanding } from "./landing";
 import { blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
@@ -27,7 +28,13 @@ function noindex(res: Response): Response {
 const SITEMAP_LASTMOD = "2026-10-05";
 
 export default {
-  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  // پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی D1 (cron در wrangler.jsonc)
+  async scheduled(_c: ScheduledController, rawEnv: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(withStore(rawEnv).KV.purge().catch((e) => console.error("purge", e)));
+  },
+
+  async fetch(req: Request, rawEnv: Env, ctx: ExecutionContext): Promise<Response> {
+    const env = withStore(rawEnv);
     const url = new URL(req.url);
     const SITE = (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
 
