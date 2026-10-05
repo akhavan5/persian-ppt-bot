@@ -265,7 +265,7 @@ export async function noteActive(env: Env, userId: Uid, username?: string, name?
 export const REF_MAX = 20;
 
 /** به دعوت‌کننده ۱ ارائه‌ی رایگان می‌دهد. هر کاربر جدید فقط یک بار حساب می‌شود. */
-export async function rewardReferral(env: Env, inviterId: number, newUserId: number): Promise<boolean> {
+export async function rewardReferral(env: Env, inviterId: number, newUserId: number, creditTo: Uid = inviterId): Promise<boolean> {
   if (!Number.isSafeInteger(inviterId) || inviterId <= 0 || inviterId === newUserId) return false;
   if ((await env.KV.get(`ref:${newUserId}`)) !== null) return false;
   if ((await env.KV.get(`seen:${inviterId}`)) === null) return false; // دعوت‌کننده باید کاربر واقعی ربات باشد
@@ -275,7 +275,7 @@ export async function rewardReferral(env: Env, inviterId: number, newUserId: num
   if (n >= REF_MAX) return false;
   await env.KV.put(`ref:${newUserId}`, String(inviterId));
   await env.KV.put(ck, String(n + 1));
-  await setBonus(env, inviterId, (await getBonus(env, inviterId)) + 1);
+  await setBonus(env, creditTo, (await getBonus(env, creditTo)) + 1); // creditTo: اگر دعوت‌کننده حسابش را به وب وصل کرده، شناسه‌ی حساب وب
   return true;
 }
 export async function getUserSeen(env: Env, userId: Uid): Promise<SeenUser | null> {

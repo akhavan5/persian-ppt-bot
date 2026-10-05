@@ -1,12 +1,11 @@
 /** API نسخه‌ی وب: ثبت‌نام/ورود، تنظیمات، ساخت ارائه (با همان Workflow ربات)، وضعیت و دانلود. */
 import type { Env } from "./env";
-import type { DeckParams, Settings } from "./types";
+import type { Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
 import {
-  FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, acquireLock, bumpStat, clampSlides, getActiveSub, getCredit, getSettings,
-  isAdmin, isAllowed, isBanned, isLocked, maxImagesFor, maxSlidesFor, planLink, refundCredit, releaseLock, saveSettings, spendCredit,
+  FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
+  isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
 } from "./settings";
-import { toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect } from "./files";
@@ -15,6 +14,8 @@ import {
   googleEnabled, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
   sessionCookie, type WebUser,
 } from "./auth";
+import { beginDeck, imagesLimitMsg, launchDeck, runningJob, slidesLimitMsg } from "./deck-service";
+import { consumeLoginToken, ensureUid } from "./link";
 
 const SEC_HEADERS = {
   "cache-control": "no-store",
@@ -33,13 +34,6 @@ async function readBody(req: Request): Promise<Record<string, unknown> | null> {
 
 const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
 
-const imagesLimitMsg = (max: number) => max <= FREE_MAX_IMAGES
-  ? `در پلن رایگان حداکثر ${toFa(String(FREE_MAX_IMAGES))} تصویر در هر ارائه می‌گیری؛ برای تصویر بیشتر پلن پلاس (تا ${toFa(String(PLANS[0].maxImages))} تصویر) یا پرو (تا ${toFa(String(PLANS[1].maxImages))} تصویر) را بگیر.`
-  : `سقف پلن تو ${toFa(String(max))} تصویر در هر ارائه است.`;
-const slidesLimitMsg = (max: number) => max <= FREE_MAX_SLIDES
-  ? `در پلن رایگان حداکثر ${toFa(String(FREE_MAX_SLIDES))} اسلاید می‌توانی بسازی؛ برای تعداد بیشتر پلن پلاس (تا ${toFa(String(PLANS[0].maxSlides))} اسلاید) یا پرو (تا ${toFa(String(PLANS[1].maxSlides))} اسلاید) را بگیر.`
-  : `پلن فعلی تو حداکثر ${toFa(String(max))} اسلاید در هر ارائه را پشتیبانی می‌کند؛ برای تعداد بیشتر پلن را ارتقا بده.`;
-
 export async function handleWeb(req: Request, env: Env, url: URL): Promise<Response> {
   try {
     return await route(req, env, url);
@@ -55,6 +49,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   // ورود با گوگل: مرورگر مستقیم به این آدرس‌ها هدایت می‌شود (GET)
   if (path === "/api/auth/google" && method === "GET") return googleStart(env, url);
   if (path === "/api/auth/google/callback" && method === "GET") return googleCallback(env, req, url);
+
+  // ورود خودکار از دکمه‌های ربات تلگرام (لینک یک‌بارمصرف که فقط به چت خود کاربر فرستاده شده)
+  if (path === "/api/auth/tg" && method === "GET") return tgLogin(env, url);
 
   // درگاه سیزپی: انتقال به درگاه (GET) و بازگشت از درگاه (POST از مرورگر کاربر؛ بدون بررسی origin)
   if (path === "/api/pay/go" && method === "GET") return paymentGo(env, url);
@@ -167,23 +164,6 @@ async function linkMobile(req: Request, env: Env, user: WebUser): Promise<Respon
   return json({ user: publicUser(user) });
 }
 
-// قفل «در حال ساخت» در KV نگه داشته می‌شود و KV سازگاری نهایی دارد: حذف قفل (که Workflow پس از اتمام انجام می‌دهد) تا حدود یک دقیقه
-// در بعضی نقاط هنوز دیده می‌شود و پیام «ارائه‌ی قبلی هنوز در حال ساخته شدن است» اشتباهی می‌آید. وضعیت قطعی از خود Workflow
-// (سازگاری قوی) خوانده می‌شود: اگر کار قبلی تمام/خطادار شده باشد، قفل باقی‌مانده نادیده گرفته می‌شود.
-async function runningJob(env: Env, userId: string): Promise<{ busy: boolean; jobId: string | null }> {
-  if (!(await isLocked(env, userId))) return { busy: false, jobId: null };
-  const jobId = await env.KV.get(`wj:${userId}`);
-  if (jobId) {
-    const inst = await env.DECK_WORKFLOW.get(jobId).catch(() => null);
-    const st = inst ? await inst.status().catch(() => null) : null;
-    if (st && (st.status === "complete" || st.status === "errored" || st.status === "terminated")) {
-      await releaseLock(env, userId).catch(() => {});
-      return { busy: false, jobId: null };
-    }
-  }
-  return { busy: true, jobId };
-}
-
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
   const [c, settings, running, sub, maxSlides, maxImages] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id)]);
@@ -232,62 +212,43 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
   return json({ settings: await getSettings(env, user.id) });
 }
 
+// ---------- ورود خودکار از ربات ----------
+/** GET /api/auth/tg?t=توکن&to=buy|home — توکن فقط داخل چت تلگرامِ خود کاربر آمده؛ مصرف می‌شود، نشست ۳۰ روزه ساخته می‌شود و کاربر به سایت می‌رود */
+async function tgLogin(env: Env, url: URL): Promise<Response> {
+  const fail = () => Response.redirect(`${url.origin}/?login=expired`, 303);
+  const tgId = await consumeLoginToken(env, url.searchParams.get("t") ?? "");
+  if (!tgId || (await isBanned(env, tgId))) return fail();
+  const uid = await ensureUid(env, tgId); // حساب وب خودکار اگر هنوز نبود
+  if (typeof uid !== "string") return fail(); // مدیرها پروفایل وب خودکار ندارند
+  const token = await createSession(env, uid);
+  const to = url.searchParams.get("to") === "buy" ? "/?buy=1" : "/";
+  return new Response(null, {
+    status: 303,
+    headers: { location: `${url.origin}${to}`, "set-cookie": sessionCookie(token), "cache-control": "no-store", "referrer-policy": "no-referrer" },
+  });
+}
+
 // ---------- ساخت ارائه ----------
+// قوانین (سقف پلن، اعتبار، قفل، برگشت اعتبار) در سرویس مشترک deck-service است و ربات تلگرام هم از همان استفاده می‌کند.
 async function generate(req: Request, env: Env, user: WebUser): Promise<Response> {
   if (!isAllowed(env, user.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
   if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
 
   const b = await readBody(req);
-  const topic = String(b?.topic ?? "").replace(/\s+/g, " ").trim();
-  if (topic.length < 3) return err("موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
-  if (topic.length > 600) return err("موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
-
-  // سقف اسلاید بر اساس پلن؛ پیش از کسر اعتبار بررسی می‌شود
-  const maxSlides = await maxSlidesFor(env, user.id);
-  if (typeof b?.slides === "number" && Number.isFinite(b.slides) && Math.round(b.slides) > maxSlides) {
-    return json({ error: slidesLimitMsg(maxSlides), needPlan: true }, 403);
+  const begin = await beginDeck(env, user.id, String(b?.topic ?? ""), {
+    slides: typeof b?.slides === "number" ? b.slides : undefined,
+    imageCount: typeof b?.imageCount === "number" ? b.imageCount : undefined,
+  });
+  if (!begin.ok) {
+    const d = begin.denied;
+    return json({ error: d.error, ...(d.needPlan ? { needPlan: true } : {}), ...(d.noCredit ? { noCredit: true } : {}) }, d.status);
   }
-
-  // تعداد تصویر: انتخاب کاربر (یا تنظیم ذخیره‌شده) در سقف پلن
-  const maxImg = await maxImagesFor(env, user.id);
-  if (typeof b?.imageCount === "number" && Number.isFinite(b.imageCount) && Math.round(b.imageCount) > maxImg) {
-    return json({ error: imagesLimitMsg(maxImg), needPlan: true }, 403);
-  }
-
-  if ((await runningJob(env, user.id)).busy) return err("ارائه‌ی قبلی هنوز در حال ساخته شدن است؛ کمی صبر کن.", 409);
-
-  const quota = await spendCredit(env, user.id);
-  if (!quota.ok) return json({ error: "اعتبارت تمام شده است.", noCredit: true }, 402);
-  await acquireLock(env, user.id);
-
-  const settings: Settings = await getSettings(env, user.id);
-  settings.slides = typeof b?.slides === "number" && Number.isFinite(b.slides) ? clampSlides(b.slides, maxSlides) : Math.min(settings.slides, maxSlides);
-  const wantImg = typeof b?.imageCount === "number" && Number.isFinite(b.imageCount) ? Math.round(b.imageCount) : (settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0));
-  const imageCount = Math.max(0, Math.min(wantImg, maxImg));
-  settings.images = imageCount > 0;
-  if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8);
-
-  const undo = async () => {
-    await refundCredit(env, user.id, quota.source, quota.day).catch((e) => console.error("refund", e));
-    await releaseLock(env, user.id).catch((e) => console.error("unlock", e));
-  };
 
   // شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow؛ پیشوندش شناسه‌ی کاربر است تا مالکیت بدون خواندن KV بررسی شود
   const jobId = `${user.id}-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
-  const params: DeckParams = {
-    chatId: 0, statusMessageId: 0, userId: user.id, channel: "web",
-    topic, settings, maxImages: imageCount, credit: quota.source, day: quota.day,
-  };
-  try {
-    await env.KV.put(`job:${jobId}`, "⏳ در صف…", { expirationTtl: 3600 });
-    await env.KV.put(`wj:${user.id}`, jobId, { expirationTtl: 900 });
-    await env.DECK_WORKFLOW.create({ id: jobId, params });
-  } catch (e) {
-    console.error("workflow create failed", e);
-    await undo();
+  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web" }))) {
     return err("شروع ساخت ارائه ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن.", 503);
   }
-  await bumpStat(env, "started").catch(() => {});
   return json({ jobId });
 }
 

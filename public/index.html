@@ -486,6 +486,7 @@ async function boot() {
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
   if (me) { if ($("#authDlg").open) $("#authDlg").close(); renderApp(); } else renderAuthBtn();
   handlePayReturn();
+  handleTgLogin();
   handleTgBuy();
   const saved = store.get("topic");
   if (saved && !$("#topic").value) $("#topic").value = saved;
@@ -775,6 +776,12 @@ async function buyPlan(id) {
     const r = await api("/api/pay/start", { method: "POST", body: { plan: id } });
     location.href = r.url;
   } catch (e) { toast(e.message); }
+}
+// ورود خودکار از دکمه‌های ربات تلگرام: ‎/?buy=1 بعد از ورود، پنجره‌ی پلن‌ها را باز می‌کند
+function handleTgLogin() {
+  const q = new URLSearchParams(location.search);
+  if (q.get("login") === "expired") { history.replaceState(null, "", "/"); toast("لینک ورود منقضی شده؛ در ربات دوباره دکمه‌ی خرید یا /site را بزن."); return; }
+  if (q.get("buy")) { history.replaceState(null, "", "/"); if (me) openBuy(); else openAuth("register", "برای خرید پلن وارد شو یا ثبت‌نام کن."); }
 }
 function handlePayReturn() {
   const q = new URLSearchParams(location.search), p = q.get("pay");

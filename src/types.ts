@@ -48,6 +48,8 @@ export interface DeckParams {
   statusMessageId: number;
   /** تلگرام: عدد؛ وب: رشته‌ی «w_…» */
   userId: number | string;
+  /** تلگرام: شناسه‌ی عددی تلگرام فرستنده؛ وقتی حساب به وب وصل است userId شناسه‌ی «w_…» است و این فیلد خود تلگرام را نگه می‌دارد */
+  tgId?: number;
   /** کانال تحویل: پیش‌فرض تلگرام. در «web» به‌جای ارسال فایل، در KV ذخیره می‌شود و صفحه‌ی وب آن را دانلود می‌کند */
   channel?: "telegram" | "web";
   topic: string;

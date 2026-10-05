@@ -8,7 +8,8 @@ import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument, sendMessage } from "./telegram";
 import { getUserById } from "./auth";
 import { toFa } from "./util";
-import { BUY_NOTE, adminIds, buyKb, bumpStat, getCredit, getUserSeen, refundCredit, releaseLock } from "./settings";
+import { adminIds, bumpStat, getCredit, getUserSeen, refundCredit, releaseLock } from "./settings";
+import { BUY_SITE_NOTE, buyKbFor } from "./deck-service";
 import { logDeck, saveFile } from "./files";
 
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
@@ -78,7 +79,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           // ثبت در گزارش مدیر (/decks)؛ خطا نباید گام را شکست بدهد
           const seen = web
             ? await getUserById(this.env, String(userId)).then((w) => (w ? { n: w.name || w.email || w.mobile || "", u: null } : null)).catch(() => null)
-            : await getUserSeen(this.env, userId as number).catch(() => null);
+            : await getUserSeen(this.env, (event.payload.tgId ?? userId) as number).catch(() => null);
           await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now() })
             .catch((err) => console.error("logDeck", err));
           if (web) return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename };
@@ -87,8 +88,9 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           const c = await getCredit(this.env, userId).catch(() => null);
           if (c && !c.unlimited && c.total <= 1) {
             const warn = c.total === 0 ? "⚠️ اعتبارت تمام شد." : "⚠️ فقط ۱ ارائه‌ی دیگر اعتبار داری.";
+            const buyKb = await buyKbFor(this.env, userId, event.payload.tgId).catch(() => undefined);
             await editMessage(this.env, chatId, mid,
-              `${done}\n\n${warn}\n${BUY_NOTE}\n🎁 یا با /invite دوستانت را دعوت کن و ارائه‌ی رایگان بگیر.`, buyKb(userId)).catch(() => {});
+              `${done}\n\n${warn}\n${BUY_SITE_NOTE}\n🎁 یا با /invite دوستانت را دعوت کن و ارائه‌ی رایگان بگیر.`, buyKb).catch(() => {});
           } else {
             await status(done);
           }
