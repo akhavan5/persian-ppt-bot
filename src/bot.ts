@@ -126,10 +126,6 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
     })), 4);
   }
 
-  const nav: Btn[] = [];
-  if (idx > 0) nav.push({ text: "◀️ مرحله‌ی قبل", callback_data: "p:back" });
-  nav.push({ text: "✖️ لغو", callback_data: "p:cancel" });
-
   const topicShown = p.topic.length > 200 ? p.topic.slice(0, 200) + "…" : p.topic;
   // انتخاب‌های مرحله‌های قبل (جلوی چشم کاربر)
   const done: string[] = [];
@@ -144,7 +140,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
     ask,
     ...(p.note ? [`\n⚠️ <i>${esc(p.note)}</i>`] : []),
   ].join("\n");
-  return { text, ...kb([...opts, nav]) };
+  return { text, ...kb(opts) };
 }
 
 /** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
