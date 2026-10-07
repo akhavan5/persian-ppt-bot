@@ -338,7 +338,8 @@ class Builder {
     const s = this.slide(this.t.bg);
     this.title(s, sd.title);
     this.shape(s, M, 1.8, W - 2 * M, foot ? 4.5 : 4.85, this.t.surface);
-    const paras = sd.bullets.length ? sd.bullets : [""];
+    const colBullets = sd.columns.flatMap((c) => c.bullets);
+    const paras = sd.bullets.length ? sd.bullets : colBullets.length ? colBullets : [""];
     const iw = W - 2 * M - 1.0, ih = foot ? 3.8 : 4.1;
     this.text(s, M + 0.5, 2.1, iw, ih, paras, fitSize(paras, iw, ih, foot ? 22 : 26, 14, true, 12), this.t.text,
       { bullet: "number", valign: "middle", space: 12 });

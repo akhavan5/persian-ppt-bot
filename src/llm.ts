@@ -283,6 +283,14 @@ export function normalizeOutline(data: any, topic: string): Outline {
       : { title: str(s?.title), summary: str(s?.summary), kind: s?.kind === "sources" || s?.kind === "questions" ? (s.kind as SlideKind) : undefined })
     .filter((s: OutlineItem) => s.title);
   if (slides.length < 2) throw new Error("model returned no valid outline");
+  // kind فقط روی اسلاید میانی و حداکثر یک بار برای هر نوع (جلوگیری از «sources» روی همه‌ی اسلایدها)
+  const seen = new Set<string>();
+  slides.forEach((s, i) => {
+    if (!s.kind) return;
+    const edge = i === 0 || i === slides.length - 1;
+    if (edge || seen.has(s.kind)) delete s.kind;
+    else seen.add(s.kind);
+  });
   return { title: str(data?.title) || topic, slides };
 }
 
@@ -325,7 +333,8 @@ Topic: ${topic}
 Number of slides (including title and closing): ${n}
 Tone: ${TONES[tone] ?? tone}
 Audience: ${o.audience || (o.mode === "student" ? "university class" : "general")}${researchBlock(o)}
-Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers", "kind": "sources|questions (ONLY on those special slides, otherwise omit)"}]}
+Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers"}]}
+Only the single recommended-sources slide gets the extra field "kind":"sources", and only the single discussion-questions slide gets "kind":"questions". Every other slide MUST NOT have a "kind" field.
 ${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model); // ۳۵ اسلاید با ۲۵۰۰ توکن جا نمی‌شد
   const out = normalizeOutline(data, topic);
   out.slides = ensureKinds(out.slides, o);

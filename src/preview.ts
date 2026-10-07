@@ -147,7 +147,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
     }).join("") };
   };
   const numbered = (sd: Slide, foot?: string): R => {
-    const paras = sd.bullets.length ? sd.bullets : [""], iw = W - 2 * M - 1.0, ih = foot ? 3.8 : 4.1;
+    const colBullets = sd.columns.flatMap((c) => c.bullets), paras = sd.bullets.length ? sd.bullets : colBullets.length ? colBullets : [""], iw = W - 2 * M - 1.0, ih = foot ? 3.8 : 4.1;
     return { bg: t.bg, num: true, html: title(sd.title) + shape(M, 1.8, W - 2 * M, foot ? 4.5 : 4.85, t.surface) +
       text(M + 0.5, 2.1, iw, ih, paras, fitSize(paras, iw, ih, foot ? 22 : 26, 14, true, 12), t.text, { bullet: "number", valign: "middle", space: 12 }) +
       (foot ? text(M, 6.45, W - 2 * M, 0.35, [foot], 11, t.muted, { space: 0 }) : "") };
