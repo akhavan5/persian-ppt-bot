@@ -85,20 +85,24 @@ async function tavily(env: Env, query: string, limit: number): Promise<Hit[]> {
 
 /** نرمال‌سازی فارسی: ی/ک عربی، نیم‌فاصله، اعراب، حروف بزرگ */
 const norm = (s: string) => s.toLowerCase().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/[\u064B-\u065F\u0640]/g, "").replace(/\u200c/g, " ");
-const STOP = new Set(["و", "در", "به", "از", "که", "با", "برای", "این", "آن", "را", "یا", "درباره", "مورد", "ارائه", "پاورپوینت", "اسلاید", "دیدگاه", "دیدگاهها", "نگاه", "نظر", "نظرات", "استاد", "دکتر", "آقای", "بررسی", "تحلیل", "چیست", "چگونه", "آخرین", "وضعیت", "سناریو", "سناریوها", "سناریوی", "سناریوهای", "پیش", "رو", "روی", "پیشرو", "آینده", "تحولات", "چشم", "انداز", "اخیر", "جدید", "مورد", "بین", "the", "of", "and", "in", "to", "for", "a", "about", "presentation"]);
+const STOP = new Set(["و", "در", "به", "از", "که", "با", "برای", "این", "آن", "را", "یا", "درباره", "مورد", "ارائه", "پاورپوینت", "اسلاید", "دیدگاه", "دیدگاهها", "نگاه", "نظر", "نظرات", "استاد", "دکتر", "آقای", "بررسی", "تحلیل", "چیست", "چگونه", "آخرین", "وضعیت", "سناریو", "سناریوها", "سناریوی", "سناریوهای", "پیش", "رو", "روی", "پیشرو", "آینده", "تحولات", "چشم", "انداز", "اخیر", "جدید", "مورد", "بین", "رابطه", "خصوص", "زمینه", "پیرامون", "موضوع", "مسئله", "مساله", "ماجرا", "خبر", "اخبار", "علت", "دلایل", "دلیل", "همه", "چه", "چرا", "the", "of", "and", "in", "to", "for", "a", "about", "presentation"]);
 /** کلمه‌های معنادار پرسش */
 const keyTokens = (q: string) => norm(q).split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2 && !STOP.has(t));
 /** نتایج بی‌ربط (جستجوی متنی ویکی‌پدیا/وب گاهی فقط یک کلمه‌ی مشترک دارند) حذف می‌شوند:
  *  دست‌کم بخش بزرگی از کلمه‌های موضوع باید در عنوان/متن بیاید (با چشم‌پوشی از فاصله و نیم‌فاصله: «رحیم‌پور» = «رحیم پور») */
-function relevant(tokens: string[], h: Hit): boolean {
-  if (BAD_HOSTS.test(h.src)) return false;
-  if (!tokens.length) return true;
+function matchCount(tokens: string[], h: Hit): number {
   const words = norm(`${h.title} ${h.text}`).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   const bag = new Set(words);
   for (let i = 0; i + 1 < words.length; i++) bag.add(words[i] + words[i + 1]); // «رحیم‌پور» = «رحیم پور»
   const same = (t: string, w: string) => t === w || (t.length >= 4 && w.length >= 4 && (w.startsWith(t) || t.startsWith(w))); // ایران ~ ایرانی (بدون تطبیق وسط کلمه)
-  const hit = tokens.filter((t) => { for (const w of bag) if (same(t.replace(/\s+/g, ""), w)) return true; return false; }).length;
-  return hit >= Math.min(2, tokens.length) && hit / tokens.length >= (tokens.length <= 2 ? 1 : 0.6);
+  return tokens.filter((t) => { for (const w of bag) if (same(t.replace(/\s+/g, ""), w)) return true; return false; }).length;
+}
+/** حداقل نیمی از کلمه‌های اصلی (و دست‌کم دو کلمه) باید بیاید؛ پرسش‌های ۱ یا ۲ کلمه‌ای همه را می‌خواهند */
+function relevant(tokens: string[], h: Hit): boolean {
+  if (BAD_HOSTS.test(h.src)) return false;
+  if (!tokens.length) return true;
+  const hit = matchCount(tokens, h);
+  return hit >= Math.min(2, tokens.length) && hit / tokens.length >= (tokens.length <= 2 ? 1 : 0.5);
 }
 /** شبکه‌های اجتماعی/ویدیویی منبع مناسبی برای یادداشت پژوهشی نیستند */
 const BAD_HOSTS = /(facebook|instagram|twitter|(^|\.)x\.com|t\.me|telegram|youtube|youtu\.be|tiktok|pinterest|aparat|eitaa|rubika)/i;
@@ -110,6 +114,20 @@ export async function researchTopic(env: Env, topic: string): Promise<string> {
   if (!searchEnabled(env)) return "";
   try {
     const q = topic.replace(/^(یک\s+)?(ارائه|پاورپوینت|اسلاید)\s*(درباره(‌|\s)?ی|در مورد|پیرامون)?\s*/u, "").trim() || topic;
+    // حالت «فقط Tavily»: اگر کلید تنظیم شده باشد، فقط Tavily و بدون هیچ فیلتری (ویکی‌پدیا/DuckDuckGo خاموش‌اند)
+    if (env.TAVILY_API_KEY) {
+      const hits = await safe("tavily", tavily(env, q, 8));
+      console.log("research", JSON.stringify({ tavily: `${hits.length}→${hits.length}` }), "q:", q.slice(0, 80));
+      const out: string[] = [];
+      let n = 0;
+      for (const h of hits) {
+        const line = `- [${h.src} · ${h.via}] ${h.title}: ${h.text}`;
+        if (n + line.length > MAX_NOTES_CHARS) break;
+        out.push(line); n += line.length;
+        console.log("research-hit", h.via, h.src, "|", h.title.slice(0, 90));
+      }
+      return out.join("\n");
+    }
     const [wfa, wen, ddg, tav] = await Promise.all([
       safe("wiki-fa", wikipedia("fa", q, 3)),
       /[A-Za-z]{3}/.test(q) ? safe("wiki-en", wikipedia("en", q, 2)) : Promise.resolve([] as Hit[]), // پرسش کاملاً فارسی در ویکی انگلیسی نتیجه‌ی مفیدی ندارد
@@ -119,7 +137,12 @@ export async function researchTopic(env: Env, topic: string): Promise<string> {
     // ترتیب اهمیت: Tavily/DDG (تازه‌تر) و ویکی‌پدیا (دقیق‌تر)؛ از هر منبع به‌نوبت برداشته می‌شود تا یکی بقیه را پر نکند
     const tokens = keyTokens(q);
     const raw = { "wiki-fa": wfa, tavily: tav, ddg, "wiki-en": wen };
-    const lists = [wfa, tav, ddg, wen].map((l) => l.filter((h) => relevant(tokens, h)));
+    const lists = [wfa, tav, ddg, wen].map((l) => l.filter((h) => {
+      const ok = relevant(tokens, h);
+      if (!ok) console.log("research-drop", h.via, h.src, `${matchCount(tokens, h)}/${tokens.length}`, "|", h.title.slice(0, 70)); // برای عیب‌یابی: چرا نتیجه‌ای کنار گذاشته شد
+      return ok;
+    }));
+    console.log("research-tokens", tokens.join(","));
     // فقط در لاگ Worker (داشبورد کلودفلر ← Logs): هر منبع چند نتیجه آورد → چند تا ماند
     console.log("research", JSON.stringify(Object.fromEntries(Object.entries(raw).map(([k, v], i) => [k, `${v.length}→${lists[i].length}`]))), "q:", q.slice(0, 80));
     const lines: string[] = [];
