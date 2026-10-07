@@ -13,7 +13,7 @@
  */
 import type { Env } from "./env";
 
-interface Hit { src: string; title: string; text: string }
+interface Hit { src: string; title: string; text: string; /** موتور جستجو: wiki-fa | wiki-en | ddg | tavily */ via: string }
 
 const MAX_NOTES_CHARS = 4000;
 const TIMEOUT_MS = 8_000;
@@ -37,7 +37,7 @@ async function wikipedia(lang: "fa" | "en", query: string, limit: number): Promi
   return pages
     .sort((a: any, b: any) => (a.index ?? 0) - (b.index ?? 0))
     .filter((x: any) => x?.extract)
-    .map((x: any) => ({ src: `${lang}.wikipedia.org`, title: clean(x.title, 100), text: clean(x.extract, 650) }));
+    .map((x: any) => ({ src: `${lang}.wikipedia.org`, title: clean(x.title, 100), text: clean(x.extract, 650), via: `wiki-${lang}` }));
 }
 
 /** DuckDuckGo HTML (بدون کلید). ممکن است گاهی محدود شود؛ در آن صورت فقط نادیده گرفته می‌شود. */
@@ -45,7 +45,7 @@ async function duckduckgo(query: string, limit: number): Promise<Hit[]> {
   const r = await fetch("https://html.duckduckgo.com/html/", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": "Mozilla/5.0 (compatible; persian-ppt-bot/1.0)", "accept-language": "fa,en;q=0.8" },
-    body: new URLSearchParams({ q: query.slice(0, 300) }).toString(),
+    body: new URLSearchParams({ q: query.slice(0, 300), ...(/آخرین|اخیر|جدید|امروز|latest|news/i.test(query) ? { df: "m" } : {}) }).toString(), // موضوع‌های «آخرین/اخیر»: فقط نتایج یک ماه گذشته
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!r.ok) throw new Error(`duckduckgo ${r.status}`);
@@ -61,7 +61,7 @@ async function duckduckgo(query: string, limit: number): Promise<Hit[]> {
       host = new URL(link.searchParams.get("uddg") || raw).hostname.replace(/^www\./, "");
     } catch { /* آدرس نامعتبر */ }
     const text = clean(m[3], 400);
-    if (host && text) out.push({ src: host, title: clean(m[2], 110), text });
+    if (host && text) out.push({ src: host, title: clean(m[2], 110), text, via: "ddg" });
   }
   return out;
 }
@@ -79,9 +79,29 @@ async function tavily(env: Env, query: string, limit: number): Promise<Hit[]> {
   const j = (await r.json()) as any;
   return (Array.isArray(j?.results) ? j.results : []).map((x: any) => {
     let host = ""; try { host = new URL(x.url).hostname.replace(/^www\./, ""); } catch { /* */ }
-    return { src: host || "web", title: clean(x.title, 110), text: clean(x.content, 450) };
+    return { src: host || "web", title: clean(x.title, 110), text: clean(x.content, 450), via: "tavily" };
   });
 }
+
+/** نرمال‌سازی فارسی: ی/ک عربی، نیم‌فاصله، اعراب، حروف بزرگ */
+const norm = (s: string) => s.toLowerCase().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/[\u064B-\u065F\u0640]/g, "").replace(/\u200c/g, " ");
+const STOP = new Set(["و", "در", "به", "از", "که", "با", "برای", "این", "آن", "را", "یا", "درباره", "مورد", "ارائه", "پاورپوینت", "اسلاید", "دیدگاه", "دیدگاهها", "نگاه", "نظر", "نظرات", "استاد", "دکتر", "آقای", "بررسی", "تحلیل", "چیست", "چگونه", "آخرین", "وضعیت", "سناریو", "سناریوها", "سناریوی", "سناریوهای", "پیش", "رو", "روی", "پیشرو", "آینده", "تحولات", "چشم", "انداز", "اخیر", "جدید", "مورد", "بین", "the", "of", "and", "in", "to", "for", "a", "about", "presentation"]);
+/** کلمه‌های معنادار پرسش */
+const keyTokens = (q: string) => norm(q).split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2 && !STOP.has(t));
+/** نتایج بی‌ربط (جستجوی متنی ویکی‌پدیا/وب گاهی فقط یک کلمه‌ی مشترک دارند) حذف می‌شوند:
+ *  دست‌کم بخش بزرگی از کلمه‌های موضوع باید در عنوان/متن بیاید (با چشم‌پوشی از فاصله و نیم‌فاصله: «رحیم‌پور» = «رحیم پور») */
+function relevant(tokens: string[], h: Hit): boolean {
+  if (BAD_HOSTS.test(h.src)) return false;
+  if (!tokens.length) return true;
+  const words = norm(`${h.title} ${h.text}`).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const bag = new Set(words);
+  for (let i = 0; i + 1 < words.length; i++) bag.add(words[i] + words[i + 1]); // «رحیم‌پور» = «رحیم پور»
+  const same = (t: string, w: string) => t === w || (t.length >= 4 && w.length >= 4 && (w.startsWith(t) || t.startsWith(w))); // ایران ~ ایرانی (بدون تطبیق وسط کلمه)
+  const hit = tokens.filter((t) => { for (const w of bag) if (same(t.replace(/\s+/g, ""), w)) return true; return false; }).length;
+  return hit >= Math.min(2, tokens.length) && hit / tokens.length >= (tokens.length <= 2 ? 1 : 0.6);
+}
+/** شبکه‌های اجتماعی/ویدیویی منبع مناسبی برای یادداشت پژوهشی نیستند */
+const BAD_HOSTS = /(facebook|instagram|twitter|(^|\.)x\.com|t\.me|telegram|youtube|youtu\.be|tiktok|pinterest|aparat|eitaa|rubika)/i;
 
 const safe = (name: string, p: Promise<Hit[]>): Promise<Hit[]> => p.catch((e) => { console.error("search", name, e instanceof Error ? e.message : e); return []; });
 
@@ -92,12 +112,16 @@ export async function researchTopic(env: Env, topic: string): Promise<string> {
     const q = topic.replace(/^(یک\s+)?(ارائه|پاورپوینت|اسلاید)\s*(درباره(‌|\s)?ی|در مورد|پیرامون)?\s*/u, "").trim() || topic;
     const [wfa, wen, ddg, tav] = await Promise.all([
       safe("wiki-fa", wikipedia("fa", q, 3)),
-      safe("wiki-en", wikipedia("en", q, 2)),
+      /[A-Za-z]{3}/.test(q) ? safe("wiki-en", wikipedia("en", q, 2)) : Promise.resolve([] as Hit[]), // پرسش کاملاً فارسی در ویکی انگلیسی نتیجه‌ی مفیدی ندارد
       safe("ddg", duckduckgo(q, 5)),
       safe("tavily", tavily(env, q, 5)),
     ]);
     // ترتیب اهمیت: Tavily/DDG (تازه‌تر) و ویکی‌پدیا (دقیق‌تر)؛ از هر منبع به‌نوبت برداشته می‌شود تا یکی بقیه را پر نکند
-    const lists = [wfa, tav, ddg, wen];
+    const tokens = keyTokens(q);
+    const raw = { "wiki-fa": wfa, tavily: tav, ddg, "wiki-en": wen };
+    const lists = [wfa, tav, ddg, wen].map((l) => l.filter((h) => relevant(tokens, h)));
+    // فقط در لاگ Worker (داشبورد کلودفلر ← Logs): هر منبع چند نتیجه آورد → چند تا ماند
+    console.log("research", JSON.stringify(Object.fromEntries(Object.entries(raw).map(([k, v], i) => [k, `${v.length}→${lists[i].length}`]))), "q:", q.slice(0, 80));
     const lines: string[] = [];
     const seen = new Set<string>();
     let used = 0;
@@ -110,9 +134,10 @@ export async function researchTopic(env: Env, topic: string): Promise<string> {
         const key = (h.src + h.title).toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
-        const line = `- [${h.src}] ${h.title}: ${h.text}`;
+        const line = `- [${h.src} · ${h.via}] ${h.title}: ${h.text}`;
         if (used + line.length > MAX_NOTES_CHARS) continue;
         lines.push(line);
+        console.log("research-hit", h.via, h.src, "|", h.title.slice(0, 90));
         used += line.length;
       }
       if (!any) break;

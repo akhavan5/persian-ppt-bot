@@ -292,7 +292,7 @@ const wantSources = (o: ContentOpts) => o.mode === "student" || !!o.sources;
 const wantQuestions = (o: ContentOpts) => !!o.questions;
 /** یادداشت‌های جستجوی وب برای پرامپت؛ فقط منبع واقعیت‌هاست و نباید در متن ذکر شود */
 const researchBlock = (o: ContentOpts) => o.research
-  ? `\nBackground notes from a live web search (snippets, may be partial or off-topic; use them only to ground facts, names, dates and figures; never copy sentences, never mention "search" or "notes"; ignore anything irrelevant; if they conflict with each other, avoid the disputed number):\n${o.research}\n`
+  ? `\nBackground notes from a live web search (short snippets; may be partial). They are MORE up to date than your own knowledge, so for recent events and current facts trust them over your memory: make the slides specific (names, dates, events, figures) wherever the notes support it, and reflect the actual situation they describe. Do not invent facts that neither the notes nor your reliable knowledge support; if something is not covered, keep that slide general. Ignore snippets unrelated to the topic. Never copy sentences, never mention "search" or "notes". If sources conflict, avoid the disputed detail. Keep a neutral, balanced, analytic tone.\n${o.research}\n`
   : "";
 
 /** اگر مدل اسلاید منابع/پرسش را جا انداخت، پیش از اسلاید پایانی اضافه می‌شود. */
