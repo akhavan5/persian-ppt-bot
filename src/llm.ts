@@ -287,9 +287,13 @@ export function normalizeOutline(data: any, topic: string): Outline {
 }
 
 // ---------- تولید ----------
-export interface ContentOpts { model?: string; audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean; maxImages?: number }
+export interface ContentOpts { model?: string; audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean; maxImages?: number; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string }
 const wantSources = (o: ContentOpts) => o.mode === "student" || !!o.sources;
 const wantQuestions = (o: ContentOpts) => !!o.questions;
+/** یادداشت‌های جستجوی وب برای پرامپت؛ فقط منبع واقعیت‌هاست و نباید در متن ذکر شود */
+const researchBlock = (o: ContentOpts) => o.research
+  ? `\nBackground notes from a live web search (snippets, may be partial or off-topic; use them only to ground facts, names, dates and figures; never copy sentences, never mention "search" or "notes"; ignore anything irrelevant; if they conflict with each other, avoid the disputed number):\n${o.research}\n`
+  : "";
 
 /** اگر مدل اسلاید منابع/پرسش را جا انداخت، پیش از اسلاید پایانی اضافه می‌شود. */
 function ensureKinds(slides: OutlineItem[], o: ContentOpts): OutlineItem[] {
@@ -320,7 +324,7 @@ export async function makeOutline(env: Env, topic: string, n: number, tone: stri
 Topic: ${topic}
 Number of slides (including title and closing): ${n}
 Tone: ${TONES[tone] ?? tone}
-Audience: ${o.audience || (o.mode === "student" ? "university class" : "general")}
+Audience: ${o.audience || (o.mode === "student" ? "university class" : "general")}${researchBlock(o)}
 Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers", "kind": "sources|questions (ONLY on those special slides, otherwise omit)"}]}
 ${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model); // ۳۵ اسلاید با ۲۵۰۰ توکن جا نمی‌شد
   const out = normalizeOutline(data, topic);
@@ -354,7 +358,7 @@ export async function makeDeck(env: Env, topic: string, title: string, outline: 
 Topic: ${topic}
 Title: ${title}
 Tone: ${TONES[tone] ?? tone}
-Audience: ${o.audience || (student ? "university class" : "general")}${scope}
+Audience: ${o.audience || (student ? "university class" : "general")}${researchBlock(o)}${scope}
 Outline of the slides to write (keep this order and count): ${JSON.stringify(slice)}
 
 Return JSON: {"title": "...", "slides": [{
@@ -378,7 +382,7 @@ ${edges}
 - "stats": 2-4 items ONLY if the numbers are well-known and reliable, otherwise use another layout.
 - "table": 2-4 columns, 3-6 rows, very short cells (max 6 words). Use for comparisons, classifications or timelines. ${tableOk ? "Use at most once here." : 'Do NOT use "table" in this part.'}
 - "chart": ONLY when you know real, widely reported figures (rounded is fine); labels 3-8; "pie" has exactly one series. Optionally 1-2 bullets with the takeaway. NEVER invent data: if unsure, use "table" or "bullets" instead. ${chartOk ? "Use at most once here." : 'Do NOT use "chart" in this part.'}
-- "sources" (only for outline items with kind "sources"): 3-6 entries in "bullets". Only real, well-known references you are highly confident exist (famous books with author, official organizations or their websites by name, widely known reports). No URLs, no page numbers, no invented titles; if unsure, write the organization or field name instead of a specific title.
+- "sources" (only for outline items with kind "sources"): 3-6 entries in "bullets". Only real, well-known references you are highly confident exist (famous books with author, official organizations or their websites by name, widely known reports). No URLs, no page numbers, no invented titles; if unsure, write the organization or field name instead of a specific title. Websites/organizations that appear in the background notes (if any) are acceptable entries (by name, no URLs).
 - "questions" (only for outline items with kind "questions"): 3-5 thought-provoking questions for the audience in "bullets", each one sentence ending with «؟».
 - "three_column": exactly 3 columns (e.g. three types, three pillars), each with a short heading and 2-3 bullets of max 8 words.
 - "timeline": 3-6 items in "steps" ordered in time; "label" = date or phase (max 3 words), "text" = one short sentence (max 12 words). Only for real chronology or history.

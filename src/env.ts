@@ -62,6 +62,9 @@ export interface Env {
   SMS_API_URL?: string;
   /** اختیاری: نوع قالب پیامک: کد=0، کد ورود=1 (پیش‌فرض)، کد تایید=2، رمز=3، رمز ورود=4 */
   SMS_TEMPLATE?: string;
+  /** جستجوی آنلاین پشت‌صحنه (رایگان: ویکی‌پدیا + DuckDuckGo): WEB_SEARCH=off خاموش می‌کند؛ TAVILY_API_KEY اختیاری (سطح رایگان tavily.com) */
+  WEB_SEARCH?: string;
+  TAVILY_API_KEY?: string;
   /** آدرس اصلی سایت برای canonical/sitemap/OG (پیش‌فرض https://pptsaz.ir) */
   SITE_URL?: string;
 }
