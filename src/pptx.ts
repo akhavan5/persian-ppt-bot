@@ -9,6 +9,22 @@ const W = 13.333, H = 7.5, M = 0.8; // اسلاید 16:9 و حاشیه (اینچ
 /** اندازه‌ی کادر تصویر در اسلایدهای «تصویر و متن» (اینچ) */
 export const IMAGE_BOX = { w: W / 2 - M - 0.3, h: 4.85 };
 
+/** ابعاد پیکسلی تصویر JPEG/PNG از روی سرفایل (بدون کتابخانه)؛ ناموفق ⇒ null */
+export function imageSize(b: Uint8Array): { w: number; h: number } | null {
+  if (b[0] === 0x89 && b[1] === 0x50) return b.length > 24 ? { w: ((b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19]) >>> 0, h: ((b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23]) >>> 0 } : null;
+  if (b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] !== 0xff) { i++; continue; }
+    const m = b[i + 1];
+    if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7) || m === 0xff) { i += m === 0xff ? 1 : 2; continue; }
+    const len = (b[i + 2] << 8) | b[i + 3];
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { h: (b[i + 5] << 8) | b[i + 6], w: (b[i + 7] << 8) | b[i + 8] };
+    i += 2 + len;
+  }
+  return null;
+}
+
 
 /** تخمین اندازه‌ی فونت مناسب تا متن در کادر جا شود. */
 export function fitSize(paras: string[], w: number, h: number, mx: number, mn: number, bullet = false, space = 8): number {
@@ -160,9 +176,10 @@ class Builder {
     // تصویر تولیدی مربع است؛ با sizing=cover به اندازه‌ی کادر برش می‌خورد (بدون کشیدگی).
     // w/h = ابعاد (نسبت) خود تصویر، و sizing.w/h = اندازه‌ی کادر
     const png = img[0] === 0x89 && img[1] === 0x50; // امضای PNG
+    const d = imageSize(img), aspect = d && d.w > 0 && d.h > 0 ? d.w / d.h : 1; // نسبت واقعی تصویر (عکس‌های واقعی مربع نیستند)
     s.addImage({
       data: `image/${png ? "png" : "jpeg"};base64,${toBase64(img)}`, x: M, y: 1.8,
-      w: IMAGE_BOX.h, h: IMAGE_BOX.h, sizing: { type: "cover", w: IMAGE_BOX.w, h: IMAGE_BOX.h },
+      w: IMAGE_BOX.h * aspect, h: IMAGE_BOX.h, sizing: { type: "cover", w: IMAGE_BOX.w, h: IMAGE_BOX.h },
     });
     const tx = W / 2 + 0.1, tw = W / 2 - M - 0.1;
     const paras = sd.bullets.length ? sd.bullets : [""];

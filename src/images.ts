@@ -3,8 +3,9 @@
  *  تعداد تصویر هر ارائه از بیرون می‌آید (وب: رایگان ۱، پلاس ۳، پرو ۶ — تلگرام: MAX_IMAGES = ۱). */
 import type { Env } from "./env";
 import type { Slide } from "./types";
-import { IMAGE_BOX } from "./pptx";
+import { IMAGE_BOX, imageSize } from "./pptx";
 import { fetchWithAccounts, parseAccounts } from "./accounts";
+import type { FoundImage } from "./research";
 
 export const MAX_IMAGES = 1;
 /** فاصله‌ی شروع درخواست تصویرها (میلی‌ثانیه): تصویر دوم ۳ ثانیه بعد از اول، سوم ۶ ثانیه بعد و ... */
@@ -76,16 +77,48 @@ async function viaApi(env: Env, query: string): Promise<Uint8Array | null> {
   }
 }
 
-/** {شماره‌ی اسلاید → بایت‌های تصویر} برای اسلایدهای image_text (حداکثر MAX_IMAGES تا).
- *  پارامتر useApi فقط برای سازگاری با فراخوانی‌های قبلی مانده و بی‌اثر است: همه‌ی کانال‌ها از API می‌گیرند. */
-export async function fetchImages(env: Env, slides: Slide[], max = MAX_IMAGES, _useApi = true): Promise<Map<number, Uint8Array>> {
+const words = (t: string) => new Set(t.toLowerCase().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\u200c/g, " ").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
+
+/** دانلود تصویر واقعی پیدا‌شده در جستجو؛ فقط JPEG/PNG با اندازه‌ی معقول (وگرنه null و تصویر بعدی/ساخت با هوش مصنوعی) */
+async function downloadReal(url: string): Promise<Uint8Array | null> {
+  try {
+    const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (compatible; persian-ppt-bot/1.0)", accept: "image/jpeg,image/png,*/*;q=0.5" }, signal: AbortSignal.timeout(10_000), redirect: "follow" });
+    if (!r.ok) return null;
+    const b = new Uint8Array(await r.arrayBuffer());
+    const png = b[0] === 0x89 && b[1] === 0x50, jpg = b[0] === 0xff && b[1] === 0xd8;
+    if (!(png || jpg) || b.length < 15_000 || b.length > 6_000_000) return null;
+    const d = imageSize(b);
+    return d && d.w >= 400 && d.h >= 250 ? b : null; // بندانگشتی/آیکن نه
+  } catch { return null; }
+}
+
+/** {شماره‌ی اسلاید → بایت‌های تصویر} برای اسلایدهای image_text (حداکثر max تا).
+ *  اگر جستجو تصویر مرتبط پیدا کرده باشد (found)، برای هر اسلاید بهترین تصویر استفاده‌نشده (بر اساس شباهت توضیح تصویر با متن اسلاید) دانلود می‌شود؛
+ *  اگر دانلود نشد یا تصویری نبود، مثل قبل با API ساخته می‌شود. */
+export async function fetchImages(env: Env, slides: Slide[], max = MAX_IMAGES, _useApi = true, found: FoundImage[] = []): Promise<Map<number, Uint8Array>> {
   const out = new Map<number, Uint8Array>();
   const idx = slides.flatMap((s, i) => (s.layout === "image_text" && s.image_query ? [i] : [])).slice(0, max);
-  // بین شروع درخواست هر تصویر چند ثانیه فاصله است تا درخواست‌ها هم‌زمان به Workers AI نرسند (هم‌زمانی گاهی یکی را در صف نگه می‌دارد و تایم‌اوت می‌شود)
-  const res = await Promise.all(idx.map(async (i, k) => {
+
+  // ۱) تصویر واقعی مرتبط (ترتیب: بهترین تطبیق متن اسلاید؛ در تساوی، ترتیب نتیجه‌ها = Tavily سپس ویکی‌پدیا)
+  const used = new Set<number>();
+  for (const i of idx) {
+    const sl = slides[i];
+    const sw = words(`${sl.title} ${sl.bullets.join(" ")} ${sl.image_query ?? ""}`);
+    const ranked = found.map((f, k) => ({ k, score: [...words(f.desc)].filter((w) => sw.has(w)).length })).filter((x) => !used.has(x.k)).sort((a, b) => b.score - a.score || a.k - b.k);
+    for (const c of ranked.slice(0, 3)) {
+      used.add(c.k);
+      const b = await downloadReal(found[c.k].url);
+      if (b) { out.set(i, b); console.log("image-real", found[c.k].via, found[c.k].url.slice(0, 120)); break; }
+      console.log("image-real-failed", found[c.k].url.slice(0, 120));
+    }
+  }
+
+  // ۲) بقیه‌ی اسلایدها: ساخت با API مثل قبل. بین شروع درخواست هر تصویر چند ثانیه فاصله است تا هم‌زمان به Workers AI نرسند
+  const rest = idx.filter((i) => !out.has(i));
+  const res = await Promise.all(rest.map(async (i, k) => {
     if (k) await new Promise((r) => setTimeout(r, k * IMAGE_STAGGER_MS));
     return viaApi(env, slides[i].image_query!);
   }));
-  idx.forEach((i, k) => { const r = res[k]; if (r) out.set(i, r); });
+  rest.forEach((i, k) => { const r = res[k]; if (r) out.set(i, r); });
   return out;
 }

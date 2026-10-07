@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import type { DeckParams } from "./types";
 import { LlmError, makeDeck, makeOutline, type ContentOpts } from "./llm";
 import { fetchImages } from "./images";
-import { researchTopic } from "./research";
+import { researchTopic, type Research } from "./research";
 import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument, sendMessage } from "./telegram";
 import { getUserById } from "./auth";
@@ -48,8 +48,9 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     let built: { title: string; slides: number; name: string };
     try {
       // جستجوی آنلاین پشت‌صحنه (بدون هیچ پیام یا تغییری در UI)؛ هر خطا ⇒ "" و ساخت ارائه عادی ادامه می‌یابد
-      contentOpts.research = await step.do("research", { retries: { limit: 0, delay: "1 second" }, timeout: "45 seconds" },
-        () => researchTopic(this.env, topic)).catch(() => "");
+      const found = await step.do("research", { retries: { limit: 0, delay: "1 second" }, timeout: "45 seconds" },
+        () => researchTopic(this.env, topic)).catch((): Research => ({ notes: "", images: [] }));
+      contentOpts.research = found.notes;
 
       const outline = await step.do("outline", LLM_STEP, () =>
         guard(async () => {
@@ -68,7 +69,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         { retries: { limit: 1, delay: "5 seconds" }, timeout: "3 minutes" },
         async () => {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
-          const images = settings.images ? await fetchImages(this.env, deck.slides, maxImages, web) : new Map();
+          const images = settings.images ? await fetchImages(this.env, deck.slides, maxImages, web, found.images) : new Map();
           const bytes = await buildPptx(deck, {
             theme: settings.theme, font: settings.font, persianDigits: settings.digits, images,
           });

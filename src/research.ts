@@ -15,6 +15,13 @@ import type { Env } from "./env";
 
 interface Hit { src: string; title: string; text: string; /** موتور جستجو: wiki-fa | wiki-en | ddg | tavily */ via: string }
 
+/** تصویر مرتبط با موضوع (برای اسلایدهای تصویری)؛ desc برای تطبیق با اسلاید */
+export interface FoundImage { url: string; desc: string; via: string }
+export interface Research { notes: string; images: FoundImage[] }
+const EMPTY: Research = { notes: "", images: [] };
+/** لوگو، آیکن، بنر و فرمت‌هایی که PowerPoint/PptxGenJS درست نمایش نمی‌دهد */
+const BAD_IMG = /\.(svg|gif|webp|ico|avif)(\?|$)|logo|icon|sprite|avatar|banner|placeholder|favicon|emoji|badge/i;
+
 const MAX_NOTES_CHARS = 4000;
 const TIMEOUT_MS = 8_000;
 const UA = "persian-ppt-bot/1.0 (+https://pptsaz.ir)";
@@ -67,16 +74,22 @@ async function duckduckgo(query: string, limit: number): Promise<Hit[]> {
 }
 
 /** Tavily (اختیاری، سطح رایگان) */
-async function tavily(env: Env, query: string, limit: number): Promise<Hit[]> {
+async function tavily(env: Env, query: string, limit: number, sink?: FoundImage[]): Promise<Hit[]> {
   if (!env.TAVILY_API_KEY) return [];
   const r = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${env.TAVILY_API_KEY}` },
-    body: JSON.stringify({ query: query.slice(0, 380), max_results: limit, search_depth: "basic" }),
+    body: JSON.stringify({ query: query.slice(0, 380), max_results: limit, search_depth: "basic", ...(sink ? { include_images: true, include_image_descriptions: true } : {}) }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!r.ok) throw new Error(`tavily ${r.status}`);
   const j = (await r.json()) as any;
+  if (sink && Array.isArray(j?.images)) { // تصویرها یا رشته‌ی نشانی‌اند یا {url, description}
+    for (const im of j.images) {
+      const url = typeof im === "string" ? im : String(im?.url ?? "");
+      if (/^https:\/\//i.test(url) && !BAD_IMG.test(url)) sink.push({ url, desc: clean(typeof im === "string" ? "" : im?.description, 200), via: "tavily" });
+    }
+  }
   return (Array.isArray(j?.results) ? j.results : []).map((x: any) => {
     let host = ""; try { host = new URL(x.url).hostname.replace(/^www\./, ""); } catch { /* */ }
     return { src: host || "web", title: clean(x.title, 110), text: clean(x.content, 450), via: "tavily" };
@@ -109,14 +122,12 @@ const BAD_HOSTS = /(facebook|instagram|twitter|(^|\.)x\.com|t\.me|telegram|youtu
 
 const safe = (name: string, p: Promise<Hit[]>): Promise<Hit[]> => p.catch((e) => { console.error("search", name, e instanceof Error ? e.message : e); return []; });
 
-/** یادداشت پژوهشی درباره‌ی موضوع؛ در هر مشکلی "" */
-export async function researchTopic(env: Env, topic: string): Promise<string> {
-  if (!searchEnabled(env)) return "";
+async function researchNotes(env: Env, topic: string, sink: FoundImage[]): Promise<string> {
   try {
     const q = topic.replace(/^(یک\s+)?(ارائه|پاورپوینت|اسلاید)\s*(درباره(‌|\s)?ی|در مورد|پیرامون)?\s*/u, "").trim() || topic;
     // حالت «فقط Tavily»: اگر کلید تنظیم شده باشد، فقط Tavily و بدون هیچ فیلتری (ویکی‌پدیا/DuckDuckGo خاموش‌اند)
     if (env.TAVILY_API_KEY) {
-      const hits = await safe("tavily", tavily(env, q, 8));
+      const hits = await safe("tavily", tavily(env, q, 8, sink));
       console.log("research", JSON.stringify({ tavily: `${hits.length}→${hits.length}` }), "q:", q.slice(0, 80));
       const out: string[] = [];
       let n = 0;
@@ -132,7 +143,7 @@ export async function researchTopic(env: Env, topic: string): Promise<string> {
       safe("wiki-fa", wikipedia("fa", q, 3)),
       /[A-Za-z]{3}/.test(q) ? safe("wiki-en", wikipedia("en", q, 2)) : Promise.resolve([] as Hit[]), // پرسش کاملاً فارسی در ویکی انگلیسی نتیجه‌ی مفیدی ندارد
       safe("ddg", duckduckgo(q, 5)),
-      safe("tavily", tavily(env, q, 5)),
+      safe("tavily", tavily(env, q, 5, sink)),
     ]);
     // ترتیب اهمیت: Tavily/DDG (تازه‌تر) و ویکی‌پدیا (دقیق‌تر)؛ از هر منبع به‌نوبت برداشته می‌شود تا یکی بقیه را پر نکند
     const tokens = keyTokens(q);
@@ -170,4 +181,37 @@ export async function researchTopic(env: Env, topic: string): Promise<string> {
     console.error("researchTopic", e instanceof Error ? e.message : e);
     return "";
   }
+}
+
+const queryOf = (topic: string) => topic.replace(/^(یک\s+)?(ارائه|پاورپوینت|اسلاید)\s*(درباره(‌|\s)?ی|در مورد|پیرامون)?\s*/u, "").trim() || topic;
+
+/** تصویر اصلی مقاله‌های ویکی‌پدیای فارسی که عنوانشان به موضوع می‌خورد (رایگان، با مجوز مشخص) */
+async function wikiImages(topic: string): Promise<FoundImage[]> {
+  const q = queryOf(topic);
+  const u = new URL("https://fa.wikipedia.org/w/api.php");
+  const p: Record<string, string> = { action: "query", format: "json", formatversion: "2", generator: "search", gsrsearch: q.slice(0, 250), gsrlimit: "4", prop: "pageimages", piprop: "thumbnail", pithumbsize: "1000", pilimit: "4" };
+  for (const k in p) u.searchParams.set(k, p[k]);
+  const r = await fetch(u, { headers: { "user-agent": UA, "api-user-agent": UA }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!r.ok) throw new Error(`wiki images ${r.status}`);
+  const pages = ((await r.json()) as any)?.query?.pages;
+  if (!Array.isArray(pages)) return [];
+  const tokens = keyTokens(q);
+  return pages
+    .sort((a: any, b: any) => (a.index ?? 0) - (b.index ?? 0))
+    .filter((x: any) => x?.thumbnail?.source && !BAD_IMG.test(x.thumbnail.source) && relevant(tokens, { src: "fa.wikipedia.org", title: clean(x.title, 100), text: "", via: "wiki-fa" }))
+    .map((x: any) => ({ url: String(x.thumbnail.source), desc: clean(x.title, 100), via: "wiki-fa" }));
+}
+
+/** پژوهش پشت‌صحنه: یادداشت متنی برای مدل + تصاویر مرتبط برای اسلایدها. در هر مشکلی خالی. */
+export async function researchTopic(env: Env, topic: string): Promise<Research> {
+  if (!searchEnabled(env)) return EMPTY;
+  const sink: FoundImage[] = [];
+  const [notes, wiki] = await Promise.all([
+    researchNotes(env, topic, sink).catch(() => ""),
+    wikiImages(topic).catch((e) => { console.error("wikiImages", e instanceof Error ? e.message : e); return [] as FoundImage[]; }),
+  ]);
+  const seen = new Set<string>();
+  const images = [...sink, ...wiki].filter((i) => !seen.has(i.url) && seen.add(i.url)).slice(0, 14);
+  console.log("research-images", JSON.stringify(images.map((i) => `${i.via}:${new URL(i.url).hostname}`)));
+  return { notes, images };
 }
