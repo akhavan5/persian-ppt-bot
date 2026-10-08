@@ -113,11 +113,11 @@ export function renderSection(s: Section): string {
 // مقاله‌های وبلاگ مرتبط با هر صفحه (برای لینک‌دهی داخلی)
 const ARTICLES_FOR: Record<string, string[]> = {
   student: ["how-many-slides", "class-presentation-tips", "presentation-topic-ideas"],
-  "thesis-defense": ["thesis-defense-slides-guide", "how-many-slides", "class-presentation-tips"],
+  "thesis-defense": ["thesis-defense-slides-guide", "thesis-defense-powerpoint-how-to", "how-many-slides"],
   teacher: ["persian-powerpoint-design", "how-many-slides", "presentation-topic-ideas"],
   business: ["persian-powerpoint-design", "how-many-slides", "ai-powerpoint-topic-tips"],
-  free: ["ai-powerpoint-topic-tips", "presentation-topic-ideas", "how-many-slides"],
-  "ppt-saz": ["ai-powerpoint-topic-tips", "persian-powerpoint-design", "presentation-topic-ideas"],
+  free: ["ai-powerpoint-step-by-step", "free-powerpoint-templates-persian", "ai-powerpoint-topic-tips"],
+  "ppt-saz": ["ai-powerpoint-step-by-step", "persian-powerpoint-design", "free-powerpoint-templates-persian"],
 };
 
 export function renderLanding(p: Page, SITE: string): string {
