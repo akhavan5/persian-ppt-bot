@@ -14,6 +14,9 @@
 - [پاورپوینت آموزشی برای معلمان](https://pptsaz.ir/teacher): اسلاید درسی با یادداشت سخنرانی
 - [پاورپوینت اداری و کسب‌وکار](https://pptsaz.ir/business): گزارش کاری، معرفی محصول و شرکت
 - [ساخت پاورپوینت رایگان](https://pptsaz.ir/free): امکانات پلن رایگان و مقایسه‌ی پلن‌ها
+- [مقایسه‌ی ابزارها](https://pptsaz.ir/compare): مقایسه‌ی سایت‌های ساخت پاورپوینت با هوش مصنوعی و معیار انتخاب
+- [ربات تلگرام و گوشی](https://pptsaz.ir/telegram): ساخت پاورپوینت با تلگرام و مرورگر گوشی، دستورهای ربات
+- [ربات تلگرام](https://t.me/pptsaz_bot): @pptsaz_bot؛ موضوع را بفرست و فایل PPTX بگیر
 - [pptساز چیست؟](https://pptsaz.ir/ppt-saz): معرفی سرویس و نام‌های مشابه آن
 
 ## وبلاگ
@@ -24,6 +27,10 @@
 - [طراحی پاورپوینت فارسی](https://pptsaz.ir/blog/persian-powerpoint-design): فونت، رنگ و راست‌به‌چپ
 - [ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-topic-tips): نوشتن موضوع و بررسی خروجی
 - [ارائه‌ی کلاسی بدون استرس](https://pptsaz.ir/blog/class-presentation-tips): تمرین، اجرا و پرسش و پاسخ
+- [انتخاب بهترین سایت ساخت پاورپوینت](https://pptsaz.ir/blog/best-ai-powerpoint-makers-persian): دسته‌ها، معیارها و آزمون ده‌دقیقه‌ای فارسی
+- [ساخت پاورپوینت با ChatGPT](https://pptsaz.ir/blog/chatgpt-powerpoint-persian): پرامپت آماده و محدودیت‌های فارسی
+- [پرسش‌های رایج ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-faq-persian): فارسی، رایگان، گوشی و ChatGPT
+- [ساخت پاورپوینت با گوشی و تلگرام](https://pptsaz.ir/blog/ai-powerpoint-mobile-telegram): راهنمای قدم‌به‌قدم
 
 ## نکات
 - زبان: فارسی؛ خروجی: PPTX سازگار با PowerPoint، LibreOffice و Google Slides

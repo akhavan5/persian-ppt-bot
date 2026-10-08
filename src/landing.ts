@@ -6,7 +6,9 @@ export const BRAND = "پاورپوینت‌ساز فارسی";
 
 export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // [متن](/مسیر) → لینک داخلی
-export const inline = (s: string) => esc(s).replace(/\[([^\]]+)\]\((\/[a-z0-9\-#/]*)\)/g, '<a href="$2">$1</a>');
+export const inline = (s: string) => esc(s)
+  .replace(/\[([^\]]+)\]\((\/[a-z0-9\-#/]*)\)/g, '<a href="$2">$1</a>')
+  .replace(/\[([^\]]+)\]\((https:\/\/t\.me\/[A-Za-z0-9_]+)\)/g, '<a href="$2" rel="noopener" target="_blank">$1</a>');
 export const plain = (s: string) => s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
 export const jsonLd = (o: unknown) => JSON.stringify(o).replace(/</g, "\\u003c");
 
@@ -116,8 +118,10 @@ const ARTICLES_FOR: Record<string, string[]> = {
   "thesis-defense": ["thesis-defense-slides-guide", "thesis-defense-powerpoint-how-to", "how-many-slides"],
   teacher: ["persian-powerpoint-design", "how-many-slides", "presentation-topic-ideas"],
   business: ["persian-powerpoint-design", "how-many-slides", "ai-powerpoint-topic-tips"],
-  free: ["ai-powerpoint-step-by-step", "free-powerpoint-templates-persian", "ai-powerpoint-topic-tips"],
+  free: ["ai-powerpoint-step-by-step", "free-powerpoint-templates-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
   "ppt-saz": ["ai-powerpoint-step-by-step", "persian-powerpoint-design", "free-powerpoint-templates-persian"],
+  compare: ["best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
+  telegram: ["ai-powerpoint-mobile-telegram", "ai-powerpoint-faq-persian", "ai-powerpoint-step-by-step"],
 };
 
 export function renderLanding(p: Page, SITE: string): string {
