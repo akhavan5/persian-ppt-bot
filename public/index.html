@@ -865,7 +865,7 @@ function tgDone(p, planId, bot) {
 
 // ---------- آپلود فایل: خواندن متن در خود مرورگر (فایل به سرور نمی‌رود؛ فقط متن استخراج‌شده) ----------
 // متن، Word، PowerPoint، Excel و PDF متنی محلی خوانده می‌شوند؛ تصویر و PDF اسکن‌شده با OCR رایگان (سرور) به متن تبدیل می‌شوند.
-const MAX_FILE = 15 * 1024 * 1024, MAX_SRC = 12000, OCR_MAX = 1000000;
+const MAX_FILE = 15 * 1024 * 1024, MAX_SRC = 50000, OCR_MAX = 1000000;
 const CDN = "https://cdnjs.cloudflare.com/ajax/libs/";
 const PDFJS = CDN + "pdf.js/3.11.174/pdf.min.js", PDFJS_WORKER = CDN + "pdf.js/3.11.174/pdf.worker.min.js", JSZIP = CDN + "jszip/3.10.1/jszip.min.js";
 let srcText = "", srcName = "", extracting = false, upSeq = 0;

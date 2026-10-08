@@ -55,8 +55,8 @@ export async function runningJob(env: Env, userId: string | number): Promise<{ b
   return { busy: true, jobId };
 }
 
-/** متن فایل آپلودی: حذف نویسه‌های کنترلی و نشانگرهای پرامپت، فشرده‌سازی فاصله‌ها، سقف ۱۲ هزار نویسه */
-export const MAX_SOURCE_CHARS = 12000;
+/** متن فایل آپلودی: حذف نویسه‌های کنترلی و نشانگرهای پرامپت، فشرده‌سازی فاصله‌ها، سقف ۵۰ هزار نویسه */
+export const MAX_SOURCE_CHARS = 50000;
 export function cleanSource(raw: unknown): string {
   return String(raw ?? "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
