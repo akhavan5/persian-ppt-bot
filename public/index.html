@@ -100,6 +100,12 @@ textarea{min-height:110px;resize:vertical}
 .ex{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .ex button{border:1px dashed #c5d3ee;background:transparent;border-radius:999px;padding:3px 12px;font-size:.84rem;color:var(--muted);cursor:pointer}
 .ex button:hover{color:var(--primary);border-color:var(--primary)}
+.up{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.up.drag{outline:2px dashed var(--primary);outline-offset:6px;border-radius:12px}
+.upchip{display:inline-flex;align-items:center;gap:8px;background:var(--soft);border:1px solid #cfdcf7;border-radius:999px;padding:5px 8px 5px 14px;font-size:.88rem;font-weight:600;max-width:100%}
+.upchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.upchip button{border:0;background:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;line-height:1;color:var(--muted)}
+.upchip button:hover{color:var(--danger)}
 .trust{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:.88rem;margin:10px 0 30px}
 .bar{height:6px;border-radius:99px;background:var(--soft);overflow:hidden;margin:14px 0 4px}
 .bar::after{content:"";display:block;height:100%;width:35%;border-radius:99px;background:linear-gradient(90deg,var(--primary),var(--primary-2));animation:slide 1.4s ease-in-out infinite}
@@ -235,6 +241,13 @@ address{font-style:normal}
     <label for="topic" style="margin-top:0">موضوع ارائه</label>
     <textarea id="topic" maxlength="600" placeholder="مثلاً: هوش مصنوعی در آموزش؛ فرصت‌ها و چالش‌ها"></textarea>
     <div class="ex" id="examples"></div>
+    <div class="up" id="upBox">
+      <input type="file" id="file" hidden accept=".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg">
+      <button class="btn ghost sm" type="button" id="pick">📎 آپلود فایل (اختیاری)</button>
+      <span class="upchip" id="upChip" hidden><span id="upName"></span><button type="button" id="upDel" aria-label="حذف فایل" title="حذف فایل">✕</button></span>
+      <span class="muted" id="upHint">Word، PDF، PowerPoint، Excel، متن یا تصویر — ارائه از روی محتوای فایل ساخته می‌شود (فایل را اینجا هم می‌توانی رها کنی)</span>
+    </div>
+    <div id="upMsg" class="msg err" role="alert" hidden></div>
     <div id="modelsBox" hidden>
       <div class="models-h"><label id="modelsLbl">مدل هوش مصنوعی</label><span class="hint" id="modelsHint"></span></div>
       <div class="models" id="models" role="group" aria-labelledby="modelsLbl"></div>
@@ -850,11 +863,150 @@ function tgDone(p, planId, bot) {
   $("#tgBuy").showModal();
 }
 
+// ---------- آپلود فایل: خواندن متن در خود مرورگر (فایل به سرور نمی‌رود؛ فقط متن استخراج‌شده) ----------
+// متن، Word، PowerPoint، Excel و PDF متنی محلی خوانده می‌شوند؛ تصویر و PDF اسکن‌شده با OCR رایگان (سرور) به متن تبدیل می‌شوند.
+const MAX_FILE = 15 * 1024 * 1024, MAX_SRC = 12000, OCR_MAX = 1000000;
+const CDN = "https://cdnjs.cloudflare.com/ajax/libs/";
+const PDFJS = CDN + "pdf.js/3.11.174/pdf.min.js", PDFJS_WORKER = CDN + "pdf.js/3.11.174/pdf.worker.min.js", JSZIP = CDN + "jszip/3.10.1/jszip.min.js";
+let srcText = "", srcName = "", extracting = false, upSeq = 0;
+const libs = {};
+const lib = (src) => libs[src] || (libs[src] = new Promise((res, rej) => {
+  const el = h("script", { src }); el.onload = res;
+  el.onerror = () => { delete libs[src]; rej(new Error("بارگذاری ابزار خواندن فایل ممکن نشد؛ اینترنت را بررسی کن.")); };
+  document.head.append(el);
+}));
+const tidy = (t) => t.replace(/\u0000/g, "").replace(/[ \t\u00A0]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+const xml = (t) => new DOMParser().parseFromString(t, "application/xml");
+const ns = (d, uri, tag) => Array.from(d.getElementsByTagNameNS(uri, tag));
+const NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main", NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main", NS_S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const upMsg = (t) => { $("#upMsg").textContent = t || ""; show($("#upMsg"), !!t); };
+
+async function readDocx(zip) {
+  const f = zip.file("word/document.xml"); if (!f) throw new Error("ساختار فایل Word معتبر نیست.");
+  return ns(xml(await f.async("string")), NS_W, "p").map((p) => {
+    const text = ns(p, NS_W, "t").map((t) => t.textContent).join("");
+    const st = ns(p, NS_W, "pStyle")[0]; const sv = st ? (st.getAttributeNS(NS_W, "val") || "") : "";
+    return text && /^(Heading|Title|عنوان)/i.test(sv) ? "# " + text : text;
+  }).filter(Boolean).join("\n");
+}
+async function readPptx(zip) {
+  const names = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+  if (!names.length) throw new Error("ساختار فایل PowerPoint معتبر نیست.");
+  const out = [];
+  for (const [i, n] of names.entries()) {
+    const paras = ns(xml(await zip.file(n).async("string")), NS_A, "p").map((p) => ns(p, NS_A, "t").map((t) => t.textContent).join("")).filter(Boolean);
+    if (paras.length) out.push(`# اسلاید ${i + 1}\n` + paras.join("\n"));
+  }
+  return out.join("\n\n");
+}
+async function readXlsx(zip) {
+  const sst = zip.file("xl/sharedStrings.xml");
+  const shared = sst ? ns(xml(await sst.async("string")), NS_S, "si").map((si) => ns(si, NS_S, "t").map((t) => t.textContent).join("")) : [];
+  const names = Object.keys(zip.files).filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+  if (!names.length) throw new Error("ساختار فایل Excel معتبر نیست.");
+  const out = [];
+  for (const [i, n] of names.entries()) {
+    const rows = ns(xml(await zip.file(n).async("string")), NS_S, "row").slice(0, 200).map((r) => ns(r, NS_S, "c").map((c) => {
+      const t = c.getAttribute("t"), v = ns(c, NS_S, "v")[0];
+      if (t === "s") return shared[Number(v && v.textContent)] || "";
+      if (t === "inlineStr") return ns(c, NS_S, "t").map((x) => x.textContent).join("");
+      return v ? v.textContent : "";
+    }).join("\t")).filter((r) => r.replace(/\t/g, "").trim());
+    if (rows.length) out.push(`# برگه ${i + 1}\n` + rows.join("\n"));
+  }
+  return out.join("\n\n");
+}
+async function readPdf(buf, file) {
+  await lib(PDFJS); pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  const pdf = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+  const pages = Math.min(pdf.numPages, 40); let text = "";
+  for (let i = 1; i <= pages && text.length < MAX_SRC * 1.5; i++) {
+    const tc = await (await pdf.getPage(i)).getTextContent();
+    text += tc.items.map((it) => it.str + (it.hasEOL ? "\n" : " ")).join("") + "\n";
+  }
+  if (tidy(text).length >= 40 * Math.min(pages, 3)) return text;
+  return readScannedPdf(pdf, pages); // بدون لایه‌ی متن ⇒ اسکن است ⇒ OCR
+}
+// تصویر را کوچک می‌کند تا زیر سقف ۱ مگابایتِ OCR بماند
+async function jpegUnder(source, w, h0) {
+  let scale = Math.min(1, 2000 / Math.max(w, h0));
+  for (let q = 0.85; ; q -= 0.15) {
+    const c = h("canvas"); c.width = Math.round(w * scale); c.height = Math.round(h0 * scale);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(source, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", Math.max(q, 0.4)));
+    if (blob && blob.size <= OCR_MAX) return blob;
+    if (q < 0.5) scale *= 0.7;
+    if (scale < 0.2) throw new Error("تصویر برای تبدیل به متن خیلی حجیم است.");
+  }
+}
+async function ocr(blob) {
+  const r = await fetch("/api/extract", { method: "POST", credentials: "same-origin", headers: { "content-type": blob.type }, body: blob });
+  let d = null; try { d = await r.json(); } catch {}
+  if (r.status === 401) throw new Error("برای تبدیل تصویر/اسکن به متن ابتدا وارد شو.");
+  if (!r.ok) throw new Error((d && d.error) || "تبدیل تصویر به متن ناموفق بود.");
+  return d.text;
+}
+async function readImage(file) {
+  if (file.size <= OCR_MAX) return ocr(file.type === "image/png" || file.type === "image/jpeg" ? file : new Blob([file], { type: "image/jpeg" }));
+  const bmp = await createImageBitmap(file); return ocr(await jpegUnder(bmp, bmp.width, bmp.height));
+}
+async function readScannedPdf(pdf, pages) {
+  let out = "";
+  for (let i = 1; i <= Math.min(pages, 4); i++) { // سقف ۴ صفحه برای OCR (سهمیه‌ی رایگان)
+    const page = await pdf.getPage(i), vp = page.getViewport({ scale: 1.6 });
+    const c = h("canvas"); c.width = vp.width; c.height = vp.height;
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    out += (await ocr(await jpegUnder(c, c.width, c.height))) + "\n";
+    $("#upHint").textContent = `⏳ تبدیل اسکن به متن… صفحه ${fa(i)} از ${fa(Math.min(pages, 4))}`;
+  }
+  return out;
+}
+async function extractFile(file) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (["txt", "md", "csv", "json", "html", "htm"].includes(ext)) {
+    const t = await file.text();
+    return ext.startsWith("htm") ? (new DOMParser().parseFromString(t, "text/html").body.textContent || "") : t;
+  }
+  if (["docx", "pptx", "xlsx"].includes(ext)) {
+    await lib(JSZIP); const zip = await JSZip.loadAsync(file);
+    return ext === "docx" ? readDocx(zip) : ext === "pptx" ? readPptx(zip) : readXlsx(zip);
+  }
+  if (ext === "pdf") return readPdf(await file.arrayBuffer(), file);
+  if (["png", "jpg", "jpeg"].includes(ext)) return readImage(file);
+  throw new Error("این نوع فایل پشتیبانی نمی‌شود. فایل Word، PDF، PowerPoint، Excel، متن یا تصویر بده (فایل‌های قدیمی doc/ppt را ابتدا به docx/pptx تبدیل کن).");
+}
+const HINT = $("#upHint").textContent;
+function clearFile() { upSeq++; srcText = srcName = ""; extracting = false; $("#file").value = ""; show($("#upChip"), false); $("#upHint").textContent = HINT; show($("#pick"), true); upMsg(""); }
+async function onFile(file) {
+  if (!file) return;
+  upMsg(""); const my = ++upSeq;
+  if (file.size > MAX_FILE) { upMsg("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد."); return; }
+  extracting = true; $("#pick").disabled = true; $("#upHint").textContent = "⏳ در حال خواندن فایل…";
+  try {
+    const raw = tidy(await extractFile(file));
+    if (my !== upSeq) return;
+    if (raw.length < 30) throw new Error("متنی در فایل پیدا نشد (اگر اسکن یا تصویر است، واضح‌تر و کم‌حجم‌تر امتحان کن).");
+    srcText = raw.slice(0, MAX_SRC); srcName = file.name;
+    $("#upName").textContent = `${file.name} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false);
+    $("#upHint").textContent = raw.length > MAX_SRC ? `فایل بلند است؛ فقط ${fa(MAX_SRC)} نویسه‌ی اول استفاده می‌شود.` : "ارائه از روی محتوای این فایل ساخته می‌شود.";
+    const t = $("#topic"); if (!t.value.trim()) { t.value = file.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").slice(0, 120); store.set("topic", t.value); }
+  } catch (e) {
+    if (my === upSeq) { upMsg(e.message || "خواندن فایل ناموفق بود."); $("#upHint").textContent = HINT; }
+  } finally { if (my === upSeq) { extracting = false; $("#pick").disabled = false; } $("#file").value = ""; }
+}
+$("#pick").onclick = () => $("#file").click();
+$("#file").onchange = (e) => onFile(e.target.files[0]);
+$("#upDel").onclick = clearFile;
+for (const ev of ["dragenter", "dragover"]) $("#upBox").addEventListener(ev, (e) => { e.preventDefault(); $("#upBox").classList.add("drag"); });
+for (const ev of ["dragleave", "drop"]) $("#upBox").addEventListener(ev, (e) => { e.preventDefault(); $("#upBox").classList.remove("drag"); });
+$("#upBox").addEventListener("drop", (e) => { if (!extracting && !srcText) onFile(e.dataTransfer.files[0]); });
+
 // ---------- ساخت ارائه ----------
 function jobView(state) { show($("#job"), !!state); show($("#jobRun"), state === "run"); show($("#jobDone"), state === "done"); show($("#jobErr"), state === "err"); }
 $("#topic").addEventListener("input", (e) => store.set("topic", e.target.value));
 $("#go").onclick = async () => {
   const msg = $("#genMsg"); show(msg, false);
+  if (extracting) { msg.textContent = "صبر کن تا خواندن فایل تمام شود."; show(msg, true); return; }
   const topic = $("#topic").value.trim();
   if (topic.length < 3) { msg.textContent = "موضوع را کمی کامل‌تر بنویس."; show(msg, true); return; }
   if (!me) { // کاربر مهمان: پنجره‌ی ورود/ثبت‌نام؛ بعد از ورود ساخت خودکار ادامه می‌یابد
@@ -864,7 +1016,7 @@ $("#go").onclick = async () => {
   }
   $("#go").disabled = true;
   try {
-    const r = await api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), imageCount: Number($("#imgCount").value) } });
+    const r = await api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), imageCount: Number($("#imgCount").value), ...(srcText ? { source: srcText } : {}) } });
     $("#jobText").textContent = "⏳ در صف…"; jobView("run");
     $("#job").scrollIntoView({ behavior: "smooth", block: "center" });
     refreshMe(); track(r.jobId);

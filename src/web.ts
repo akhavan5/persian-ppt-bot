@@ -16,6 +16,7 @@ import {
   sessionCookie, type WebUser,
 } from "./auth";
 import { beginDeck, imagesLimitMsg, launchDeck, runningJob, slidesLimitMsg } from "./deck-service";
+import { OCR_MAX_BYTES, OCR_TYPES, ocrSpace } from "./extract";
 import { consumeLoginToken, ensureUid } from "./link";
 
 const SEC_HEADERS = {
@@ -27,8 +28,8 @@ const json = (data: unknown, status = 200, extra: HeadersInit = {}) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", ...SEC_HEADERS, ...extra } });
 const err = (message: string, status = 400) => json({ error: message }, status);
 
-async function readBody(req: Request): Promise<Record<string, unknown> | null> {
-  if (Number(req.headers.get("content-length") ?? 0) > 20_000) return null;
+async function readBody(req: Request, maxBytes = 20_000): Promise<Record<string, unknown> | null> {
+  if (Number(req.headers.get("content-length") ?? 0) > maxBytes) return null;
   const b = await req.json().catch(() => null);
   return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : null;
 }
@@ -106,6 +107,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
   if (path === "/api/generate" && method === "POST") return generate(req, env, user);
+  if (path === "/api/extract" && method === "POST") return extract(req, env, user);
   if (path === "/api/pay/start" && method === "POST") return startPayment(env, url, user, await readBody(req));
 
   if (path.startsWith("/api/jobs/") && method === "GET") return jobStatus(env, user, path.slice("/api/jobs/".length));
@@ -242,8 +244,9 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   if (!isAllowed(env, user.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
   if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
 
-  const b = await readBody(req);
+  const b = await readBody(req, 80_000); // متن فایل آپلودی (حداکثر ۱۲ هزار نویسه) هم در بدنه می‌آید
   const begin = await beginDeck(env, user.id, String(b?.topic ?? ""), {
+    source: typeof b?.source === "string" ? b.source : undefined,
     slides: typeof b?.slides === "number" ? b.slides : undefined,
     imageCount: typeof b?.imageCount === "number" ? b.imageCount : undefined,
   });
@@ -258,6 +261,22 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
     return err("شروع ساخت ارائه ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن.", 503);
   }
   return json({ jobId });
+}
+
+// ---------- OCR تصویر / PDF اسکن‌شده ----------
+// بدنه = بایت‌های خام فایل (نه JSON)؛ فقط برای تصویر و PDFِ بدون لایه‌ی متن. بقیه‌ی فرمت‌ها در مرورگر خوانده می‌شوند.
+async function extract(req: Request, env: Env, user: WebUser): Promise<Response> {
+  if (!isAllowed(env, user.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
+  if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
+  const mime = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (!OCR_TYPES.has(mime)) return err("فقط تصویر PNG/JPG یا فایل PDF پشتیبانی می‌شود.", 415);
+  if (Number(req.headers.get("content-length") ?? 0) > OCR_MAX_BYTES) return err("حجم فایل برای تبدیل به متن حداکثر ۱ مگابایت است.", 413);
+  const day = new Date().toISOString().slice(0, 10);
+  if (await hitLimit(env, `ocr:${user.id}:${day}`, 15, 172_800)) return err("سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن.", 429);
+  const bytes = await req.arrayBuffer();
+  if (bytes.byteLength < 100 || bytes.byteLength > OCR_MAX_BYTES) return err("حجم فایل برای تبدیل به متن حداکثر ۱ مگابایت است.", 413);
+  const r = await ocrSpace(env, bytes, mime);
+  return r.ok ? json({ text: r.text }) : err(r.error, 422);
 }
 
 // وضعیت قطعی از خود Workflow می‌آید (سازگاری قوی)؛ متن پیشرفت از KV و ممکن است چند ثانیه عقب باشد

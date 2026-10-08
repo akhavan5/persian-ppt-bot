@@ -38,7 +38,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
     const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
     const maxImages = Math.max(1, event.payload.maxImages ?? 1); // تلگرام: ۱ تصویر؛ وب: طبق پلن
-    const contentOpts: ContentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, maxImages: settings.images ? maxImages : 0 };
+    const contentOpts: ContentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, maxImages: settings.images ? maxImages : 0, source: event.payload.source || undefined };
     const web = event.payload.channel === "web";
     // تلگرام: ویرایش پیام وضعیت؛ وب: متن پیشرفت در KV (صفحه‌ی وب هر چند ثانیه می‌خواند)
     const status = (t: string) => (web
@@ -48,8 +48,11 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     let built: { title: string; slides: number; name: string };
     try {
       // جستجوی آنلاین پشت‌صحنه (بدون هیچ پیام یا تغییری در UI)؛ هر خطا ⇒ "" و ساخت ارائه عادی ادامه می‌یابد
-      const found = await step.do("research", { retries: { limit: 0, delay: "1 second" }, timeout: "45 seconds" },
-        () => researchTopic(this.env, topic)).catch((): Research => ({ notes: "", images: [] }));
+      // اگر کاربر فایل آپلود کرده باشد، خودِ فایل منبع اصلی است و جستجوی وب (که به موضوع/نام فایل وابسته است) رد می‌شود
+      const found: Research = event.payload.source
+        ? { notes: "", images: [] }
+        : await step.do("research", { retries: { limit: 0, delay: "1 second" }, timeout: "45 seconds" },
+          () => researchTopic(this.env, topic)).catch((): Research => ({ notes: "", images: [] }));
       contentOpts.research = found.notes;
 
       const outline = await step.do("outline", LLM_STEP, () =>

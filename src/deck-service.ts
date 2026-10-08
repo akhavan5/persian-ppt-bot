@@ -55,10 +55,20 @@ export async function runningJob(env: Env, userId: string | number): Promise<{ b
   return { busy: true, jobId };
 }
 
+/** متن فایل آپلودی: حذف نویسه‌های کنترلی و نشانگرهای پرامپت، فشرده‌سازی فاصله‌ها، سقف ۱۲ هزار نویسه */
+export const MAX_SOURCE_CHARS = 12000;
+export function cleanSource(raw: unknown): string {
+  return String(raw ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+    .replace(/<<<DOCUMENT|DOCUMENT>>>/g, " ")
+    .replace(/\r\n?/g, "\n").replace(/[ \t\u00A0]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n")
+    .trim().slice(0, MAX_SOURCE_CHARS);
+}
+
 export interface Denied { error: string; status: number; needPlan?: boolean; noCredit?: boolean; busy?: boolean }
 type Quota = Awaited<ReturnType<typeof spendCredit>>;
 export type Begin =
-  | { ok: true; topic: string; settings: Settings; imageCount: number; quota: Quota; undo: () => Promise<void> }
+  | { ok: true; topic: string; source: string; settings: Settings; imageCount: number; quota: Quota; undo: () => Promise<void> }
   | { ok: false; denied: Denied };
 
 const deny = (error: string, status: number, extra: Partial<Denied> = {}): Begin => ({ ok: false, denied: { error, status, ...extra } });
@@ -67,10 +77,13 @@ const deny = (error: string, status: number, extra: Partial<Denied> = {}): Begin
  * اعتبارسنجی + کسر اعتبار + قفل. uid: شناسه‌ی اصلی کاربر (حساب وب یا تلگرامِ بدون اتصال).
  * بعد از موفقیت، فراخواننده باید یا launchDeck را صدا بزند یا (در صورت خطا) undo را.
  */
-export async function beginDeck(env: Env, uid: string | number, topicRaw: string, want: { slides?: number; imageCount?: number } = {}): Promise<Begin> {
+export async function beginDeck(env: Env, uid: string | number, topicRaw: string, want: { slides?: number; imageCount?: number; source?: unknown } = {}): Promise<Begin> {
   const topic = topicRaw.replace(/\s+/g, " ").trim();
   if (topic.length < 3) return deny("موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.", 400);
   if (topic.length > 600) return deny("موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).", 400);
+
+  const source = cleanSource(want.source);
+  if (want.source && source.length < 30) return deny("متن فایل خیلی کوتاه یا خالی است؛ فایل دیگری را امتحان کن.", 400);
 
   const [maxSlides, maxImg] = await Promise.all([maxSlidesFor(env, uid), maxImagesFor(env, uid)]);
   const wantSlides = typeof want.slides === "number" && Number.isFinite(want.slides) ? Math.round(want.slides) : undefined;
@@ -98,7 +111,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
     await refundCredit(env, uid, quota.source, quota.day).catch((e) => console.error("refund", e));
     await releaseLock(env, uid).catch((e) => console.error("unlock", e));
   };
-  return { ok: true, topic, settings, imageCount, quota, undo };
+  return { ok: true, topic, source, settings, imageCount, quota, undo };
 }
 
 export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number }
@@ -107,7 +120,7 @@ export interface Delivery { chatId: number; statusMessageId: number; channel: "w
 export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid: string | number, jobId: string, d: Delivery): Promise<boolean> {
   const params: DeckParams = {
     chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId,
-    topic: b.topic, settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
+    topic: b.topic, ...(b.source ? { source: b.source } : {}), settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
   };
   try {
     if (d.channel === "web") await env.KV.put(`job:${jobId}`, "⏳ در صف…", { expirationTtl: 3600 });

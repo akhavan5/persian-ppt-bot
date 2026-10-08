@@ -65,6 +65,8 @@ export interface Env {
   /** جستجوی آنلاین پشت‌صحنه (رایگان: ویکی‌پدیا + DuckDuckGo): WEB_SEARCH=off خاموش می‌کند؛ TAVILY_API_KEY اختیاری (سطح رایگان tavily.com) */
   WEB_SEARCH?: string;
   TAVILY_API_KEY?: string;
+  /** تبدیل تصویر/PDF اسکن‌شده به متن (OCR) با ocr.space؛ کلید رایگان از ocr.space/ocrapi/freekey. بدون آن از کلید دموی عمومی (با سقف بسیار کم) استفاده می‌شود */
+  OCR_SPACE_API_KEY?: string;
   /** آدرس اصلی سایت برای canonical/sitemap/OG (پیش‌فرض https://pptsaz.ir) */
   SITE_URL?: string;
 }
