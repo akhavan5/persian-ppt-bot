@@ -227,7 +227,7 @@ main{max-width:1000px;margin:0 auto;padding:12px 16px 40px}
 </style></head>
 <body>
 <header class="bar"><h1>👁 ${esc(deck.title)}</h1>
-<div class="act"><a class="btn" href="/api/files/${id}">⬇️ دانلود PPTX</a><button class="btn" id="pdf" type="button">📄 ذخیره PDF</button><a class="btn ghost" href="/">بازگشت به سایت</a></div></header>
+<div class="act"><a class="btn" href="/api/files/${id}" rel="nofollow">⬇️ دانلود PPTX</a><button class="btn" id="pdf" type="button">📄 ذخیره PDF</button><a class="btn ghost" href="/">بازگشت به سایت</a></div></header>
 <p class="hint">برای PDF روی «ذخیره PDF» بزن و در پنجره‌ی چاپ، مقصد را <b>Save as PDF</b> بگذار (حاشیه: هیچ). ${note}</p>
 <main>
 ${slides}

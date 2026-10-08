@@ -17,7 +17,9 @@ function safeEqual(a: string, b: string): boolean {
   return d === 0;
 }
 
-// سئو: پاسخ‌های API و مسیرهای مدیریتی هرگز نباید ایندکس شوند
+// سئو: پاسخ‌های API و مسیرهای مدیریتی هرگز نباید ایندکس شوند.
+// نکته‌ی مهم: این مسیرها عمداً در robots.txt مسدود نیستند؛ اگر مسدود باشند گوگل هدر noindex را نمی‌بیند
+// و آدرس را «Indexed, though blocked by robots.txt» ایندکس می‌کند. گوگل باید بتواند بخزد تا noindex را ببیند.
 function noindex(res: Response): Response {
   const r = new Response(res.body, res);
   r.headers.set("x-robots-tag", "noindex, nofollow");
@@ -47,10 +49,13 @@ export default {
     if (url.pathname.startsWith("/api/")) return noindex(await handleWeb(req, env, url));
 
     // وبهوک تلگرام — تلگرام هدر محرمانه را روی هر درخواست می‌فرستد
+    if (url.pathname === "/telegram" && req.method !== "POST") {
+      return noindex(new Response("method not allowed", { status: 405, headers: { allow: "POST" } }));
+    }
     if (url.pathname === "/telegram" && req.method === "POST") {
       const got = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
       if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(got, env.TELEGRAM_WEBHOOK_SECRET)) {
-        return new Response("forbidden", { status: 403 });
+        return noindex(new Response("forbidden", { status: 403 }));
       }
       const update = await req.json();
       // فوراً ۲۰۰ برمی‌گردانیم تا تلگرام درخواست را تکرار نکند؛ کار اصلی در Workflow انجام می‌شود
@@ -60,14 +65,14 @@ export default {
         const chatId = (update as any)?.message?.chat?.id ?? (update as any)?.callback_query?.message?.chat?.id;
         if (chatId) await tg(env, "sendMessage", { chat_id: chatId, text: "⚠️ مشکلی پیش آمد. چند لحظه بعد دوباره امتحان کن." }).catch(() => {});
       }));
-      return new Response("ok");
+      return noindex(new Response("ok"));
     }
 
     // ثبت وبهوک: یک بار در مرورگر باز کن → /setup?secret=<TELEGRAM_WEBHOOK_SECRET>
     if (url.pathname === "/setup") {
       const secret = url.searchParams.get("secret") ?? "";
       if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
-        return new Response("forbidden", { status: 403 });
+        return noindex(new Response("forbidden", { status: 403 }));
       }
       await tg(env, "setWebhook", {
         url: `${url.origin}/telegram`,
@@ -81,7 +86,7 @@ export default {
         await tg(env, "setMyCommands", { commands: ADMIN_COMMANDS, scope: { type: "chat", chat_id: Number(id) } }).catch((e) => console.error("admin commands", e));
       }
       const info = await tg(env, "getWebhookInfo");
-      return Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count });
+      return noindex(Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count }));
     }
 
     // تأیید مالکیت در وب‌مستر یاندکس (مستقیم از Worker تا ریدایرکت .html کلودفلر مانعش نشود)
@@ -90,7 +95,7 @@ export default {
     }
     // سئو: robots و sitemap با دامنه‌ی واقعی سایت ساخته می‌شوند
     if (url.pathname === "/robots.txt") {
-      return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /setup\nDisallow: /telegram\n\nSitemap: ${SITE}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     if (url.pathname === "/sitemap.xml") {
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n${landingSitemapEntries(SITE)}${blogSitemapEntries(SITE)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
