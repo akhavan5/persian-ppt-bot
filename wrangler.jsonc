@@ -12,7 +12,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/api/*", "/telegram", "/setup", "/robots.txt", "/sitemap.xml", "/yandex_85baee77d3c502ea.html", "/student", "/thesis-defense", "/teacher", "/business", "/free", "/compare", "/telegram", "/ppt-saz", "/blog", "/blog/*"]
+    "run_worker_first": ["/", "/api/*", "/telegram", "/setup", "/robots.txt", "/sitemap.xml", "/yandex_85baee77d3c502ea.html", "/student", "/thesis-defense", "/teacher", "/business", "/free", "/compare", "/telegram-bot", "/ppt-saz", "/blog", "/blog/*"]
   },
 
   // متغیرها/رمزهایی که در داشبورد تنظیم می‌کنید با هر دیپلوی پاک نشوند

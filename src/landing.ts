@@ -121,7 +121,7 @@ const ARTICLES_FOR: Record<string, string[]> = {
   free: ["ai-powerpoint-step-by-step", "free-powerpoint-templates-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
   "ppt-saz": ["ai-powerpoint-step-by-step", "persian-powerpoint-design", "free-powerpoint-templates-persian"],
   compare: ["best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
-  telegram: ["ai-powerpoint-mobile-telegram", "ai-powerpoint-faq-persian", "ai-powerpoint-step-by-step"],
+  "telegram-bot": ["ai-powerpoint-mobile-telegram", "ai-powerpoint-faq-persian", "ai-powerpoint-step-by-step"],
 };
 
 export function renderLanding(p: Page, SITE: string): string {
