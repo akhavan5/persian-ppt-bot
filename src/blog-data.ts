@@ -2,6 +2,7 @@
 // مسیر /blog/<slug>، sitemap، فهرست وبلاگ، داده‌ی ساختاریافته و لینک‌های مرتبط خودکار ساخته می‌شوند.
 // متن‌ها ساده‌اند (HTML ندارند). لینک داخلی: [متن](/مسیر). از " در متن فارسی استفاده نکن؛ از « » استفاده کن.
 import type { Section } from "./landing-data";
+import { EXTRA_POSTS } from "./blog-data-extra";
 
 export type BlogSection = Section & { chips?: string[] };
 
@@ -23,7 +24,7 @@ export type Post = {
   cta: string;
 };
 
-export const POSTS: Post[] = [
+const BASE_POSTS: Post[] = [
   // ───────────────────────── ساختار دفاعیه ─────────────────────────
   {
     slug: "thesis-defense-slides-guide",
@@ -1357,5 +1358,8 @@ export const POSTS: Post[] = [
   },
 
 ];
+
+// مقاله‌های راهنمای جامع، پرامپت، نمودار، RTL، فونت و رفع مشکل در blog-data-extra.ts هستند
+export const POSTS: Post[] = [...BASE_POSTS, ...EXTRA_POSTS];
 
 export const POST_BY_SLUG = new Map(POSTS.map((p) => [p.slug, p]));

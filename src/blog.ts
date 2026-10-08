@@ -90,7 +90,7 @@ function head(o: { title: string; desc: string; url: string; site: string; type:
 }
 
 function shell(site: string, current: string, main: string): string {
-  const nav = PAGES.filter((x) => x.slug !== "ppt-saz").map((x) => `<a href="/${x.slug}">${esc(x.nav)}</a>`).join("") + `<a href="/blog"${current === "blog" ? ' aria-current="page"' : ""}>وبلاگ</a><a href="/#pricing">تعرفه</a>`;
+  const nav = PAGES.filter((x) => x.slug !== "ppt-saz" && x.menu !== false).map((x) => `<a href="/${x.slug}">${esc(x.nav)}</a>`).join("") + `<a href="/blog"${current === "blog" ? ' aria-current="page"' : ""}>وبلاگ</a><a href="/#pricing">تعرفه</a>`;
   const guides = PAGES.map((x) => `<li><a href="/${x.slug}">${esc(x.nav)}</a></li>`).join("");
   const arts = POSTS.map((x) => `<li><a href="/blog/${x.slug}">${esc(x.nav)}</a></li>`).join("");
   return `<body>

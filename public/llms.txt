@@ -17,6 +17,9 @@
 - [مقایسه‌ی ابزارها](https://pptsaz.ir/compare): مقایسه‌ی سایت‌های ساخت پاورپوینت با هوش مصنوعی و معیار انتخاب
 - [ربات تلگرام و گوشی](https://pptsaz.ir/telegram-bot): ساخت پاورپوینت با تلگرام و مرورگر گوشی، دستورهای ربات
 - [ربات تلگرام](https://t.me/pptsaz_bot): @pptsaz_bot؛ موضوع را بفرست و فایل PPTX بگیر
+- [ساخت پاورپوینت از متن](https://pptsaz.ir/text-to-pptx): تبدیل متن به PPTX فارسی؛ متن کوتاه در کادر، متن بلند با فایل TXT/MD/DOCX
+- [تبدیل Word به پاورپوینت](https://pptsaz.ir/word-to-pptx): روش دستی با Heading و روش آپلود DOCX
+- [تبدیل PDF به پاورپوینت](https://pptsaz.ir/pdf-to-pptx): PDF متنی و اسکن‌شده (OCR)
 - [pptساز چیست؟](https://pptsaz.ir/ppt-saz): معرفی سرویس و نام‌های مشابه آن
 
 ## وبلاگ
@@ -31,6 +34,13 @@
 - [ساخت پاورپوینت با ChatGPT](https://pptsaz.ir/blog/chatgpt-powerpoint-persian): پرامپت آماده و محدودیت‌های فارسی
 - [پرسش‌های رایج ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-faq-persian): فارسی، رایگان، گوشی و ChatGPT
 - [ساخت پاورپوینت با گوشی و تلگرام](https://pptsaz.ir/blog/ai-powerpoint-mobile-telegram): راهنمای قدم‌به‌قدم
+
+- [بهترین روش ساخت پاورپوینت فارسی](https://pptsaz.ir/blog/best-way-persian-powerpoint): راهنمای جامع شش‌مرحله‌ای
+- [نوشتن پرامپت برای پاورپوینت](https://pptsaz.ir/blog/ai-powerpoint-prompt-persian): فرمول و نمونه‌پرامپت‌های آماده
+- [نمودار در پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-charts): نوع نمودار، داده و ارقام فارسی
+- [اسلاید فارسی راست‌به‌چپ](https://pptsaz.ir/blog/persian-rtl-slides): تنظیم RTL و Slide Master
+- [بهترین فونت فارسی پاورپوینت](https://pptsaz.ir/blog/best-persian-font-powerpoint): Vazirmatn، Tahoma و Arial
+- [مشکل به‌هم‌ریختگی فارسی در PowerPoint](https://pptsaz.ir/blog/fix-persian-powerpoint-broken): علت‌ها و راه‌حل‌ها
 
 ## نکات
 - زبان: فارسی؛ خروجی: PPTX سازگار با PowerPoint، LibreOffice و Google Slides

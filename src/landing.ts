@@ -114,13 +114,16 @@ export function renderSection(s: Section): string {
 
 // مقاله‌های وبلاگ مرتبط با هر صفحه (برای لینک‌دهی داخلی)
 const ARTICLES_FOR: Record<string, string[]> = {
-  student: ["how-many-slides", "class-presentation-tips", "presentation-topic-ideas"],
+  student: ["how-many-slides", "class-presentation-tips", "ai-powerpoint-prompt-persian"],
   "thesis-defense": ["thesis-defense-slides-guide", "thesis-defense-powerpoint-how-to", "how-many-slides"],
   teacher: ["persian-powerpoint-design", "how-many-slides", "presentation-topic-ideas"],
-  business: ["persian-powerpoint-design", "how-many-slides", "ai-powerpoint-topic-tips"],
+  business: ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides"],
   free: ["ai-powerpoint-step-by-step", "free-powerpoint-templates-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
-  "ppt-saz": ["ai-powerpoint-step-by-step", "persian-powerpoint-design", "free-powerpoint-templates-persian"],
+  "ppt-saz": ["best-way-persian-powerpoint", "best-persian-font-powerpoint", "ai-powerpoint-step-by-step"],
   compare: ["best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
+  "text-to-pptx": ["ai-powerpoint-prompt-persian", "best-way-persian-powerpoint", "ai-powerpoint-charts"],
+  "word-to-pptx": ["best-way-persian-powerpoint", "fix-persian-powerpoint-broken", "persian-rtl-slides"],
+  "pdf-to-pptx": ["best-way-persian-powerpoint", "thesis-defense-slides-guide", "ai-powerpoint-prompt-persian"],
   "telegram-bot": ["ai-powerpoint-mobile-telegram", "ai-powerpoint-faq-persian", "ai-powerpoint-step-by-step"],
 };
 
@@ -154,7 +157,7 @@ export function renderLanding(p: Page, SITE: string): string {
     ],
   };
 
-  const nav = PAGES.filter((x) => x.slug !== "ppt-saz").map((x) => `<a href="/${x.slug}"${x.slug === p.slug ? ' aria-current="page"' : ""}>${esc(x.nav)}</a>`).join("") + `<a href="/blog">وبلاگ</a><a href="/#pricing">تعرفه</a>`;
+  const nav = PAGES.filter((x) => x.slug !== "ppt-saz" && x.menu !== false).map((x) => `<a href="/${x.slug}"${x.slug === p.slug ? ' aria-current="page"' : ""}>${esc(x.nav)}</a>`).join("") + `<a href="/blog">وبلاگ</a><a href="/#pricing">تعرفه</a>`;
   const guides = PAGES.map((x) => `<li><a href="/${x.slug}">${esc(x.nav)}</a></li>`).join("") + `<li><a href="/blog">وبلاگ</a></li>`;
 
   return `<!doctype html>
