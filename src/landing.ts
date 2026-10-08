@@ -37,13 +37,13 @@ a{color:var(--primary)}
 .wide{max-width:1040px}
 header.top{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 header .in{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05rem;color:var(--text);text-decoration:none}
+.brand{white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05rem;color:var(--text);text-decoration:none}
 .brand i{font-style:normal;display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;font-size:20px;box-shadow:0 6px 16px rgba(37,99,235,.3)}
-nav.links{display:flex;gap:14px;flex-wrap:wrap}
-nav.links a{color:var(--muted);text-decoration:none;font-size:.88rem;font-weight:600}
+nav.links{display:flex;gap:12px;flex-wrap:nowrap}
+nav.links a{color:var(--muted);text-decoration:none;font-size:.86rem;font-weight:600;white-space:nowrap}
 nav.links a:hover,nav.links a[aria-current]{color:var(--primary)}
-@media(max-width:1000px){nav.links{display:none}}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;padding:12px 24px;font-weight:700;cursor:pointer;text-decoration:none;background:linear-gradient(135deg,var(--primary),#1d4ed8);color:#fff;box-shadow:0 6px 18px rgba(37,99,235,.28);transition:.15s}
+@media(max-width:1180px){nav.links{display:none}}
+.btn{white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;padding:12px 24px;font-weight:700;cursor:pointer;text-decoration:none;background:linear-gradient(135deg,var(--primary),#1d4ed8);color:#fff;box-shadow:0 6px 18px rgba(37,99,235,.28);transition:.15s}
 .btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(37,99,235,.34)}
 .btn.ghost{background:#fff;color:var(--text);border:1px solid var(--line);box-shadow:none}
 .btn.ghost:hover{border-color:var(--primary);color:var(--primary)}
