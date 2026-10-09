@@ -16,6 +16,9 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const I = (inch: number) => `${(inch * 7.5).toFixed(3)}cqw`;
 const P = (pt: number) => `${((pt * 7.5) / 72).toFixed(3)}cqw`;
 
+/** ارتفاع صفحه‌ی PDF ربات (اینچ): ۷٫۵ = فقط اسلاید؛ اگر اسلایدی یادداشت دارد ۱۰ (جای کادر یادداشت زیر اسلاید) */
+export const pdfPageHeight = (deck: Deck) => (deck.slides.some((s) => s.notes) ? 10 : 7.5);
+
 export interface PreviewOpts {
   id: string; theme: string; font: string; digits: boolean; images: number[]; nonce: string;
   /** حالت PDF سمت سرور (ربات تلگرام): شماره‌ی اسلاید ← تصویر به‌صورت data: URI؛ نوار بالا، راهنما و اسکریپت حذف می‌شوند */
@@ -179,10 +182,14 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
       : lay === "questions" ? numbered(sd)
       : bullets(sd);
     const num = r.num ? text(0.6, 6.95, 1.0, 0.3, [String(i + 1)], 11, t.muted, { align: "left", space: 0 }) : "";
-    const notes = sd.notes ? `<div class="notes"><b>یادداشت سخنرانی:</b> ${tx(sd.notes)}</div>` : "";
+    // یادداشت سخنرانی مثل پیش‌نمایش وب زیر اسلاید می‌آید؛ در PDF ربات هم همان کادر در همان صفحه (فونت بر اساس طول متن کم می‌شود تا جا شود)
+    const nlen = sd.notes ? sd.notes.length : 0;
+    const npt = nlen <= 380 ? 16 : nlen <= 520 ? 14 : nlen <= 750 ? 12.5 : 11;
+    const notes = sd.notes ? `<div class="notes"${o.pdf ? ` style="font-size:${npt}pt"` : ""}><b>یادداشت سخنرانی:</b> ${tx(sd.notes)}</div>` : "";
     return `<div class="item"><div class="sl"><section class="slide" style="background:#${r.bg}">${r.html}${num}</section></div>${notes}</div>`;
   }).join("\n");
 
+  const pageH = pdfPageHeight(deck);
   const cssVars = `--font:"${fontName}","Vazirmatn",Tahoma,Arial,sans-serif`;
   const vazir = fontName === "Vazirmatn";
   const note = vazir
@@ -229,7 +236,17 @@ main{max-width:1000px;margin:0 auto;padding:12px 16px 40px}
   .sl{width:13.333in;height:7.5in;border-radius:0;box-shadow:none}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
-</style></head>
+</style>
+${o.pdf ? `<style>
+/* PDF ربات: هر صفحه = اسلاید + (در صورت وجود یادداشت) کادر یادداشت زیرش، مثل پیش‌نمایش وب */
+@page{size:13.333in ${pageH}in;margin:0}
+html,body{background:#eef1f6}
+@media print{
+  .item{height:${pageH}in;overflow:hidden;background:#eef1f6}
+  .notes{display:block!important;margin:.2in .5in 0;height:${(pageH - 7.5 - 0.4).toFixed(2)}in;overflow:hidden;line-height:1.9;border:1px solid #dbe1ea;border-radius:8px;background:#fff;padding:.08in .2in}
+}
+</style>` : ""}
+</head>
 <body>
 ${o.pdf ? "" : `<header class="bar"><h1>👁 ${esc(deck.title)}</h1>
 <div class="act"><a class="btn" href="/api/files/${id}" rel="nofollow">⬇️ دانلود PPTX</a><button class="btn" id="pdf" type="button">📄 ذخیره PDF</button><a class="btn ghost" href="/">بازگشت به سایت</a></div></header>

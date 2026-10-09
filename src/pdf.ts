@@ -2,7 +2,7 @@
  * نسخه‌ی PDF ارائه برای ربات تلگرام (سمت سرور).
  * همان صفحه‌ی HTML پیش‌نمایش وب (renderPreview) در مرورگر بدون‌سر کلودفلر (Browser Rendering) باز و به PDF تبدیل می‌شود؛
  * پس فونت فارسی (Vazirmatn از Google Fonts)، راست‌به‌چپ، نمودارها و تصویرها دقیقاً مثل پیش‌نمایش وب درمی‌آیند.
- * هر اسلاید یک صفحه‌ی ۱۳٫۳۳×۷٫۵ اینچ است (استایل چاپ همان صفحه).
+ * هر اسلاید یک صفحه است؛ یادداشت سخنرانی مثل پیش‌نمایش وب در کادری زیر همان اسلاید می‌آید (صفحه ۱۳٫۳۳×۱۰ اینچ؛ اگر هیچ اسلایدی یادداشت نداشته باشد ۱۳٫۳۳×۷٫۵).
  *
  * سهمیه: پلن رایگان Workers = ۱۰ دقیقه مرورگر در روز؛ برای همین PDF فقط با دکمه‌ی کاربر ساخته می‌شود (نه خودکار برای همه)،
  * نتیجه ۲۴ ساعت در KV نگه داشته می‌شود تا کلیک دوباره مرورگر جدید نخواهد، و سقف روزانه‌ی هر کاربر در bot.ts اعمال می‌شود.
@@ -12,7 +12,7 @@ import JSZip from "jszip";
 import type { Env } from "./env";
 import type { Uid } from "./settings";
 import { loadFileDirect, loadPreview } from "./files";
-import { renderPreview } from "./preview";
+import { pdfPageHeight, renderPreview } from "./preview";
 
 const TTL = 24 * 60 * 60;
 const pdfKey = (userId: Uid, id: string) => `pdf:${userId}:${id}`;
@@ -57,7 +57,7 @@ export async function buildDeckPdf(env: Env, userId: Uid, id: string): Promise<P
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 40_000 });
     await page.evaluate("document.fonts.ready.then(function(){return 1})"); // فونت وب کامل بارگذاری شود
-    const buf = await page.pdf({ width: "13.333in", height: "7.5in", printBackground: true, preferCSSPageSize: true });
+    const buf = await page.pdf({ width: "13.333in", height: `${pdfPageHeight(p.deck)}in`, printBackground: true, preferCSSPageSize: true });
     const data = new Uint8Array(buf);
     if (data.byteLength < 1000) return { ok: false, error: "⚠️ ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن." };
     if (data.byteLength <= 24 * 1024 * 1024) await env.FILES.put(pdfKey(userId, id), data, { expirationTtl: TTL }).catch((e) => console.error("pdf cache", e));
