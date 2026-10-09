@@ -1,6 +1,5 @@
 // اجرا: npm run sample  → فایل sample.pptx در ریشه‌ی پروژه ساخته می‌شود (بدون نیاز به کلید API)
 import { writeFileSync } from "node:fs";
-import { readFileSync } from "node:fs";
 import { buildPptx } from "../src/pptx";
 import type { Deck } from "../src/types";
 
@@ -18,8 +17,7 @@ const deck: Deck = {
 
 for (const theme of ["ocean", "midnight"]) {
   const t0 = performance.now();
-  const bytes = await buildPptx(deck, { theme, font: "Vazirmatn", persianDigits: true,
-    embed: [{ typeface: "Vazirmatn", regular: readFileSync("src/fonts/Vazirmatn-Regular.fntdata"), bold: readFileSync("src/fonts/Vazirmatn-Bold.fntdata") }] });
+  const bytes = await buildPptx(deck, { theme, font: "Vazirmatn", persianDigits: true });
   console.log(theme, bytes.length, "bytes", (performance.now() - t0).toFixed(1), "ms");
   writeFileSync(theme === "ocean" ? "sample.pptx" : `sample-${theme}.pptx`, bytes);
 }

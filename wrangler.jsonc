@@ -5,9 +5,6 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
-
-  // فونت‌های جاسازی‌شده در PPTX (src/fonts/*.fntdata) به‌صورت بایت خام import می‌شوند
-  "rules": [{ "type": "Data", "globs": ["**/*.fntdata"], "fallthrough": true }],
   "observability": { "enabled": true },
 
   // نسخه‌ی وب: فایل‌های پوشه‌ی public مستقیم از لبه‌ی کلودفلر سرو می‌شوند؛

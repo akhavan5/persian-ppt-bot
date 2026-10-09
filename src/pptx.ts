@@ -3,7 +3,6 @@ import PptxGenJS from "pptxgenjs";
 import type { Deck, Slide } from "./types";
 import { THEMES, iconOf, type Theme } from "./themes";
 import { toFa } from "./util";
-import { embedFonts, type EmbeddedFont } from "./embed-font";
 
 const W = 13.333, H = 7.5, M = 0.8; // اسلاید 16:9 و حاشیه (اینچ)
 
@@ -59,15 +58,11 @@ export interface BuildOptions {
   font?: string;
   persianDigits?: boolean;
   images?: Map<number, Uint8Array>;
-  /** فونت‌هایی که باید داخل فایل جاسازی شوند (نام typeface باید با فونت ارائه یکی باشد) */
-  embed?: EmbeddedFont[];
 }
 
 export async function buildPptx(deck: Deck, opts: BuildOptions = {}): Promise<Uint8Array> {
   const b = new Builder(opts);
-  const out = await b.build(deck);
-  const fonts = (opts.embed ?? []).filter((f) => f.typeface === (opts.font ?? "Vazirmatn"));
-  return fonts.length ? embedFonts(out, fonts) : out;
+  return b.build(deck);
 }
 
 class Builder {
