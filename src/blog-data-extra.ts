@@ -395,7 +395,7 @@ export const EXTRA_POSTS: Post[] = [
       {
         h2: "چطور Vazirmatn را نصب کنیم؟",
         steps: [
-          { t: "فونت را دانلود کن", d: "از صفحه‌ی رسمی Vazirmatn در GitHub یا Google Fonts فایل فونت را بگیر." },
+          { t: "فونت را دانلود کن", d: "فایل فونت را مستقیم از https://pptsaz.ir/fonts/Vazirmatn.zip دانلود کن." },
           { t: "فایل‌ها را نصب کن", d: "در ویندوز روی فایل TTF راست‌کلیک و Install را بزن؛ در مک فایل را در Font Book باز و نصب کن." },
           { t: "PowerPoint را دوباره باز کن", d: "برنامه را ببند و باز کن تا فونت جدید در فهرست دیده شود." },
         ],
