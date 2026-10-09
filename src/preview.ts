@@ -193,7 +193,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   const cssVars = `--font:"${fontName}","Vazirmatn",Tahoma,Arial,sans-serif`;
   const vazir = fontName === "Vazirmatn";
   const note = vazir
-    ? `این پیش‌نمایش و PDF با فونت Vazirmatn ساخته می‌شود. برای نمایش درست فایل PPTX روی دستگاهت، فونت را نصب کن؛ دانلود: <a href="${FONT_URL}" target="_blank" rel="noopener">GitHub</a> · <a href="${FONT_URL_ALT}" target="_blank" rel="noopener">Google Fonts</a>`
+    ? `این پیش‌نمایش و PDF با فونت Vazirmatn ساخته می‌شود. برای نمایش درست فایل PPTX روی دستگاهت، فونت را نصب کن؛ دانلود مستقیم: <a href="${FONT_URL}" download rel="noopener">Vazirmatn.zip</a> · <a href="${FONT_URL_ALT}" download rel="noopener">فایل TTF</a>`
     : `فونت انتخابی (${esc(fontName)}) روی بیشتر دستگاه‌ها نصب است؛ اگر در پیش‌نمایش متفاوت دیدی، فایل PPTX هم همین‌طور باز می‌شود.`;
   const id = encodeURIComponent(o.id);
 
