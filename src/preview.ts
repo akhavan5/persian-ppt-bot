@@ -70,7 +70,8 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
     const tx0 = W / 2 + 0.1, tw = W / 2 - M - 0.1, paras = sd.bullets.length ? sd.bullets : [""];
     const iw = W / 2 - M - 0.3, ih = 4.85;
     return { bg: t.bg, num: true, html: title(sd.title) +
-      box(M, 1.8, iw, ih, `<img data-src="/api/files/${encodeURIComponent(o.id)}/img/${i}" alt="">`, "overflow:hidden;border-radius:" + I(0.1)) +
+      shape(M, 1.8, iw, ih, t.surface) + // پشت تصویر (مثل فایل pptx): کل تصویر بدون برش دیده می‌شود
+      box(M, 1.8, iw, ih, `<img data-src="/api/files/${encodeURIComponent(o.id)}/img/${i}" alt="" style="object-fit:contain">`, "overflow:hidden;border-radius:" + I(0.1)) +
       text(tx0, 1.8, tw, 4.85, paras, fitSize(paras, tw, 4.85, 24, 15, true), t.text, { bullet: true, valign: "middle" }) };
   };
   const columns = (sd: Slide, n: 2 | 3): R => {

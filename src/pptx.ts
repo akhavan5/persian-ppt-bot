@@ -173,13 +173,15 @@ class Builder {
   private imageText(sd: Slide, img: Uint8Array) {
     const s = this.slide(this.t.bg);
     this.title(s, sd.title);
-    // تصویر تولیدی مربع است؛ با sizing=cover به اندازه‌ی کادر برش می‌خورد (بدون کشیدگی).
+    // عکس‌های واقعی وب نسبت‌های مختلفی دارند و گاهی متن/لوگو در لبه‌هایشان است؛ با cover لبه‌ها بریده می‌شد.
+    // با sizing=contain کل تصویر (بدون برش و بدون کشیدگی) وسط کادر می‌نشیند؛ پشتش کادر هم‌رنگ سطح اسلاید است.
     // w/h = ابعاد (نسبت) خود تصویر، و sizing.w/h = اندازه‌ی کادر
+    this.shape(s, M, 1.8, IMAGE_BOX.w, IMAGE_BOX.h, this.t.surface);
     const png = img[0] === 0x89 && img[1] === 0x50; // امضای PNG
     const d = imageSize(img), aspect = d && d.w > 0 && d.h > 0 ? d.w / d.h : 1; // نسبت واقعی تصویر (عکس‌های واقعی مربع نیستند)
     s.addImage({
       data: `image/${png ? "png" : "jpeg"};base64,${toBase64(img)}`, x: M, y: 1.8,
-      w: IMAGE_BOX.h * aspect, h: IMAGE_BOX.h, sizing: { type: "cover", w: IMAGE_BOX.w, h: IMAGE_BOX.h },
+      w: IMAGE_BOX.h * aspect, h: IMAGE_BOX.h, sizing: { type: "contain", w: IMAGE_BOX.w, h: IMAGE_BOX.h },
     });
     const tx = W / 2 + 0.1, tw = W / 2 - M - 0.1;
     const paras = sd.bullets.length ? sd.bullets : [""];
