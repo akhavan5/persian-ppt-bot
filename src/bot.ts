@@ -16,6 +16,7 @@ import { modelList } from "./llm";
 import { PLANS } from "./payment";
 import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
+import { markRefill, toggleRefill } from "./refill";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf } from "./tg-file";
 
 const HELP =
@@ -26,6 +27,7 @@ const HELP =
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت دانشجویی، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب\n" +
+  "🔔 /remind ← یادآوری شارژ روزانه (روشن/خاموش)\n" +
   "🌐 /site ← ورود خودکار به سایت (پلن‌ها و پرداخت آنلاین)\n" +
   "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
   "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX و PDF) تا ۲۴ ساعت"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
@@ -156,6 +158,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
     if (d.noCredit) {
       await answer();
+      await markRefill(env, chatId, uid);
       return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, tgId));
     }
     if (d.needPlan) {
@@ -423,6 +426,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
       kb([[{ text: "📤 ارسال به دوستان", url: share }]]));
   }
 
+  if (cmd === "/remind") return await sendMessage(env, chatId, await toggleRefill(env, chatId));
   if (cmd === "/credit" || cmd === "/balance") {
     const [c, sub, caps] = await Promise.all([getCredit(env, uid), getActiveSub(env, uid), getCaps(env, uid)]);
     const planName = sub ? (PLANS.find((p) => p.id === sub.plan)?.name ?? sub.plan) : "";
@@ -481,6 +485,7 @@ async function wizardGate(env: Env, chatId: number, uid: Uid, userId: number): P
   }
   const [s, caps, credit] = await Promise.all([getSettings(env, uid), getCaps(env, uid), getCredit(env, uid)]);
   if (!credit.unlimited && credit.total <= 0) {
+    await markRefill(env, chatId, uid);
     await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, userId));
     return null;
   }
