@@ -24,6 +24,8 @@ const BAD_IMG = /\.(svg|gif|webp|ico|avif)(\?|$)|logo|icon|sprite|avatar|banner|
 
 const MAX_NOTES_CHARS = 4000;
 const TIMEOUT_MS = 8_000;
+/** Tavily با include_images کندتر است؛ زمان بیشتر می‌گیرد (زیر سقف ۴۵ ثانیه‌ی مرحله‌ی research در workflow) */
+const TAVILY_TIMEOUT_MS = 20_000;
 const UA = "persian-ppt-bot/1.0 (+https://pptsaz.ir)";
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim().slice(0, n);
 
@@ -80,7 +82,7 @@ async function tavily(env: Env, query: string, limit: number, sink?: FoundImage[
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${env.TAVILY_API_KEY}` },
     body: JSON.stringify({ query: query.slice(0, 380), max_results: limit, search_depth: "basic", ...(sink ? { include_images: true, include_image_descriptions: true } : {}) }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(TAVILY_TIMEOUT_MS),
   });
   if (!r.ok) throw new Error(`tavily ${r.status}`);
   const j = (await r.json()) as any;
@@ -125,7 +127,8 @@ const safe = (name: string, p: Promise<Hit[]>): Promise<Hit[]> => p.catch((e) =>
 async function researchNotes(env: Env, topic: string, sink: FoundImage[]): Promise<string> {
   try {
     const q = topic.replace(/^(یک\s+)?(ارائه|پاورپوینت|اسلاید)\s*(درباره(‌|\s)?ی|در مورد|پیرامون)?\s*/u, "").trim() || topic;
-    // حالت «فقط Tavily»: اگر کلید تنظیم شده باشد، فقط Tavily و بدون هیچ فیلتری (ویکی‌پدیا/DuckDuckGo خاموش‌اند)
+    // حالت «فقط Tavily»: اگر کلید تنظیم شده باشد، فقط Tavily و بدون هیچ فیلتری (ویکی‌پدیا/DuckDuckGo خاموش‌اند).
+    // اگر Tavily شکست خورد/تایم‌اوت شد، یادداشت خالی می‌ماند (عمداً بدون پشتیبان).
     if (env.TAVILY_API_KEY) {
       const hits = await safe("tavily", tavily(env, q, 8, sink));
       console.log("research", JSON.stringify({ tavily: `${hits.length}→${hits.length}` }), "q:", q.slice(0, 80));
