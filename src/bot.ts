@@ -8,6 +8,8 @@ import {
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleBroadcastCallback } from "./admin";
 import { listFiles, loadFile } from "./files";
+import { buildDeckPdf, cachedPdf } from "./pdf";
+import { hitLimit } from "./auth";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
@@ -26,7 +28,7 @@ const HELP =
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب\n" +
   "🌐 /site ← ورود خودکار به سایت (پلن‌ها و پرداخت آنلاین)\n" +
   "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
-  "📁 /files ← دریافت دوباره‌ی فایل‌های ۲۴ ساعت اخیر";
+  "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX و PDF) تا ۲۴ ساعت"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
 type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
@@ -237,6 +239,46 @@ async function banned(env: Env, tgId: number, uid: Uid): Promise<boolean> {
   return (await isBanned(env, tgId)) || (uid !== tgId && (await isBanned(env, uid)));
 }
 
+/** سقف روزانه‌ی ساخت PDF برای هر کاربر (پلن رایگان کلودفلر ۱۰ دقیقه مرورگر در روز دارد؛ PDF ذخیره‌شده این سقف را مصرف نمی‌کند) */
+const PDF_DAILY_LIMIT = 8;
+
+/** دکمه‌ی «دریافت نسخه‌ی PDF» (g:<شناسه‌ی ارائه>) */
+async function sendDeckPdf(env: Env, cq: any, uid: Uid, chatId: number, id: string) {
+  const answer = (text?: string, alert = false) =>
+    tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
+  if (!/^[\w-]{1,100}$/.test(id)) return await answer();
+  const cap = (title: string) => `📄 <b>${esc(title)}</b>\nنسخه‌ی PDF`;
+  const name = (title: string) => `${title.replace(/[\\/:*?"<>|\n\r]+/g, " ").trim().slice(0, 80) || "presentation"}.pdf`;
+
+  // قبلاً ساخته شده؟ بدون مصرف مرورگر و بدون شمارش در سقف روزانه
+  const hit = await cachedPdf(env, uid, id).catch(() => null);
+  if (hit) {
+    await answer();
+    const f = (await listFiles(env, uid).catch(() => [])).find((x) => x.id === id);
+    return await sendDocument(env, chatId, hit, name(f?.title ?? "presentation"), cap(f?.title ?? "ارائه"), { mime: "application/pdf" });
+  }
+  const day = new Date().toISOString().slice(0, 10);
+  if (await hitLimit(env, `pdf:${uid}:${day}`, PDF_DAILY_LIMIT, 172_800)) {
+    return await answer("سقف روزانه‌ی ساخت PDF تمام شد؛ فردا دوباره امتحان کن (فایل PPTX همیشه در دسترس است).", true);
+  }
+  await answer("⏳ در حال ساخت PDF… چند ثانیه صبر کن.");
+  const wait = await sendMessage(env, chatId, "⏳ در حال ساخت PDF…").catch(() => null);
+  const done = () => (wait ? tg(env, "deleteMessage", { chat_id: chatId, message_id: wait.message_id }).catch(() => {}) : Promise.resolve());
+  try {
+    const r = await buildDeckPdf(env, uid, id);
+    await done();
+    if (!r.ok) return await sendMessage(env, chatId, r.error);
+    return await sendDocument(env, chatId, r.data, name(r.title), cap(r.title), { mime: "application/pdf" });
+  } catch (e) {
+    console.error("deck pdf", e);
+    await done();
+    const msg = String(e instanceof Error ? e.message : e);
+    return await sendMessage(env, chatId, /429|time limit/i.test(msg)
+      ? "⚠️ سقف ساخت PDF برای امروز تمام شده است؛ فردا دوباره امتحان کن. فایل PPTX همیشه در دسترس است."
+      : "⚠️ ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن.");
+  }
+}
+
 async function handleCallback(env: Env, cq: any) {
   const userId: number = cq.from.id;
   const chatId: number = cq.message?.chat?.id;
@@ -250,6 +292,7 @@ async function handleCallback(env: Env, cq: any) {
   if (act === "af") return await handleAdminFileCallback(env, cq);
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
   if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
+  if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
   if (act === "f") {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
     const f = await loadFile(env, uid, a);
@@ -363,7 +406,10 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const list = await listFiles(env, uid);
     if (!list.length) return await sendMessage(env, chatId, "📁 فایلی برای ۲۴ ساعت اخیر نداری. فایل هر ارائه بعد از ساخته شدن تا ۲۴ ساعت اینجا می‌ماند.");
     return await sendMessage(env, chatId, "📁 <b>فایل‌های ۲۴ ساعت اخیر</b>\nبرای دریافت دوباره، یکی را بزن:",
-      kb(list.map((f) => [{ text: `📥 ${f.title.slice(0, 40)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` }])));
+      kb(list.map((f) => [
+        { text: `📥 ${f.title.slice(0, 32)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` },
+        ...(env.BROWSER ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),
+      ])));
   }
   if (cmd === "/invite") {
     const me = await tg<{ username?: string }>(env, "getMe");

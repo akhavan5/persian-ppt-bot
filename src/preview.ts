@@ -16,7 +16,11 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const I = (inch: number) => `${(inch * 7.5).toFixed(3)}cqw`;
 const P = (pt: number) => `${((pt * 7.5) / 72).toFixed(3)}cqw`;
 
-export interface PreviewOpts { id: string; theme: string; font: string; digits: boolean; images: number[]; nonce: string }
+export interface PreviewOpts {
+  id: string; theme: string; font: string; digits: boolean; images: number[]; nonce: string;
+  /** حالت PDF سمت سرور (ربات تلگرام): شماره‌ی اسلاید ← تصویر به‌صورت data: URI؛ نوار بالا، راهنما و اسکریپت حذف می‌شوند */
+  pdf?: Record<number, string>;
+}
 
 interface TOpts { bold?: boolean; align?: "right" | "center" | "left"; valign?: "top" | "middle" | "bottom"; bullet?: boolean | "number"; space?: number; emoji?: boolean }
 
@@ -71,7 +75,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
     const iw = W / 2 - M - 0.3, ih = 4.85;
     return { bg: t.bg, num: true, html: title(sd.title) +
       shape(M, 1.8, iw, ih, t.surface) + // پشت تصویر (مثل فایل pptx): کل تصویر بدون برش دیده می‌شود
-      box(M, 1.8, iw, ih, `<img data-src="/api/files/${encodeURIComponent(o.id)}/img/${i}" alt="" style="object-fit:contain">`, "overflow:hidden;border-radius:" + I(0.1)) +
+      box(M, 1.8, iw, ih, (o.pdf?.[i] ? `<img src="${o.pdf[i]}" alt="" style="object-fit:contain">` : `<img data-src="/api/files/${encodeURIComponent(o.id)}/img/${i}" alt="" style="object-fit:contain">`), "overflow:hidden;border-radius:" + I(0.1)) +
       text(tx0, 1.8, tw, 4.85, paras, fitSize(paras, tw, 4.85, 24, 15, true), t.text, { bullet: true, valign: "middle" }) };
   };
   const columns = (sd: Slide, n: 2 | 3): R => {
@@ -227,17 +231,17 @@ main{max-width:1000px;margin:0 auto;padding:12px 16px 40px}
 }
 </style></head>
 <body>
-<header class="bar"><h1>👁 ${esc(deck.title)}</h1>
+${o.pdf ? "" : `<header class="bar"><h1>👁 ${esc(deck.title)}</h1>
 <div class="act"><a class="btn" href="/api/files/${id}" rel="nofollow">⬇️ دانلود PPTX</a><button class="btn" id="pdf" type="button">📄 ذخیره PDF</button><a class="btn ghost" href="/">بازگشت به سایت</a></div></header>
-<p class="hint">برای PDF روی «ذخیره PDF» بزن و در پنجره‌ی چاپ، مقصد را <b>Save as PDF</b> بگذار (حاشیه: هیچ). ${note}</p>
+<p class="hint">برای PDF روی «ذخیره PDF» بزن و در پنجره‌ی چاپ، مقصد را <b>Save as PDF</b> بگذار (حاشیه: هیچ). ${note}</p>`}
 <main>
 ${slides}
 </main>
-<script nonce="${o.nonce}">
+${o.pdf ? "" : `<script nonce="${o.nonce}">
 document.getElementById("pdf").onclick=function(){window.print()};
 // تصویرها از فایل PPTX می‌آیند؛ اگر فایل هنوز برای همه‌ی نقاط شبکه دیده نمی‌شد چند بار دوباره امتحان می‌شود
 document.querySelectorAll("img[data-src]").forEach(function(im){var n=0;function go(){im.src=im.getAttribute("data-src")+(n?"?r="+n:"")}im.onerror=function(){if(n++<8)setTimeout(go,3000)};go()});
-</script>
+</script>`}
 </body></html>`;
 }
 

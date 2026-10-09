@@ -11,6 +11,8 @@ export interface Env {
   KV: Store;
   /** فایل‌های استاتیک نسخه‌ی وب (پوشه‌ی public) */
   ASSETS: Fetcher;
+  /** Browser Rendering (مرورگر بدون‌سر کلودفلر) برای ساخت PDF در ربات تلگرام؛ در wrangler.jsonc با کلید browser تعریف می‌شود */
+  BROWSER?: Fetcher;
   DECK_WORKFLOW: Workflow<DeckParams>;
   BROADCAST_WORKFLOW: Workflow<BroadcastParams>;
 

@@ -39,14 +39,16 @@ export async function editMessage(env: Env, chatId: number, messageId: number, t
   }
 }
 
-export async function sendDocument(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string) {
+const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+/** extra.reply_markup (مثلاً دکمه‌ی PDF) به‌صورت JSON در فرم فرستاده می‌شود؛ mime پیش‌فرض pptx است */
+export async function sendDocument(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { reply_markup?: unknown; mime?: string } = {}) {
   const form = new FormData();
   form.append("chat_id", String(chatId));
   form.append("caption", caption);
   form.append("parse_mode", "HTML");
-  form.append("document", new Blob([data], {
-    type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  }), filename);
+  if (extra.reply_markup) form.append("reply_markup", JSON.stringify(extra.reply_markup));
+  form.append("document", new Blob([data], { type: extra.mime ?? PPTX_MIME }), filename);
   const r = await fetch(`${apiBase(env)}/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, {
     method: "POST", body: form, signal: AbortSignal.timeout(120_000),
   });

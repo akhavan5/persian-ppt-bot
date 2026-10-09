@@ -22,6 +22,11 @@ const EMPTY: Research = { notes: "", images: [] };
 /** لوگو، آیکن، بنر و فرمت‌هایی که PowerPoint/PptxGenJS درست نمایش نمی‌دهد */
 const BAD_IMG = /\.(svg|gif|webp|ico|avif)(\?|$)|logo|icon|sprite|avatar|banner|placeholder|favicon|emoji|badge/i;
 
+/** تصویر Tavily فقط از منابع بدون واترمارک/لوگو پذیرفته می‌شود (تصویر سایت‌های تجاری و وبلاگ‌ها معمولاً لوگو، شماره‌تلفن یا نشانی سایت رویشان است).
+ *  تصویر ردشده جایش با ساخت تصویر هوش مصنوعی (بدون متن) پر می‌شود. */
+const CLEAN_IMG_HOSTS = /(^|\.)(wikimedia\.org|wikipedia\.org|unsplash\.com|pexels\.com|pixabay\.com|nasa\.gov|esa\.int|noaa\.gov|usgs\.gov|loc\.gov|si\.edu|europeana\.eu)$/i;
+const cleanImgHost = (url: string) => { try { return CLEAN_IMG_HOSTS.test(new URL(url).hostname); } catch { return false; } };
+
 const MAX_NOTES_CHARS = 4000;
 const TIMEOUT_MS = 8_000;
 /** Tavily با include_images کندتر است؛ زمان بیشتر می‌گیرد (زیر سقف ۴۵ ثانیه‌ی مرحله‌ی research در workflow) */
@@ -89,7 +94,7 @@ async function tavily(env: Env, query: string, limit: number, sink?: FoundImage[
   if (sink && Array.isArray(j?.images)) { // تصویرها یا رشته‌ی نشانی‌اند یا {url, description}
     for (const im of j.images) {
       const url = typeof im === "string" ? im : String(im?.url ?? "");
-      if (/^https:\/\//i.test(url) && !BAD_IMG.test(url)) sink.push({ url, desc: clean(typeof im === "string" ? "" : im?.description, 200), via: "tavily" });
+      if (/^https:\/\//i.test(url) && !BAD_IMG.test(url) && cleanImgHost(url)) sink.push({ url, desc: clean(typeof im === "string" ? "" : im?.description, 200), via: "tavily" });
     }
   }
   return (Array.isArray(j?.results) ? j.results : []).map((x: any) => {
