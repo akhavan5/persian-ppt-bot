@@ -27,10 +27,8 @@ export const ICONS: Record<string, string> = {
 };
 export const iconOf = (name: string) => ICONS[String(name || "").trim().toLowerCase()] ?? ICONS.star;
 
-/** فونت Vazirmatn داخل فایل PPTX جاسازی نمی‌شود؛ روی دستگاهی که نصبش نکرده، PowerPoint فونت دیگری جایگزین می‌کند. */
+/** فونت Vazirmatn داخل خود فایل PPTX جاسازی می‌شود (src/embed-font.ts)؛ نیازی به نصب نیست. لینک‌ها فقط برای ویرایش در برنامه‌های دیگر. */
 export const FONT_URL = "https://github.com/rastikerdar/vazirmatn/releases/latest";
 export const FONT_URL_ALT = "https://fonts.google.com/specimen/Vazirmatn";
-/** یادداشت نصب فونت برای کپشن تلگرام (HTML)؛ فقط وقتی فونت انتخابی Vazirmatn است */
-export const fontCaption = (font: string) => font === "Vazirmatn"
-  ? `\n\n🔤 برای نمایش درست، فونت <a href="${FONT_URL}">Vazirmatn</a> را روی دستگاهت نصب کن؛ یا در /settings فونت Tahoma را انتخاب کن.`
-  : "";
+/** فونت وزیر داخل فایل جاسازی شده؛ دیگر یادداشت نصب لازم نیست (برای سازگاری با فراخوانی‌ها نگه داشته شد) */
+export const fontCaption = (_font: string) => "";

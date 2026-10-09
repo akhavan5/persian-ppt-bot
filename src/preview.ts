@@ -6,7 +6,7 @@
  * اندازه‌ها با واحد cqw (درصد عرض اسلاید) هستند: ۱ اینچ = ۷٫۵cqw و ۱pt = ۰٫۱۰۴cqw؛ پس همه‌چیز با عرض صفحه مقیاس می‌گیرد.
  */
 import type { Chart, Deck, Slide } from "./types";
-import { FONT_URL, FONT_URL_ALT, THEMES, iconOf, type Theme } from "./themes";
+import { THEMES, iconOf, type Theme } from "./themes";
 import { toFa } from "./util";
 import { fitSize } from "./pptx";
 
@@ -193,7 +193,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   const cssVars = `--font:"${fontName}","Vazirmatn",Tahoma,Arial,sans-serif`;
   const vazir = fontName === "Vazirmatn";
   const note = vazir
-    ? `این پیش‌نمایش و PDF با فونت Vazirmatn ساخته می‌شود. برای نمایش درست فایل PPTX روی دستگاهت، فونت را نصب کن؛ دانلود: <a href="${FONT_URL}" target="_blank" rel="noopener">GitHub</a> · <a href="${FONT_URL_ALT}" target="_blank" rel="noopener">Google Fonts</a>`
+    ? `این پیش‌نمایش و PDF با فونت Vazirmatn ساخته می‌شود و همین فونت داخل فایل PPTX هم جاسازی شده است؛ نیازی به نصب فونت نیست.`
     : `فونت انتخابی (${esc(fontName)}) روی بیشتر دستگاه‌ها نصب است؛ اگر در پیش‌نمایش متفاوت دیدی، فایل PPTX هم همین‌طور باز می‌شود.`;
   const id = encodeURIComponent(o.id);
 

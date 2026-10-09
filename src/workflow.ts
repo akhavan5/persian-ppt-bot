@@ -6,6 +6,7 @@ import { LlmError, makeDeck, makeOutline, type ContentOpts } from "./llm";
 import { fetchImages } from "./images";
 import { researchTopic, type Research } from "./research";
 import { buildPptx } from "./pptx";
+import { VAZIR } from "./fonts";
 import { editMessage, esc, sendDocument, sendMessage } from "./telegram";
 import { getUserById } from "./auth";
 import { toFa } from "./util";
@@ -74,7 +75,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
           const images = settings.images ? await fetchImages(this.env, deck.slides, maxImages, web, found.images) : new Map();
           const bytes = await buildPptx(deck, {
-            theme: settings.theme, font: settings.font, persianDigits: settings.digits, images,
+            theme: settings.theme, font: settings.font, persianDigits: settings.digits, images, embed: [VAZIR],
           });
           const filename = safeFilename(deck.title);
           // متن اسلایدها برای پیش‌نمایش و PDF؛ خطا در ذخیره نباید ساخت ارائه را خراب کند

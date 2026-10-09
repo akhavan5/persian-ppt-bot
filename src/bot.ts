@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { Settings } from "./types";
-import { FONTS, FONT_URL, THEMES, TONES } from "./themes";
+import { FONTS, THEMES, TONES } from "./themes";
 import {
   ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, getActiveSub, getCredit, getSettings, isAdmin, isAllowed, isBanned,
   maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
@@ -70,7 +70,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
     title = "🗣 لحن متن";
     opts = Object.entries(TONES).map(([k, v]) => ({ text: mark(s.tone === k, v), callback_data: `v:tone:${k}` }));
   } else if (kind === "font") {
-    title = `🔤 فونت\n<i>Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد (<a href="${FONT_URL}">دانلود</a>)؛ Tahoma و Arial همه‌جا کار می‌کنند.</i>`;
+    title = `🔤 فونت\n<i>فونت Vazirmatn داخل خود فایل پاورپوینت جاسازی می‌شود و نیازی به نصب نیست.</i>`;
     opts = FONTS.map((f) => ({ text: mark(s.font === f, f), callback_data: `v:font:${f}` }));
   } else if (kind === "imgs") {
     const cur = imgCountOf(s, caps);
