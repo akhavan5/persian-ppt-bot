@@ -270,12 +270,15 @@ async function sendDeckPdf(env: Env, cq: any, uid: Uid, chatId: number, id: stri
     if (!r.ok) return await sendMessage(env, chatId, r.error);
     return await sendDocument(env, chatId, r.data, name(r.title), cap(r.title), { mime: "application/pdf" });
   } catch (e) {
-    console.error("deck pdf", e);
-    await done();
     const msg = String(e instanceof Error ? e.message : e);
-    return await sendMessage(env, chatId, /429|time limit/i.test(msg)
+    console.error("deck pdf", msg.slice(0, 400), e); // پیام کامل در ابتدای لاگ بیاید
+    await done();
+    // ۴۲۹ معمولاً یعنی شلوغی لحظه‌ای (تعداد مرورگر در دقیقه)، نه تمام‌شدن سهمیه‌ی روز؛ فقط خطای صریح «time limit» سقف روزانه است
+    return await sendMessage(env, chatId, /time limit/i.test(msg)
       ? "⚠️ سقف ساخت PDF برای امروز تمام شده است؛ فردا دوباره امتحان کن. فایل PPTX همیشه در دسترس است."
-      : "⚠️ ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن.");
+      : /429|rate|too many|concurrent/i.test(msg)
+        ? "⏳ الان سرویس ساخت PDF شلوغ است؛ حدود یک دقیقه دیگر دوباره دکمه‌ی PDF را بزن. فایل PPTX همیشه در دسترس است."
+        : "⚠️ ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن.");
   }
 }
 
