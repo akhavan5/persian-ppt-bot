@@ -5,7 +5,8 @@
  *
  * محدودیت سطح رایگان: ۱ مگابایت برای هر فایل. کلید رایگان: https://ocr.space/ocrapi/freekey (متغیر OCR_SPACE_API_KEY).
  * بدون کلید، کلید دموی عمومی استفاده می‌شود که سقف درخواستش بسیار کم است.
- * دقت OCR برای فارسی محدود است (موتور ۱ با زبان عربی)؛ متن خروجی فقط ورودی مدل است و قبل از استفاده نرمال‌سازی می‌شود.
+ * موتور ۳ (OCREngine=3) فارسی را با تشخیص خودکار زبان می‌خواند؛ موتور ۱ منسوخ شده و کد زبان «ara» را دیگر نمی‌پذیرد (خطای E201).
+ * سقف سطح رایگان برای موتور ۳: ۱۰۰۰ تبدیل در ماه (جدا از ۲۵٬۰۰۰ تبدیل موتور ۱/۲). متن خروجی فقط ورودی مدل است و قبل از استفاده نرمال‌سازی می‌شود.
  */
 import type { Env } from "./env";
 
@@ -18,10 +19,9 @@ const normFa = (s: string) => s.replace(/ي/g, "ی").replace(/ى/g, "ی").replac
 export async function ocrSpace(env: Env, bytes: ArrayBuffer, mime: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const form = new FormData();
   form.append("file", new Blob([bytes], { type: mime }), mime === "application/pdf" ? "scan.pdf" : mime === "image/png" ? "scan.png" : "scan.jpg");
-  form.append("language", "ara");
-  form.append("OCREngine", "1");
+  // موتور ۳: تشخیص خودکار زبان (فارسی هم پشتیبانی می‌شود)؛ پارامتر language عمداً فرستاده نمی‌شود
+  form.append("OCREngine", "3");
   form.append("scale", "true");
-  form.append("detectOrientation", "true");
   form.append("isOverlayRequired", "false");
   let r: Response;
   try {
