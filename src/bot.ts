@@ -14,12 +14,14 @@ import { modelList } from "./llm";
 import { PLANS } from "./payment";
 import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
+import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf } from "./tg-file";
 
 const HELP =
   "سلام! 👋\n" +
   "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد مرحله‌به‌مرحله <b>مدل، تعداد اسلاید و تعداد تصویر</b> را انتخاب می‌کنی و ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
+  "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت دانشجویی، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب\n" +
   "🌐 /site ← ورود خودکار به سایت (پلن‌ها و پرداخت آنلاین)\n" +
@@ -90,7 +92,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
 // ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← تعداد تصویر) ----------
 type Step = "model" | "slides" | "imgs";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
-interface Pending { topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string }
+interface Pending { topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
@@ -134,6 +136,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   else if (steps.indexOf("slides") >= 0 && steps.indexOf("slides") < idx) done.push(`📄 اسلاید: <b>${toFa(String(p.slides))}</b>`);
   const text = [
     `📝 <b>موضوع:</b> ${esc(topicShown)}`,
+    ...(p.source ? [`📎 <b>فایل:</b> ${esc((p.file ?? "فایل").slice(0, 80))} <i>(ارائه از روی محتوای فایل ساخته می‌شود)</i>`] : []),
     ...(done.length ? ["", ...done] : []),
     "",
     `<i>مرحله‌ی ${toFa(String(idx + 1))} از ${toFa(String(steps.length))}</i>`,
@@ -145,7 +148,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 
 /** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
 async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
-  const begin = await beginDeck(env, uid, p.topic, { slides: p.slides, imageCount: p.imgs });
+  const begin = await beginDeck(env, uid, p.topic, { slides: p.slides, imageCount: p.imgs, ...(p.source ? { source: p.source } : {}) });
   if (!begin.ok) {
     const d = begin.denied;
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
@@ -393,32 +396,69 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     return await sendMessage(env, chatId, t, extra);
   }
   if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. /start را بزن.");
-  if (!text) return await sendMessage(env, chatId, "لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست.");
+
+  // آپلود فایل (سند یا عکس): متن فایل منبع ارائه می‌شود؛ کپشن (اگر باشد) موضوع است، وگرنه نام فایل
+  const ref = fileRefOf(msg);
+  if (ref) {
+    const caption = String(msg.caption ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").trim();
+    const { topic: capTopic, slides: capSlides } = extractSlideCount(caption);
+    if (capTopic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
+    const gate = await wizardGate(env, chatId, uid, userId);
+    if (!gate) return;
+    const wait = await sendMessage(env, chatId, "⏳ در حال خواندن فایل…");
+    const ex = await extractTelegramFile(env, ref, uid);
+    if (!ex.ok) return await editMessage(env, chatId, wait.message_id, `⚠️ ${esc(ex.error)}`);
+    const fromName = ref.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
+    const topic = capTopic.length >= 3 ? capTopic : fromName.length >= 3 && !ref.isPhoto ? fromName.slice(0, 200) : "ارائه از روی فایل ارسالی";
+    return await showWizard(env, chatId, uid, gate, { topic, slides: capSlides, source: ex.text, file: ref.name, cardId: wait.message_id });
+  }
+
+  if (!text) return await sendMessage(env, chatId, `لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست؛ یا یک فایل (${SUPPORTED_NOTE}) تا ارائه از روی محتوایش ساخته شود.`);
 
   // به‌جای ساخت فوری، کارت انتخاب (مدل / اسلاید / تصویر) نشان داده می‌شود؛ اعتبار فقط با «🚀 ساخت ارائه» کم می‌شود
   const { topic, slides } = extractSlideCount(text);
   if (topic.length < 3) return await sendMessage(env, chatId, "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
   if (topic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
+  const gate = await wizardGate(env, chatId, uid, userId);
+  if (!gate) return;
+  return await showWizard(env, chatId, uid, gate, { topic, slides });
+}
+
+/** پیش‌شرط‌های شروع ویزارد (ارائه‌ی در حال ساخت / اتمام اعتبار)؛ اگر مانعی باشد پیام می‌دهد و null برمی‌گرداند */
+async function wizardGate(env: Env, chatId: number, uid: Uid, userId: number): Promise<{ s: Settings; caps: Caps } | null> {
   if ((await runningJob(env, uid)).busy) {
-    return await sendMessage(env, chatId, "⏳ ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، موضوع بعدی را بفرست.");
+    await sendMessage(env, chatId, "⏳ ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، موضوع بعدی را بفرست.");
+    return null;
   }
   const [s, caps, credit] = await Promise.all([getSettings(env, uid), getCaps(env, uid), getCredit(env, uid)]);
   if (!credit.unlimited && credit.total <= 0) {
-    return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, userId));
+    await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, userId));
+    return null;
   }
+  return { s, caps };
+}
+
+/** نمایش کارت انتخاب (مدل / اسلاید / تصویر). cardId: پیامی که باید به کارت تبدیل شود (مثلاً «در حال خواندن فایل…»)؛ خالی = پیام تازه */
+async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; caps: Caps }, o: { topic: string; slides?: number; source?: string; file?: string; cardId?: number }) {
+  const { s, caps } = g;
   const models = modelList(env);
   const pend: Pending = {
-    topic, mid: 0,
-    slides: Math.min(slides ?? s.slides, caps.maxSlides),
+    topic: o.topic, mid: 0,
+    slides: Math.min(o.slides ?? s.slides, caps.maxSlides),
     imgs: imgCountOf(s, caps),
     model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,
     step: "model",
-    fixed: slides !== undefined, // تعداد اسلاید در متن موضوع آمده؛ دوباره پرسیده نمی‌شود
-    note: slides !== undefined && slides > caps.maxSlides ? slidesLimitMsg(caps.maxSlides) : undefined,
+    fixed: o.slides !== undefined, // تعداد اسلاید در متن موضوع آمده؛ دوباره پرسیده نمی‌شود
+    note: o.slides !== undefined && o.slides > caps.maxSlides ? slidesLimitMsg(caps.maxSlides) : undefined,
+    ...(o.source ? { source: o.source, file: o.file } : {}),
   };
   pend.step = stepsOf(env, pend)[0];
   const { text: cardText, ...cardExtra } = pendingView(env, pend, s, caps);
-  const card = await sendMessage(env, chatId, cardText, cardExtra);
-  pend.mid = card.message_id;
+  if (o.cardId) {
+    await editMessage(env, chatId, o.cardId, cardText, cardExtra);
+    pend.mid = o.cardId;
+  } else {
+    pend.mid = (await sendMessage(env, chatId, cardText, cardExtra)).message_id;
+  }
   await putPending(env, uid, pend);
 }
