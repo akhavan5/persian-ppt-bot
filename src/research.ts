@@ -27,7 +27,7 @@ const BAD_IMG = /\.(svg|gif|webp|ico|avif)(\?|$)|logo|icon|sprite|avatar|banner|
 const CLEAN_IMG_HOSTS = /(^|\.)(wikimedia\.org|wikipedia\.org|unsplash\.com|pexels\.com|pixabay\.com|nasa\.gov|esa\.int|noaa\.gov|usgs\.gov|loc\.gov|si\.edu|europeana\.eu)$/i;
 const cleanImgHost = (url: string) => { try { return CLEAN_IMG_HOSTS.test(new URL(url).hostname); } catch { return false; } };
 
-const MAX_NOTES_CHARS = 4000;
+const MAX_NOTES_CHARS = 6500;
 const TIMEOUT_MS = 8_000;
 /** Tavily با include_images کندتر است؛ زمان بیشتر می‌گیرد (زیر سقف ۴۵ ثانیه‌ی مرحله‌ی research در workflow) */
 const TAVILY_TIMEOUT_MS = 20_000;
@@ -99,7 +99,7 @@ async function tavily(env: Env, query: string, limit: number, sink?: FoundImage[
   }
   return (Array.isArray(j?.results) ? j.results : []).map((x: any) => {
     let host = ""; try { host = new URL(x.url).hostname.replace(/^www\./, ""); } catch { /* */ }
-    return { src: host || "web", title: clean(x.title, 110), text: clean(x.content, 450), via: "tavily" };
+    return { src: host || "web", title: clean(x.title, 110), text: clean(x.content, 700), via: "tavily" };
   });
 }
 
