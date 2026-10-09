@@ -17,7 +17,20 @@ const I = (inch: number) => `${(inch * 7.5).toFixed(3)}cqw`;
 const P = (pt: number) => `${((pt * 7.5) / 72).toFixed(3)}cqw`;
 
 /** ارتفاع صفحه‌ی PDF ربات (اینچ): ۷٫۵ = فقط اسلاید؛ اگر اسلایدی یادداشت دارد ۱۰ (جای کادر یادداشت زیر اسلاید) */
-export const pdfPageHeight = (deck: Deck) => (deck.slides.some((s) => s.notes) ? 10 : 7.5);
+export const pdfPageHeight = (deck: Deck) => Math.max(7.5, ...deck.slides.map((s) => pdfSlideHeight(s.notes)));
+
+/** اندازه‌ی فونت یادداشت در PDF بر اساس طول متن */
+const notesPt = (len: number) => (len <= 380 ? 16 : len <= 520 ? 14 : len <= 750 ? 12.5 : 11);
+
+/** ارتفاع صفحه‌ی PDF برای یک اسلاید (اینچ): ۷٫۵ بدون یادداشت؛ با یادداشت = اسلاید + کادری به اندازه‌ی خود متن (بدون سفیدیِ اضافه) */
+export function pdfSlideHeight(notes?: string): number {
+  if (!notes) return 7.5;
+  const pt = notesPt(notes.length);
+  const cpl = Math.max(1, Math.floor((11.93 * 72) / (pt * 0.52))); // عرض کادر ≈ ۱۱٫۹۳ اینچ؛ میانگین عرض حرف فارسی ≈ ۰٫۵ em (کمی محافظه‌کارانه)
+  const lines = Math.ceil((notes.length + 17) / cpl); // ۱۷ = برچسب «یادداشت سخنرانی:»
+  const box = (lines * pt * 1.9) / 72 + 0.2;
+  return Math.min(11, Math.ceil((7.5 + 0.2 + box + 0.2) * 20) / 20);
+}
 
 export interface PreviewOpts {
   id: string; theme: string; font: string; digits: boolean; images: number[]; nonce: string;
@@ -163,6 +176,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
 
   // ---------- انتخاب چیدمان (همان شرط‌های pptx.ts: داده‌ی ناقص ⇒ اسلاید فهرستی) ----------
   let sec = 0;
+  const pageRules: string[] = [];
   const slides = deck.slides.map((sd, i) => {
     const lay = sd.layout;
     const r: R =
@@ -184,9 +198,11 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
     const num = r.num ? text(0.6, 6.95, 1.0, 0.3, [String(i + 1)], 11, t.muted, { align: "left", space: 0 }) : "";
     // یادداشت سخنرانی مثل پیش‌نمایش وب زیر اسلاید می‌آید؛ در PDF ربات هم همان کادر در همان صفحه (فونت بر اساس طول متن کم می‌شود تا جا شود)
     const nlen = sd.notes ? sd.notes.length : 0;
-    const npt = nlen <= 380 ? 16 : nlen <= 520 ? 14 : nlen <= 750 ? 12.5 : 11;
+    const npt = notesPt(nlen);
+    const ph = pdfSlideHeight(sd.notes);
+    if (o.pdf) pageRules.push(`@page p${i}{size:13.333in ${ph}in;margin:0}.item.p${i}{page:p${i};height:${ph}in}`);
     const notes = sd.notes ? `<div class="notes"${o.pdf ? ` style="font-size:${npt}pt"` : ""}><b>یادداشت سخنرانی:</b> ${tx(sd.notes)}</div>` : "";
-    return `<div class="item"><div class="sl"><section class="slide" style="background:#${r.bg}">${r.html}${num}</section></div>${notes}</div>`;
+    return `<div class="item${o.pdf ? ` p${i}` : ""}"><div class="sl"><section class="slide" style="background:#${r.bg}">${r.html}${num}</section></div>${notes}</div>`;
   }).join("\n");
 
   const pageH = pdfPageHeight(deck);
@@ -239,11 +255,13 @@ main{max-width:1000px;margin:0 auto;padding:12px 16px 40px}
 </style>
 ${o.pdf ? `<style>
 /* PDF ربات: هر صفحه = اسلاید + (در صورت وجود یادداشت) کادر یادداشت زیرش، مثل پیش‌نمایش وب */
+/* هر اسلاید صفحه‌ی نام‌دار خودش را دارد: ارتفاع = اسلاید + کادر یادداشت به اندازه‌ی متن (بدون سفیدی اضافه) */
 @page{size:13.333in ${pageH}in;margin:0}
+${pageRules.join("\n")}
 html,body{background:#eef1f6}
 @media print{
-  .item{height:${pageH}in;overflow:hidden;background:#eef1f6}
-  .notes{display:block!important;margin:.2in .5in 0;height:${(pageH - 7.5 - 0.4).toFixed(2)}in;overflow:hidden;line-height:1.9;border:1px solid #dbe1ea;border-radius:8px;background:#fff;padding:.08in .2in}
+  .item{overflow:hidden;background:#eef1f6}
+  .notes{display:block!important;margin:.2in .5in 0;height:auto;overflow:hidden;line-height:1.9;border:1px solid #dbe1ea;border-radius:8px;background:#fff;padding:.08in .2in}
 }
 </style>` : ""}
 </head>
