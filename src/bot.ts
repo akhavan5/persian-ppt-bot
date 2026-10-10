@@ -347,13 +347,18 @@ async function handleCallback(env: Env, cq: any) {
 
 // ---------- استخراج تعداد اسلاید از متن (مثلاً «… ، ۱۰ اسلاید») ----------
 /** حروف اضافه/قیدهای آویزان کنار «عدد + اسلاید» («… در ۸ اسلاید»، «در قالب ۱۰ صفحه»، «حدود ۱۲ اسلاید») که بعد از حذف عدد در موضوع می‌مانند */
-const DANGLING = "(?:(?:در\\s*)?قالب|به\\s*تعداد|با\\s*تعداد|در\\s*حد|به\\s*(?:صورت|\\u200c?صورت)|بصورت|حدود|تقریباً|تقریبا|حداکثر|حداقل|شامل|طی|تعداد|در|با|به|برای|و|تا|از|حتماً|حتما)";
-const DANGLING_END = new RegExp(`(?:^|[\\s،,.:;\\-–—])${DANGLING}(?:[\\s،,.:;\\-–—]+${DANGLING})*[\\s،,.:;\\-–—]*$`, "u");
+const DANGLING = "(?:(?:در\\s*)?قالب|به\\s*تعداد|با\\s*تعداد|در\\s*حد|به\\s*(?:صورت|\\u200c?صورت)|بصورت|حدود|تقریباً|تقریبا|حداکثر|حداقل|شامل|طی|تعداد|در|با|به|برای|و|تا|از|حتماً|حتما|in|with|within|for|of|using|to)";
+const DANGLING_END = new RegExp(`(?:^|[\\s،,.:;\\-–—])${DANGLING}(?:[\\s،,.:;\\-–—]+${DANGLING})*[\\s،,.:;\\-–—]*$`, "iu");
 const trimPunct = (t: string) => t.replace(/\s+/g, " ").replace(/^[\s،,.:;\-–—]+|[\s،,.:;\-–—]+$/g, "");
 
 function extractSlideCount(text: string): { topic: string; slides?: number } {
   const norm = toEn(text);
-  const m = norm.match(/(\d{1,2})\s*(?:اسلایدی|اسلاید|صفحه‌ای|صفحه|slides?)/i);
+  // «اسلاید/slide» همیشه تعداد اسلاید است؛ «صفحه» فقط وقتی که متن از ارائه حرف بزند یا «… ۱۰ صفحه» آخر جمله باشد
+  // (تا موضوع‌هایی مثل «طراحی وب‌سایت ۳ صفحه‌ای برای شرکت» دست‌نخورده بمانند)
+  const isPpt = /ارائه|پاورپوینت|پرزنت|اسلاید|slide|presentation|ppt/i.test(norm);
+  const all = [...norm.matchAll(/(?<!\d)(\d{1,3})\s*(اسلایدی|اسلاید|صفحه‌ای|صفحه|slides?)/gi)];
+  const m = all.find((x) => !/^صفحه/.test(x[2])) // «اسلاید» بر «صفحه» مقدم است
+    ?? all.find((x) => isPpt || /^[\s،,.:;!؟?]*$/.test(norm.slice((x.index ?? 0) + x[0].length)));
   if (!m) return { topic: text.trim() };
   let before = trimPunct(norm.slice(0, m.index));
   let after = trimPunct(norm.slice((m.index ?? 0) + m[0].length));
