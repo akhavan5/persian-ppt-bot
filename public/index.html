@@ -129,7 +129,15 @@ details>summary::after{content:"▾";color:var(--muted)} details[open]>summary::
 .doneBtns{display:flex;flex-wrap:wrap;gap:8px}.fontNote{margin:12px 0 0;line-height:1.9}
 .file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .file .fa{display:flex;gap:6px;flex:none}
-.file:last-child{border-bottom:0} .file div{min-width:0} .file strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file:last-child{border-bottom:0} .file>div:first-child{min-width:0;flex:1 1 180px} .file strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file .muted{display:block;margin-top:2px;font-size:.85rem}
+/* گوشی: دکمه‌ها زیر عنوان می‌روند تا عنوان و توضیح جا داشته باشند */
+@media (max-width:560px){
+  .file{flex-wrap:wrap;align-items:stretch;row-gap:8px}
+  .file>div:first-child{flex:1 1 100%}
+  .file strong{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .file .fa{flex:1 1 100%} .file .fa .btn{flex:1;justify-content:center;text-align:center;white-space:nowrap;padding:7px 6px;font-size:.84rem}
+}
 dialog{border:1px solid var(--line);border-radius:20px;background:#fff;color:var(--text);max-width:440px;width:calc(100% - 32px);padding:24px;box-shadow:0 30px 80px rgba(15,27,51,.25)}
 dialog::backdrop{background:rgba(15,27,51,.5);backdrop-filter:blur(3px)}
 .x{position:absolute;inset-block-start:10px;inset-inline-start:12px;border:0;background:transparent;font-size:1.5rem;cursor:pointer;color:var(--muted);line-height:1}
