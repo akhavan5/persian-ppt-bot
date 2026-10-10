@@ -224,6 +224,8 @@ function finalizeLayout(sl: Slide): Slide {
     case "timeline": case "process": if ((sl.steps?.length ?? 0) < 2) toBullets(joined(sl.steps ?? [])); break;
     case "icons": if ((sl.items?.length ?? 0) < 2) toBullets(joined(sl.items ?? [])); break;
     case "quote": if (!sl.quote) toBullets([]); break;
+    case "sources": case "questions": // بدون bullets اسلاید خالی می‌شود؛ محتوای items/steps/columns به لیست تبدیل می‌شود
+      if (!sl.bullets.length) { const xs = joined(sl.items?.length ? sl.items : sl.steps ?? []); if (xs.length) sl.bullets = xs; else if (sl.columns.length) sl.bullets = sl.columns.flatMap((c) => c.bullets); } break;
     case "three_column": if (sl.columns.length < 3) sl.layout = sl.columns.length === 2 ? "two_column" : "bullets"; break;
     case "two_column": if (!sl.columns.length) sl.layout = "bullets"; break;
   }
@@ -414,6 +416,17 @@ ${edges}
 
   const deck: Deck = { title: title || topic, slides: parts.flat() };
   deck.slides.forEach((sl, i) => { const k = outline[i]?.kind; if (k) sl.layout = k; }); // چیدمان اسلایدهای ویژه ثابت است
+  // برخی مدل‌ها (مثل gpt-oss) خودسرانه layout "sources"/"questions" می‌دهند، حتی وقتی در سرفصل چنین اسلایدی نیست
+  // (مثلاً کاربر «منابع» را خاموش کرده): اسلاید «icons» با items خالی نمایش داده می‌شد و اسلاید پایانی به «منابع» تبدیل می‌شد.
+  deck.slides.forEach((sl, i) => {
+    if (outline[i]?.kind || (sl.layout !== "sources" && sl.layout !== "questions")) return;
+    if (i === deck.slides.length - 1) { // اسلاید آخر ⇒ پایانی
+      sl.layout = "closing"; sl.bullets = []; sl.items = []; sl.title = outline[i]?.title || "با تشکر"; return;
+    }
+    if ((sl.items?.length ?? 0) >= 2 && !sl.bullets.length) sl.layout = "icons";
+    else if ((sl.steps?.length ?? 0) >= 2 && !sl.bullets.length) sl.layout = "process";
+    else sl.layout = "bullets";
+  });
   // تعداد اسلایدهای تصویری باید دقیقاً wantImages باشد: اضافه‌ها به bullets برمی‌گردند و کمبود از اسلایدهای bullets دارای image_query جبران می‌شود
   let have = 0;
   for (const sl of deck.slides) {
