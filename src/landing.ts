@@ -128,6 +128,13 @@ const ARTICLES_FOR: Record<string, string[]> = {
   "ai-powerpoint-maker": ["ai-powerpoint-prompt-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-step-by-step"],
   "online-powerpoint-maker": ["ai-powerpoint-step-by-step", "ai-powerpoint-mobile-telegram", "best-way-persian-powerpoint"],
   "gamma-alternative": ["best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
+  "slide-maker": ["ai-powerpoint-step-by-step", "persian-powerpoint-design", "how-many-slides"],
+  "pitch-deck": ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides"],
+  "proposal-presentation": ["thesis-defense-slides-guide", "how-many-slides", "class-presentation-tips"],
+  "article-presentation": ["ai-powerpoint-prompt-persian", "best-way-persian-powerpoint", "how-many-slides"],
+  "school-presentation": ["class-presentation-tips", "presentation-topic-ideas", "how-many-slides"],
+  "ppt-with-images": ["persian-powerpoint-design", "ai-powerpoint-step-by-step", "free-powerpoint-templates-persian"],
+  "speaker-notes": ["class-presentation-tips", "how-many-slides", "ai-powerpoint-prompt-persian"],
 };
 
 export function renderLanding(p: Page, SITE: string): string {
