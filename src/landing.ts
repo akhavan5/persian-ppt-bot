@@ -125,6 +125,9 @@ const ARTICLES_FOR: Record<string, string[]> = {
   "word-to-pptx": ["best-way-persian-powerpoint", "fix-persian-powerpoint-broken", "persian-rtl-slides"],
   "pdf-to-pptx": ["best-way-persian-powerpoint", "thesis-defense-slides-guide", "ai-powerpoint-prompt-persian"],
   "telegram-bot": ["ai-powerpoint-mobile-telegram", "ai-powerpoint-faq-persian", "ai-powerpoint-step-by-step"],
+  "ai-powerpoint-maker": ["ai-powerpoint-prompt-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-step-by-step"],
+  "online-powerpoint-maker": ["ai-powerpoint-step-by-step", "ai-powerpoint-mobile-telegram", "best-way-persian-powerpoint"],
+  "gamma-alternative": ["best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
 };
 
 export function renderLanding(p: Page, SITE: string): string {

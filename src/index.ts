@@ -28,7 +28,7 @@ function noindex(res: Response): Response {
 }
 
 // تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
-const SITEMAP_LASTMOD = "2026-10-08";
+const SITEMAP_LASTMOD = "2026-10-10";
 
 export default {
   // پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی D1 (cron در wrangler.jsonc)

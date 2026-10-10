@@ -21,6 +21,9 @@
 - [تبدیل Word به پاورپوینت](https://pptsaz.ir/word-to-pptx): روش دستی با Heading و روش آپلود DOCX
 - [تبدیل PDF به پاورپوینت](https://pptsaz.ir/pdf-to-pptx): PDF متنی و اسکن‌شده (OCR)
 - [pptساز چیست؟](https://pptsaz.ir/ppt-saz): معرفی سرویس و نام‌های مشابه آن
+- [پاورپوینت ساز هوش مصنوعی](https://pptsaz.ir/ai-powerpoint-maker): ساخت اسلاید با AI؛ چه کارهایی را بسپاری و چه چیزهایی را خودت بررسی کنی
+- [پاورپوینت ساز آنلاین](https://pptsaz.ir/online-powerpoint-maker): ساخت پاورپوینت بدون نصب با مرورگر کامپیوتر و گوشی
+- [جایگزین فارسی Gamma](https://pptsaz.ir/gamma-alternative): مقایسه‌ی Gamma و pptساز برای فارسی‌زبان‌ها و آزمون ۵ دقیقه‌ای انتخاب
 
 ## وبلاگ
 - [وبلاگ](https://pptsaz.ir/blog): راهنماهای ساخت و ارائه‌ی پاورپوینت فارسی
