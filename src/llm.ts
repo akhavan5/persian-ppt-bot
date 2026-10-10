@@ -282,7 +282,7 @@ export function normalizeOutline(data: any, topic: string): Outline {
   const slides: OutlineItem[] = (Array.isArray(data?.slides) ? data.slides : [])
     .map((s: any): OutlineItem => typeof s === "string"
       ? { title: s.trim(), summary: "" }
-      : { title: str(s?.title), summary: str(s?.summary), kind: s?.kind === "sources" || s?.kind === "questions" ? (s.kind as SlideKind) : undefined })
+      : { title: str(s?.title), summary: str(s?.summary), message: str(s?.message) || undefined, kind: s?.kind === "sources" || s?.kind === "questions" ? (s.kind as SlideKind) : undefined })
     .filter((s: OutlineItem) => s.title);
   if (slides.length < 2) throw new Error("model returned no valid outline");
   // kind فقط روی اسلاید میانی و حداکثر یک بار برای هر نوع (جلوگیری از «sources» روی همه‌ی اسلایدها)
@@ -297,7 +297,7 @@ export function normalizeOutline(data: any, topic: string): Outline {
 }
 
 // ---------- تولید ----------
-export interface ContentOpts { model?: string; audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean; maxImages?: number; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوا */ source?: string }
+export interface ContentOpts { model?: string; audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean; maxImages?: number; /** مرور نهایی کیفیت (فقط پلن‌های پولی) */ review?: boolean; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوا */ source?: string }
 const wantSources = (o: ContentOpts) => o.mode === "student" || !!o.sources;
 const wantQuestions = (o: ContentOpts) => !!o.questions;
 /** یادداشت‌های جستجوی وب برای پرامپت؛ فقط منبع واقعیت‌هاست و نباید در متن ذکر شود */
@@ -340,7 +340,9 @@ Topic: ${topic}
 Number of slides (including title and closing): ${n}
 Tone: ${TONES[tone] ?? tone}
 Audience: ${o.audience || (o.mode === "student" ? "university class" : "general")}${researchBlock(o)}${sourceBlock(o)}
-Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers"}]}
+Story: order the slides as one coherent narrative whose arc fits THIS topic (e.g. a problem/issue: context → causes → consequences → solutions → takeaway; a history: chronological; a technology or method: what → how → benefits and limits → uses; a comparison: criteria → options → verdict; a person or place: who/what → key facts → significance). Choose the arc that suits the topic; never force an arc that does not fit.
+Titles: every slide title except the first (title), the last (closing) and the sources/questions slides must be a short, specific headline (max ~9 words) that states the point of the slide, not a bare label. Bad: «مزایا و معایب». Good: «هزینه‌ی کم، مهم‌ترین مزیت؛ وابستگی به اینترنت، مهم‌ترین ضعف». (Fixed required titles such as «فهرست مطالب», «مقدمه», «نتیجه‌گیری» stay as they are.)
+Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers", "message": "one sentence: the single takeaway the audience should remember from this slide"}]}
 Only the single recommended-sources slide gets the extra field "kind":"sources", and only the single discussion-questions slide gets "kind":"questions". Every other slide MUST NOT have a "kind" field.
 ${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model); // ۳۵ اسلاید با ۲۵۰۰ توکن جا نمی‌شد
   const out = normalizeOutline(data, topic);
@@ -391,6 +393,12 @@ Return JSON: {"title": "...", "slides": [{
   "image_query": "English description of ONE concrete visual scene for this slide (objects, setting; no abstract words), max 12 words. It must directly depict the subject of THIS presentation topic (e.g. solar panels and wind turbines for renewable energy); never generic landmarks, mosques, buildings or cultural stereotypes unless the topic itself is about them",
   "notes": "speaker notes in Persian"}]}
 
+Quality rules:
+- Each outline item has a "message": the takeaway of that slide. Build the slide around it, so every slide makes one clear point. Keep the outline title as the slide title (you may shorten it slightly); title/closing/sources/questions slides keep a plain title.
+- Make bullets differ in role and length: e.g. one gives a reason, one a concrete example, number or name, one a consequence. Do not write bullets that could fit any topic. Avoid empty filler such as «افزایش کیفیت», «بهبود وضعیت», «توسعه پایدار» unless made specific.
+- Whenever the background notes or your reliable knowledge support it, put at least one specific detail (name, year, number, place, mechanism) on each content slide. If you have none that you are sure of, keep the slide general; never invent details.
+- Examples: if the topic concerns Iran or Persian-speaking audiences, or an Iranian example you are certain about fits naturally (cities, institutions, events), prefer it for local relevance. For global, scientific or technical topics use the most fitting well-known examples and do not force Iranian ones.
+
 Layout rules:
 ${edges}
 - "bullets": ${student ? "4-6 bullets (up to ~18 words each; define terms, add a concrete example where useful)" : "3-5 bullets"}. "image_text": 3-4 bullets + image_query. ${imgQuota > 0 ? `Use it EXACTLY ${imgQuota} time${imgQuota > 1 ? "s" : ""} here, on the most concrete, visual topics (never on the title/closing slide), each with a different image_query depicting a different scene${imgQuota > 1 ? "; do not put two image slides next to each other" : ""}.` : 'Do NOT use "image_text" in this part.'}
@@ -408,7 +416,7 @@ ${edges}
 - Use "three_column", "timeline", "process", "icons" and "quote" sparingly: each at most once in this part, never on special (sources/questions) slides, and only where the content naturally fits; otherwise use "bullets".
 - "section": only for a divider between big parts, and only in decks of 10+ slides.
 - Vary layouts; do not use the same one more than 3 times in a row.
-- Include "notes" for every slide: ${student ? "a full speaking script of 4-6 sentences" : "2-3 sentences"}.
+- Include "notes" for every slide: ${student ? "a full speaking script of 4-6 sentences" : "2-3 sentences"}. Do not just repeat the slide text: add an example, a question for the audience, or a useful extra detail.
 - "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.`,
       (student ? 900 : 700) * slice.length + 500, o.model);
     return normalizeDeck(data, slice).slides.slice(0, slice.length); // normalizeDeck کمبود را از روی سرفصل پر می‌کند ⇒ ترتیب دسته‌ها به‌هم نمی‌خورد
@@ -439,6 +447,54 @@ ${edges}
     if (c.layout === "bullets" && c.image_query && !outline[i]?.kind) { c.layout = "image_text"; c.bullets = c.bullets.slice(0, 4); have++; }
   }
   return deck;
+}
+
+// ---------- مرور نهایی کیفیت (پلن‌های پولی) ----------
+const SPECIAL_LAYOUTS = new Set<string>(["title", "closing", "sources", "questions"]);
+
+/** یک درخواست ارزان: مدل ارائه را مثل ویراستار می‌خواند و فقط اسلایدهای ضعیف را بازنویسی می‌کند.
+ *  هر مشکلی (خطا، JSON نامعتبر، خروجی ناسازگار) ⇒ ارائه‌ی اصلی بدون تغییر برمی‌گردد. چیدمان و تعداد bullet/ستون تغییر نمی‌کند. */
+export async function reviewDeck(env: Env, deck: Deck, topic: string, o: ContentOpts = {}): Promise<Deck> {
+  if (!hasKey(env) || deck.slides.length < 4 || o.source) return deck; // با فایل آپلودی، وفاداری به منبع مهم‌تر است
+  const n = deck.slides.length;
+  const view = deck.slides.map((s, i) => ({ s, i })).filter(({ s, i }) => i > 0 && i < n - 1 && !SPECIAL_LAYOUTS.has(s.layout))
+    .map(({ s, i }) => ({ i, layout: s.layout, title: s.title, bullets: s.bullets, columns: s.columns, notes: s.notes }));
+  if (!view.length) return deck;
+  const allowed = new Set(view.map((v) => v.i));
+  const max = Math.max(2, Math.ceil(n / 3));
+  try {
+    const data = await ask(env, `You are a strict editor reviewing a Persian presentation about: ${topic}
+Find the WEAK slides: (a) the title is a bare label instead of a specific headline that states the point; (b) vague filler, clichés, or bullets that could fit any topic; (c) ideas repeated from another slide; (d) bullets all of the same shape and length with no concrete example, number or name; (e) claims, numbers, names or quotes that look invented or unsupported.
+Rewrite ONLY the weak slides (at most ${max}), in fluent Persian, keeping each slide's topic, layout, and the SAME number of bullets and columns. Make them more specific only when the background notes or facts you are certain of support it; otherwise make them concrete but general, and remove doubtful numbers or names instead of inventing. If the deck is fine, return {"fixes": []}.${researchBlock(o)}
+Slides (JSON): ${JSON.stringify(view)}
+Return JSON: {"fixes": [{"i": <slide index>, "title": "...", "bullets": ["..."], "columns": [{"heading": "...", "bullets": ["..."]}], "notes": "..."}]} — include only the fields you changed.`,
+      Math.min(4000, 700 + max * 500), o.model);
+    const fixes: any[] = Array.isArray(data?.fixes) ? data.fixes.slice(0, max) : [];
+    const out: Deck = structuredClone(deck);
+    for (const f of fixes) {
+      const i = Number(f?.i), sl = out.slides[i];
+      if (!Number.isInteger(i) || !sl || !allowed.has(i)) continue;
+      const title = str(f.title);
+      if (title && title.length <= 120) sl.title = title;
+      if (Array.isArray(f.bullets) && sl.bullets.length) {
+        const nb = strArr(f.bullets);
+        if (nb.length === sl.bullets.length) sl.bullets = nb;
+      }
+      if (Array.isArray(f.columns) && sl.columns.length && f.columns.length === sl.columns.length) {
+        const nc = f.columns.map((c: any, k: number) => {
+          const b = strArr(c?.bullets);
+          return { heading: str(c?.heading) || sl.columns[k].heading, bullets: b.length === sl.columns[k].bullets.length ? b : sl.columns[k].bullets };
+        });
+        sl.columns = nc;
+      }
+      const notes = str(f.notes);
+      if (notes) sl.notes = notes;
+    }
+    return out;
+  } catch (e) {
+    console.error("reviewDeck failed", e instanceof Error ? e.message : e);
+    return deck;
+  }
 }
 
 // ---------- حالت نمایشی (بدون کلید API) ----------

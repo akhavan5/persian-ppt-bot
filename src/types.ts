@@ -30,7 +30,7 @@ export interface Slide {
 export interface Deck { title: string; slides: Slide[] }
 /** kind: اسلایدهای ویژه که چیدمان‌شان ثابت است */
 export type SlideKind = "sources" | "questions";
-export interface OutlineItem { title: string; summary: string; kind?: SlideKind }
+export interface OutlineItem { title: string; summary: string; kind?: SlideKind; /** پیام کلیدی اسلاید (یک جمله) */ message?: string }
 export interface Outline { title: string; slides: OutlineItem[] }
 
 export interface Settings {
