@@ -96,7 +96,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
 // ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← تعداد تصویر) ----------
 type Step = "model" | "slides" | "imgs";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
-interface Pending { topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string }
+interface Pending { /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
@@ -175,7 +175,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     await editMessage(env, chatId, mid,
       `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`,
       { reply_markup: { inline_keyboard: [] } });
-    const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId });
+    const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig });
     if (!ok) {
       return await editMessage(env, chatId, mid, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.").catch(() => {});
     }
@@ -479,7 +479,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     if (!ex.ok) return await editMessage(env, chatId, wait.message_id, `⚠️ ${esc(ex.error)}`);
     const fromName = ref.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
     const topic = capTopic.length >= 3 ? capTopic : fromName.length >= 3 && !ref.isPhoto ? fromName.slice(0, 200) : "ارائه از روی فایل ارسالی";
-    return await showWizard(env, chatId, uid, gate, { topic, slides: capSlides, source: ex.text, file: ref.name, cardId: wait.message_id });
+    return await showWizard(env, chatId, uid, gate, { topic, slides: capSlides, source: ex.text, file: ref.name, cardId: wait.message_id, orig: caption });
   }
 
   if (!text) return await sendMessage(env, chatId, `لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست؛ یا یک فایل (${SUPPORTED_NOTE}) تا ارائه از روی محتوایش ساخته شود.`);
@@ -490,7 +490,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (topic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
   const gate = await wizardGate(env, chatId, uid, userId);
   if (!gate) return;
-  return await showWizard(env, chatId, uid, gate, { topic, slides });
+  return await showWizard(env, chatId, uid, gate, { topic, slides, orig: text });
 }
 
 /** پیش‌شرط‌های شروع ویزارد (ارائه‌ی در حال ساخت / اتمام اعتبار)؛ اگر مانعی باشد پیام می‌دهد و null برمی‌گرداند */
@@ -509,11 +509,12 @@ async function wizardGate(env: Env, chatId: number, uid: Uid, userId: number): P
 }
 
 /** نمایش کارت انتخاب (مدل / اسلاید / تصویر). cardId: پیامی که باید به کارت تبدیل شود (مثلاً «در حال خواندن فایل…»)؛ خالی = پیام تازه */
-async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; caps: Caps }, o: { topic: string; slides?: number; source?: string; file?: string; cardId?: number }) {
+async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; caps: Caps }, o: { topic: string; slides?: number; source?: string; file?: string; cardId?: number; orig?: string }) {
   const { s, caps } = g;
   const models = modelList(env);
   const pend: Pending = {
     topic: o.topic, mid: 0,
+    ...(o.orig?.trim() ? { orig: o.orig.replace(/\s+/g, " ").trim().slice(0, 300) } : {}),
     slides: Math.min(o.slides ?? s.slides, caps.maxSlides),
     imgs: imgCountOf(s, caps),
     model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,

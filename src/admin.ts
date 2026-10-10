@@ -80,7 +80,8 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
     if (!list.length) return reply("هنوز ارائه‌ای ثبت نشده است؛ از این به بعد هر ارائه‌ی ساخته‌شده در این فهرست ثبت می‌شود.");
     const lines = list.map((x, i) =>
       `${toFa(String(i + 1))}. <b>${esc(x.title.slice(0, 60))}</b> (${toFa(String(x.slides))} اسلاید)\n` +
-      `    👤 ${userLink(x.userId, x.n, x.u)} · <code>${x.userId}</code> · 🕒 ${fmtTime(x.t)}`);
+      `    👤 ${userLink(x.userId, x.n, x.u)} · <code>${x.userId}</code> · 🕒 ${fmtTime(x.t)}` +
+      (x.o ? `\n    ✍️ <i>${esc(x.o.slice(0, 200))}</i>` : ""));
     // فایل‌ها فقط ۲۴ ساعت (و ۳ فایل آخر هر کاربر) نگه داشته می‌شوند؛ برای قدیمی‌تر دکمه نمی‌گذاریم
     const fresh = Date.now() - 24 * 3600 * 1000;
     const buttons = list

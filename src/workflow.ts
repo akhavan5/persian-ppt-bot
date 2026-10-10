@@ -99,7 +99,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           const seen = web
             ? await getUserById(this.env, String(userId)).then((w) => (w ? { n: w.name || w.email || w.mobile || "", u: null } : null)).catch(() => null)
             : await getUserSeen(this.env, (event.payload.tgId ?? userId) as number).catch(() => null);
-          await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now() })
+          await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now(), ...(event.payload.orig ? { o: event.payload.orig } : {}) })
             .catch((err) => console.error("logDeck", err));
           if (web) return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename };
           const done = "✅ آماده شد! فایل بالا را ببین. برای ساخت ارائه‌ی بعدی، موضوع جدید را بفرست.";

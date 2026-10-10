@@ -114,13 +114,13 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
   return { ok: true, topic, source, settings, imageCount, quota, undo };
 }
 
-export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number }
+export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
 
 /** ساخت نمونه‌ی Workflow. شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow. در صورت شکست، اعتبار برمی‌گردد و false برمی‌گرداند. */
 export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid: string | number, jobId: string, d: Delivery): Promise<boolean> {
   const params: DeckParams = {
     chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId,
-    topic: b.topic, ...(b.source ? { source: b.source } : {}), settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
+    topic: b.topic, ...(d.orig ? { orig: d.orig } : {}), ...(b.source ? { source: b.source } : {}), settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
   };
   try {
     if (d.channel === "web") await env.KV.put(`job:${jobId}`, "⏳ در صف…", { expirationTtl: 3600 });

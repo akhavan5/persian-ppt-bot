@@ -74,7 +74,7 @@ export async function loadPreviewImage(env: Env, userId: Uid, id: string, slide:
 }
 
 // ---------- گزارش ۱۰ ارائه‌ی اخیر (برای مدیر) ----------
-export interface DeckLog { id: string; userId: Uid; n: string; u: string | null; title: string; slides: number; t: number }
+export interface DeckLog { id: string; userId: Uid; n: string; u: string | null; title: string; slides: number; t: number; /** ورودی اصلی کاربر (کوتاه) */ o?: string }
 const LOG_KEY = "recent:decks";
 const LOG_MAX = 10;
 
