@@ -64,6 +64,17 @@ nav.links{display:flex;gap:16px}
 nav.links a{color:var(--muted);text-decoration:none;font-size:.92rem;font-weight:600}
 nav.links a:hover{color:var(--primary)}
 @media(max-width:900px){nav.links{display:none}}
+/* گوشی: هدر فشرده؛ نام برند کوچک‌تر و نوار کاربر (ارتقا / اعتبار / نام) در یک ردیف کنار برند یا زیر آن */
+@media(max-width:560px){
+  header .in{flex-wrap:wrap;min-height:0;padding-top:8px;padding-bottom:8px;row-gap:8px;column-gap:8px}
+  .brand{gap:8px;font-size:.98rem;white-space:nowrap}
+  .brand i{width:34px;height:34px;font-size:18px;border-radius:10px}
+  header .row{flex-wrap:nowrap;gap:6px}
+  header #userbar{flex:1 1 100%;justify-content:flex-start}
+  header .chip{padding:5px 11px;font-size:.82rem;white-space:nowrap}
+  header #userName{max-width:120px;overflow:hidden;text-overflow:ellipsis;display:inline-block}
+  header .btn.sm{padding:6px 12px;font-size:.84rem;white-space:nowrap}
+}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-bottom:18px}
 h1{font-size:clamp(1.6rem,4.2vw,2.5rem);margin:0 0 12px;line-height:1.5;font-weight:800}
