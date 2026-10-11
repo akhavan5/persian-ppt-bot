@@ -2,13 +2,13 @@
  * دریافت فایل از تلگرام و تبدیل آن به متن (منبع محتوای ارائه)، هم‌ارز آپلود فایل در نسخه‌ی وب.
  * - txt/md/csv/json/html: مستقیم
  * - docx / pptx / xlsx: با JSZip (بدون هزینه‌ی هوش مصنوعی)
- * - PDF: Workers AI toMarkdown (رایگان برای PDF)؛ اگر لایه‌ی متن نداشت (اسکن) و ≤۱ مگابایت بود ← OCR
- * - تصویر (عکس یا فایل png/jpg): OCR با ocr.space (همان مسیر نسخه‌ی وب)
+ * - PDF: Workers AI toMarkdown (رایگان برای PDF)؛ اگر لایه‌ی متن نداشت (اسکن) ← OCR با مدل vision کلودفلر (vision-ocr.ts)
+ * - تصویر (عکس یا فایل png/jpg): OCR با مدل vision کلودفلر
  * سقف دانلود ربات‌های تلگرام ۲۰ مگابایت است؛ سقف این‌جا ۱۵ مگابایت (مثل وب).
  */
 import JSZip from "jszip";
 import type { Env } from "./env";
-import { OCR_MAX_BYTES, ocrSpace } from "./extract";
+import { ocrSmart, VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { hitLimit } from "./auth";
 import { tg } from "./telegram";
 
@@ -72,7 +72,7 @@ async function readXlsx(zip: JSZip): Promise<string> {
   return out.join("\n\n");
 }
 
-async function readPdf(env: Env, bytes: ArrayBuffer, name: string): Promise<Extracted> {
+async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: string | number): Promise<Extracted> {
   let text = "";
   try {
     const ai = env.AI as any;
@@ -92,22 +92,23 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string): Promise<Extr
     .replace(/^#{1,6}\s*(Contents|Page\s*\d+)\s*$/gim, "")     // سرتیترهای ساختاری
     .replace(/\s+/g, "").length;
   if (realLen >= 60) return { ok: true, text };
-  // بدون لایه‌ی متن ⇒ اسکن
-  if (bytes.byteLength <= OCR_MAX_BYTES) return ocrSpace(env, bytes, "application/pdf");
-  return fail("این PDF لایه‌ی متنی ندارد (اسکن است) و برای تبدیل به متن بیش از ۱ مگابایت است؛ نسخه‌ی متنی‌اش یا یک عکس واضح از صفحه‌ها را بفرست.");
+  // بدون لایه‌ی متن ⇒ اسکن ⇒ OCR با مدل vision (صفحه‌به‌صفحه)
+  const day = new Date().toISOString().slice(0, 10);
+  if (await hitLimit(env, `ocr:${userId}:${day}`, 15, 172_800)) return fail("سقف روزانه‌ی تبدیل تصویر/اسکن به متن تمام شد؛ فردا دوباره امتحان کن.");
+  return ocrSmart(env, bytes, "application/pdf");
 }
 
 /** عکس/تصویر ← متن با OCR (سقف روزانه مثل وب) */
 async function readImage(env: Env, bytes: ArrayBuffer, mime: string, userId: string | number): Promise<Extracted> {
-  if (bytes.byteLength > OCR_MAX_BYTES) return fail("تصویر برای تبدیل به متن حداکثر ۱ مگابایت می‌تواند باشد؛ آن را به‌صورت «عکس» (نه «فایل») بفرست تا تلگرام کوچکش کند.");
+  if (bytes.byteLength > VISION_MAX_IMAGE_BYTES) return fail("تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد؛ آن را به‌صورت «عکس» (نه «فایل») بفرست تا تلگرام کوچکش کند.");
   const day = new Date().toISOString().slice(0, 10);
   if (await hitLimit(env, `ocr:${userId}:${day}`, 15, 172_800)) return fail("سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن.");
-  return ocrSpace(env, bytes, mime);
+  return ocrSmart(env, bytes, mime);
 }
 
 export interface TgFileRef { fileId: string; name: string; mime: string; size?: number; isPhoto?: boolean }
 
-/** از پیام تلگرام، فایل قابل‌پردازش (سند یا عکس) را برمی‌گرداند؛ عکس: بزرگ‌ترین اندازه‌ی ≤۱ مگابایت (سقف OCR) */
+/** از پیام تلگرام، فایل قابل‌پردازش (سند یا عکس) را برمی‌گرداند؛ عکس: بزرگ‌ترین اندازه‌ی ≤۴ مگابایت (سقف OCR) */
 export function fileRefOf(msg: any): TgFileRef | null {
   if (msg.document?.file_id) {
     const d = msg.document;
@@ -115,7 +116,7 @@ export function fileRefOf(msg: any): TgFileRef | null {
   }
   if (Array.isArray(msg.photo) && msg.photo.length) {
     const sizes = [...msg.photo].sort((a: any, b: any) => (a.file_size ?? 0) - (b.file_size ?? 0));
-    const pick = [...sizes].reverse().find((p: any) => (p.file_size ?? 0) <= OCR_MAX_BYTES) ?? sizes[0];
+    const pick = [...sizes].reverse().find((p: any) => (p.file_size ?? 0) <= VISION_MAX_IMAGE_BYTES) ?? sizes[0];
     return { fileId: pick.file_id, name: "photo.jpg", mime: "image/jpeg", size: pick.file_size, isPhoto: true };
   }
   return null;
@@ -160,7 +161,7 @@ export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: stri
       const raw = new TextDecoder("utf-8").decode(bytes);
       text = ext.startsWith("htm") ? decodeXml(raw.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ")) : raw;
     } else if (ext === "pdf") {
-      const r = await readPdf(env, bytes, ref.name);
+      const r = await readPdf(env, bytes, ref.name, userId);
       if (!r.ok) return r;
       text = r.text;
     } else if (IMG_EXT.has(ext)) {

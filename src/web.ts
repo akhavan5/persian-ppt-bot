@@ -16,7 +16,8 @@ import {
   sessionCookie, type WebUser,
 } from "./auth";
 import { beginDeck, imagesLimitMsg, launchDeck, runningJob, slidesLimitMsg } from "./deck-service";
-import { OCR_MAX_BYTES, OCR_TYPES, ocrSpace } from "./extract";
+import { OCR_MAX_BYTES, OCR_TYPES } from "./extract";
+import { ocrSmart } from "./vision-ocr";
 import { consumeLoginToken, ensureUid } from "./link";
 
 const SEC_HEADERS = {
@@ -278,7 +279,7 @@ async function extract(req: Request, env: Env, user: WebUser): Promise<Response>
   if (await hitLimit(env, `ocr:${user.id}:${day}`, 15, 172_800)) return err("سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن.", 429);
   const bytes = await req.arrayBuffer();
   if (bytes.byteLength < 100 || bytes.byteLength > OCR_MAX_BYTES) return err("حجم فایل برای تبدیل به متن حداکثر ۱ مگابایت است.", 413);
-  const r = await ocrSpace(env, bytes, mime);
+  const r = await ocrSmart(env, bytes, mime);
   return r.ok ? json({ text: r.text }) : err(r.error, 422);
 }
 

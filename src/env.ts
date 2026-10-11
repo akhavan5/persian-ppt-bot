@@ -75,6 +75,8 @@ export interface Env {
   TAVILY_API_KEY?: string;
   /** تبدیل تصویر/PDF اسکن‌شده به متن (OCR) با ocr.space؛ کلید رایگان از ocr.space/ocrapi/freekey. بدون آن از کلید دموی عمومی (با سقف بسیار کم) استفاده می‌شود */
   OCR_SPACE_API_KEY?: string;
+  /** اختیاری: مدل‌های vision کلودفلر برای OCR (با کاما، به ترتیب اولویت). پیش‌فرض: gemma-4-26b-a4b-it ← qwen3.8-27b ← mistral-small-3.1 */
+  OCR_VISION_MODELS?: string;
   /** آدرس اصلی سایت برای canonical/sitemap/OG (پیش‌فرض https://pptsaz.ir) */
   SITE_URL?: string;
 }
