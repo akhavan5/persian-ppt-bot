@@ -38,6 +38,8 @@ export function brandOf(id: string): string {
   if (/zai|glm/i.test(id)) return "zai";
   if (/openai|gpt|(^|\/)o\d/i.test(id)) return "openai";
   if (/claude|anthropic/i.test(id)) return "anthropic";
+  if (/gemma|gemini|google/i.test(id)) return "google";
+  if (/mistral|mixtral|codestral|ministral/i.test(id)) return "mistral";
   return "other";
 }
 const shortName = (id: string) => id.split("/").pop() || id;
