@@ -21,6 +21,9 @@ export class Store {
       .catch((e) => { this.ready = null; throw e; }));
   }
 
+  /** برای دستورهای SQL اتمی مستقیم روی env.DB (مثل کسر اعتبار): مطمئن می‌شود جدول ساخته شده است. */
+  ready(): Promise<unknown> { return this.init(); }
+
   async get(key: string, type: "text" | "json" = "text"): Promise<any> {
     await this.init();
     const r = await this.db.prepare("SELECT v, exp FROM kv WHERE k = ?1").bind(key).first<{ v: string; exp: number | null }>();

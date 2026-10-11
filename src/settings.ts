@@ -175,40 +175,65 @@ export async function getCredit(env: Env, userId: Uid): Promise<CreditInfo> {
   return { unlimited: false, limit, used, dailyLeft, plan, bonus, total: dailyLeft + plan + bonus };
 }
 
-/** یک ارائه اعتبار برمی‌دارد: اول سهمیه‌ی روزانه (فقط کاربران بدون پلن فعال؛ با پایان پلن دوباره برقرار می‌شود)، بعد اعتبار پلن ماهانه، بعد اعتبار اضافه. KV همگام‌سازی لحظه‌ای ندارد؛ برای کنترل هزینه کافی است، نه یک سد ریاضی دقیق. */
+// ---------- کسر/برگشت اعتبار و قفل: عملیات «اتمی» روی D1 ----------
+// هر تغییر یک دستور SQL شرطی است (UPDATE ... WHERE موجودی > 0) و موفقیتش از meta.changes فهمیده می‌شود؛ پس خواندن و نوشتن جدا
+// (که با درخواست‌های موازی دوبار کسر/هیچ‌کسر می‌کرد) وجود ندارد. D1 دستورها را پشت‌سرهم اجرا می‌کند و batch یک تراکنش است.
+const nowSec = () => Math.floor(Date.now() / 1000);
+const changed = (r: D1Result) => (r.meta?.changes ?? 0) > 0;
+const rawDb = async (env: Env): Promise<D1Database> => { await env.KV.ready(); return env.DB; };
+
+/** یک ارائه اعتبار برمی‌دارد: اول سهمیه‌ی روزانه (فقط کاربران بدون پلن فعال؛ با پایان پلن دوباره برقرار می‌شود)، بعد اعتبار پلن ماهانه، بعد اعتبار اضافه.
+ *  هر مرحله اتمی است: اگر هم‌زمان کسی آخرین اعتبار را برداشته باشد، همین مرحله شکست می‌خورد و نوبت منبع بعدی می‌شود. */
 export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean; source: CreditSource; day: string; left: number; unlimited: boolean }> {
   const day = today();
   const c = await getCredit(env, userId);
   if (c.unlimited) return { ok: true, source: "none", day, left: Infinity, unlimited: true };
-  if (c.dailyLeft > 0) {
-    await env.KV.put(dailyKey(userId, day), String(c.used + 1), { expirationTtl: 172_800 });
-    return { ok: true, source: "daily", day, left: c.total - 1, unlimited: false };
+  const db = await rawDb(env);
+  const now = nowSec();
+  const ok = (source: CreditSource) => ({ ok: true, source, day, left: Math.max(0, c.total - 1), unlimited: false });
+
+  // ۱) سهمیه‌ی روزانه: شمارنده فقط وقتی بالا می‌رود که کمتر از سقف باشد (ردیف منقضی‌شده مثل صفر حساب می‌شود)
+  if (c.plan === 0 && c.limit > 0) {
+    const r = await db.prepare(
+      "INSERT INTO kv (k, v, exp) VALUES (?1, '1', ?2) ON CONFLICT(k) DO UPDATE SET " +
+      "v = CASE WHEN exp IS NOT NULL AND exp <= ?3 THEN '1' ELSE CAST(CAST(v AS INTEGER) + 1 AS TEXT) END, exp = ?2 " +
+      "WHERE (exp IS NOT NULL AND exp <= ?3) OR CAST(v AS INTEGER) < ?4")
+      .bind(dailyKey(userId, day), now + 172_800, now, c.limit).run();
+    if (changed(r)) return ok("daily");
   }
+  // ۲) اعتبار پلن ماهانه
   if (c.plan > 0) {
-    const sub = await getSub(env, userId);
-    if (sub && sub.credits > 0) {
-      await putSub(env, userId, { ...sub, credits: sub.credits - 1 });
-      return { ok: true, source: "plan", day, left: c.total - 1, unlimited: false };
-    }
+    const r = await db.prepare(
+      "UPDATE kv SET v = json_set(v, '$.credits', json_extract(v, '$.credits') - 1) " +
+      "WHERE k = ?1 AND (exp IS NULL OR exp > ?2) AND json_extract(v, '$.credits') > 0 AND json_extract(v, '$.exp') > ?3")
+      .bind(subKey(userId), now, Date.now()).run();
+    if (changed(r)) return ok("plan");
   }
+  // ۳) اعتبار اضافه
   if (c.bonus > 0) {
-    await setBonus(env, userId, c.bonus - 1);
-    return { ok: true, source: "bonus", day, left: c.bonus - 1, unlimited: false };
+    const r = await db.prepare(
+      "UPDATE kv SET v = CAST(CAST(v AS INTEGER) - 1 AS TEXT) WHERE k = ?1 AND (exp IS NULL OR exp > ?2) AND CAST(v AS INTEGER) > 0")
+      .bind(bonusKey(userId), now).run();
+    if (changed(r)) return ok("bonus");
   }
   return { ok: false, source: "none", day, left: 0, unlimited: false };
 }
 
-/** برگرداندن اعتبار وقتی ساخت ارائه شکست خورد. */
+/** برگرداندن اعتبار وقتی ساخت ارائه شکست خورد (اتمی). */
 export async function refundCredit(env: Env, userId: Uid, source: CreditSource, day: string) {
+  if (source === "none") return;
+  const db = await rawDb(env);
   if (source === "daily") {
-    const k = dailyKey(userId, day);
-    const used = Number(await env.KV.get(k)) || 0;
-    if (used > 0) await env.KV.put(k, String(used - 1), { expirationTtl: 172_800 });
+    await db.prepare("UPDATE kv SET v = CAST(CAST(v AS INTEGER) - 1 AS TEXT) WHERE k = ?1 AND CAST(v AS INTEGER) > 0").bind(dailyKey(userId, day)).run();
   } else if (source === "plan") {
-    const sub = await getSub(env, userId); // اگر پلن در این فاصله تمام شده باشد، چیزی برنمی‌گردد
-    if (sub) await putSub(env, userId, { ...sub, credits: sub.credits + 1 });
+    // اگر پلن در این فاصله تمام شده باشد، چیزی برنمی‌گردد
+    await db.prepare(
+      "UPDATE kv SET v = json_set(v, '$.credits', json_extract(v, '$.credits') + 1) WHERE k = ?1 AND (exp IS NULL OR exp > ?2) AND json_extract(v, '$.exp') > ?3")
+      .bind(subKey(userId), nowSec(), Date.now()).run();
   } else if (source === "bonus") {
-    await setBonus(env, userId, (await getBonus(env, userId)) + 1);
+    await db.prepare(
+      "INSERT INTO kv (k, v, exp) VALUES (?1, '1', NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT), exp = NULL")
+      .bind(bonusKey(userId)).run();
   }
 }
 
@@ -216,7 +241,18 @@ export async function refundCredit(env: Env, userId: Uid, source: CreditSource, 
 // TTL فقط شبکه‌ی ایمنی است تا اگر Workflow اصلاً به پایان نرسید، کاربر برای همیشه قفل نماند.
 const lockKey = (userId: Uid) => `lock:${userId}`;
 export const isLocked = async (env: Env, userId: Uid) => (await env.KV.get(lockKey(userId))) !== null;
-export const acquireLock = (env: Env, userId: Uid) => env.KV.put(lockKey(userId), String(Date.now()), { expirationTtl: 900 });
+/** گرفتن اتمی قفل: true = قفل مال ماست؛ false = کار دیگری در جریان است. ردیف قفلِ منقضی‌شده بازپس گرفته می‌شود.
+ *  در همان تراکنش، شناسه‌ی کارِ قبلی (wj:) هم پاک می‌شود تا وضعیت کار قبلی با قفل تازه اشتباه نشود. */
+export async function acquireLock(env: Env, userId: Uid): Promise<boolean> {
+  const db = await rawDb(env);
+  const token = crypto.randomUUID(), now = nowSec();
+  const [r] = await db.batch([
+    db.prepare("INSERT INTO kv (k, v, exp) VALUES (?1, ?2, ?3) ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp WHERE exp IS NOT NULL AND exp <= ?4")
+      .bind(lockKey(userId), token, now + 900, now),
+    db.prepare("DELETE FROM kv WHERE k = ?1 AND EXISTS (SELECT 1 FROM kv WHERE k = ?2 AND v = ?3)").bind(`wj:${userId}`, lockKey(userId), token),
+  ]);
+  return changed(r);
+}
 export const releaseLock = (env: Env, userId: Uid) => env.KV.delete(lockKey(userId));
 
 // ---------- آمار ----------

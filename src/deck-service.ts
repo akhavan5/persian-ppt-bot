@@ -91,27 +91,43 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
   const wantImgs = typeof want.imageCount === "number" && Number.isFinite(want.imageCount) ? Math.round(want.imageCount) : undefined;
   if (wantImgs !== undefined && wantImgs > maxImg) return deny(imagesLimitMsg(maxImg), 403, { needPlan: true });
 
-  if ((await runningJob(env, uid)).busy) return deny("ارائه‌ی قبلی هنوز در حال ساخته شدن است؛ کمی صبر کن.", 409, { busy: true });
+  // ۱) قفل اتمی «یک ارائه در هر لحظه» پیش از کسر اعتبار: درخواست‌های موازی فقط یکی‌شان قفل را می‌گیرد.
+  const busy = () => deny("ارائه‌ی قبلی هنوز در حال ساخته شدن است؛ کمی صبر کن.", 409, { busy: true });
+  if (!(await acquireLock(env, uid))) {
+    // قفل مانده از کاری که Workflowش تمام شده باشد آزاد می‌شود (runningJob)؛ بعد یک بار دیگر تلاش می‌کنیم
+    if ((await runningJob(env, uid)).busy || !(await acquireLock(env, uid))) return busy();
+  }
 
-  const quota = await spendCredit(env, uid);
-  if (!quota.ok) return deny("اعتبارت تمام شده است.", 402, { noCredit: true });
-  await acquireLock(env, uid);
+  // ۲) از اینجا قفل مال ماست: هر خروجِ زودهنگام یا خطا باید قفل (و اعتبار کسرشده) را برگرداند
+  let spent: Quota | null = null;
+  try {
+    const quota = await spendCredit(env, uid);
+    if (!quota.ok) {
+      await releaseLock(env, uid).catch((e) => console.error("unlock", e));
+      return deny("اعتبارت تمام شده است.", 402, { noCredit: true });
+    }
+    spent = quota;
 
-  const settings = await getSettings(env, uid);
-  settings.slides = wantSlides !== undefined ? clampSlides(wantSlides, maxSlides) : Math.min(settings.slides, maxSlides);
-  const imgWanted = wantImgs ?? (settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0));
-  const imageCount = Math.max(0, Math.min(imgWanted, maxImg));
-  settings.images = imageCount > 0;
-  if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8); // ساختار دانشجویی حداقل ۸ اسلاید می‌خواهد
+    const settings = await getSettings(env, uid);
+    settings.slides = wantSlides !== undefined ? clampSlides(wantSlides, maxSlides) : Math.min(settings.slides, maxSlides);
+    const imgWanted = wantImgs ?? (settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0));
+    const imageCount = Math.max(0, Math.min(imgWanted, maxImg));
+    settings.images = imageCount > 0;
+    if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8); // ساختار دانشجویی حداقل ۸ اسلاید می‌خواهد
 
-  let undone = false;
-  const undo = async () => { // idempotent: دوبار صدا زدن اعتبار را دوبار برنمی‌گرداند
-    if (undone) return;
-    undone = true;
-    await refundCredit(env, uid, quota.source, quota.day).catch((e) => console.error("refund", e));
-    await releaseLock(env, uid).catch((e) => console.error("unlock", e));
-  };
-  return { ok: true, topic, source, settings, imageCount, quota, undo };
+    let undone = false;
+    const undo = async () => { // idempotent: دوبار صدا زدن اعتبار را دوبار برنمی‌گرداند
+      if (undone) return;
+      undone = true;
+      await refundCredit(env, uid, quota.source, quota.day).catch((e) => console.error("refund", e));
+      await releaseLock(env, uid).catch((e) => console.error("unlock", e));
+    };
+    return { ok: true, topic, source, settings, imageCount, quota, undo };
+  } catch (e) {
+    if (spent) await refundCredit(env, uid, spent.source, spent.day).catch((err) => console.error("refund", err));
+    await releaseLock(env, uid).catch((err) => console.error("unlock", err));
+    throw e;
+  }
 }
 
 export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
