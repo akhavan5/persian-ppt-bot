@@ -18,10 +18,10 @@ const normFa = (s: string) => s.replace(/ي/g, "ی").replace(/ى/g, "ی").replac
 
 type OcrRes = { ok: true; text: string } | { ok: false; error: string; retry?: boolean };
 
-/** موتور ۳ گاهی برای PDF اسکن خطای داخلی (E580/۵xx) می‌دهد؛ یک بار دوباره و سپس با موتور ۲ امتحان می‌کنیم. */
+/** موتور ۳ گاهی خطای داخلی (E580/۵xx) می‌دهد؛ چند بار دوباره امتحان می‌کنیم. موتور ۲ فارسی بلد نیست و متن بی‌معنی لاتین برمی‌گرداند، پس عمداً به آن برنمی‌گردیم. */
 export async function ocrSpace(env: Env, bytes: ArrayBuffer, mime: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   let last: OcrRes = { ok: false, error: "سرویس تبدیل تصویر به متن در دسترس نیست؛ کمی بعد دوباره امتحان کن." };
-  for (const engine of ["3", "3", "2"]) {
+  for (const engine of ["3", "3", "3"]) {
     last = await ocrOnce(env, bytes, mime, engine);
     if (last.ok || !last.retry) break;
   }
@@ -60,5 +60,12 @@ async function ocrOnce(env: Env, bytes: ArrayBuffer, mime: string, engine: strin
     return { ok: false, retry: true, error: "متنی از تصویر خوانده نشد؛ تصویر واضح‌تر یا فایل متنی را امتحان کن." };
   }
   const text = normFa(j.ParsedResults.map((p: any) => String(p?.ParsedText ?? "")).join("\n")).replace(/\s+\n/g, "\n").trim();
-  return text.length < 20 ? { ok: false, error: "متن قابل‌خواندنی در تصویر پیدا نشد." } : { ok: true, text };
+  if (text.length < 20) return { ok: false, error: "متن قابل‌خواندنی در تصویر پیدا نشد." };
+  // متن بی‌معنی (فارسی که لاتینِ دارای نشانه خوانده شده، مثل «ÇiÇ lůl») ← خطا، نه ساخت اسلاید از آشغال
+  const letters = (text.match(/[A-Za-z\u00C0-\u024F\u0600-\u06FF]/g) ?? []).length;
+  const odd = (text.match(/[\u00C0-\u024F]/g) ?? []).length;
+  const fa = (text.match(/[\u0600-\u06FF]/g) ?? []).length;
+  if (letters && odd / letters > 0.05 && fa / letters < 0.3)
+    return { ok: false, error: "کیفیت تشخیص متن پایین بود و نتیجه قابل‌اعتماد نیست؛ عکس واضح‌تر (بدون سایه و کج‌شدگی) یا فایل متنی را بفرست." };
+  return { ok: true, text };
 }
