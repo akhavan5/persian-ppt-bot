@@ -3,14 +3,15 @@
  * نه بایندینگ. جایگزین ocr.space که برای فارسی و PDF چندصفحه‌ای قابل‌اعتماد نبود.
  *
  * - تصویر (png/jpg): مستقیم به مدل vision داده می‌شود.
- * - PDF اسکن‌شده: JPEGهای صفحه‌ها (فیلتر DCTDecode؛ مثل خروجی CamScanner و بیشتر اسکنرها) از داخل PDF بیرون کشیده و صفحه‌به‌صفحه خوانده می‌شود.
- *   PDFی که تصویرش JPEG نباشد (مثلاً Flate/JBIG2) پشتیبانی نمی‌شود و پیام راهنما برمی‌گردد.
+ * - PDF اسکن‌شده یا دارای تصویر: تصویرهای صفحه‌ها از داخل PDF بیرون کشیده و یکی‌یکی خوانده می‌شود (pdf-images.ts: JPEG مستقیم، Flate ← PNG).
+ *   PDFی که تصویرش JBIG2/CCITT/Indexed باشد پشتیبانی نمی‌شود و پیام راهنما برمی‌گردد.
  * - ترتیب مدل‌ها (ارزان ← گران): gemma-4 ← qwen3.8 ← mistral-small؛ با OCR_VISION_MODELS (با کاما) قابل تغییر است.
  * - ocr.space فقط برای PDFی که JPEG قابل‌استخراج ندارد و ≤۱ مگابایت است باقی مانده است.
  */
 import type { Env } from "./env";
 import { PoolExhausted, fetchWithAccounts } from "./accounts";
 import { ocrSpace, OCR_MAX_BYTES } from "./extract";
+import { extractPdfImages, type PdfImage } from "./pdf-images";
 
 export type OcrResult = { ok: true; text: string } | { ok: false; error: string };
 
@@ -22,7 +23,7 @@ const CONCURRENCY = 3;
 
 const PROMPT =
   "Transcribe ALL the text in this image exactly as written. The text is usually Persian (Farsi, right-to-left); keep Persian letters, English words, digits and math formulas as they appear. " +
-  "Keep line breaks and reading order. Output ONLY the transcribed text, with no explanation, no translation and no markdown fences. If the image has no readable text, output exactly: EMPTY";
+  "Keep line breaks and reading order. Output ONLY the transcribed text, with no explanation, no translation and no markdown fences. If the image shows a multiple-choice question, put each option on its own line and start the option that is marked as chosen/correct (green check mark, ticked or filled box) with ✔. Write tables row by row with \" | \" between cells. If the image has no readable text, output exactly: EMPTY";
 
 const toB64 = (u8: Uint8Array) => {
   let s = "";
@@ -88,40 +89,22 @@ async function readOne(env: Env, img: { bytes: Uint8Array; mime: string }, model
   return "";
 }
 
-async function readMany(env: Env, imgs: { bytes: Uint8Array; mime: string }[]): Promise<OcrResult> {
+async function readEach(env: Env, imgs: { bytes: Uint8Array; mime: string }[]): Promise<string[]> {
   const models = (env.OCR_VISION_MODELS || DEFAULT_MODELS).split(/[,\n;]+/).map((s) => s.trim()).filter(Boolean);
   const out: string[] = new Array(imgs.length).fill("");
   let next = 0;
   const worker = async () => { for (let i = next++; i < imgs.length; i = next++) out[i] = await readOne(env, imgs[i], models); };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, imgs.length) }, worker));
-  const text = out.map((t, i) => (t && imgs.length > 1 ? `# صفحه ${i + 1}\n${t}` : t)).filter(Boolean).join("\n\n").trim();
-  return text.length < 20 ? { ok: false, error: "متن قابل‌خواندنی در تصویر پیدا نشد؛ اسکن واضح‌تر (بدون سایه و کج‌شدگی) یا فایل متنی را بفرست." } : { ok: true, text };
+  return out;
 }
 
-const latin1 = (u8: Uint8Array) => new TextDecoder("latin1").decode(u8);
+/** متن هر تصویر جداگانه (به همان ترتیب ورودی؛ تصویر بدون متن = رشته‌ی خالی). برای حالت ترکیبی «متن + تصویر» در PDF */
+export const ocrImages = (env: Env, imgs: PdfImage[]): Promise<string[]> => readEach(env, imgs);
 
-/** JPEGهای صفحه‌ها را به ترتیب سند از PDF بیرون می‌کشد (فقط استریم‌های DCTDecode) */
-export function extractPdfJpegs(bytes: Uint8Array): Uint8Array[] {
-  const s = latin1(bytes);
-  const out: Uint8Array[] = [];
-  const re = /stream\r?\n/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s))) {
-    const start = m.index + m[0].length;
-    const dictFrom = Math.max(s.lastIndexOf("obj", m.index), m.index - 1500);
-    const dict = s.slice(dictFrom, m.index);
-    if (!/\/DCTDecode/.test(dict) || !/\/Subtype\s*\/Image/.test(dict)) continue;
-    const w = Number(dict.match(/\/Width\s+(\d+)/)?.[1] ?? 0), h = Number(dict.match(/\/Height\s+(\d+)/)?.[1] ?? 0);
-    if ((w && w < 200) || (h && h < 200)) continue; // آیکن/تصویر ریز
-    let end = s.indexOf("endstream", start);
-    if (end < 0) break;
-    const len = Number(dict.match(/\/Length\s+(\d+)(?!\s+\d+\s+R)/)?.[1] ?? 0);
-    const stop = len > 0 && start + len <= end ? start + len : end;
-    const jpg = bytes.subarray(start, stop);
-    if (jpg.length > 1000 && jpg[0] === 0xff && jpg[1] === 0xd8) out.push(jpg);
-    re.lastIndex = end + 9;
-  }
-  return out;
+async function readMany(env: Env, imgs: { bytes: Uint8Array; mime: string }[]): Promise<OcrResult> {
+  const out = await readEach(env, imgs);
+  const text = out.map((t, i) => (t && imgs.length > 1 ? `# صفحه ${i + 1}\n${t}` : t)).filter(Boolean).join("\n\n").trim();
+  return text.length < 20 ? { ok: false, error: "متن قابل‌خواندنی در تصویر پیدا نشد؛ اسکن واضح‌تر (بدون سایه و کج‌شدگی) یا فایل متنی را بفرست." } : { ok: true, text };
 }
 
 /**
@@ -131,14 +114,14 @@ export async function ocrSmart(env: Env, bytes: ArrayBuffer, mime: string): Prom
   const u8 = new Uint8Array(bytes);
   let imgs: { bytes: Uint8Array; mime: string }[];
   if (mime === "application/pdf") {
-    const jpgs = extractPdfJpegs(u8);
-    if (!jpgs.length) {
+    const found = await extractPdfImages(u8).catch((e) => { console.error("pdf images", e instanceof Error ? e.message : e); return { images: [] as PdfImage[], pages: 0 }; });
+    if (!found.images.length) {
       if (u8.byteLength <= OCR_MAX_BYTES) return ocrSpace(env, bytes, mime);
       return { ok: false, error: "این PDF اسکن است ولی تصاویر صفحه‌هایش در قالب قابل‌خواندن نیست؛ صفحه‌ها را به‌صورت عکس (JPG) بفرست." };
     }
-    const usable = jpgs.filter((j) => j.byteLength <= VISION_MAX_IMAGE_BYTES);
+    const usable = found.images.filter((j) => j.bytes.byteLength <= VISION_MAX_IMAGE_BYTES);
     if (!usable.length) return { ok: false, error: "تصویر صفحه‌های این PDF بیش از حد بزرگ است؛ با کیفیت کمتر دوباره اسکن کن یا صفحه‌ها را به‌صورت عکس بفرست." };
-    imgs = usable.slice(0, VISION_MAX_PAGES).map((b) => ({ bytes: b, mime: "image/jpeg" }));
+    imgs = usable.slice(0, VISION_MAX_PAGES);
   } else {
     if (u8.byteLength > VISION_MAX_IMAGE_BYTES) return { ok: false, error: "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت است." };
     imgs = [{ bytes: u8, mime }];
