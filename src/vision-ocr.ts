@@ -6,7 +6,7 @@
  * - PDF اسکن‌شده: JPEGهای صفحه‌ها (فیلتر DCTDecode؛ مثل خروجی CamScanner و بیشتر اسکنرها) از داخل PDF بیرون کشیده و صفحه‌به‌صفحه خوانده می‌شود.
  *   PDFی که تصویرش JPEG نباشد (مثلاً Flate/JBIG2) پشتیبانی نمی‌شود و پیام راهنما برمی‌گردد.
  * - ترتیب مدل‌ها (ارزان ← گران): gemma-4 ← qwen3.8 ← mistral-small؛ با OCR_VISION_MODELS (با کاما) قابل تغییر است.
- * - اگر همه‌ی مدل‌ها شکست خوردند و فایل ≤۱ مگابایت بود، آخرین راه ocr.space است.
+ * - ocr.space فقط برای PDFی که JPEG قابل‌استخراج ندارد و ≤۱ مگابایت است باقی مانده است.
  */
 import type { Env } from "./env";
 import { PoolExhausted, fetchWithAccounts } from "./accounts";
@@ -47,6 +47,7 @@ const THINKERS = /qwen|glm|kimi/i;
 async function readOne(env: Env, img: { bytes: Uint8Array; mime: string }, models: string[]): Promise<string> {
   const url = `data:${img.mime};base64,${toB64(img.bytes)}`;
   for (const model of models) {
+    const t0 = Date.now();
     const body: Record<string, unknown> = {
       model,
       messages: [{ role: "user", content: [{ type: "text", text: PROMPT }, { type: "image_url", image_url: { url } }] }],
@@ -64,18 +65,24 @@ async function readOne(env: Env, img: { bytes: Uint8Array; mime: string }, model
       }));
     } catch (e) {
       if (e instanceof PoolExhausted) throw e; // همه‌ی حساب‌ها سقف خورده‌اند؛ مدل دیگر هم کمکی نمی‌کند
-      console.error("vision ocr fetch", model, e instanceof Error ? e.message : e);
+      console.error("vision ocr fetch", model, `${Date.now() - t0}ms`, e instanceof Error ? e.message : e);
       continue;
     }
     if (!r.ok) {
-      console.error("vision ocr http", model, r.status, (await r.text().catch(() => "")).slice(0, 300));
+      console.error("vision ocr http", model, r.status, `${Date.now() - t0}ms`, (await r.text().catch(() => "")).slice(0, 400));
       continue;
     }
     const j = (await r.json().catch(() => null)) as any;
     const c = j?.choices?.[0]?.message?.content;
     const text = normFa(typeof c === "string" ? c : Array.isArray(c) ? c.map((p: any) => p?.text ?? "").join("") : "").replace(/^```\w*\n?|```$/g, "").trim();
-    if (!text || /^EMPTY\.?$/i.test(text)) return ""; // صفحه‌ی بدون متن
-    if (looksGarbled(text)) { console.error("vision ocr garbled", model); continue; }
+    if (!text) {
+      // پاسخ خالی: ساختار پاسخ را لاگ می‌کنیم (مثلاً محتوا در reasoning_content یا finish_reason=length) و مدل بعدی امتحان می‌شود
+      console.error("vision ocr empty", model, `${Date.now() - t0}ms`, JSON.stringify(j)?.slice(0, 500));
+      continue;
+    }
+    if (/^EMPTY\.?$/i.test(text)) return ""; // مدل می‌گوید متنی نیست
+    if (looksGarbled(text)) { console.error("vision ocr garbled", model, text.slice(0, 120)); continue; }
+    console.log("vision ocr ok", model, `${Date.now() - t0}ms`, text.length);
     return text;
   }
   return "";
@@ -143,10 +150,6 @@ export async function ocrSmart(env: Env, bytes: ArrayBuffer, mime: string): Prom
   } catch (e) {
     console.error("vision ocr pool", e instanceof Error ? e.message.slice(0, 200) : e);
     r = { ok: false, error: "سرویس تبدیل تصویر به متن موقتاً در دسترس نیست؛ کمی بعد دوباره امتحان کن." };
-  }
-  if (!r.ok && u8.byteLength <= OCR_MAX_BYTES) {
-    const fb = await ocrSpace(env, bytes, mime); // آخرین راه
-    if (fb.ok && !looksGarbled(fb.text)) return fb;
   }
   return r;
 }
