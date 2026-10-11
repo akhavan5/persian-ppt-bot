@@ -351,12 +351,18 @@ const DANGLING = "(?:(?:در\\s*)?قالب|به\\s*تعداد|با\\s*تعداد
 const DANGLING_END = new RegExp(`(?:^|[\\s،,.:;\\-–—])${DANGLING}(?:[\\s،,.:;\\-–—]+${DANGLING})*[\\s،,.:;\\-–—]*$`, "iu");
 const trimPunct = (t: string) => t.replace(/\s+/g, " ").replace(/^[\s،,.:;\-–—]+|[\s،,.:;\-–—]+$/g, "");
 
+/** عدد به حروف («ده اسلایدی»، «دوازده اسلاید»، «بیست و پنج اسلاید») ⇒ رقم؛ فقط وقتی بلافاصله بعدش «اسلاید/صفحه» بیاید */
+const WORD_VAL: Record<string, number> = { یک: 1, دو: 2, سه: 3, چهار: 4, پنج: 5, شش: 6, شیش: 6, هفت: 7, هشت: 8, نه: 9, ده: 10, یازده: 11, دوازده: 12, سیزده: 13, چهارده: 14, پانزده: 15, شانزده: 16, هفده: 17, هجده: 18, نوزده: 19, بیست: 20, سی: 30, چهل: 40, پنجاه: 50 };
+const ONES = "یک|دو|سه|چهار|پنج|شش|شیش|هفت|هشت|نه";
+const WORD_NUM_RE = new RegExp(`(?<![\\p{L}\\p{N}])((?:بیست|سی|چهل|پنجاه)(?:\\s+و\\s+(?:${ONES}))?|یازده|دوازده|سیزده|چهارده|پانزده|شانزده|هفده|هجده|نوزده|${ONES}|ده)(?=\\s*(?:تا\\s*)?(?:اسلایدی|اسلاید|صفحه|slides?)(?![\\p{L}]))`, "giu");
+const wordsToDigits = (t: string) => t.replace(WORD_NUM_RE, (w) => String(w.split(/\s+و\s+/).reduce((a, x) => a + (WORD_VAL[x] ?? 0), 0)));
+
 function extractSlideCount(text: string): { topic: string; slides?: number } {
-  const norm = toEn(text);
+  const norm = wordsToDigits(toEn(text));
   // «اسلاید/slide» همیشه تعداد اسلاید است؛ «صفحه» فقط وقتی که متن از ارائه حرف بزند یا «… ۱۰ صفحه» آخر جمله باشد
   // (تا موضوع‌هایی مثل «طراحی وب‌سایت ۳ صفحه‌ای برای شرکت» دست‌نخورده بمانند)
   const isPpt = /ارائه|پاورپوینت|پرزنت|اسلاید|slide|presentation|ppt/i.test(norm);
-  const all = [...norm.matchAll(/(?<!\d)(\d{1,3})\s*(اسلایدی|اسلاید|صفحه‌ای|صفحه|slides?)/gi)];
+  const all = [...norm.matchAll(/(?<!\d)(\d{1,3})\s*(?:تا\s*)?(اسلایدی|اسلاید|صفحه[\u200c\s]*ای|صفحه|slides?)/gi)];
   const m = all.find((x) => !/^صفحه/.test(x[2])) // «اسلاید» بر «صفحه» مقدم است
     ?? all.find((x) => isPpt || /^[\s،,.:;!؟?]*$/.test(norm.slice((x.index ?? 0) + x[0].length)));
   if (!m) return { topic: text.trim() };

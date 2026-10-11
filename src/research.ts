@@ -36,6 +36,48 @@ const clean = (s: unknown, n: number) => String(s ?? "").replace(/<[^>]+>/g, " "
 
 export const searchEnabled = (env: Env) => !/^(off|0|false|no)$/i.test((env.WEB_SEARCH || "").trim());
 
+// ---------- پاک‌سازی عبارت جستجو ----------
+// متن کاربر («در حوزه مدیریت دانش یک پاورپوینت ده اسلایدی برام بساز») درخواست ساخت است، نه موضوع جستجو.
+// اگر همین‌طور به Tavily برود، نتیجه‌ها درباره‌ی «آموزش ساخت پاورپوینت / ۱۰ اسلاید» می‌شود نه خودِ موضوع.
+// تعداد اسلاید را هم از منوی ربات می‌گیریم، پس اینجا کاملاً حذف می‌شود.
+const NUM_ONES = "یک|دو|سه|چهار|پنج|شش|شیش|هفت|هشت|نه";
+const NUM_WORD = `(?:بیست|سی|چهل|پنجاه)(?:\\s+و\\s+(?:${NUM_ONES}))?|یازده|دوازده|سیزده|چهارده|پانزده|شانزده|هفده|هجده|نوزده|${NUM_ONES}|ده`;
+const NB = "(?<![\\p{L}\\p{N}])", NA = "(?![\\p{L}\\p{N}])"; // مرز کلمه برای حروف فارسی (\b با یونیکد کار نمی‌کند)
+const COUNT_LEAD = "(?:(?:در|با|حدود|حداقل|حداکثر|تقریباً|تقریبا|به\\s*تعداد|در\\s*قالب)\\s+)?";
+const COUNT_NUM = `(?:[0-9۰-۹٠-٩]{1,3}|${NUM_WORD})`;
+/** «۱۰ اسلاید»، «ده اسلایدی»، «۱۲ تا اسلاید»، «10 slides» */
+const SLIDE_COUNT = new RegExp(`${COUNT_LEAD}${NB}${COUNT_NUM}\\s*(?:تا\\s*)?(?:اسلایدی|اسلاید|slides?)${NA}`, "giu");
+/** «صفحه» فقط وقتی تعداد اسلاید است که متن از ارائه حرف بزند (تا «سایت ۳ صفحه‌ای» دست نخورد) */
+const PAGE_COUNT = new RegExp(`${COUNT_LEAD}${NB}${COUNT_NUM}\\s*(?:تا\\s*)?صفحه(?:[\\u200c\\s]*ای)?${NA}`, "giu");
+const PPT_WORDS = /ارائه|پاورپوینت|پاور\s*پوینت|پرزنت|اسلاید|slide|presentation|ppt/i;
+/** واژه‌های درخواست («یک پاورپوینت … برام بساز») که ربطی به موضوع ندارند */
+const REQ_NOISE = new RegExp(
+  `(?:(?:یک|یه)\\s+)?${NB}(?:` +
+  "لطفاً|لطفا|پاور\\s*پوینتی|پاور\\s*پوینت|پرزنتیشن|پرزنت|اسلایدها|اسلایدی|اسلاید|powerpoint|pptx|ppt|slides?|presentation|" +
+  "می[\\u200c\\s]?خواهم|می[\\u200c\\s]?خوام|نیاز\\s+دارم|لازم\\s+دارم|برایم|برام|برای\\s+من|" +
+  "بسازید|بساز|درست\\s+کنید|درست\\s+کن|تهیه\\s+کنید|تهیه\\s+کن|آماده\\s+کنید|آماده\\s+کن|تولید\\s+کن|ایجاد\\s+کن|بنویس|" +
+  `ارائه‌ای)${NA}`, "giu");
+/** ابتدای عبارت، بخش بی‌خطر: «یک ارائه درباره‌ی …»، «در حوزه‌ی …»، «موضوع …» */
+const LEAD_SAFE = /^(?:(?:یک|یه)\s+)?(?:ارائه\s*)?(?:(?:در\s+(?:حوزه|مورد|زمینه|خصوص|باره)(?:[\u200c\s]?ی)?|درباره(?:[\u200c\s]?ی)?|راجع\s+به|پیرامون|با\s+موضوع|به\s+موضوع|موضوع)\s+)+/u;
+/** حرف اضافه‌ی ساده‌ی ابتدای عبارت («از درس دوم …»): فقط وقتی اعمال می‌شود که قبلش جمله‌ی درخواست/تعداد حذف شده باشد، تا «به سوی آینده» دست نخورد */
+const LEAD_BARE = /^(?:(?:از|در|برای|به)\s+)+/u;
+/** انتهای عبارت: حرف اضافه/نشانه‌ی مفعول آویزان بعد از حذف واژه‌های درخواست */
+const TRAIL_FILLER = /(?:[\s،,.:;!؟?\-–—]+(?:و|را|رو|از|در|به|با|برای|که|تا|هم|یه|یک))+[\s،,.:;!؟?\-–—]*$/u;
+
+/** عبارت تمیز برای موتورهای جستجو: بدون تعداد اسلاید و بدون جمله‌ی درخواست ساخت. اگر چیزی نماند، متن اصلی. */
+export function searchQuery(topic: string): string {
+  const orig = String(topic ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "");
+  let q = orig.replace(SLIDE_COUNT, " ");
+  if (PPT_WORDS.test(q)) q = q.replace(PAGE_COUNT, " ");
+  q = q.replace(REQ_NOISE, " ");
+  const changed = q.replace(/\s+/g, " ").trim() !== orig.replace(/\s+/g, " ").trim(); // آیا چیزی از جمله‌ی درخواست حذف شد؟
+  q = q.replace(/\s+/g, " ").replace(/^[\s،,.:;!؟?\-–—]+|[\s،,.:;!؟?\-–—]+$/g, "");
+  q = q.replace(LEAD_SAFE, "");
+  if (changed) q = q.replace(LEAD_BARE, "").replace(TRAIL_FILLER, "");
+  q = q.replace(/\s+/g, " ").trim();
+  return q.length >= 2 ? q : orig.trim();
+}
+
 /** ویکی‌پدیا: جستجوی متنی + چکیده‌ی مقاله‌ها در یک درخواست */
 async function wikipedia(lang: "fa" | "en", query: string, limit: number): Promise<Hit[]> {
   const u = new URL(`https://${lang}.wikipedia.org/w/api.php`);
@@ -131,39 +173,27 @@ const safe = (name: string, p: Promise<Hit[]>): Promise<Hit[]> => p.catch((e) =>
 
 async function researchNotes(env: Env, topic: string, sink: FoundImage[]): Promise<string> {
   try {
-    const q = topic.replace(/^(یک\s+)?(ارائه|پاورپوینت|اسلاید)\s*(درباره(‌|\s)?ی|در مورد|پیرامون)?\s*/u, "").trim() || topic;
-    // حالت «فقط Tavily»: اگر کلید تنظیم شده باشد، فقط Tavily و بدون هیچ فیلتری (ویکی‌پدیا/DuckDuckGo خاموش‌اند).
-    // اگر Tavily شکست خورد/تایم‌اوت شد، یادداشت خالی می‌ماند (عمداً بدون پشتیبان).
-    if (env.TAVILY_API_KEY) {
-      const hits = await safe("tavily", tavily(env, q, 8, sink));
-      console.log("research", JSON.stringify({ tavily: `${hits.length}→${hits.length}` }), "q:", q.slice(0, 80));
-      const out: string[] = [];
-      let n = 0;
-      for (const h of hits) {
-        const line = `- [${h.src} · ${h.via}] ${h.title}: ${h.text}`;
-        if (n + line.length > MAX_NOTES_CHARS) break;
-        out.push(line); n += line.length;
-        console.log("research-hit", h.via, h.src, "|", h.title.slice(0, 90));
-      }
-      return out.join("\n");
-    }
+    const q = searchQuery(topic);
+    // اگر کلید Tavily تنظیم باشد: هر سه منبع (Tavily، ویکی‌پدیا، DuckDuckGo) موازی و مثل Tavily «بدون فیلتر» استفاده می‌شوند؛
+    // Tavily اولویت دارد (۸ نتیجه و اولین نوبت). بدون کلید: همان رفتار قبلی با فیلتر ارتباط.
+    const useTav = !!env.TAVILY_API_KEY;
     const [wfa, wen, ddg, tav] = await Promise.all([
       safe("wiki-fa", wikipedia("fa", q, 3)),
       /[A-Za-z]{3}/.test(q) ? safe("wiki-en", wikipedia("en", q, 2)) : Promise.resolve([] as Hit[]), // پرسش کاملاً فارسی در ویکی انگلیسی نتیجه‌ی مفیدی ندارد
       safe("ddg", duckduckgo(q, 5)),
-      safe("tavily", tavily(env, q, 5, sink)),
+      safe("tavily", tavily(env, q, useTav ? 8 : 5, sink)),
     ]);
-    // ترتیب اهمیت: Tavily/DDG (تازه‌تر) و ویکی‌پدیا (دقیق‌تر)؛ از هر منبع به‌نوبت برداشته می‌شود تا یکی بقیه را پر نکند
     const tokens = keyTokens(q);
-    const raw = { "wiki-fa": wfa, tavily: tav, ddg, "wiki-en": wen };
-    const lists = [wfa, tav, ddg, wen].map((l) => l.filter((h) => {
+    const raw: Record<string, Hit[]> = { "wiki-fa": wfa, tavily: tav, ddg, "wiki-en": wen };
+    const order = useTav ? ["tavily", "wiki-fa", "ddg", "wiki-en"] : ["wiki-fa", "tavily", "ddg", "wiki-en"]; // از هر منبع به‌نوبت برداشته می‌شود تا یکی بقیه را پر نکند
+    const lists = order.map((k) => useTav ? raw[k] : raw[k].filter((h) => {
       const ok = relevant(tokens, h);
       if (!ok) console.log("research-drop", h.via, h.src, `${matchCount(tokens, h)}/${tokens.length}`, "|", h.title.slice(0, 70)); // برای عیب‌یابی: چرا نتیجه‌ای کنار گذاشته شد
       return ok;
     }));
     console.log("research-tokens", tokens.join(","));
     // فقط در لاگ Worker (داشبورد کلودفلر ← Logs): هر منبع چند نتیجه آورد → چند تا ماند
-    console.log("research", JSON.stringify(Object.fromEntries(Object.entries(raw).map(([k, v], i) => [k, `${v.length}→${lists[i].length}`]))), "q:", q.slice(0, 80));
+    console.log("research", JSON.stringify(Object.fromEntries(order.map((k, i) => [k, `${raw[k].length}→${lists[i].length}`]))), useTav ? "mode:no-filter" : "mode:filtered", "q:", q.slice(0, 80));
     const lines: string[] = [];
     const seen = new Set<string>();
     let used = 0;
@@ -191,7 +221,7 @@ async function researchNotes(env: Env, topic: string, sink: FoundImage[]): Promi
   }
 }
 
-const queryOf = (topic: string) => topic.replace(/^(یک\s+)?(ارائه|پاورپوینت|اسلاید)\s*(درباره(‌|\s)?ی|در مورد|پیرامون)?\s*/u, "").trim() || topic;
+const queryOf = searchQuery;
 
 /** تصویر اصلی مقاله‌های ویکی‌پدیای فارسی که عنوانشان به موضوع می‌خورد (رایگان، با مجوز مشخص) */
 async function wikiImages(topic: string): Promise<FoundImage[]> {
