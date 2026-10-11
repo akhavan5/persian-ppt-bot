@@ -109,12 +109,19 @@ export async function authUser(env: Env, req: Request): Promise<WebUser | null> 
   return id ? getUserById(env, id) : null;
 }
 
-// ---------- محدودیت تلاش (KV؛ بهترین‌تلاش، نه سد ریاضی دقیق) ----------
+// ---------- محدودیت تلاش (شمارنده‌ی اتمی روی D1) ----------
+/** true = سقف پر شده (درخواست رد شود). شمارش در «یک» دستور SQL اتمی انجام می‌شود (مثل کسر اعتبار در settings.ts):
+ *  شمارنده فقط وقتی بالا می‌رود که کمتر از سقف باشد و ردیف منقضی‌شده مثل صفر حساب می‌شود؛
+ *  پس درخواست‌های هم‌زمان نمی‌توانند با «خواندن، بعد نوشتن» از سقف رد شوند. موفقیت از meta.changes فهمیده می‌شود. */
 export async function hitLimit(env: Env, key: string, max: number, ttl: number): Promise<boolean> {
-  const n = Number(await env.KV.get(key)) || 0;
-  if (n >= max) return true;
-  await env.KV.put(key, String(n + 1), { expirationTtl: ttl });
-  return false;
+  await env.KV.ready();
+  const now = Math.floor(Date.now() / 1000);
+  const r = await env.DB.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, '1', ?2) ON CONFLICT(k) DO UPDATE SET " +
+    "v = CASE WHEN exp IS NOT NULL AND exp <= ?3 THEN '1' ELSE CAST(CAST(v AS INTEGER) + 1 AS TEXT) END, exp = ?2 " +
+    "WHERE (exp IS NOT NULL AND exp <= ?3) OR CAST(v AS INTEGER) < ?4")
+    .bind(key, now + Math.max(1, Math.floor(ttl)), now, max).run();
+  return r.meta?.changes !== 1;
 }
 
 // ---------- ورود با پیامک یک‌بارمصرف (OTP) ----------
@@ -139,15 +146,16 @@ const otpHash = (code: string, mobile: string) => sha256hex(`otp:${mobile}:${cod
 export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ error: string; status: number } | null> {
   if (!otpEnabled(env)) return { error: "ورود با پیامک فعال نیست.", status: 503 };
   // محدودیت: ۶۰ ثانیه فاصله بین دو ارسال به یک شماره، ۵ پیامک در ساعت برای هر شماره، ۱۵ در ساعت برای هر شبکه
-  if (await env.KV.get(`oc:${mobile}`)) return { error: "کد قبلاً ارسال شده است؛ تا یک دقیقه صبر کن و دوباره بخواه.", status: 429 };
+  // فاصله‌ی ۶۰ ثانیه‌ای: ادعای اتمی (دو درخواست هم‌زمان نمی‌توانند هر دو پیامک بفرستند)
+  if (await hitLimit(env, `oc:${mobile}`, 1, 60)) return { error: "کد قبلاً ارسال شده است؛ تا یک دقیقه صبر کن و دوباره بخواه.", status: 429 };
   if (await hitLimit(env, `os:m:${mobile}`, 5, 3600)) return { error: "تعداد درخواست کد برای این شماره زیاد بود؛ یک ساعت بعد دوباره امتحان کن.", status: 429 };
   if (await hitLimit(env, `os:ip:${ip}`, 15, 3600)) return { error: "تعداد درخواست کد از این شبکه زیاد بود؛ کمی بعد دوباره امتحان کن.", status: 429 };
 
   const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
   const code = String(n).padStart(6, "0");
   const exp = Math.floor(Date.now() / 1000) + OTP_TTL;
-  await env.KV.put(`ot:${mobile}`, JSON.stringify({ h: await otpHash(code, mobile), tries: 0, exp }), { expiration: exp });
-  await env.KV.put(`oc:${mobile}`, "1", { expirationTtl: 60 });
+  await env.KV.put(`ot:${mobile}`, JSON.stringify({ h: await otpHash(code, mobile), exp }), { expiration: exp });
+  await env.KV.delete(`otf:${mobile}`); // کد تازه ⇒ شمارنده‌ی تلاش ناموفق از صفر
 
   const token = (env.SMS_API_TOKEN ?? "").trim().replace(/^Bearer\s+/i, "");
   const template = Number.isFinite(Number(env.SMS_TEMPLATE)) && String(env.SMS_TEMPLATE ?? "").trim() !== "" ? Number(env.SMS_TEMPLATE) : 1;
@@ -172,15 +180,14 @@ export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ e
 /** بررسی کد. موفق ⇒ کد مصرف می‌شود (یک‌بار مصرف). خروجی: null = درست، وگرنه پیام خطا. */
 export async function checkOtp(env: Env, mobile: string, code: string): Promise<string | null> {
   if (!/^\d{6}$/.test(code)) return "کد باید ۶ رقم باشد.";
-  const rec = (await env.KV.get(`ot:${mobile}`, "json")) as { h: string; tries: number; exp: number } | null;
+  const rec = (await env.KV.get(`ot:${mobile}`, "json")) as { h: string; exp: number } | null;
   if (!rec) return "کد منقضی شده است؛ دوباره کد بگیر.";
-  if (rec.tries >= OTP_MAX_TRIES) { await env.KV.delete(`ot:${mobile}`); return "تعداد تلاش‌های ناموفق زیاد بود؛ دوباره کد بگیر."; }
+  // هر تلاش «قبل از» مقایسه، اتمی شمرده می‌شود؛ پس حدس‌های هم‌زمان نمی‌توانند از سقف ۵ تلاش رد شوند
+  if (await hitLimit(env, `otf:${mobile}`, OTP_MAX_TRIES, OTP_TTL)) { await env.KV.delete(`ot:${mobile}`); return "تعداد تلاش‌های ناموفق زیاد بود؛ دوباره کد بگیر."; }
   const ok = safeEqual(enc.encode(await otpHash(code, mobile)), enc.encode(rec.h));
-  if (!ok) {
-    await env.KV.put(`ot:${mobile}`, JSON.stringify({ ...rec, tries: rec.tries + 1 }), { expiration: Math.max(rec.exp, Math.floor(Date.now() / 1000) + 60) });
-    return "کد درست نیست.";
-  }
+  if (!ok) return "کد درست نیست.";
   await env.KV.delete(`ot:${mobile}`);
+  await env.KV.delete(`otf:${mobile}`);
   return null;
 }
 
