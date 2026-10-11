@@ -34,7 +34,7 @@ const TIMEOUT_MS = 8_000;
 /** Tavily با include_images کندتر است؛ زمان بیشتر می‌گیرد (زیر سقف ۴۵ ثانیه‌ی مرحله‌ی research در workflow) */
 const TAVILY_TIMEOUT_MS = 20_000;
 const UA = "persian-ppt-bot/1.0 (+https://pptsaz.ir)";
-const clean = (s: unknown, n: number) => String(s ?? "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim().slice(0, n);
+const clean = (s: unknown, n: number) => String(s ?? "").normalize("NFKC").replace(/[\u200e\u200f]/g, "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim().slice(0, n);
 
 export const searchEnabled = (env: Env) => !/^(off|0|false|no)$/i.test((env.WEB_SEARCH || "").trim());
 
