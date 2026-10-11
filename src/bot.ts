@@ -17,7 +17,7 @@ import { PLANS } from "./payment";
 import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { markRefill, toggleRefill } from "./refill";
-import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf } from "./tg-file";
+import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
 
 const HELP =
   "سلام! 👋\n" +
@@ -486,11 +486,17 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const gate = await wizardGate(env, chatId, uid, userId);
     if (!gate) return;
     const wait = await sendMessage(env, chatId, "⏳ در حال خواندن فایل…");
-    const ex = await extractTelegramFile(env, ref, uid);
-    if (!ex.ok) return await editMessage(env, chatId, wait.message_id, `⚠️ ${esc(ex.error)}`);
-    const fromName = ref.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
-    const topic = capTopic.length >= 3 ? capTopic : fromName.length >= 3 && !ref.isPhoto ? fromName.slice(0, 200) : "ارائه از روی فایل ارسالی";
-    return await showWizard(env, chatId, uid, gate, { topic, slides: capSlides, source: ex.text, file: ref.name, cardId: wait.message_id, orig: caption });
+    // PDF و عکس ممکن است OCR شوند (چند ده ثانیه)؛ waitUntil فقط ~۳۰ ثانیه فرصت دارد، پس در Workflow اجرا می‌شود
+    const heavy = ref.isPhoto || ref.mime === "application/pdf" || ref.mime.startsWith("image/") || /\.(pdf|png|jpe?g)$/i.test(ref.name);
+    if (heavy && env.OCR_WORKFLOW) {
+      try {
+        await env.OCR_WORKFLOW.create({ id: `ocr-${chatId}-${Date.now()}`, params: { chatId, userId, uid, ref, caption, waitId: wait.message_id } });
+        return;
+      } catch (e) {
+        console.error("ocr workflow create", e instanceof Error ? e.message : e); // ناموفق ⇒ مسیر درون‌خطی
+      }
+    }
+    return await finishFileUpload(env, chatId, uid, userId, ref, caption, await extractTelegramFile(env, ref, uid), wait.message_id);
   }
 
   if (!text) return await sendMessage(env, chatId, `لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست؛ یا یک فایل (${SUPPORTED_NOTE}) تا ارائه از روی محتوایش ساخته شود.`);
@@ -502,6 +508,18 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const gate = await wizardGate(env, chatId, uid, userId);
   if (!gate) return;
   return await showWizard(env, chatId, uid, gate, { topic, slides, orig: text });
+}
+
+/** بعد از خواندن فایل: پیام خطا یا کارت انتخاب ارائه. هم از مسیر درون‌خطی و هم از OcrWorkflow صدا زده می‌شود */
+export async function finishFileUpload(env: Env, chatId: number, uid: Uid, userId: number, ref: TgFileRef, caption: string, ex: Extracted, waitId: number): Promise<null> {
+  if (!ex.ok) { await editMessage(env, chatId, waitId, `⚠️ ${esc(ex.error)}`); return null; }
+  const { topic: capTopic, slides: capSlides } = extractSlideCount(caption);
+  const gate = await wizardGate(env, chatId, uid, userId);
+  if (!gate) { await editMessage(env, chatId, waitId, "✅ فایل خوانده شد."); return null; }
+  const fromName = ref.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
+  const topic = capTopic.length >= 3 ? capTopic : fromName.length >= 3 && !ref.isPhoto ? fromName.slice(0, 200) : "ارائه از روی فایل ارسالی";
+  await showWizard(env, chatId, uid, gate, { topic, slides: capSlides, source: ex.text, file: ref.name, cardId: waitId, orig: caption });
+  return null;
 }
 
 /** پیش‌شرط‌های شروع ویزارد (ارائه‌ی در حال ساخت / اتمام اعتبار)؛ اگر مانعی باشد پیام می‌دهد و null برمی‌گرداند */

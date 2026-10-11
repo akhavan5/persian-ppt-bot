@@ -10,6 +10,7 @@ import { blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blo
 
 export { DeckWorkflow } from "./workflow";
 export { BroadcastWorkflow } from "./broadcast";
+export { OcrWorkflow } from "./ocr-workflow";
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;

@@ -1,6 +1,7 @@
 import type { DeckParams } from "./types";
 import type { BroadcastParams } from "./broadcast";
 import type { Store } from "./store";
+import type { OcrParams } from "./ocr-workflow";
 
 export interface Env {
   /** پایگاه داده‌ی D1: همه‌ی داده‌های کوچک (کاربران، نشست‌ها، اعتبار، آمار، قفل‌ها) اینجا ذخیره می‌شود */
@@ -15,6 +16,8 @@ export interface Env {
   BROWSER?: Fetcher;
   DECK_WORKFLOW: Workflow<DeckParams>;
   BROADCAST_WORKFLOW: Workflow<BroadcastParams>;
+  /** خواندن فایل‌های PDF/عکس تلگرام (OCR چندصفحه‌ای) خارج از سقف ۳۰ ثانیه‌ی waitUntil؛ اختیاری: اگر تعریف نشود، مسیر درون‌خطی */
+  OCR_WORKFLOW?: Workflow<OcrParams>;
 
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
