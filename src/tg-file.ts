@@ -180,12 +180,14 @@ const extOf = (name: string, mime: string) => {
   return "";
 };
 
+const isSupportedExt = (ext: string) => TEXT_EXT.has(ext) || IMG_EXT.has(ext) || ["docx", "pptx", "xlsx", "pdf"].includes(ext);
+const unsupportedFile = (): Extracted =>
+  fail(`این نوع فایل پشتیبانی نمی‌شود. ${SUPPORTED_NOTE} بفرست (فایل‌های قدیمی doc/ppt/xls را ابتدا به docx/pptx/xlsx تبدیل کن).`);
+
 /** دانلود از تلگرام و استخراج متن؛ خطاها پیام فارسی آماده برای کاربر هستند */
 export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: string | number): Promise<Extracted> {
   const ext = extOf(ref.name, ref.mime);
-  if (!TEXT_EXT.has(ext) && !IMG_EXT.has(ext) && !["docx", "pptx", "xlsx", "pdf"].includes(ext)) {
-    return fail(`این نوع فایل پشتیبانی نمی‌شود. ${SUPPORTED_NOTE} بفرست (فایل‌های قدیمی doc/ppt/xls را ابتدا به docx/pptx/xlsx تبدیل کن).`);
-  }
+  if (!isSupportedExt(ext)) return unsupportedFile();
   if ((ref.size ?? 0) > TG_MAX_FILE) return fail("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد.");
 
   let bytes: ArrayBuffer;
@@ -201,6 +203,16 @@ export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: stri
     console.error("telegram file download", e instanceof Error ? e.message : e);
     return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
   }
+  return extractFileBytes(env, bytes, ref.name, ref.mime, userId);
+}
+
+/**
+ * از بایت‌های فایل به متن؛ هسته‌ی مشترک ربات تلگرام و نسخه‌ی وب (web-ocr-workflow.ts)،
+ * پس هر دو دقیقاً یک مسیر را می‌روند: toMarkdown ← (اسکن) OCR با مدل vision ← (ترکیبی) متن + OCR تصویرها.
+ */
+export async function extractFileBytes(env: Env, bytes: ArrayBuffer, name: string, mime: string, userId: string | number): Promise<Extracted> {
+  const ext = extOf(name, mime);
+  if (!isSupportedExt(ext)) return unsupportedFile();
   if (bytes.byteLength > TG_MAX_FILE) return fail("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد.");
 
   try {
@@ -209,7 +221,7 @@ export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: stri
       const raw = new TextDecoder("utf-8").decode(bytes);
       text = ext.startsWith("htm") ? decodeXml(raw.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ")) : raw;
     } else if (ext === "pdf") {
-      const r = await readPdf(env, bytes, ref.name, userId);
+      const r = await readPdf(env, bytes, name, userId);
       if (!r.ok) return r;
       text = r.text;
     } else if (IMG_EXT.has(ext)) {

@@ -16,8 +16,10 @@ import {
   sessionCookie, type WebUser,
 } from "./auth";
 import { beginDeck, imagesLimitMsg, launchDeck, runningJob, slidesLimitMsg } from "./deck-service";
-import { OCR_MAX_BYTES, OCR_TYPES } from "./extract";
-import { ocrSmart } from "./vision-ocr";
+import { OCR_TYPES } from "./extract";
+import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
+import { TG_MAX_FILE, extractFileBytes } from "./tg-file";
+import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { consumeLoginToken, ensureUid } from "./link";
 
 const SEC_HEADERS = {
@@ -109,6 +111,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
   if (path === "/api/generate" && method === "POST") return generate(req, env, user);
   if (path === "/api/extract" && method === "POST") return extract(req, env, user);
+  if (path.startsWith("/api/extract/") && method === "GET") return ocrStatus(env, user, path.slice("/api/extract/".length));
   if (path === "/api/pay/start" && method === "POST") return startPayment(env, url, user, await readBody(req));
 
   if (path.startsWith("/api/jobs/") && method === "GET") return jobStatus(env, user, path.slice("/api/jobs/".length));
@@ -267,20 +270,60 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   return json({ jobId });
 }
 
-// ---------- OCR تصویر / PDF اسکن‌شده ----------
-// بدنه = بایت‌های خام فایل (نه JSON)؛ فقط برای تصویر و PDFِ بدون لایه‌ی متن. بقیه‌ی فرمت‌ها در مرورگر خوانده می‌شوند.
+// ---------- خواندن PDF / تصویر (همان مسیر ربات تلگرام) ----------
+// بدنه = بایت‌های خام فایل (نه JSON). PDF و عکس دقیقاً مثل تلگرام پردازش می‌شود (extractFileBytes در tg-file.ts):
+// PDF متنی ← toMarkdown؛ اسکن ← OCR با مدل vision؛ ترکیبی (متن + تصویر) ← متن هر صفحه + OCR تصویرهای همان صفحه (تا ۱۲ صفحه، ۴ مگابایت برای هر تصویر).
+// کار در Workflow اجرا و با GET /api/extract/<jobId> پیگیری می‌شود (مثل OcrWorkflow تلگرام)؛ بقیه‌ی فرمت‌ها در مرورگر خوانده می‌شوند.
+const ocrMagic = (bytes: ArrayBuffer, mime: string): boolean => {
+  const u = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 1024));
+  if (mime === "application/pdf") return new TextDecoder("latin1").decode(u).includes("%PDF-");
+  if (mime === "image/png") return u[0] === 0x89 && u[1] === 0x50 && u[2] === 0x4e && u[3] === 0x47;
+  return u[0] === 0xff && u[1] === 0xd8; // JPEG
+};
+
 async function extract(req: Request, env: Env, user: WebUser): Promise<Response> {
   if (!isAllowed(env, user.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
   if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
   const mime = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (!OCR_TYPES.has(mime)) return err("فقط تصویر PNG/JPG یا فایل PDF پشتیبانی می‌شود.", 415);
-  if (Number(req.headers.get("content-length") ?? 0) > OCR_MAX_BYTES) return err("حجم فایل برای تبدیل به متن حداکثر ۱ مگابایت است.", 413);
-  const day = new Date().toISOString().slice(0, 10);
-  if (await hitLimit(env, `ocr:${user.id}:${day}`, 15, 172_800)) return err("سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن.", 429);
+  const isPdf = mime === "application/pdf";
+  const max = isPdf ? TG_MAX_FILE : VISION_MAX_IMAGE_BYTES; // سقف‌ها دقیقاً مثل تلگرام: PDF ۱۵ مگابایت، تصویر ۴ مگابایت
+  const tooBig = () => err(isPdf ? "حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد." : "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد.", 413);
+  if (Number(req.headers.get("content-length") ?? 0) > max) return tooBig();
+  // سقف روزانه‌ی «تبدیل اسکن/تصویر» داخل خود مسیر مشترک اعمال می‌شود (مثل تلگرام: فقط وقتی OCR واقعاً لازم باشد)؛ این‌جا فقط جلوی سیل درخواست گرفته می‌شود
+  if (await hitLimit(env, `ocrjob:${user.id}:${new Date().toISOString().slice(0, 13)}`, 60, 7_200)) return err("درخواست‌های خواندن فایل زیاد شد؛ کمی بعد دوباره امتحان کن.", 429);
   const bytes = await req.arrayBuffer();
-  if (bytes.byteLength < 100 || bytes.byteLength > OCR_MAX_BYTES) return err("حجم فایل برای تبدیل به متن حداکثر ۱ مگابایت است.", 413);
-  const r = await ocrSmart(env, bytes, mime);
+  if (bytes.byteLength > max) return tooBig();
+  if (bytes.byteLength < 100 || !ocrMagic(bytes, mime)) return err("فایل معتبر نیست؛ فایل دیگری را امتحان کن.", 415);
+  const name = isPdf ? "file.pdf" : mime === "image/png" ? "image.png" : "image.jpg"; // پسوند همیشه با نوع واقعی می‌خواند
+
+  if (env.WEB_OCR_WORKFLOW) {
+    const jobId = `${user.id}-ocr-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
+    try {
+      await env.FILES.put(webOcrKey(user.id, jobId), bytes, { expirationTtl: 3600 });
+      await env.WEB_OCR_WORKFLOW.create({ id: jobId, params: { userId: user.id, jobId, name, mime } });
+      return json({ jobId });
+    } catch (e) {
+      console.error("web ocr workflow create", e instanceof Error ? e.message : e); // ناموفق ⇒ مسیر درون‌خطی (مثل تلگرام)
+      await env.FILES.delete(webOcrKey(user.id, jobId)).catch(() => {});
+    }
+  }
+  const r = await extractFileBytes(env, bytes, name, mime, user.id);
   return r.ok ? json({ text: r.text }) : err(r.error, 422);
+}
+
+// وضعیت خواندن فایل؛ شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow و پیشوندش شناسه‌ی کاربر است تا مالکیت بررسی شود
+async function ocrStatus(env: Env, user: WebUser, id: string): Promise<Response> {
+  if (!/^[\w-]{1,100}$/.test(id) || !id.startsWith(`${user.id}-ocr-`) || !env.WEB_OCR_WORKFLOW) return err("پیدا نشد", 404);
+  const inst = await env.WEB_OCR_WORKFLOW.get(id).catch(() => null);
+  if (!inst) return err("پیدا نشد", 404);
+  const st = await inst.status();
+  if (st.status === "complete") {
+    const o = st.output as WebOcrOut | undefined;
+    return o?.ok ? json({ state: "done", text: o.text }) : json({ state: "error", message: o?.error ?? "خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن." });
+  }
+  if (st.status === "errored" || st.status === "terminated") return json({ state: "error", message: "خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن." });
+  return json({ state: "running" });
 }
 
 // وضعیت قطعی از خود Workflow می‌آید (سازگاری قوی)؛ متن پیشرفت از KV و ممکن است چند ثانیه عقب باشد

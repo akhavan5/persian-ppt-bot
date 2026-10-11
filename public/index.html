@@ -891,11 +891,12 @@ function tgDone(p, planId, bot) {
   $("#tgBuy").showModal();
 }
 
-// ---------- آپلود فایل: خواندن متن در خود مرورگر (فایل به سرور نمی‌رود؛ فقط متن استخراج‌شده) ----------
-// متن، Word، PowerPoint، Excel و PDF متنی محلی خوانده می‌شوند؛ تصویر و PDF اسکن‌شده با OCR رایگان (سرور) به متن تبدیل می‌شوند.
-const MAX_FILE = 15 * 1024 * 1024, MAX_SRC = 50000, OCR_MAX = 1000000;
+// ---------- آپلود فایل ----------
+// متن، Word، PowerPoint و Excel در خود مرورگر خوانده می‌شوند (فایل به سرور نمی‌رود)؛ PDF (متنی، اسکن و ترکیبی) و تصویر دقیقاً مثل ربات تلگرام
+// در سرور خوانده می‌شوند (toMarkdown + OCR با مدل vision، تا ۱۲ صفحه) و فقط متن استخراج‌شده نگه داشته می‌شود؛ بایت‌های فایل بعد از پایان کار پاک می‌شوند.
+const MAX_FILE = 15 * 1024 * 1024, MAX_SRC = 50000, IMG_MAX = 4000000, OCR_WAIT = 6 * 60 * 1000; // سقف تصویر ۴ مگابایت مثل تلگرام
 const CDN = "https://cdnjs.cloudflare.com/ajax/libs/";
-const PDFJS = CDN + "pdf.js/3.11.174/pdf.min.js", PDFJS_WORKER = CDN + "pdf.js/3.11.174/pdf.worker.min.js", JSZIP = CDN + "jszip/3.10.1/jszip.min.js";
+const JSZIP = CDN + "jszip/3.10.1/jszip.min.js";
 let srcText = "", srcName = "", extracting = false, upSeq = 0;
 const libs = {};
 const lib = (src) => libs[src] || (libs[src] = new Promise((res, rej) => {
@@ -944,52 +945,51 @@ async function readXlsx(zip) {
   }
   return out.join("\n\n");
 }
-async function readPdf(buf, file) {
-  await lib(PDFJS); pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-  const pdf = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
-  const pages = Math.min(pdf.numPages, 40); let text = "";
-  for (let i = 1; i <= pages && text.length < MAX_SRC * 1.5; i++) {
-    const tc = await (await pdf.getPage(i)).getTextContent();
-    text += tc.items.map((it) => it.str + (it.hasEOL ? "\n" : " ")).join("") + "\n";
-  }
-  if (tidy(text).length >= 40 * Math.min(pages, 3)) return text;
-  return readScannedPdf(pdf, pages); // بدون لایه‌ی متن ⇒ اسکن است ⇒ OCR
-}
-// تصویر را کوچک می‌کند تا زیر سقف ۱ مگابایتِ OCR بماند
-async function jpegUnder(source, w, h0) {
+// تصویر را کوچک می‌کند تا زیر سقف حجم (۴ مگابایت، مثل تلگرام) بماند
+async function jpegUnder(source, w, h0, limit = IMG_MAX) {
   let scale = Math.min(1, 2000 / Math.max(w, h0));
   for (let q = 0.85; ; q -= 0.15) {
     const c = h("canvas"); c.width = Math.round(w * scale); c.height = Math.round(h0 * scale);
     const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(source, 0, 0, c.width, c.height);
     const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", Math.max(q, 0.4)));
-    if (blob && blob.size <= OCR_MAX) return blob;
+    if (blob && blob.size <= limit) return blob;
     if (q < 0.5) scale *= 0.7;
     if (scale < 0.2) throw new Error("تصویر برای تبدیل به متن خیلی حجیم است.");
   }
 }
-async function ocr(blob) {
+// PDF و تصویر: بایت‌های فایل به سرور می‌رود و همان مسیر ربات تلگرام اجرا می‌شود (PDF متنی، اسکن و ترکیبی)؛
+// خواندن در Workflow انجام می‌شود و وضعیتش هر ۲ ثانیه پرسیده می‌شود (OCR چندصفحه‌ای ممکن است چند دقیقه طول بکشد)
+async function serverExtract(blob, my) {
   const r = await fetch("/api/extract", { method: "POST", credentials: "same-origin", headers: { "content-type": blob.type }, body: blob });
   let d = null; try { d = await r.json(); } catch {}
-  if (r.status === 401) throw new Error("برای تبدیل تصویر/اسکن به متن ابتدا وارد شو.");
-  if (!r.ok) throw new Error((d && d.error) || "تبدیل تصویر به متن ناموفق بود.");
-  return d.text;
-}
-async function readImage(file) {
-  if (file.size <= OCR_MAX) return ocr(file.type === "image/png" || file.type === "image/jpeg" ? file : new Blob([file], { type: "image/jpeg" }));
-  const bmp = await createImageBitmap(file); return ocr(await jpegUnder(bmp, bmp.width, bmp.height));
-}
-async function readScannedPdf(pdf, pages) {
-  let out = "";
-  for (let i = 1; i <= Math.min(pages, 4); i++) { // سقف ۴ صفحه برای OCR (سهمیه‌ی رایگان)
-    const page = await pdf.getPage(i), vp = page.getViewport({ scale: 1.6 });
-    const c = h("canvas"); c.width = vp.width; c.height = vp.height;
-    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
-    out += (await ocr(await jpegUnder(c, c.width, c.height))) + "\n";
-    $("#upHint").textContent = `⏳ تبدیل اسکن به متن… صفحه ${fa(i)} از ${fa(Math.min(pages, 4))}`;
+  if (r.status === 401) throw new Error("برای خواندن PDF و تصویر ابتدا وارد شو.");
+  if (!r.ok) throw new Error((d && d.error) || "خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.");
+  if (d && typeof d.text === "string") return d.text; // مسیر درون‌خطی (وقتی Workflow وب تعریف نشده)
+  if (!d || !d.jobId) throw new Error("خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.");
+  $("#upHint").textContent = "⏳ در حال خواندن فایل… (PDF اسکن‌شده ممکن است تا چند دقیقه طول بکشد)";
+  const end = Date.now() + OCR_WAIT; let fails = 0;
+  while (Date.now() < end) {
+    await new Promise((res) => setTimeout(res, 2000));
+    if (my !== upSeq) throw new Error("لغو شد"); // کاربر فایل را حذف کرد یا فایل دیگری گذاشت
+    let pr, pd = null;
+    try { pr = await fetch("/api/extract/" + encodeURIComponent(d.jobId), { credentials: "same-origin" }); pd = await pr.json().catch(() => null); }
+    catch { if (++fails > 5) throw new Error("ارتباط با سرور قطع شد؛ دوباره امتحان کن."); continue; }
+    if (pr.status === 401) throw new Error("نشست تمام شده؛ دوباره وارد شو.");
+    if (pr.status === 404) throw new Error("خواندن فایل پیدا نشد؛ دوباره آپلودش کن.");
+    if (!pr.ok) { if (++fails > 5) throw new Error((pd && pd.error) || "خواندن فایل ناموفق بود؛ دوباره امتحان کن."); continue; }
+    fails = 0;
+    if (pd && pd.state === "done") return pd.text;
+    if (pd && pd.state === "error") throw new Error(pd.message || "خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.");
   }
-  return out;
+  throw new Error("خواندن فایل بیش از حد طول کشید؛ دوباره امتحان کن.");
 }
-async function extractFile(file) {
+async function readImage(file, ext, my) {
+  const type = ext === "png" ? "image/png" : "image/jpeg"; // نوع را از پسوند می‌گیریم (file.type گاهی خالی است)
+  if (file.size <= IMG_MAX) return serverExtract(file.type === type ? file : new Blob([file], { type }), my);
+  const bmp = await createImageBitmap(file); return serverExtract(await jpegUnder(bmp, bmp.width, bmp.height), my);
+}
+const readPdf = (file, my) => serverExtract(file.type === "application/pdf" ? file : new Blob([file], { type: "application/pdf" }), my);
+async function extractFile(file, my) {
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   if (["txt", "md", "csv", "json", "html", "htm"].includes(ext)) {
     const t = await file.text();
@@ -999,8 +999,8 @@ async function extractFile(file) {
     await lib(JSZIP); const zip = await JSZip.loadAsync(file);
     return ext === "docx" ? readDocx(zip) : ext === "pptx" ? readPptx(zip) : readXlsx(zip);
   }
-  if (ext === "pdf") return readPdf(await file.arrayBuffer(), file);
-  if (["png", "jpg", "jpeg"].includes(ext)) return readImage(file);
+  if (ext === "pdf") return readPdf(file, my);
+  if (["png", "jpg", "jpeg"].includes(ext)) return readImage(file, ext, my);
   throw new Error("این نوع فایل پشتیبانی نمی‌شود. فایل Word، PDF، PowerPoint، Excel، متن یا تصویر بده (فایل‌های قدیمی doc/ppt را ابتدا به docx/pptx تبدیل کن).");
 }
 const HINT = $("#upHint").textContent;
@@ -1011,7 +1011,7 @@ async function onFile(file) {
   if (file.size > MAX_FILE) { upMsg("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد."); return; }
   extracting = true; $("#pick").disabled = true; $("#upHint").textContent = "⏳ در حال خواندن فایل…";
   try {
-    const raw = tidy(await extractFile(file));
+    const raw = tidy(await extractFile(file, my));
     if (my !== upSeq) return;
     if (raw.length < 30) throw new Error("متنی در فایل پیدا نشد (اگر اسکن یا تصویر است، واضح‌تر و کم‌حجم‌تر امتحان کن).");
     srcText = raw.slice(0, MAX_SRC); srcName = file.name;
