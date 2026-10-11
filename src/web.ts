@@ -20,6 +20,7 @@ import { OCR_TYPES } from "./extract";
 import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { TG_MAX_FILE, extractFileBytes } from "./tg-file";
 import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
+import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { consumeLoginToken, ensureUid } from "./link";
 
 const SEC_HEADERS = {
@@ -290,8 +291,8 @@ async function extract(req: Request, env: Env, user: WebUser): Promise<Response>
   const max = isPdf ? TG_MAX_FILE : VISION_MAX_IMAGE_BYTES; // سقف‌ها دقیقاً مثل تلگرام: PDF ۱۵ مگابایت، تصویر ۴ مگابایت
   const tooBig = () => err(isPdf ? "حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد." : "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد.", 413);
   if (Number(req.headers.get("content-length") ?? 0) > max) return tooBig();
-  // سقف روزانه‌ی «تبدیل اسکن/تصویر» داخل خود مسیر مشترک اعمال می‌شود (مثل تلگرام: فقط وقتی OCR واقعاً لازم باشد)؛ این‌جا فقط جلوی سیل درخواست گرفته می‌شود
-  if (await hitLimit(env, `ocrjob:${user.id}:${new Date().toISOString().slice(0, 13)}`, 60, 7_200)) return err("درخواست‌های خواندن فایل زیاد شد؛ کمی بعد دوباره امتحان کن.", 429);
+  // سقف روزانه‌ی آپلود (حتی PDF متنی) = اعتبار ساخت ارائه + ۲؛ سقف جداگانه‌ی «تبدیل اسکن/تصویر» هم داخل خود مسیر مشترک اعمال می‌شود (ocr-limit.ts)
+  if (await ocrLimitHit(env, user.id, "upload")) return err(`سقف امروزت برای آپلود PDF/تصویر تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`, 429);
   const bytes = await req.arrayBuffer();
   if (bytes.byteLength > max) return tooBig();
   if (bytes.byteLength < 100 || !ocrMagic(bytes, mime)) return err("فایل معتبر نیست؛ فایل دیگری را امتحان کن.", 415);

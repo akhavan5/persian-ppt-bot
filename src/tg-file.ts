@@ -11,7 +11,7 @@ import JSZip from "jszip";
 import type { Env } from "./env";
 import { ocrImages, ocrSmart, VISION_MAX_IMAGE_BYTES, VISION_MAX_PAGES } from "./vision-ocr";
 import { extractPdfImages, type PdfImage } from "./pdf-images";
-import { hitLimit } from "./auth";
+import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { tg } from "./telegram";
 
 export const TG_MAX_FILE = 15 * 1024 * 1024;
@@ -119,11 +119,9 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: strin
   const pages = splitPages(text);
   // طول متن واقعی (بدون عنوان/Metadata/سرتیتر صفحه)؛ وگرنه اسکن به‌اشتباه «متنی» تشخیص داده می‌شود.
   const realLen = pages.reduce((n, p) => n + p.text.replace(/\s+/g, "").length, 0);
-  const day = new Date().toISOString().slice(0, 10);
-  const limitKey = `ocr:${userId}:${day}`;
   if (realLen < 60) {
     // بدون لایه‌ی متن ⇒ اسکن ⇒ OCR با مدل vision (صفحه‌به‌صفحه)
-    if (await hitLimit(env, limitKey, 15, 172_800)) return fail("سقف روزانه‌ی تبدیل تصویر/اسکن به متن تمام شد؛ فردا دوباره امتحان کن.");
+    if (await ocrLimitHit(env, userId)) return fail(`سقف روزانه‌ی تبدیل تصویر/اسکن به متن تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`);
     return ocrSmart(env, bytes, "application/pdf");
   }
 
@@ -135,7 +133,7 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: strin
   const perPage = realLen / Math.max(found.pages || pages.length, 1);
   if (!imgs.length || perPage >= MIXED_TEXT_PER_PAGE) return { ok: true, text: plain };
 
-  if (await hitLimit(env, limitKey, 15, 172_800)) return fail("این PDF بخش‌هایی به‌صورت تصویر دارد و سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن.");
+  if (await ocrLimitHit(env, userId)) return fail(`این PDF بخش‌هایی به‌صورت تصویر دارد و سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`);
   let texts: string[] = [];
   try {
     texts = await ocrImages(env, imgs);
@@ -146,11 +144,10 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: strin
   return { ok: true, text: mergePages(pages, imgs, texts) };
 }
 
-/** عکس/تصویر ← متن با OCR (سقف روزانه مثل وب) */
+/** عکس/تصویر ← متن با OCR (سقف روزانه: اعتبار ساخت ارائه + ۲، مثل وب) */
 async function readImage(env: Env, bytes: ArrayBuffer, mime: string, userId: string | number): Promise<Extracted> {
   if (bytes.byteLength > VISION_MAX_IMAGE_BYTES) return fail("تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد؛ آن را به‌صورت «عکس» (نه «فایل») بفرست تا تلگرام کوچکش کند.");
-  const day = new Date().toISOString().slice(0, 10);
-  if (await hitLimit(env, `ocr:${userId}:${day}`, 15, 172_800)) return fail("سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن.");
+  if (await ocrLimitHit(env, userId)) return fail(`سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`);
   return ocrSmart(env, bytes, mime);
 }
 
