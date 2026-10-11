@@ -29,6 +29,8 @@ const cleanImgHost = (url: string) => { try { return CLEAN_IMG_HOSTS.test(new UR
 
 /** ویکی‌پدیا در یادداشت‌های متنی خاموش است (نتیجه‌های بی‌ربط می‌آورد). برای روشن کردن: true. تصاویر ویکی‌پدیا جداست و تغییری نکرده. */
 const WIKI_NOTES = false;
+/** DuckDuckGo از IPهای کلودفلر تایم‌اوت می‌شود (لاگ واقعی) و هر ارائه را ~۸ ثانیه کند می‌کرد؛ خاموش است. برای روشن کردن: true. */
+const DDG_NOTES = false;
 const MAX_NOTES_CHARS = 6500;
 const TIMEOUT_MS = 8_000;
 /** Tavily با include_images کندتر است؛ زمان بیشتر می‌گیرد (زیر سقف ۴۵ ثانیه‌ی مرحله‌ی research در workflow) */
@@ -182,7 +184,7 @@ async function researchNotes(env: Env, topic: string, sink: FoundImage[]): Promi
     const [wfa, wen, ddg, tav] = await Promise.all([
       WIKI_NOTES ? safe("wiki-fa", wikipedia("fa", q, 3)) : Promise.resolve([] as Hit[]),
       WIKI_NOTES && /[A-Za-z]{3}/.test(q) ? safe("wiki-en", wikipedia("en", q, 2)) : Promise.resolve([] as Hit[]), // پرسش کاملاً فارسی در ویکی انگلیسی نتیجه‌ی مفیدی ندارد
-      safe("ddg", duckduckgo(q, 5)),
+      DDG_NOTES ? safe("ddg", duckduckgo(q, 5)) : Promise.resolve([] as Hit[]),
       safe("tavily", tavily(env, q, useTav ? 8 : 5, sink)),
     ]);
     const tokens = keyTokens(q);
