@@ -1,6 +1,6 @@
 /** درگاه پرداخت دیجی‌پی (UPG — درگاه یکپارچه، OAuth + tickets/business + purchases/verify) — فقط نسخه‌ی وب. پس از پرداخت موفق، پلن کاربر فعال/تمدید می‌شود. */
 import type { Env } from "./env";
-import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getActiveSub, getBonus, putSub, setBonus } from "./settings";
+import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getActiveSub, getBonus, putSub, setBonus, type Sub } from "./settings";
 import { hitLimit, type WebUser } from "./auth";
 
 /**
@@ -20,12 +20,14 @@ export const PLANS: Plan[] = [
  * - تمدید همان پلن فعال (پلاس←پلاس یا پرو←پرو): ۳۰ روز به پایان پلن فعلی اضافه می‌شود و اعتبار جدید روی اعتبار باقی‌مانده جمع می‌شود.
  * - خرید پلنِ دیگر (پلاس←پرو یا پرو←پلاس): پلن قبلی با روز و اعتبار باقی‌مانده‌اش منقضی می‌شود و پلن جدید مثل پلن رایگان از همین لحظه با ۳۰ روز و اعتبار جدید شروع می‌شود.
  */
-export async function activatePlan(env: Env, uid: string, p: Plan) {
-  let cur = await getActiveSub(env, uid); // پلنِ منقضی یا بدون اعتبار = پلن رایگان؛ خرید جدید از نو شروع می‌شود
+/** اشتراک جدید از روی اشتراک فعال فعلی (خالص؛ بدون نوشتن). cur: پلنِ منقضی یا بدون اعتبار = null */
+export function nextSub(cur: Sub | null, p: Plan): Sub {
   // خرید پلنِ دیگر (پلاس ← پرو یا پرو ← پلاس): پلن قبلی منقضی می‌شود و پلنِ جدید مثل کاربر رایگان از همین لحظه شروع می‌شود
   if (cur && cur.plan !== p.id) cur = null;
-  const plan = p.id;
-  await putSub(env, uid, { plan, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits });
+  return { plan: p.id, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits };
+}
+export async function activatePlan(env: Env, uid: string, p: Plan) {
+  await putSub(env, uid, nextSub(await getActiveSub(env, uid), p));
 }
 
 /**
@@ -113,7 +115,7 @@ function normalizeMobile(v: unknown): string | null {
 }
 
 /** شماره‌ی سفارش یکتا (providerId) */
-const newOrderId = () => `pp${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const newOrderId = () => `pp${Date.now()}${String(crypto.getRandomValues(new Uint32Array(1))[0] % 10_000).padStart(4, "0")}`; // pp + ۱۳ رقم زمان + ۴ رقم تصادفیِ امن
 const ORDER_RE = /^pp\d{13,17}$/;
 
 /** POST /api/pay/start  { plan } → { url }  (کاربر باید وارد شده باشد) */
@@ -197,7 +199,9 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   const trackingCode = field("trackingCode");
   const type = /^\d{1,3}$/.test(field("type")) ? field("type") : DP_VERIFY_FALLBACK;
   if (field("result") !== "SUCCESS" || !trackingCode) {
-    await env.KV.put(`pay:${order}`, JSON.stringify({ ...rec, state: "failed" }), { expirationTtl: TTL });
+    // فقط pending ← failed؛ هرگز یک پرداخت «paid» را به failed برنمی‌گردانیم (وگرنه callback بعدی دوباره پلن را فعال می‌کرد)
+    await env.DB.prepare("UPDATE kv SET v=?2 WHERE k=?1 AND json_extract(v,'$.state')='pending'")
+      .bind(`pay:${order}`, JSON.stringify({ ...rec, state: "failed" })).run();
     return go("pay=cancel");
   }
   if (Number(field("amount")) !== rec.amount) {
@@ -231,14 +235,27 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
     if (!dpOk(d)) console.error("digipay deliver failed", JSON.stringify({ s: d?.result?.status, m: d?.result?.message }).slice(0, 300));
   }
 
-  // ابتدا پرداخت‌شده علامت می‌خورد، بعد پلن فعال می‌شود (جلوگیری از افزودن دوباره با رفرش)
-  const fresh = (await env.KV.get(`pay:${order}`, "json")) as PayRecord | null;
-  if (fresh?.state !== "paid") {
-    await env.KV.put(`pay:${order}`, JSON.stringify({ ...rec, state: "paid", ref: trackingCode }), { expirationTtl: TTL * 6 });
-    const plan = rec.plan ? PLANS.find((p) => p.id === rec.plan) : undefined;
-    if (plan) await activatePlan(env, rec.uid, plan);
-    else await setBonus(env, rec.uid, (await getBonus(env, rec.uid)) + rec.count); // رکوردهای قدیمیِ بسته‌ی اعتباری (پیش از پلن‌ها)
-    console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode);
+  // ادعای اتمی: فقط یک درخواست «برنده» می‌شود. علامت‌زدن «paid» و فعال‌سازی پلن در «یک تراکنش» D1 انجام می‌شود؛
+  // پس نه رفرش/callback تکراری پلن را دوبار فعال می‌کند و نه کرش وسط کار باعث «پول رفته، پلن نیامده» می‌شود.
+  const by = crypto.randomUUID(); // نشانه‌ی برنده؛ نوشتن اشتراک فقط وقتی انجام می‌شود که رکورد پرداخت همین نشانه را داشته باشد
+  const nowSec = Math.floor(Date.now() / 1000);
+  const claim = env.DB.prepare("UPDATE kv SET v=?2, exp=?3 WHERE k=?1 AND json_extract(v,'$.state') != 'paid'")
+    .bind(`pay:${order}`, JSON.stringify({ ...rec, state: "paid", ref: trackingCode, by }), nowSec + TTL * 6);
+  const plan = rec.plan ? PLANS.find((p) => p.id === rec.plan) : undefined;
+  let won: boolean;
+  if (plan) {
+    const sub = nextSub(await getActiveSub(env, rec.uid), plan);
+    const subExp = nowSec + Math.max(60, Math.ceil((sub.exp - Date.now()) / 1000) + 86_400); // مثل putSub
+    const write = env.DB.prepare(
+      "INSERT INTO kv (k, v, exp) SELECT ?1, ?2, ?3 WHERE EXISTS (SELECT 1 FROM kv WHERE k=?4 AND json_extract(v,'$.by')=?5) " +
+      "ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp")
+      .bind(`sub:${rec.uid}`, JSON.stringify(sub), subExp, `pay:${order}`, by);
+    won = (await env.DB.batch([claim, write]))[0].meta.changes === 1;
+  } else {
+    // رکوردهای قدیمیِ بسته‌ی اعتباری (پیش از پلن‌ها)
+    won = (await claim.run()).meta.changes === 1;
+    if (won) await setBonus(env, rec.uid, (await getBonus(env, rec.uid)) + rec.count);
   }
+  if (won) console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode);
   return go(okQ);
 }
