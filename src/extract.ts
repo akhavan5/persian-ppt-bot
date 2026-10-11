@@ -35,7 +35,13 @@ export async function ocrSpace(env: Env, bytes: ArrayBuffer, mime: string): Prom
     console.error("ocr fetch", e instanceof Error ? e.message : e);
     return { ok: false, error: "سرویس تبدیل تصویر به متن پاسخ نداد؛ کمی بعد دوباره امتحان کن." };
   }
-  if (!r.ok) return { ok: false, error: "سرویس تبدیل تصویر به متن در دسترس نیست؛ کمی بعد دوباره امتحان کن." };
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    console.error("ocr http", r.status, body.slice(0, 300), "key:", env.OCR_SPACE_API_KEY ? "custom" : "demo(helloworld)");
+    if (r.status === 403 || r.status === 429)
+      return { ok: false, error: env.OCR_SPACE_API_KEY ? "سقف درخواست سرویس OCR تمام شده است؛ کمی بعد دوباره امتحان کن." : "سرویس OCR با کلید عمومی (دمو) رد شد؛ مدیر باید کلید OCR_SPACE_API_KEY را تنظیم کند." };
+    return { ok: false, error: "سرویس تبدیل تصویر به متن در دسترس نیست؛ کمی بعد دوباره امتحان کن." };
+  }
   const j = (await r.json().catch(() => null)) as any;
   if (!j || j.IsErroredOnProcessing || !Array.isArray(j.ParsedResults)) {
     console.error("ocr error", JSON.stringify(j?.ErrorMessage ?? j?.OCRExitCode ?? "unknown").slice(0, 300));
