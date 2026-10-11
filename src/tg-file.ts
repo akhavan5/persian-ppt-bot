@@ -84,8 +84,15 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string): Promise<Extr
     console.error("toMarkdown failed", e instanceof Error ? e.message : e);
   }
   text = tidy(text);
-  if (text.length >= 60) return { ok: true, text };
-  // بدون لایه‌ی متن ⇒ احتمالاً اسکن
+  // toMarkdown برای PDFِ اسکن‌شده هم عنوان، بخش Metadata و سرتیترهای «Page N» را برمی‌گرداند؛
+  // طول متن واقعی را بدون این‌ها می‌سنجیم، وگرنه اسکن به‌اشتباه «متنی» تشخیص داده می‌شود.
+  const realLen = text
+    .replace(/^#\s.*$/m, "")                                   // عنوان فایل
+    .replace(/^##\s*Metadata[\s\S]*?(?=^##\s*Contents|$(?![\s\S]))/im, "") // بخش Metadata
+    .replace(/^#{1,6}\s*(Contents|Page\s*\d+)\s*$/gim, "")     // سرتیترهای ساختاری
+    .replace(/\s+/g, "").length;
+  if (realLen >= 60) return { ok: true, text };
+  // بدون لایه‌ی متن ⇒ اسکن
   if (bytes.byteLength <= OCR_MAX_BYTES) return ocrSpace(env, bytes, "application/pdf");
   return fail("این PDF لایه‌ی متنی ندارد (اسکن است) و برای تبدیل به متن بیش از ۱ مگابایت است؛ نسخه‌ی متنی‌اش یا یک عکس واضح از صفحه‌ها را بفرست.");
 }
