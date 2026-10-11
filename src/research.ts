@@ -27,6 +27,8 @@ const BAD_IMG = /\.(svg|gif|webp|ico|avif)(\?|$)|logo|icon|sprite|avatar|banner|
 const CLEAN_IMG_HOSTS = /(^|\.)(wikimedia\.org|wikipedia\.org|unsplash\.com|pexels\.com|pixabay\.com|nasa\.gov|esa\.int|noaa\.gov|usgs\.gov|loc\.gov|si\.edu|europeana\.eu)$/i;
 const cleanImgHost = (url: string) => { try { return CLEAN_IMG_HOSTS.test(new URL(url).hostname); } catch { return false; } };
 
+/** ویکی‌پدیا در یادداشت‌های متنی خاموش است (نتیجه‌های بی‌ربط می‌آورد). برای روشن کردن: true. تصاویر ویکی‌پدیا جداست و تغییری نکرده. */
+const WIKI_NOTES = false;
 const MAX_NOTES_CHARS = 6500;
 const TIMEOUT_MS = 8_000;
 /** Tavily با include_images کندتر است؛ زمان بیشتر می‌گیرد (زیر سقف ۴۵ ثانیه‌ی مرحله‌ی research در workflow) */
@@ -174,26 +176,26 @@ const safe = (name: string, p: Promise<Hit[]>): Promise<Hit[]> => p.catch((e) =>
 async function researchNotes(env: Env, topic: string, sink: FoundImage[]): Promise<string> {
   try {
     const q = searchQuery(topic);
-    // اگر کلید Tavily تنظیم باشد: هر سه منبع (Tavily، ویکی‌پدیا، DuckDuckGo) موازی و مثل Tavily «بدون فیلتر» استفاده می‌شوند؛
-    // Tavily اولویت دارد (۸ نتیجه و اولین نوبت). بدون کلید: همان رفتار قبلی با فیلتر ارتباط.
+    // هر سه منبع (Tavily، ویکی‌پدیا، DuckDuckGo) موازی اجرا می‌شوند. اگر کلید Tavily تنظیم باشد، Tavily اولویت دارد
+    // (۸ نتیجه، اولین نوبت و بدون فیلتر)؛ نتیجه‌های ویکی/DDG همیشه از فیلتر ارتباط رد می‌شوند.
     const useTav = !!env.TAVILY_API_KEY;
     const [wfa, wen, ddg, tav] = await Promise.all([
-      safe("wiki-fa", wikipedia("fa", q, 3)),
-      /[A-Za-z]{3}/.test(q) ? safe("wiki-en", wikipedia("en", q, 2)) : Promise.resolve([] as Hit[]), // پرسش کاملاً فارسی در ویکی انگلیسی نتیجه‌ی مفیدی ندارد
+      WIKI_NOTES ? safe("wiki-fa", wikipedia("fa", q, 3)) : Promise.resolve([] as Hit[]),
+      WIKI_NOTES && /[A-Za-z]{3}/.test(q) ? safe("wiki-en", wikipedia("en", q, 2)) : Promise.resolve([] as Hit[]), // پرسش کاملاً فارسی در ویکی انگلیسی نتیجه‌ی مفیدی ندارد
       safe("ddg", duckduckgo(q, 5)),
       safe("tavily", tavily(env, q, useTav ? 8 : 5, sink)),
     ]);
     const tokens = keyTokens(q);
     const raw: Record<string, Hit[]> = { "wiki-fa": wfa, tavily: tav, ddg, "wiki-en": wen };
     const order = useTav ? ["tavily", "wiki-fa", "ddg", "wiki-en"] : ["wiki-fa", "tavily", "ddg", "wiki-en"]; // از هر منبع به‌نوبت برداشته می‌شود تا یکی بقیه را پر نکند
-    const lists = order.map((k) => useTav ? raw[k] : raw[k].filter((h) => {
+    const lists = order.map((k) => (useTav && k === "tavily") ? raw[k] : raw[k].filter((h) => { // Tavily بدون فیلتر؛ ویکی‌پدیا و DuckDuckGo فقط با فیلتر ارتباط (جستجوی متنی‌شان گاهی فقط یک کلمه‌ی مشترک دارد)
       const ok = relevant(tokens, h);
       if (!ok) console.log("research-drop", h.via, h.src, `${matchCount(tokens, h)}/${tokens.length}`, "|", h.title.slice(0, 70)); // برای عیب‌یابی: چرا نتیجه‌ای کنار گذاشته شد
       return ok;
     }));
     console.log("research-tokens", tokens.join(","));
     // فقط در لاگ Worker (داشبورد کلودفلر ← Logs): هر منبع چند نتیجه آورد → چند تا ماند
-    console.log("research", JSON.stringify(Object.fromEntries(order.map((k, i) => [k, `${raw[k].length}→${lists[i].length}`]))), useTav ? "mode:no-filter" : "mode:filtered", "q:", q.slice(0, 80));
+    console.log("research", JSON.stringify(Object.fromEntries(order.map((k, i) => [k, `${raw[k].length}→${lists[i].length}`]))), useTav ? "mode:tavily-first" : "mode:filtered", "q:", q.slice(0, 80));
     const lines: string[] = [];
     const seen = new Set<string>();
     let used = 0;
