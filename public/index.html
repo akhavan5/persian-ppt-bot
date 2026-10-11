@@ -739,18 +739,22 @@ function modelLogo(brand) {
 }
 function renderModels() {
   if (!cfg || !cfg.models) return;
-  const cur = me && me.settings.model ? me.settings.model : cfg.models[0].id;
+  const cur = me && me.settings.model ? me.settings.model : defModelId();
   show($("#modelsBox"), cfg.models.length > 1);
-  $("#modelsHint").textContent = "همه‌ی مدل‌ها رایگان‌اند ✓";
+  $("#modelsHint").textContent = cfg.models.some((m) => m.free === false) ? "مدل‌های دارای برچسب «ویژه» فقط برای دارندگان پلن‌اند" : "همه‌ی مدل‌ها رایگان‌اند ✓";
   $("#models").replaceChildren(...cfg.models.map((m) => {
     const b = BRANDS[m.brand] || BRANDS.other;
+    const locked = m.free === false && !(me && me.premium);
     return h("button", {
-      type: "button", class: "mdl", "aria-pressed": String(m.id === cur), title: m.name, onclick: () => pickModel(m),
-    }, modelLogo(m.brand), h("span", { class: "nm" }, h("b", {}, m.name), h("small", {}, b.label)));
+      type: "button", class: "mdl" + (locked ? " locked" : ""), "aria-pressed": String(m.id === cur), title: m.name, onclick: () => pickModel(m),
+    }, ...(m.free === false ? [h("span", { class: "tag pro" }, "ویژه")] : []), modelLogo(m.brand), h("span", { class: "nm" }, h("b", {}, m.name), h("small", {}, b.label)));
   }));
 }
+const defModelId = () => (cfg.models.find((m) => m.free !== false) || cfg.models[0]).id;
 function pickModel(m) {
-  if (!me) { if (m.id !== cfg.models[0].id) openAuth("register", "برای انتخاب مدل ثبت‌نام کن؛ همه‌ی مدل‌ها رایگان‌اند."); return; }
+  const special = m.free === false;
+  if (!me) { if (m.id !== defModelId()) openAuth("register", special ? "برای استفاده از مدل‌های ویژه ثبت‌نام کن و پلن بگیر." : "برای انتخاب مدل ثبت‌نام کن؛ این مدل رایگان است."); return; }
+  if (special && !me.premium) { openBuy("مدل «" + m.name + "» فقط برای کاربران دارای پلن پلاس/پرو فعال است."); return; }
   if (me.settings.model !== m.id) saveSetting({ model: m.id });
 }
 

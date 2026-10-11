@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, FONT_URL, THEMES, TONES } from "./themes";
 import {
-  ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, getActiveSub, getCredit, getSettings, isAdmin, isAllowed, isBanned,
+  EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, getActiveSub, getCredit, getSettings, isAdmin, isAllowed, isBanned,
   maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
@@ -37,10 +37,10 @@ const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
 
 // ---------- منوی تنظیمات ----------
 /** سقف‌های حساب (بر اساس پلن)؛ همان قوانین نسخه‌ی وب */
-interface Caps { maxSlides: number; maxImg: number }
+interface Caps { maxSlides: number; maxImg: number; /** مدیر یا پلن فعال: دسترسی به مدل‌های ویژه */ premium: boolean }
 const getCaps = async (env: Env, uid: Uid): Promise<Caps> => {
-  const [maxSlides, maxImg] = await Promise.all([maxSlidesFor(env, uid), maxImagesFor(env, uid)]);
-  return { maxSlides, maxImg };
+  const [maxSlides, maxImg, premium] = await Promise.all([maxSlidesFor(env, uid), maxImagesFor(env, uid), hasPlanAccess(env, uid)]);
+  return { maxSlides, maxImg, premium };
 };
 const imgCountOf = (s: Settings, caps: Caps) => Math.min(caps.maxImg, s.imageCount ?? (s.images ? 1 : 0));
 
@@ -82,7 +82,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
     }));
   } else if (kind === "model") {
     title = "🤖 مدل هوش مصنوعی";
-    opts = modelList(env).map((m, i) => ({ text: mark(s.model === m.id, m.name), callback_data: `v:model:${i}` }));
+    opts = modelList(env).map((m, i) => ({ text: lock(!!m.extra && !caps.premium, mark(s.model === m.id, m.name)), callback_data: `v:model:${i}` }));
   } else {
     title = `📄 تعداد اسلاید پیش‌فرض\n<i>سقف حساب تو: ${toFa(String(caps.maxSlides))} اسلاید. گزینه‌های 🔒 با پلن پلاس/پرو باز می‌شوند. در متن پیام هم می‌توانی بنویسی «۱۲ اسلاید».</i>`;
     opts = WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(s.slides === n, toFa(String(n)))), callback_data: `v:slides:${n}` }));
@@ -121,7 +121,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   let ask = "", opts: Btn[][] = [];
   if (p.step === "model") {
     ask = "🤖 <b>مدل هوش مصنوعی</b> را انتخاب کن:";
-    opts = chunk(models.map((m, i) => ({ text: mark(p.model === m.id, m.name), callback_data: `p:model:${i}` })), 2);
+    opts = chunk(models.map((m, i) => ({ text: lock(!!m.extra && !caps.premium, mark(p.model === m.id, m.name)), callback_data: `p:model:${i}` })), 2);
   } else if (p.step === "slides") {
     ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (s.mode === "student" ? `\n<i>🎓 حالت دانشجویی حداقل ${toFa(String(MIN_STUDENT_SLIDES))} اسلاید می‌سازد.</i>` : "");
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
@@ -167,7 +167,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     }
     return await answer(d.error, true);
   }
-  begin.settings.model = p.model; // انتخاب مدل در ویزارد (بدون وابستگی به خواندن KV)
+  if (await canUseModel(env, uid, p.model)) begin.settings.model = p.model; // انتخاب مدل در ویزارد (بدون وابستگی به خواندن KV)؛ مدل ویژه بدون پلن نادیده گرفته می‌شود
   try {
     await env.KV.delete(pendKey(uid)).catch(() => {});
     await answer();
@@ -220,6 +220,7 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
   if (a === "model") {
     const m = modelList(env)[Number(b)];
     if (!m) return await answer();
+    if (m.extra && !caps.premium) return await answer(EXTRA_MODEL_MSG, true);
     p.model = m.id; s.model = m.id;
   } else if (a === "slides") {
     if (!(Number(b) >= 3)) return await answer();
@@ -336,7 +337,11 @@ async function handleCallback(env: Env, cq: any) {
       s.imageCount = Number(b);
       s.images = s.imageCount > 0;
     }
-    if (a === "model") { const m = modelList(env)[Number(b)]; if (m) s.model = m.id; }
+    if (a === "model") {
+      const m = modelList(env)[Number(b)];
+      if (m?.extra && !caps.premium) return await alertLimit(EXTRA_MODEL_MSG);
+      if (m) s.model = m.id;
+    }
     await saveSettings(env, uid, s);
     view = mainMenu(env, s, caps);
   }

@@ -4,7 +4,7 @@ import type { Settings } from "./types";
 import { FONTS, THEMES, TONES } from "./themes";
 import {
   FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
-  isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
+  EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
 } from "./settings";
 import { modelList } from "./llm";
 import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
@@ -73,8 +73,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       slideChoices: WEB_SLIDE_CHOICES,
       freeMaxSlides: FREE_MAX_SLIDES,
       freeMaxImages: FREE_MAX_IMAGES,
-      // همه‌ی مدل‌ها برای همه رایگان است
-      models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: true })),
+      // مدل‌های ارائه‌دهنده‌ی دوم (extra) فقط برای دارندگان پلن‌اند: free=false
+      models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: !m.extra })),
       plans: PLANS,
     });
   }
@@ -216,7 +216,10 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
     s.imageCount = Math.max(0, Math.round(b.imageCount));
     s.images = s.imageCount > 0;
   }
-  if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) s.model = b.model;
+  if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) {
+    if (!(await canUseModel(env, user.id, b.model))) return json({ error: EXTRA_MODEL_MSG.replace("🔒 ", ""), needPlan: true }, 403);
+    s.model = b.model;
+  }
   for (const k of ["digits", "images", "sources", "questions"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
   await saveSettings(env, user.id, s);
   return json({ settings: await getSettings(env, user.id) });
