@@ -41,8 +41,8 @@ export function looksGarbled(text: string): boolean {
 /** ی/ک عربی ← فارسی، حذف اعراب و کشیده */
 const normFa = (s: string) => s.replace(/ي/g, "ی").replace(/ى/g, "ی").replace(/ك/g, "ک").replace(/[ً-ٟـ]/g, "");
 
-/** برای مدل‌هایی که پیش‌فرض «فکر» می‌کنند (مثل qwen) فکر کردن خاموش می‌شود */
-const THINKERS = /qwen|glm|kimi/i;
+/** مدل‌هایی که پیش‌فرض «فکر» می‌کنند و تمام توکن‌ها را صرف reasoning می‌کنند (content=null, finish_reason=length)؛ فکر کردن خاموش می‌شود. هم‌راستا با THINKERS در llm.ts */
+const THINKERS = /qwen3|qwen-3|qwen|glm|gemma-?4|kimi/i;
 
 async function readOne(env: Env, img: { bytes: Uint8Array; mime: string }, models: string[]): Promise<string> {
   const url = `data:${img.mime};base64,${toB64(img.bytes)}`;
@@ -51,7 +51,7 @@ async function readOne(env: Env, img: { bytes: Uint8Array; mime: string }, model
     const body: Record<string, unknown> = {
       model,
       messages: [{ role: "user", content: [{ type: "text", text: PROMPT }, { type: "image_url", image_url: { url } }] }],
-      max_tokens: 4096,
+      max_tokens: 6000,
       temperature: 0,
     };
     if (THINKERS.test(model)) body.chat_template_kwargs = { enable_thinking: false };
