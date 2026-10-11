@@ -30,7 +30,7 @@ function useOpenAI(env: Env): boolean {
   return p === "openai" || (!!env.OPENAI_API_KEY && p !== "anthropic");
 }
 
-export interface ModelOption { id: string; name: string; model: string; brand: string }
+export interface ModelOption { id: string; name: string; model: string; brand: string; /** مدل ارائه‌دهنده‌ی دوم (EXTRA_LLM_*)، نه کلودفلر */ extra?: boolean }
 /** برند مدل (برای نمایش لوگو در وب)؛ از روی نام مدل تشخیص داده می‌شود. ترتیب مهم است: «deepseek-…-qwen» باید deepseek حساب شود. */
 export function brandOf(id: string): string {
   if (/deepseek/i.test(id)) return "deepseek";
@@ -41,30 +41,38 @@ export function brandOf(id: string): string {
   return "other";
 }
 const shortName = (id: string) => id.split("/").pop() || id;
+/** تجزیه‌ی فهرست مدل‌ها (متن ساده با کاما/خط جدید و «|» برای نام نمایشی، یا JSON) */
+function parseModels(raw: string, add: (model: unknown, name?: unknown) => void) {
+  raw = raw.trim();
+  if (raw.startsWith("[")) {
+    try {
+      for (const x of JSON.parse(raw)) typeof x === "string" ? add(x) : add(x?.model ?? x?.id, x?.name);
+    } catch { /* JSON نامعتبر: نادیده گرفته می‌شود */ }
+  } else {
+    for (const part of raw.split(/[,\n;]+/)) { const [m, ...n] = part.split("|"); add(m, n.join("|")); }
+  }
+}
+/** آیا ارائه‌دهنده‌ی دوم (فقط متنی) کامل تنظیم شده است؟ */
+const extraReady = (env: Env) => !!(env.EXTRA_LLM_BASE_URL?.trim() && env.EXTRA_LLM_API_KEY?.trim() && env.EXTRA_LLM_MODELS?.trim());
 /**
  * فهرست مدل‌های قابل انتخاب. متغیر OPENAI_MODELS (در کلودفلر) یکی از این دو شکل را می‌پذیرد:
  *   ۱) متن ساده: هر مدل با کاما یا خط جدید جدا شود؛ نام نمایشی اختیاری با «|»:   gpt-4o-mini|سریع, gpt-4o|دقیق
  *   ۲) JSON: ["gpt-4o-mini", {"model":"gpt-4o","name":"دقیق"}]
- * مدل اول = «مدل رایگان» (برای همه‌ی کاربران وب و پیش‌فرض)؛ بقیه‌ی مدل‌ها فقط برای اعضای پلن پلاس/پرو باز می‌شوند.
+ * مدل‌های EXTRA_LLM_MODELS (ارائه‌دهنده‌ی دوم، فقط متنی) «قبل از» مدل‌های کلودفلر قرار می‌گیرند؛ پس مدل اول فهرست (پیش‌فرض/رایگان) از همین‌ها می‌آید.
  * اگر OPENAI_MODELS خالی باشد، از OPENAI_MODEL (و OPENAI_MODEL_2) استفاده می‌شود.
  */
 export function modelList(env: Env): ModelOption[] {
   if (!useOpenAI(env)) { const m = env.ANTHROPIC_MODEL || "claude-sonnet-5-5"; return [{ id: m, name: m, model: m, brand: "anthropic" }]; }
   const out: ModelOption[] = [];
-  const add = (model: unknown, name?: unknown) => {
+  const adder = (extra: boolean) => (model: unknown, name?: unknown) => {
     const m = String(model ?? "").trim();
-    if (m && !out.some((o) => o.id === m)) out.push({ id: m, name: String(name ?? "").trim() || shortName(m), model: m, brand: brandOf(m) });
+    if (m && !out.some((o) => o.id === m)) out.push({ id: m, name: String(name ?? "").trim() || shortName(m), model: m, brand: brandOf(m), ...(extra ? { extra: true } : {}) });
   };
-  const raw = (env.OPENAI_MODELS ?? "").trim();
-  if (raw.startsWith("[")) {
-    try {
-      for (const x of JSON.parse(raw)) typeof x === "string" ? add(x) : add(x?.model ?? x?.id, x?.name);
-    } catch { /* JSON نامعتبر: نادیده گرفته می‌شود و فهرست پیش‌فرض به کار می‌رود */ }
-  } else {
-    for (const part of raw.split(/[,\n;]+/)) { const [m, ...n] = part.split("|"); add(m, n.join("|")); }
-  }
-  if (!out.length) { add(env.OPENAI_MODEL || "gpt-4o-mini"); add(env.OPENAI_MODEL_2); }
-  return out.slice(0, 12);
+  if (extraReady(env)) parseModels(env.EXTRA_LLM_MODELS ?? "", adder(true)); // اول: ارائه‌دهنده‌ی دوم
+  const add = adder(false);
+  parseModels(env.OPENAI_MODELS ?? "", add);
+  if (!out.some((o) => !o.extra)) { add(env.OPENAI_MODEL || "gpt-4o-mini"); add(env.OPENAI_MODEL_2); }
+  return out.slice(0, 20);
 }
 export const resolveModel = (env: Env, id?: string): ModelOption => {
   const l = modelList(env);
@@ -95,8 +103,19 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
     if (THINKERS.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
     if (/gpt-oss/i.test(String(body.model))) body.reasoning_effort = "low"; // کم‌فکر ⇒ سریع‌تر و پاسخ کامل‌تر
+    const picked = resolveModel(env, modelId);
+    // مدل ارائه‌دهنده‌ی دوم: مستقیم به گیت‌وی و کلید خودش (بدون چرخش حساب‌های کلودفلر)
+    const extraBase = (env.EXTRA_LLM_BASE_URL ?? "").trim().replace(/\/+$/, "");
+    const extraKey = (env.EXTRA_LLM_API_KEY ?? "").trim();
     // OPENAI_API_KEY می‌تواند فهرستی از حساب‌ها باشد: از آخرین حساب سالم شروع می‌شود و با ۴۲۹ (سقف نورون) به حساب بعدی می‌رود
     const call = async () => {
+      if (picked.extra) {
+        return fetch(`${extraBase}/chat/completions`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${extraKey}` },
+          body: JSON.stringify(body), signal: AbortSignal.timeout(180_000),
+        });
+      }
       try {
         return await fetchWithAccounts(env, (a) => fetch(`${a.base}/chat/completions`, {
           method: "POST",

@@ -27,6 +27,12 @@ export interface Env {
   OPENAI_MODELS?: string;
   /** قدیمی: اگر OPENAI_MODELS خالی باشد، مدل دوم از اینجا خوانده می‌شود */
   OPENAI_MODEL_2?: string;
+  /** اختیاری: ارائه‌دهنده‌ی دوم فقط برای مدل‌های متنی (سازگار با OpenAI). مدل‌هایش در فهرست «قبل از» مدل‌های کلودفلر می‌آیند و تصویر همچنان فقط از کلودفلر است.
+   *  EXTRA_LLM_BASE_URL: آدرس گیت‌وی تا /v1 (مثل https://example.com/v1)؛ EXTRA_LLM_API_KEY: کلید همان گیت‌وی؛
+   *  EXTRA_LLM_MODELS: فهرست مدل‌ها با همان قالب OPENAI_MODELS (کاما/خط جدید، نام نمایشی با «|») یا JSON */
+  EXTRA_LLM_BASE_URL?: string;
+  EXTRA_LLM_API_KEY?: string;
+  EXTRA_LLM_MODELS?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;
   LLM_PROVIDER?: string;
