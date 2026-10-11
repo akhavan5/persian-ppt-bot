@@ -24,6 +24,8 @@ const SYSTEM =
 const THINKERS = /qwen3|qwen-3|glm|gemma-?4/i;
 /** مدل‌هایی که فکر کردنشان خاموش نمی‌شود (فقط توکن بیشتر می‌خواهند): DeepSeek-R1 با تگ <think>، gpt-oss با reasoning_effort */
 const ALWAYS_THINK = /deepseek-r1|gpt-oss|\bo\d/i;
+/** Claude از طریق گیت‌وی: ممکن است «فکر کردن» روشن باشد و کل سقف توکن را بخورد (finish=length با متن خالی) */
+const CLAUDE = /claude/i;
 
 function useOpenAI(env: Env): boolean {
   const p = (env.LLM_PROVIDER || "").toLowerCase();
@@ -97,7 +99,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     const body: Record<string, unknown> = {
       model: resolveModel(env, modelId).model,
       // مدل‌های «استدلالی» (GLM، Gemma 4، Qwen3) بخشی از توکن‌ها را صرف فکر کردن می‌کنند؛ با سقف کم، پاسخ نیمه‌کاره/خالی می‌ماند
-      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) ? maxTokens * 2 : maxTokens, 8000),
+      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) || CLAUDE.test(resolveModel(env, modelId).model) ? maxTokens * 2 : maxTokens, 8000),
       temperature: 0.5,
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
@@ -105,6 +107,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
     if (THINKERS.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
     if (/gpt-oss/i.test(String(body.model))) body.reasoning_effort = "low"; // کم‌فکر ⇒ سریع‌تر و پاسخ کامل‌تر
+    if (CLAUDE.test(String(body.model))) body.thinking = { type: "disabled" }; // برای JSON لازم نیست؛ اگر گیت‌وی نپذیرد (۴۰۰) پایین‌تر حذف و دوباره تلاش می‌شود
     const picked = resolveModel(env, modelId);
     // مدل ارائه‌دهنده‌ی دوم: مستقیم به گیت‌وی و کلید خودش (بدون چرخش حساب‌های کلودفلر)
     const extraBase = (env.EXTRA_LLM_BASE_URL ?? "").trim().replace(/\/+$/, "");
@@ -134,6 +137,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
       delete body.response_format; // برخی سرویس‌ها response_format یا chat_template_kwargs را نمی‌پذیرند
       delete body.chat_template_kwargs;
       delete body.reasoning_effort;
+      delete body.thinking;
       r = await call();
     }
     if (!r.ok) await failFrom(r, "LLM");
@@ -179,7 +183,8 @@ export function parseJson(text: string): any {
 async function ask(env: Env, prompt: string, maxTokens = 6000, modelId?: string): Promise<any> {
   let last: unknown;
   for (let i = 0; i < 2; i++) { // یک بار تلاش مجدد در صورت JSON نامعتبر
-    const text = await complete(env, prompt, maxTokens, modelId);
+    // تلاش دوم (بعد از خروجی خالی/ناقص، مثلاً finish=length) با سقف توکن بیشتر
+    const text = await complete(env, prompt, i ? Math.min(8000, Math.round(maxTokens * 1.6)) : maxTokens, modelId);
     try { return parseJson(text); } catch (e) { last = e; }
   }
   throw last instanceof Error ? last : new Error("invalid JSON");
