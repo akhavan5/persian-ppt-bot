@@ -11,14 +11,14 @@ export interface ListResult { keys: { name: string }[]; list_complete: boolean; 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 export class Store {
-  private ready: Promise<unknown> | null = null;
+  private initP: Promise<unknown> | null = null;
   constructor(private db: D1Database) {}
 
   // جدول در اولین استفاده ساخته می‌شود (بدون نیاز به migration دستی). WITHOUT ROWID = هر نوشتن فقط یک ردیف حساب می‌شود.
   private init(): Promise<unknown> {
-    return (this.ready ??= this.db
+    return (this.initP ??= this.db
       .exec("CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, exp INTEGER) WITHOUT ROWID")
-      .catch((e) => { this.ready = null; throw e; }));
+      .catch((e) => { this.initP = null; throw e; }));
   }
 
   /** برای دستورهای SQL اتمی مستقیم روی env.DB (مثل کسر اعتبار): مطمئن می‌شود جدول ساخته شده است. */
