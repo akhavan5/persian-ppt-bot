@@ -1,3 +1,5 @@
+import type { Mode } from "./types";
+
 export interface Theme {
   name: string; bg: string; surface: string; primary: string; dark: string;
   accent: string; text: string; muted: string; onPrimary: string;
@@ -10,6 +12,17 @@ export const THEMES: Record<string, Theme> = {
   royal: { name: "سلطنتی", bg: "FFFFFF", surface: "F0ECF9", primary: "5B3FA6", dark: "3A2673", accent: "E05CA0", text: "231B33", muted: "756B8A", onPrimary: "FFFFFF" },
   midnight: { name: "نیمه‌شب", bg: "0F172A", surface: "1E293B", primary: "4F46E5", dark: "0B1120", accent: "22D3EE", text: "F1F5F9", muted: "94A3B8", onPrimary: "FFFFFF" },
 };
+
+/** حالت‌های ساخت. minSlides: حداقل اسلاید لازم برای ساختار کامل آن حالت (۰ = بدون حداقل) */
+export const MODES: Record<Mode, { name: string; emoji: string; hint: string; minSlides: number }> = {
+  normal: { name: "عادی", emoji: "📄", hint: "ساختار آزاد، متناسب با موضوع", minSlides: 0 },
+  student: { name: "دانشجویی", emoji: "🎓", hint: "فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع", minSlides: 8 },
+  business: { name: "کسب‌وکار", emoji: "💼", hint: "خلاصه‌ی مدیریتی، مسئله و راه‌حل، جدول و نمودار، برنامه‌ی اجرا و گام‌های بعدی", minSlides: 8 },
+  teacher: { name: "معلم", emoji: "🍎", hint: "اهداف درس، پرسش آغازین، محتوا، فعالیت کلاسی، جمع‌بندی و پرسش‌های مرور", minSlides: 8 },
+  thesis: { name: "دفاع پایان‌نامه", emoji: "🎓", hint: "مسئله، اهداف، پیشینه، روش، یافته‌ها، نتیجه‌گیری، پیشنهادها و منابع", minSlides: 10 },
+};
+export const isMode = (v: unknown): v is Mode => typeof v === "string" && Object.hasOwn(MODES, v);
+export const nextMode = (m: Mode): Mode => { const k = Object.keys(MODES) as Mode[]; return k[(k.indexOf(m) + 1) % k.length]; };
 
 export const TONES: Record<string, string> = {
   formal: "رسمی و حرفه‌ای",

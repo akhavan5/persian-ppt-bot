@@ -9,7 +9,8 @@ export interface Quote { text: string; author?: string }
 /** کارت آیکن‌دار؛ icon نام یکی از کلیدهای ICONS در themes.ts است */
 export interface IconItem { icon: string; heading: string; text: string }
 export interface Table { headers: string[]; rows: string[][] }
-export interface Chart { type: "bar" | "line" | "pie"; labels: string[]; series: { name: string; values: number[] }[] }
+/** doughnut: سهم اجزا از یک کل (مثل pie)؛ stacked: ستونی انباشته (اجزای هر دسته روی هم) */
+export interface Chart { type: "bar" | "line" | "pie" | "doughnut" | "stacked"; labels: string[]; series: { name: string; values: number[] }[] }
 
 export interface Slide {
   layout: Layout;
@@ -33,6 +34,9 @@ export type SlideKind = "sources" | "questions";
 export interface OutlineItem { title: string; summary: string; kind?: SlideKind; /** پیام کلیدی اسلاید (یک جمله) */ message?: string }
 export interface Outline { title: string; slides: OutlineItem[] }
 
+/** حالت ساخت: ساختار و سبک محتوا را تعیین می‌کند (فهرست حالت‌ها و برچسب‌ها: MODES در themes.ts) */
+export type Mode = "normal" | "student" | "business" | "teacher" | "thesis";
+
 export interface Settings {
   theme: string;
   font: string;
@@ -42,8 +46,8 @@ export interface Settings {
   images: boolean;
   /** فقط وب: تعداد تصویر انتخابی هر ارائه (۰ = بدون تصویر)؛ خالی = ۱ اگر images روشن باشد */
   imageCount?: number;
-  /** normal | student (ساختار دانشجویی: فهرست، مقدمه، بدنه، نتیجه‌گیری، منابع) */
-  mode: "normal" | "student";
+  /** normal | student (فهرست، مقدمه، بدنه، نتیجه‌گیری، منابع) | business (خلاصه‌ی مدیریتی، مسئله، راه‌حل، برنامه، گام‌های بعدی) | teacher (اهداف درس، فعالیت، جمع‌بندی، پرسش) | thesis (دفاع پایان‌نامه: مسئله، اهداف، پیشینه، روش، یافته‌ها، نتیجه‌گیری) */
+  mode: Mode;
   /** افزودن اسلاید منابع / پرسش‌های پایانی */
   sources: boolean;
   questions: boolean;

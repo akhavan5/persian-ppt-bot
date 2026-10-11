@@ -287,8 +287,9 @@ function chartSvg(c: Chart, wIn: number, hIn: number, t: Theme, tx: (s: string) 
   const fmt = (v: number) => tx(Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
   const txt = (x: number, y: number, s: string, size: number, color: string, anchor = "middle", bold = false) =>
     `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${fs(size)}" fill="#${color}" text-anchor="${anchor}"${bold ? ' font-weight="700"' : ""}>${tx(s)}</text>`;
-  const multi = c.series.length > 1 || c.type === "pie";
-  const names = c.type === "pie" ? c.labels : c.series.map((s, i) => s.name || `سری ${i + 1}`);
+  const ring = c.type === "pie" || c.type === "doughnut";
+  const multi = c.series.length > 1 || ring;
+  const names = ring ? c.labels : c.series.map((s, i) => s.name || `سری ${i + 1}`);
   const legend = multi ? (() => {
     const wOf = (s: string) => 60 + s.length * 17;
     const total = names.reduce((a, n) => a + wOf(n), 0);
@@ -297,23 +298,25 @@ function chartSvg(c: Chart, wIn: number, hIn: number, t: Theme, tx: (s: string) 
   })() : "";
   const bottom = multi ? 90 : 55;
 
-  if (c.type === "pie") {
+  if (ring) {
     const vals = c.series[0].values, sum = vals.reduce((a, b) => a + Math.max(0, b), 0) || 1;
     const cx = vw / 2, cy = (vh - bottom) / 2 + 10, r = Math.min(vw, vh - bottom) / 2 - 10;
     let a0 = -Math.PI / 2;
     const slices = vals.map((v, i) => {
       const frac = Math.max(0, v) / sum, a1 = a0 + frac * Math.PI * 2, big = a1 - a0 > Math.PI ? 1 : 0;
       const p = (a: number, rr = r) => `${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy + rr * Math.sin(a)).toFixed(1)}`;
-      const mid = (a0 + a1) / 2, lx = cx + r * 0.62 * Math.cos(mid), ly = cy + r * 0.62 * Math.sin(mid);
+      const mid = (a0 + a1) / 2, lr = c.type === "doughnut" ? 0.78 : 0.62, lx = cx + r * lr * Math.cos(mid), ly = cy + r * lr * Math.sin(mid); // دونات: برچسب وسط حلقه
       const d = frac >= 0.9999 ? `M ${p(a0)} A ${r} ${r} 0 1 1 ${p(a0 + Math.PI)} A ${r} ${r} 0 1 1 ${p(a0)} Z` : `M ${cx} ${cy} L ${p(a0)} A ${r} ${r} 0 ${big} 1 ${p(a1)} Z`;
       a0 = a1;
       return `<path d="${d}" fill="#${pal[i % pal.length]}" stroke="#${t.bg}" stroke-width="3"/>` + (frac >= 0.04 ? txt(lx, ly + 6, `${Math.round(frac * 100)}%`, 13, "FFFFFF", "middle", true) : "");
     }).join("");
-    return `<svg direction="ltr" viewBox="0 0 ${vw} ${vh}" role="img">${slices}${legend}</svg>`;
+    const hole = c.type === "doughnut" ? `<circle cx="${cx}" cy="${cy}" r="${(r * 0.55).toFixed(1)}" fill="#${t.bg}"/>` : "";
+    return `<svg direction="ltr" viewBox="0 0 ${vw} ${vh}" role="img">${slices}${hole}${legend}</svg>`;
   }
 
   const L = 80, R = 20, T = 30, pw = vw - L - R, ph = vh - T - bottom;
-  const all = c.series.flatMap((s) => s.values), lo = Math.min(0, ...all), hi = Math.max(...all, 1);
+  const stacked = c.type === "stacked", pos = (v: number) => Math.max(0, v);
+  const all = stacked ? c.labels.map((_, i) => c.series.reduce((a, s) => a + pos(s.values[i]), 0)) : c.series.flatMap((s) => s.values), lo = Math.min(0, ...all), hi = Math.max(...all, 1);
   const raw = (hi - lo) / 4 || 1, mag = 10 ** Math.floor(Math.log10(raw));
   const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? mag * 10;
   const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
@@ -323,7 +326,18 @@ function chartSvg(c: Chart, wIn: number, hIn: number, t: Theme, tx: (s: string) 
   const n = c.labels.length, gw = pw / n;
   const cats = c.labels.map((l, i) => txt(L + gw * (i + 0.5), vh - bottom + 30, l, 14, t.text)).join("");
   let marks = "";
-  if (c.type === "bar") {
+  if (stacked) {
+    const bw = gw * 0.5;
+    c.labels.forEach((_, i) => {
+      let acc = 0;
+      c.series.forEach((s, si) => {
+        const v = pos(s.values[i]), x = L + gw * i + (gw - bw) / 2, yTop = y(acc + v), h = y(acc) - yTop;
+        marks += `<rect x="${x.toFixed(1)}" y="${yTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" fill="#${pal[si % pal.length]}"/>` + (h >= 26 ? txt(x + bw / 2, yTop + h / 2 + 5, fmt(v), 13, "FFFFFF", "middle", true) : "");
+        acc += v;
+      });
+      marks += txt(L + gw * (i + 0.5), y(acc) - 8, fmt(acc), 13, t.text, "middle", true);
+    });
+  } else if (c.type === "bar") {
     const ns = c.series.length, bw = (gw * 0.62) / ns;
     c.series.forEach((s, si) => s.values.forEach((v, i) => {
       const x = L + gw * i + gw * 0.19 + bw * si, y0 = y(Math.max(v, 0)), h = Math.abs(y(v) - y(0));

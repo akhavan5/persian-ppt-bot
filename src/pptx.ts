@@ -313,18 +313,22 @@ class Builder {
     const labels = c.labels.map((l) => this.txt(l));
     const data = c.series.map((se, i) => ({ name: this.txt(se.name || `سری ${i + 1}`), labels, values: se.values }));
     const palette = [this.t.primary, this.t.accent, "E0A93B", "2F7D5B", "D9482B", "5B3FA6", this.t.muted, "14B8A6"];
-    const type = c.type === "line" ? this.p.ChartType.line : c.type === "pie" ? this.p.ChartType.pie : this.p.ChartType.bar;
+    const ring = c.type === "pie" || c.type === "doughnut"; // سهم اجزا از یک کل
+    const stacked = c.type === "stacked";
+    const type = c.type === "line" ? this.p.ChartType.line : c.type === "pie" ? this.p.ChartType.pie : c.type === "doughnut" ? this.p.ChartType.doughnut : this.p.ChartType.bar;
     const font = { fontFace: this.font, color: this.t.text } as const;
     s.addChart(type, data as any, {
       x: M, y: 1.8, w: hasText ? 7.0 : W - 2 * M, h: 4.55,
-      chartColors: c.type === "pie" ? palette.slice(0, labels.length) : palette.slice(0, data.length),
-      showLegend: c.type === "pie" || data.length > 1, legendPos: "b", legendFontFace: this.font, legendFontSize: 14, legendColor: this.t.text,
+      chartColors: ring ? palette.slice(0, labels.length) : palette.slice(0, data.length),
+      showLegend: ring || data.length > 1, legendPos: "b", legendFontFace: this.font, legendFontSize: 14, legendColor: this.t.text,
       catAxisLabelFontFace: this.font, catAxisLabelFontSize: 14, catAxisLabelColor: this.t.text,
       valAxisLabelFontFace: this.font, valAxisLabelFontSize: 13, valAxisLabelColor: this.t.muted,
       valGridLine: { color: this.t.muted, size: 0.5, style: "dash" } as any, catGridLine: { style: "none" } as any,
-      showValue: c.type !== "pie", showPercent: c.type === "pie", dataLabelFontFace: this.font, dataLabelFontSize: 13, dataLabelColor: c.type === "pie" ? "FFFFFF" : font.color,
+      showValue: !ring, showPercent: ring, dataLabelFontFace: this.font, dataLabelFontSize: 13, dataLabelColor: ring || stacked ? "FFFFFF" : font.color,
       ...(c.type === "line" ? { lineSize: 3, lineDataSymbolSize: 9 } : {}),
-      ...(c.type === "bar" ? { barGapWidthPct: 60 } : {}),
+      ...(c.type === "bar" || stacked ? { barGapWidthPct: 60 } : {}),
+      ...(stacked ? { barGrouping: "stacked" } : {}),
+      ...(c.type === "doughnut" ? { holeSize: 55 } : {}),
     } as any);
     if (hasText) {
       const tx = M + 7.3, tw = W - M - tx;

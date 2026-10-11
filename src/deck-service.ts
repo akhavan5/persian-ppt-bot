@@ -5,6 +5,7 @@
  */
 import type { Env } from "./env";
 import type { DeckParams, Settings } from "./types";
+import { MODES } from "./themes";
 import {
   FREE_MAX_IMAGES, FREE_MAX_SLIDES, acquireLock, bumpStat, clampSlides, getSettings, isLocked, maxImagesFor, maxSlidesFor,
   refundCredit, releaseLock, spendCredit,
@@ -113,7 +114,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
     const imgWanted = wantImgs ?? (settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0));
     const imageCount = Math.max(0, Math.min(imgWanted, maxImg));
     settings.images = imageCount > 0;
-    if (settings.mode === "student") settings.slides = Math.max(settings.slides, 8); // ساختار دانشجویی حداقل ۸ اسلاید می‌خواهد
+    settings.slides = Math.max(settings.slides, MODES[settings.mode].minSlides); // ساختار دانشجویی/کسب‌وکار/معلم حداقل ۸ اسلاید می‌خواهد
 
     let undone = false;
     const undo = async () => { // idempotent: دوبار صدا زدن اعتبار را دوبار برنمی‌گرداند

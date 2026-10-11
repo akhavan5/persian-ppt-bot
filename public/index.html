@@ -311,7 +311,15 @@ address{font-style:normal}
           <div><label for="font">فونت</label><select id="font"></select><div class="muted" id="fontHint" style="margin-top:6px;font-size:.82rem" hidden>Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد: <a href="/fonts/Vazirmatn.zip" download>دانلود مستقیم</a>. Tahoma و Arial همه‌جا کار می‌کنند.</div></div>
         </div>
         <div style="margin-top:8px">
-          <label class="sw"><span>حالت دانشجویی<small>فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع</small></span><input type="checkbox" id="mode"></label>
+          <label for="mode" style="margin-top:0">حالت ساخت</label>
+          <select id="mode">
+            <option value="normal">عادی</option>
+            <option value="student">دانشجویی</option>
+            <option value="business">کسب‌وکار</option>
+            <option value="teacher">معلم</option>
+            <option value="thesis">دفاع پایان‌نامه</option>
+          </select>
+          <div class="muted" id="modeHint" style="margin:6px 0 4px;font-size:.82rem"></div>
           <label class="sw"><span>ارقام فارسی</span><input type="checkbox" id="digits"></label>
           <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
           <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
@@ -700,13 +708,26 @@ function renderApp() {
   loadFiles();
   if (me.activeJob) track(me.activeJob);
 }
+const MODE_HINTS = {
+  normal: "ساختار آزاد، متناسب با موضوع",
+  student: "فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع (حداقل ۸ اسلاید)",
+  business: "خلاصه‌ی مدیریتی، مسئله و راه‌حل، جدول و نمودار، برنامه‌ی اجرا و گام‌های بعدی (حداقل ۸ اسلاید)",
+  thesis: "مسئله، اهداف، پیشینه، روش، یافته‌ها، نتیجه‌گیری، پیشنهادها و منابع (حداقل ۱۰ اسلاید)",
+  teacher: "اهداف درس، پرسش آغازین، محتوا، فعالیت کلاسی، جمع‌بندی و پرسش‌های مرور (حداقل ۸ اسلاید)",
+};
 function syncSettings() {
   const s = me.settings;
   $("#tone").value = s.tone; $("#font").value = s.font; $("#fontHint").hidden = s.font !== "Vazirmatn";
-  $("#mode").checked = s.mode === "student";
+  $("#mode").value = s.mode;
+  $("#modeHint").textContent = MODE_HINTS[s.mode] || "";
   for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
   renderImages();
-  $("#sources").disabled = s.mode === "student";
+  // در حالت‌های دانشجویی و دفاع پایان‌نامه اسلاید منابع و در حالت معلم اسلاید پرسش‌ها همیشه ساخته می‌شود
+  const srcForced = s.mode === "student" || s.mode === "thesis";
+  $("#sources").checked = !!s.sources || srcForced;
+  $("#sources").disabled = srcForced;
+  $("#questions").checked = !!s.questions || s.mode === "teacher";
+  $("#questions").disabled = s.mode === "teacher";
   renderModels();
   $("#themes").replaceChildren(...cfg.themes.map((t) =>
     h("button", { type: "button", class: "theme", "aria-pressed": String(s.theme === t.key), onclick: () => saveSetting({ theme: t.key }) },
@@ -718,7 +739,7 @@ async function saveSetting(patch) {
 }
 $("#tone").onchange = (e) => saveSetting({ tone: e.target.value });
 $("#font").onchange = (e) => saveSetting({ font: e.target.value });
-$("#mode").onchange = (e) => saveSetting({ mode: e.target.checked ? "student" : "normal" });
+$("#mode").onchange = (e) => saveSetting({ mode: e.target.value });
 for (const k of ["digits", "sources", "questions"]) $("#" + k).onchange = (e) => saveSetting({ [k]: e.target.checked });
 
 // ---------- مدل‌های هوش مصنوعی (روی صفحه‌ی اصلی) ----------

@@ -1,7 +1,7 @@
 /** API نسخه‌ی وب: ثبت‌نام/ورود، تنظیمات، ساخت ارائه (با همان Workflow ربات)، وضعیت و دانلود. */
 import type { Env } from "./env";
 import type { Settings } from "./types";
-import { FONTS, THEMES, TONES } from "./themes";
+import { FONTS, THEMES, TONES, isMode } from "./themes";
 import {
   FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
   EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
@@ -209,7 +209,7 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
   if (typeof b.theme === "string" && b.theme in THEMES) s.theme = b.theme;
   if (typeof b.tone === "string" && b.tone in TONES) s.tone = b.tone;
   if (typeof b.font === "string" && (FONTS as readonly string[]).includes(b.font)) s.font = b.font;
-  if (typeof b.mode === "string" && (b.mode === "normal" || b.mode === "student")) s.mode = b.mode;
+  if (isMode(b.mode)) s.mode = b.mode;
   if (typeof b.slides === "number" && Number.isFinite(b.slides)) {
     const max = await maxSlidesFor(env, user.id);
     if (Math.round(b.slides) > max) return json({ error: slidesLimitMsg(max), needPlan: true }, 403);

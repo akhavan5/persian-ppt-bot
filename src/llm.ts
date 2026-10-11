@@ -1,6 +1,6 @@
 /** تولید سرفصل و محتوای اسلایدها با API سازگار با OpenAI یا Claude (یا حالت نمایشی بدون کلید). */
 import type { Env } from "./env";
-import type { Deck, Outline, OutlineItem, Slide, Layout, Table, Chart, SlideKind, Step, Quote, IconItem } from "./types";
+import type { Deck, Outline, OutlineItem, Slide, Layout, Table, Chart, SlideKind, Step, Quote, IconItem, Mode } from "./types";
 import { ICONS, TONES } from "./themes";
 import { toEn } from "./util";
 import { PoolExhausted, fetchWithAccounts } from "./accounts";
@@ -217,16 +217,17 @@ function coerceTable(t: any): Table | undefined {
 }
 
 function coerceChart(c: any): Chart | undefined {
-  const type = ["bar", "line", "pie"].includes(c?.type) ? (c.type as Chart["type"]) : "bar";
+  let type = ["bar", "line", "pie", "doughnut", "stacked"].includes(c?.type) ? (c.type as Chart["type"]) : "bar";
   const labels = strArr(c?.labels).slice(0, 8);
   if (labels.length < 2) return undefined;
-  const series = (Array.isArray(c?.series) ? c.series : []).slice(0, type === "pie" ? 1 : 3)
+  const series = (Array.isArray(c?.series) ? c.series : []).slice(0, type === "pie" || type === "doughnut" ? 1 : 3)
     .map((se: any) => ({
       name: str(se?.name),
       values: (Array.isArray(se?.values) ? se.values : []).slice(0, labels.length)
         .map((v: any) => Number(toEn(String(v)).replace(/[,٬،%\s]/g, ""))),
     }))
     .filter((se: { values: number[] }) => se.values.length === labels.length && se.values.every(Number.isFinite));
+  if (type === "stacked" && series.length < 2) type = "bar"; // انباشته بدون دست‌کم دو سری معنا ندارد
   return series.length ? { type, labels, series } : undefined;
 }
 
@@ -323,9 +324,26 @@ export function normalizeOutline(data: any, topic: string): Outline {
 }
 
 // ---------- تولید ----------
-export interface ContentOpts { model?: string; audience?: string; mode?: "normal" | "student"; sources?: boolean; questions?: boolean; maxImages?: number; /** مرور نهایی کیفیت (فقط پلن‌های پولی) */ review?: boolean; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوا */ source?: string }
-const wantSources = (o: ContentOpts) => o.mode === "student" || !!o.sources;
-const wantQuestions = (o: ContentOpts) => !!o.questions;
+export interface ContentOpts { model?: string; audience?: string; mode?: Mode; sources?: boolean; questions?: boolean; maxImages?: number; /** مرور نهایی کیفیت (فقط پلن‌های پولی) */ review?: boolean; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوا */ source?: string }
+const wantSources = (o: ContentOpts) => o.mode === "student" || o.mode === "thesis" || !!o.sources;
+const wantQuestions = (o: ContentOpts) => o.mode === "teacher" || !!o.questions;
+
+/** مخاطب پیش‌فرض و سبک نوشتن هر حالت (فقط برای حالت‌های غیر از عادی چیزی اضافه می‌شود) */
+const audienceOf = (o: ContentOpts) => o.audience || (o.mode === "student" ? "university class" : o.mode === "business" ? "managers, clients or investors who decide quickly" : o.mode === "teacher" ? "school students in a classroom" : o.mode === "thesis" ? "an academic examination committee (professors and examiners)" : "general");
+const MODE_STYLE: Record<Mode, { batch: number; bullets: string; notes: string; tokens: number }> = {
+  normal: { batch: 4, bullets: "3-5 bullets", notes: "2-3 sentences", tokens: 700 },
+  student: { batch: 3, bullets: "4-6 bullets (up to ~18 words each; define terms, add a concrete example where useful)", notes: "a full speaking script of 4-6 sentences", tokens: 900 },
+  business: { batch: 4, bullets: "3-4 short, punchy bullets (max ~12 words each; lead with the benefit, the decision or the figure that is actually available; no filler)", notes: "3-4 sentences: the talking points plus one likely question from the audience and a short answer", tokens: 750 },
+  thesis: { batch: 3, bullets: "3-5 precise academic bullets (max ~16 words each; use correct terminology; state the claim, not a topic label)", notes: "a speaking script of 4-6 sentences in formal academic Persian, including how to answer a likely examiner question on this slide", tokens: 900 },
+  teacher: { batch: 4, bullets: "3-5 simple bullets in clear classroom language (short sentences; define every new term; one everyday example where useful)", notes: "3-5 sentences telling the teacher how to present this slide: an explanation, a concrete example and one question to ask the students", tokens: 850 },
+};
+/** قواعد چیدمان ویژه‌ی هر حالت؛ به قواعد عمومی «Layout rules» اضافه می‌شود */
+function modeLayoutRules(o: ContentOpts): string {
+  if (o.mode === "business") return `\n- Business style: results first, no academic tone. Prefer \"two_column\" for problem vs solution or us vs alternative, \"table\" for comparisons, pricing, budget or plan options (qualitative cells are fine), \"process\" or \"timeline\" for plans and roadmaps, \"icons\" for key benefits, and \"stats\"/\"chart\" ONLY for figures given in the background notes/document or famous and certain. Never invent market sizes, revenues, growth rates, prices or customer counts: if a slide needs numbers that are not available, describe it qualitatively or as a table of criteria. The slide that asks for a decision or the next step must name concrete actions (who, what, when) without invented dates.`;
+  if (o.mode === "thesis") return `\n- Thesis-defense style: formal academic register. The research itself (its data, results, sample sizes, p-values, accuracy figures, case names) is NOT known to you unless it appears in the background notes/document: NEVER invent findings, statistics, sample sizes, survey results or experiment outcomes. If the findings are not available, write the findings slides as a clear template of WHAT was measured and HOW it was analysed (qualitatively), so the student can fill in the numbers. Use \"process\" for the research method or pipeline, \"table\" for comparing prior studies or variables, \"two_column\" for hypotheses vs. results or strengths vs. limitations, and \"chart\"/\"stats\" ONLY with figures from the document/notes. Prior-work slides may mention only real, well-known studies you are certain about, by author or field, with no invented citations.`;
+  if (o.mode === "teacher") return `\n- Classroom style: simple vocabulary, short sentences, one idea per slide. Use \"process\" for steps of a method or experiment, \"icons\" for key ideas, \"two_column\" for compare/contrast, \"table\" for classifications. Avoid \"stats\" and \"chart\" unless the numbers are famous and certain. The activity slide must give students something concrete to DO in class (a task, a group discussion or a mini-experiment) with 3-5 clear instructions.`;
+  return "";
+}
 /** یادداشت‌های جستجوی وب برای پرامپت؛ فقط منبع واقعیت‌هاست و نباید در متن ذکر شود */
 const researchBlock = (o: ContentOpts) => o.research
   ? `\nBackground notes from a live web search (short snippets; may be partial). They are MORE up to date than your own knowledge, so for recent events and current facts trust them over your memory: make the slides specific (names, dates, events, figures) wherever the notes support it, and reflect the actual situation they describe. Do not invent facts that neither the notes nor your reliable knowledge support; if something is not covered, keep that slide general. Ignore snippets unrelated to the topic. Never copy sentences, never mention "search" or "notes". If sources conflict, avoid the disputed detail. Keep a neutral, balanced, analytic tone.\n${o.research}\n`
@@ -356,6 +374,15 @@ function structureRules(o: ContentOpts): string {
   if (o.mode === "student") {
     return `Use an academic student-presentation structure, in this exact order: (1) title slide; (2) agenda slide "فهرست مطالب"; (3) introduction "مقدمه" (problem statement and goals); (4) the body slides (main content split logically, as many as needed); (5) conclusion "نتیجه‌گیری" (key takeaways).${q} Then the sources slide (kind "sources"), and the last slide is a short closing/thanks slide.`;
   }
+  if (o.mode === "business") {
+    return `Use a business-presentation structure, in this exact order: (1) title slide; (2) executive summary "خلاصه‌ی مدیریتی" (the whole message in 3 bullets); (3) the problem or opportunity; (4) the body slides (solution, how it works, market or customers, competition or alternatives, business model or numbers, risks: only those that fit the topic); (5) the plan "برنامه‌ی اجرا" (steps or roadmap); (6) the next steps / ask "گام‌های بعدی" (what the audience should decide or do).${q}${src} The last slide is a short closing slide with a call to action.`;
+  }
+  if (o.mode === "thesis") {
+    return `Use a thesis-defense structure, in this exact order: (1) title slide (title plus a short subtitle about the field only; never placeholders for student or supervisor names); (2) agenda "فهرست مطالب"; (3) problem statement and necessity "بیان مسئله و ضرورت"; (4) research objectives and questions or hypotheses "اهداف و پرسش‌های پژوهش"; (5) literature review "پیشینه‌ی پژوهش"; (6) research method "روش پژوهش"; (7) the findings / analysis slides (as many as needed); (8) conclusion "نتیجه‌گیری"; (9) limitations and suggestions for future work "محدودیت‌ها و پیشنهادها".${q} Then the sources slide (kind "sources"), and the last slide is a short thanks slide with an invitation for the committee's questions.`;
+  }
+  if (o.mode === "teacher") {
+    return `Use a classroom-lesson structure, in this exact order: (1) title slide; (2) lesson objectives "اهداف درس" (3-4 things students will be able to do); (3) a warm-up slide "پرسش آغازین" (an engaging question or short scenario linked to students' everyday life); (4) the content slides (explanation split into small steps, each with an example); (5) a class activity slide "فعالیت کلاسی"; (6) a summary slide "جمع‌بندی" (key points); (7) the review questions slide (kind "questions") right before the closing slide.${src} The last slide is a short closing slide.`;
+  }
   return `The first slide is the title slide and the last is a closing slide.${q}${src}`;
 }
 
@@ -365,9 +392,9 @@ export async function makeOutline(env: Env, topic: string, n: number, tone: stri
 Topic: ${topic}
 Number of slides (including title and closing): ${n}
 Tone: ${TONES[tone] ?? tone}
-Audience: ${o.audience || (o.mode === "student" ? "university class" : "general")}${researchBlock(o)}${sourceBlock(o)}
+Audience: ${audienceOf(o)}${researchBlock(o)}${sourceBlock(o)}
 Story: order the slides as one coherent narrative whose arc fits THIS topic (e.g. a problem/issue: context → causes → consequences → solutions → takeaway; a history: chronological; a technology or method: what → how → benefits and limits → uses; a comparison: criteria → options → verdict; a person or place: who/what → key facts → significance). Choose the arc that suits the topic; never force an arc that does not fit.
-Titles: every slide title except the first (title), the last (closing) and the sources/questions slides must be a short, specific headline (max ~9 words) that states the point of the slide, not a bare label. Bad: «مزایا و معایب». Good: «هزینه‌ی کم، مهم‌ترین مزیت؛ وابستگی به اینترنت، مهم‌ترین ضعف». (Fixed required titles such as «فهرست مطالب», «مقدمه», «نتیجه‌گیری» stay as they are.)
+Titles: every slide title except the first (title), the last (closing) and the sources/questions slides must be a short, specific headline (max ~9 words) that states the point of the slide, not a bare label. Bad: «مزایا و معایب». Good: «هزینه‌ی کم، مهم‌ترین مزیت؛ وابستگی به اینترنت، مهم‌ترین ضعف». (Fixed required titles named in the structure rules below, such as «فهرست مطالب», «بیان مسئله و ضرورت», «روش پژوهش», «مقدمه», «نتیجه‌گیری», «خلاصه‌ی مدیریتی», «گام‌های بعدی», «اهداف درس», «فعالیت کلاسی» or «جمع‌بندی», stay as they are.)
 Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers", "message": "one sentence: the single takeaway the audience should remember from this slide"}]}
 Only the single recommended-sources slide gets the extra field "kind":"sources", and only the single discussion-questions slide gets "kind":"questions". Every other slide MUST NOT have a "kind" field.
 ${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model); // ۳۵ اسلاید با ۲۵۰۰ توکن جا نمی‌شد
@@ -378,11 +405,11 @@ ${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model); // ۳۵ اسلا
 
 export async function makeDeck(env: Env, topic: string, title: string, outline: OutlineItem[], tone: string, o: ContentOpts = {}): Promise<Deck> {
   if (!hasKey(env)) return mockDeck(title || topic, outline);
-  const student = o.mode === "student";
+  const st = MODE_STYLE[o.mode ?? "normal"];
 
   // محتوا به دسته‌های کوچک (۳ تا ۴ اسلاید) شکسته می‌شود و دسته‌ها هم‌زمان ساخته می‌شوند:
   // هر درخواست کوتاه و سریع است، پس مدل‌های کندتر (مثل Qwen) روی یک درخواست بلند تایم‌اوت نمی‌شوند.
-  const size = student ? 3 : 4;
+  const size = st.batch;
   const batches: [number, number][] = [];
   if (outline.length <= 6) batches.push([0, outline.length]);
   else for (let a = 0; a < outline.length; a += size) batches.push([a, Math.min(outline.length, a + size)]);
@@ -393,7 +420,7 @@ export async function makeDeck(env: Env, topic: string, title: string, outline: 
 
   const parts = await Promise.all(batches.map(async ([a, z], bi) => {
     const slice = outline.slice(a, z);
-    const tableOk = nb === 1 || bi % 2 === 0, chartOk = bi === Math.min(1, nb - 1);
+    const biz = o.mode === "business", tableOk = biz || nb === 1 || bi % 2 === 0, chartOk = biz ? bi < 3 : bi === Math.min(1, nb - 1); // کسب‌وکار: جدول در هر دسته و نمودار تا سه دسته (فقط با داده‌ی واقعی)
     // سهم این دسته از تصاویر: تصاویر به‌طور مساوی بین دسته‌ها پخش می‌شوند (اسلاید عنوان/پایانی تصویر نمی‌گیرند)
     const imgQuota = Math.min(Math.floor(wantImages / nb) + (bi < wantImages % nb ? 1 : 0), Math.max(0, slice.length - (a === 0 ? 1 : 0) - (z === outline.length ? 1 : 0)));
     const scope = nb === 1 ? "" : `\nThe deck has ${outline.length} slides in total: ${ctx}\nWrite ONLY slides ${a + 1} to ${z} (${slice.length} slides) — return exactly ${slice.length} slide objects, in this order.\n`;
@@ -402,7 +429,7 @@ export async function makeDeck(env: Env, topic: string, title: string, outline: 
 Topic: ${topic}
 Title: ${title}
 Tone: ${TONES[tone] ?? tone}
-Audience: ${o.audience || (student ? "university class" : "general")}${researchBlock(o)}${sourceBlock(o)}${scope}
+Audience: ${audienceOf(o)}${researchBlock(o)}${sourceBlock(o)}${scope}
 Outline of the slides to write (keep this order and count): ${JSON.stringify(slice)}
 
 Return JSON: {"title": "...", "slides": [{
@@ -412,7 +439,7 @@ Return JSON: {"title": "...", "slides": [{
   "columns": [{"heading": "...", "bullets": ["..."]}, {"heading": "...", "bullets": ["..."]}],
   "stats": [{"value": "...", "label": "..."}],
   "table": {"headers": ["..."], "rows": [["..."]]},
-  "chart": {"type": "bar|line|pie", "labels": ["..."], "series": [{"name": "...", "values": [1, 2]}]},
+  "chart": {"type": "bar|line|pie|doughnut|stacked", "labels": ["..."], "series": [{"name": "...", "values": [1, 2]}]},
   "steps": [{"label": "...", "text": "..."}],
   "quote": {"text": "...", "author": "optional"},
   "items": [{"icon": "...", "heading": "...", "text": "..."}],
@@ -427,11 +454,11 @@ Quality rules:
 
 Layout rules:
 ${edges}
-- "bullets": ${student ? "4-6 bullets (up to ~18 words each; define terms, add a concrete example where useful)" : "3-5 bullets"}. "image_text": 3-4 bullets + image_query. ${imgQuota > 0 ? `Use it EXACTLY ${imgQuota} time${imgQuota > 1 ? "s" : ""} here, on the most concrete, visual topics (never on the title/closing slide), each with a different image_query depicting a different scene${imgQuota > 1 ? "; do not put two image slides next to each other" : ""}.` : 'Do NOT use "image_text" in this part.'}
+- "bullets": ${st.bullets}. "image_text": 3-4 bullets + image_query. ${imgQuota > 0 ? `Use it EXACTLY ${imgQuota} time${imgQuota > 1 ? "s" : ""} here, on the most concrete, visual topics (never on the title/closing slide), each with a different image_query depicting a different scene${imgQuota > 1 ? "; do not put two image slides next to each other" : ""}.` : 'Do NOT use "image_text" in this part.'}
 - "two_column": exactly 2 columns (comparison, pros/cons), 2-4 bullets each.
 - "stats": 2-4 items ONLY if the exact numbers come from the background notes/document or are famous and certain; otherwise use another layout. Never use "stats" for estimates you are unsure of.
 - "table": 2-4 columns, 3-6 rows, very short cells (max 6 words). Use for comparisons, classifications or timelines. ${tableOk ? "Use at most once here." : 'Do NOT use "table" in this part.'}
-- "chart": ONLY when you know real, widely reported figures (rounded is fine); labels 3-8; "pie" has exactly one series. Optionally 1-2 bullets with the takeaway. NEVER invent data: if unsure, use "table" or "bullets" instead. ${chartOk ? "Use at most once here." : 'Do NOT use "chart" in this part.'}
+- "chart": ONLY when you know real, widely reported figures (rounded is fine); labels 3-8; "pie" and "doughnut" have exactly one series (shares of one whole, values summing to a meaningful total); "stacked" has 2-3 series whose values add up per label (composition over categories or time); use "bar" or "line" otherwise. Optionally 1-2 bullets with the takeaway. NEVER invent data: if unsure, use "table" or "bullets" instead. ${chartOk ? "Use at most once here." : 'Do NOT use "chart" in this part.'}
 - "sources" (only for outline items with kind "sources"): 3-6 entries in "bullets". Only real, well-known references you are highly confident exist (famous books with author, official organizations or their websites by name, widely known reports). No URLs, no page numbers, no invented titles; if unsure, write the organization or field name instead of a specific title. Websites/organizations that appear in the background notes (if any) are acceptable entries (by name, no URLs).
 - "questions" (only for outline items with kind "questions"): 3-5 thought-provoking questions for the audience in "bullets", each one sentence ending with «؟».
 - "three_column": exactly 3 columns (e.g. three types, three pillars), each with a short heading and 2-3 bullets of max 8 words.
@@ -442,9 +469,9 @@ ${edges}
 - Use "three_column", "timeline", "process", "icons" and "quote" sparingly: each at most once in this part, never on special (sources/questions) slides, and only where the content naturally fits; otherwise use "bullets".
 - "section": only for a divider between big parts, and only in decks of 10+ slides.
 - Vary layouts; do not use the same one more than 3 times in a row.
-- Include "notes" for every slide: ${student ? "a full speaking script of 4-6 sentences" : "2-3 sentences"}. Do not just repeat the slide text: add an example, a question for the audience, or a useful extra detail.
-- "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.`,
-      (student ? 900 : 700) * slice.length + 500, o.model);
+- Include "notes" for every slide: ${st.notes}. Do not just repeat the slide text: add an example, a question for the audience, or a useful extra detail.
+- "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.${modeLayoutRules(o)}`,
+      st.tokens * slice.length + 500, o.model);
     return normalizeDeck(data, slice).slides.slice(0, slice.length); // normalizeDeck کمبود را از روی سرفصل پر می‌کند ⇒ ترتیب دسته‌ها به‌هم نمی‌خورد
   }));
 

@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { Settings } from "./types";
-import { FONTS, FONT_URL, THEMES, TONES } from "./themes";
+import { FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, getActiveSub, getCredit, getSettings, isAdmin, isAllowed, isBanned,
   maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
@@ -25,7 +25,7 @@ const HELP =
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد مرحله‌به‌مرحله <b>مدل، تعداد اسلاید و تعداد تصویر</b> را انتخاب می‌کنی و ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
-  "⚙️ /settings ← تغییر تم، لحن، فونت، حالت دانشجویی، منابع و تعداد اسلاید\n" +
+  "⚙️ /settings ← تغییر تم، لحن، فونت، حالت (عادی، دانشجویی، کسب‌وکار، معلم، دفاع پایان‌نامه)، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب\n" +
   "🔔 /remind ← یادآوری شارژ روزانه (روشن/خاموش)\n" +
   "🌐 /site ← ورود خودکار به سایت (پلن‌ها و پرداخت آنلاین)\n" +
@@ -47,15 +47,15 @@ const imgCountOf = (s: Settings, caps: Caps) => Math.min(caps.maxImg, s.imageCou
 function mainMenu(env: Env, s: Settings, caps: Caps) {
   const models = modelList(env);
   const model = models.find((m) => m.id === s.model) ?? models[0];
-  const modeBtn: Btn = { text: `🎓 حالت: ${s.mode === "student" ? "دانشجویی" : "عادی"}`, callback_data: "t:mode" };
+  const modeBtn: Btn = { text: `${MODES[s.mode].emoji} حالت: ${MODES[s.mode].name}`, callback_data: "t:mode" };
   const n = imgCountOf(s, caps);
   const rows: Btn[][] = [
     [{ text: `🎨 تم: ${THEMES[s.theme].name}`, callback_data: "m:theme" }, { text: `🗣 لحن: ${TONES[s.tone]}`, callback_data: "m:tone" }],
     [{ text: `🔤 فونت: ${s.font}`, callback_data: "m:font" }, { text: `📄 اسلاید: ${toFa(String(Math.min(s.slides, caps.maxSlides)))}`, callback_data: "m:slides" }],
     [{ text: `🖼 تصویر: ${n ? toFa(String(n)) : "خاموش"}`, callback_data: "m:imgs" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
     models.length > 1 ? [{ text: `🤖 مدل: ${model.name}`, callback_data: "m:model" }, modeBtn] : [modeBtn],
-    [{ text: `📚 منابع: ${s.mode === "student" ? "روشن (دانشجویی)" : s.sources ? "روشن" : "خاموش"}`, callback_data: "t:sources" },
-      { text: `❓ پرسش پایانی: ${s.questions ? "روشن" : "خاموش"}`, callback_data: "t:questions" }],
+    [{ text: `📚 منابع: ${s.mode === "student" || s.mode === "thesis" ? "روشن (" + MODES[s.mode].name + ")" : s.sources ? "روشن" : "خاموش"}`, callback_data: "t:sources" },
+      { text: `❓ پرسش پایانی: ${s.mode === "teacher" ? "روشن (معلم)" : s.questions ? "روشن" : "خاموش"}`, callback_data: "t:questions" }],
     [{ text: "✅ بستن", callback_data: "x:close" }],
   ];
   return { text: "⚙️ <b>تنظیمات</b>\nگزینه‌ای را برای تغییر انتخاب کن:", ...kb(rows) };
@@ -100,7 +100,6 @@ interface Pending { /** متن اصلی ارسالی کاربر (برای گزا
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
-const MIN_STUDENT_SLIDES = 8;
 
 /** مرحله‌ها به ترتیب: مدل (فقط اگر بیش از یکی باشد)، اسلاید (اگر کاربر در متن موضوع تعداد را نوشته باشد پرسیده نمی‌شود)، تصویر */
 const stepsOf = (env: Env, p: Pending): Step[] => [
@@ -123,7 +122,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
     ask = "🤖 <b>مدل هوش مصنوعی</b> را انتخاب کن:";
     opts = chunk(models.map((m, i) => ({ text: lock(!!m.extra && !caps.premium, mark(p.model === m.id, m.name)), callback_data: `p:model:${i}` })), 2);
   } else if (p.step === "slides") {
-    ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (s.mode === "student" ? `\n<i>🎓 حالت دانشجویی حداقل ${toFa(String(MIN_STUDENT_SLIDES))} اسلاید می‌سازد.</i>` : "");
+    ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (MODES[s.mode].minSlides ? `\n<i>${MODES[s.mode].emoji} حالت ${MODES[s.mode].name} حداقل ${toFa(String(MODES[s.mode].minSlides))} اسلاید می‌سازد.</i>` : "");
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
   } else {
     ask = "🖼 <b>تعداد تصویر</b> را انتخاب کن:\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>";
@@ -319,7 +318,7 @@ async function handleCallback(env: Env, cq: any) {
   else if (act === "t") {
     if (a === "images") { s.images = !s.images; s.imageCount = s.images ? Math.min(1, caps.maxImg) : 0; } // دکمه‌های قدیمی
     if (a === "digits") s.digits = !s.digits;
-    if (a === "mode") s.mode = s.mode === "student" ? "normal" : "student";
+    if (a === "mode") s.mode = nextMode(s.mode);
     if (a === "sources") s.sources = !s.sources;
     if (a === "questions") s.questions = !s.questions;
     await saveSettings(env, uid, s);

@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { Settings } from "./types";
-import { FONTS, THEMES, TONES } from "./themes";
+import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { modelList } from "./llm";
 
 /** شناسه‌ی کاربر: عددی برای تلگرام، رشته‌ی «w_…» برای کاربران وب */
@@ -34,7 +34,7 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   s.digits = !!s.digits;
   s.images = !!s.images;
   if (s.imageCount !== undefined) s.imageCount = Math.max(0, Math.min(ABS_MAX_IMAGES, Math.round(Number(s.imageCount) || 0)));
-  s.mode = s.mode === "student" ? "student" : "normal";
+  s.mode = isMode(s.mode) ? s.mode : "normal";
   s.sources = !!s.sources;
   s.questions = !!s.questions;
   const models = modelList(env);
