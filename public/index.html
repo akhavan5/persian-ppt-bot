@@ -466,6 +466,13 @@ address{font-style:normal}
     <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfMob" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="09123456789" style="flex:1"><button class="btn ghost sm" id="pfMobSend" type="button">ارسال کد</button></div>
     <div class="row" id="pfCodeRow" style="gap:8px;margin-top:8px" hidden><input class="ltr" type="text" id="pfCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد ۶ رقمی" style="flex:1"><button class="btn sm" id="pfMobVerify" type="button">تایید</button></div>
   </div>
+  <label>تلگرام</label>
+  <div class="ltr muted" id="pfTgSet" style="padding:6px 2px" hidden></div>
+  <div id="pfTgAdd" hidden>
+    <p class="muted" style="margin:0 0 8px;font-size:.86rem">در ربات تلگرام دستور <b>/id</b> را بزن، آیدی عددی‌ات را اینجا وارد کن تا ربات یک کد ۶ رقمی برایت بفرستد. بعد از تایید، اعتبار و ارائه‌های ربات و سایت یکی می‌شود.</p>
+    <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfTg" inputmode="numeric" autocomplete="off" maxlength="16" placeholder="123456789" style="flex:1"><button class="btn ghost sm" id="pfTgSend" type="button">ارسال کد</button></div>
+    <div class="row" id="pfTgCodeRow" style="gap:8px;margin-top:8px" hidden><input class="ltr" type="text" id="pfTgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد ۶ رقمی تلگرام" style="flex:1"><button class="btn sm" id="pfTgVerify" type="button">تایید</button></div>
+  </div>
   <div id="pfMsg" class="msg err" role="alert" hidden></div>
   <button class="btn ghost block" id="logout" type="button" style="margin-top:18px">خروج از حساب</button>
 </dialog>
@@ -666,6 +673,12 @@ function renderPfMobile() {
   if (!u.mobile && !cfg.otp) { $("#pfMobSet").textContent = "—"; show($("#pfMobSet"), true); }
   show($("#pfCodeRow"), false); $("#pfMob").value = ""; $("#pfCode").value = ""; $("#pfMobSend").disabled = false; $("#pfMobSend").textContent = "ارسال کد";
 }
+function renderPfTg() {
+  const t = me.telegram;
+  $("#pfTgSet").textContent = t ? `✅ وصل است (${fa(t)})` : ""; show($("#pfTgSet"), !!t);
+  show($("#pfTgAdd"), !t);
+  show($("#pfTgCodeRow"), false); $("#pfTg").value = ""; $("#pfTgCode").value = ""; $("#pfTgSend").disabled = false; $("#pfTgSend").textContent = "ارسال کد";
+}
 function openProfile(note = "") {
   const u = me.user;
   if (typeof note !== "string") note = ""; // onclick رویداد می‌فرستد
@@ -674,7 +687,7 @@ function openProfile(note = "") {
   $("#pfAv").textContent = (u.name || "?").trim().charAt(0);
   const pl = me.plan && (me.plans.find((x) => x.id === me.plan.id) || {}).name;
   $("#pfPlan").textContent = me.plan ? `👑 پلن ${pl || ""} تا ${new Date(me.plan.exp).toLocaleDateString("fa-IR", { year: "numeric", month: "long", day: "numeric" })}` : "پلن رایگان";
-  show($("#pfMsg"), false); renderPfMobile();
+  show($("#pfMsg"), false); renderPfMobile(); renderPfTg();
   $("#profileDlg").showModal();
 }
 $("#userName").onclick = openProfile;
@@ -695,6 +708,26 @@ $("#pfMobVerify").onclick = async () => {
   try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); toast("شماره‌ی موبایل ثبت شد ✓");
     if (pendingPlan) { const id = pendingPlan; pendingPlan = null; $("#profileDlg").close(); buyPlan(id); } }
   catch (e) { msg.textContent = e.message; show(msg, true); }
+};
+const normTg = (v) => { const s = String(v || "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\s/g, ""); return /^\d{5,15}$/.test(s) ? s : null; };
+$("#pfTgSend").onclick = async () => {
+  const msg = $("#pfMsg"); show(msg, false);
+  const t = normTg($("#pfTg").value);
+  if (!t) { msg.textContent = "آیدی تلگرام معتبر نیست؛ فقط عدد است. در ربات /id را بزن و عدد را کپی کن."; show(msg, true); return; }
+  try {
+    const r = await api("/api/profile/telegram/send", { method: "POST", body: { tgId: t } });
+    if (r.already) { me.telegram = r.telegram; renderPfTg(); toast("تلگرام قبلاً وصل شده است ✓"); return; }
+    show($("#pfTgCodeRow"), true); $("#pfTgCode").focus(); countdown($("#pfTgSend"), 60, "ارسال دوباره"); toast("کد در تلگرام ارسال شد");
+  } catch (e) { msg.textContent = e.message; show(msg, true); }
+};
+$("#pfTgVerify").onclick = async () => {
+  const msg = $("#pfMsg"); show(msg, false);
+  try {
+    const r = await api("/api/profile/telegram/verify", { method: "POST", body: { code: $("#pfTgCode").value } });
+    toast("تلگرام به حساب وصل شد ✓");
+    await boot(); // اعتبار/پلنِ منتقل‌شده از ربات هم به‌روز شود
+    if (me) { me.telegram = me.telegram || r.telegram; renderPfTg(); }
+  } catch (e) { msg.textContent = e.message; show(msg, true); }
 };
 $("#logout").onclick = async () => { $("#profileDlg").close(); try { await api("/api/auth/logout", { method: "POST" }); } catch {} tracking++; me = null; jobView(null); $("#go").disabled = false; await boot(); };
 

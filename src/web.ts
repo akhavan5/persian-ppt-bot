@@ -21,7 +21,7 @@ import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { TG_MAX_FILE, extractFileBytes } from "./tg-file";
 import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
-import { consumeLoginToken, ensureUid } from "./link";
+import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
 
 const SEC_HEADERS = {
   "cache-control": "no-store",
@@ -109,6 +109,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
+  if (path === "/api/profile/telegram/send" && method === "POST") return tgLinkSend(req, env, user);
+  if (path === "/api/profile/telegram/verify" && method === "POST") return tgLinkVerify(req, env, user);
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
   if (path === "/api/generate" && method === "POST") return generate(req, env, user);
   if (path === "/api/extract" && method === "POST") return extract(req, env, user);
@@ -179,15 +181,32 @@ async function linkMobile(req: Request, env: Env, user: WebUser): Promise<Respon
   return json({ user: publicUser(user) });
 }
 
+/** اتصال تلگرام ۱: آیدی عددی را می‌گیرد و ربات یک کد ۶ رقمی به چت تلگرام همان آیدی می‌فرستد */
+async function tgLinkSend(req: Request, env: Env, user: WebUser): Promise<Response> {
+  const b = await readBody(req);
+  const r = await startTgLink(env, user.id, clientIp(req), b?.tgId);
+  if ("error" in r) return err(r.error, r.status);
+  return json("already" in r ? { already: true, telegram: await getLinkedTg(env, user.id) } : { ok: true });
+}
+
+/** اتصال تلگرام ۲: کد ۶ رقمی را تایید می‌کند و تلگرام را به حساب وب وصل می‌کند */
+async function tgLinkVerify(req: Request, env: Env, user: WebUser): Promise<Response> {
+  const b = await readBody(req);
+  const r = await verifyTgLink(env, user.id, b?.code);
+  if ("error" in r) return err(r.error, r.status);
+  return json({ telegram: r.tg });
+}
+
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
-  const [c, settings, running, sub, maxSlides, maxImages] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id)]);
+  const [c, settings, running, sub, maxSlides, maxImages, telegram] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id), getLinkedTg(env, user.id)]);
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
   settings.imageCount = Math.min(settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0), maxImages);
   const activeJob = running.busy ? running.jobId : null;
   return json({
     user: publicUser(user),
+    telegram, // آیدی عددی تلگرامِ وصل‌شده (یا null)
     credit: c.unlimited
       ? { unlimited: true }
       : { unlimited: false, total: c.total, bonus: c.bonus, plan: c.plan },
@@ -238,6 +257,7 @@ async function tgLogin(env: Env, url: URL): Promise<Response> {
   if (!tgId || (await isBanned(env, tgId))) return fail();
   const uid = await ensureUid(env, tgId); // حساب وب خودکار اگر هنوز نبود
   if (typeof uid !== "string") return fail(); // مدیرها پروفایل وب خودکار ندارند
+  await env.KV.put(`w2tg:${uid}`, String(tgId)).catch(() => {}); // نمایش تلگرام وصل‌شده در پروفایل (برای حساب‌های قدیمی هم)
   const token = await createSession(env, uid);
   const to = url.searchParams.get("to") === "buy" ? "/?buy=1" : "/";
   return new Response(null, {
