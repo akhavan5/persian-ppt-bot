@@ -915,7 +915,7 @@ function tgDone(p, planId, bot) {
 // ---------- آپلود فایل ----------
 // متن، Word، PowerPoint و Excel در خود مرورگر خوانده می‌شوند (فایل به سرور نمی‌رود)؛ PDF (متنی، اسکن و ترکیبی) و تصویر دقیقاً مثل ربات تلگرام
 // در سرور خوانده می‌شوند (toMarkdown + OCR با مدل vision، تا ۱۲ صفحه) و فقط متن استخراج‌شده نگه داشته می‌شود؛ بایت‌های فایل بعد از پایان کار پاک می‌شوند.
-const MAX_FILE = 15 * 1024 * 1024, MAX_SRC = 100000, IMG_MAX = 4000000, OCR_WAIT = 6 * 60 * 1000; // سقف تصویر ۴ مگابایت مثل تلگرام
+const MAX_FILE = 15 * 1024 * 1024, MAX_SRC = 120000, IMG_MAX = 4000000, OCR_WAIT = 6 * 60 * 1000; // سقف تصویر ۴ مگابایت مثل تلگرام
 const CDN = "https://cdnjs.cloudflare.com/ajax/libs/";
 const JSZIP = CDN + "jszip/3.10.1/jszip.min.js";
 let srcText = "", srcName = "", extracting = false, upSeq = 0;
