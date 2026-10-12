@@ -4,8 +4,8 @@
  * فقط اینجاست. اجرای اصلی همان DeckWorkflow است که از قبل مشترک بود.
  */
 import type { Env } from "./env";
-import type { DeckParams, Settings } from "./types";
-import { MODES } from "./themes";
+import type { DeckParams, Mode, Settings } from "./types";
+import { MODES, isMode } from "./themes";
 import {
   FREE_MAX_IMAGES, FREE_MAX_SLIDES, acquireLock, bumpStat, clampSlides, getSettings, isLocked, maxImagesFor, maxSlidesFor,
   refundCredit, releaseLock, spendCredit,
@@ -78,7 +78,7 @@ const deny = (error: string, status: number, extra: Partial<Denied> = {}): Begin
  * اعتبارسنجی + کسر اعتبار + قفل. uid: شناسه‌ی اصلی کاربر (حساب وب یا تلگرامِ بدون اتصال).
  * بعد از موفقیت، فراخواننده باید یا launchDeck را صدا بزند یا (در صورت خطا) undo را.
  */
-export async function beginDeck(env: Env, uid: string | number, topicRaw: string, want: { slides?: number; imageCount?: number; source?: unknown } = {}): Promise<Begin> {
+export async function beginDeck(env: Env, uid: string | number, topicRaw: string, want: { slides?: number; imageCount?: number; mode?: Mode; source?: unknown } = {}): Promise<Begin> {
   const topic = topicRaw.replace(/\s+/g, " ").trim();
   if (topic.length < 3) return deny("موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.", 400);
   if (topic.length > 600) return deny("موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).", 400);
@@ -114,6 +114,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
     const imgWanted = wantImgs ?? (settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0));
     const imageCount = Math.max(0, Math.min(imgWanted, maxImg));
     settings.images = imageCount > 0;
+    if (want.mode && isMode(want.mode)) settings.mode = want.mode; // حالتِ نوشته‌شده در متن کاربر؛ فقط برای همین ارائه (ذخیره نمی‌شود)
     settings.slides = Math.max(settings.slides, MODES[settings.mode].minSlides); // ساختار دانشجویی/کسب‌وکار/معلم حداقل ۸ اسلاید می‌خواهد
 
     let undone = false;

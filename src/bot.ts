@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { Settings } from "./types";
+import type { Mode, Settings } from "./types";
 import { FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, getActiveSub, getCredit, getSettings, isAdmin, isAllowed, isBanned,
@@ -16,6 +16,7 @@ import { modelList } from "./llm";
 import { PLANS } from "./payment";
 import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
+import { parseRequest } from "./parse";
 import { markRefill, toggleRefill } from "./refill";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
 
@@ -96,7 +97,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
 // ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← تعداد تصویر) ----------
 type Step = "model" | "slides" | "imgs";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
-interface Pending { /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string }
+interface Pending { /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
@@ -122,7 +123,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
     ask = "🤖 <b>مدل هوش مصنوعی</b> را انتخاب کن:";
     opts = chunk(models.map((m, i) => ({ text: lock(!!m.extra && !caps.premium, mark(p.model === m.id, m.name)), callback_data: `p:model:${i}` })), 2);
   } else if (p.step === "slides") {
-    ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (MODES[s.mode].minSlides ? `\n<i>${MODES[s.mode].emoji} حالت ${MODES[s.mode].name} حداقل ${toFa(String(MODES[s.mode].minSlides))} اسلاید می‌سازد.</i>` : "");
+    ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (MODES[p.mode ?? s.mode].minSlides ? `\n<i>${MODES[p.mode ?? s.mode].emoji} حالت ${MODES[p.mode ?? s.mode].name} حداقل ${toFa(String(MODES[p.mode ?? s.mode].minSlides))} اسلاید می‌سازد.</i>` : "");
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
   } else {
     ask = "🖼 <b>تعداد تصویر</b> را انتخاب کن:\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>";
@@ -151,7 +152,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 
 /** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
 async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
-  const begin = await beginDeck(env, uid, p.topic, { slides: p.slides, imageCount: p.imgs, ...(p.source ? { source: p.source } : {}) });
+  const begin = await beginDeck(env, uid, p.topic, { slides: p.slides, imageCount: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
   if (!begin.ok) {
     const d = begin.denied;
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
@@ -349,37 +350,8 @@ async function handleCallback(env: Env, cq: any) {
   await editMessage(env, chatId, mid, text, extra);
 }
 
-// ---------- استخراج تعداد اسلاید از متن (مثلاً «… ، ۱۰ اسلاید») ----------
-/** حروف اضافه/قیدهای آویزان کنار «عدد + اسلاید» («… در ۸ اسلاید»، «در قالب ۱۰ صفحه»، «حدود ۱۲ اسلاید») که بعد از حذف عدد در موضوع می‌مانند */
-const DANGLING = "(?:(?:در\\s*)?قالب|به\\s*تعداد|با\\s*تعداد|در\\s*حد|به\\s*(?:صورت|\\u200c?صورت)|بصورت|حدود|تقریباً|تقریبا|حداکثر|حداقل|شامل|طی|تعداد|در|با|به|برای|و|تا|از|حتماً|حتما|in|with|within|for|of|using|to)";
-const DANGLING_END = new RegExp(`(?:^|[\\s،,.:;\\-–—])${DANGLING}(?:[\\s،,.:;\\-–—]+${DANGLING})*[\\s،,.:;\\-–—]*$`, "iu");
-const trimPunct = (t: string) => t.replace(/\s+/g, " ").replace(/^[\s،,.:;\-–—]+|[\s،,.:;\-–—]+$/g, "");
-
-/** عدد به حروف («ده اسلایدی»، «دوازده اسلاید»، «بیست و پنج اسلاید») ⇒ رقم؛ فقط وقتی بلافاصله بعدش «اسلاید/صفحه» بیاید */
-const WORD_VAL: Record<string, number> = { یک: 1, دو: 2, سه: 3, چهار: 4, پنج: 5, شش: 6, شیش: 6, هفت: 7, هشت: 8, نه: 9, ده: 10, یازده: 11, دوازده: 12, سیزده: 13, چهارده: 14, پانزده: 15, شانزده: 16, هفده: 17, هجده: 18, نوزده: 19, بیست: 20, سی: 30, چهل: 40, پنجاه: 50 };
-const ONES = "یک|دو|سه|چهار|پنج|شش|شیش|هفت|هشت|نه";
-const WORD_NUM_RE = new RegExp(`(?<![\\p{L}\\p{N}])((?:بیست|سی|چهل|پنجاه)(?:\\s+و\\s+(?:${ONES}))?|یازده|دوازده|سیزده|چهارده|پانزده|شانزده|هفده|هجده|نوزده|${ONES}|ده)(?=\\s*(?:تا\\s*)?(?:اسلایدی|اسلاید|صفحه|slides?)(?![\\p{L}]))`, "giu");
-const wordsToDigits = (t: string) => t.replace(WORD_NUM_RE, (w) => String(w.split(/\s+و\s+/).reduce((a, x) => a + (WORD_VAL[x] ?? 0), 0)));
-
-function extractSlideCount(text: string): { topic: string; slides?: number } {
-  const norm = wordsToDigits(toEn(text));
-  // «اسلاید/slide» همیشه تعداد اسلاید است؛ «صفحه» فقط وقتی که متن از ارائه حرف بزند یا «… ۱۰ صفحه» آخر جمله باشد
-  // (تا موضوع‌هایی مثل «طراحی وب‌سایت ۳ صفحه‌ای برای شرکت» دست‌نخورده بمانند)
-  const isPpt = /ارائه|پاورپوینت|پرزنت|اسلاید|slide|presentation|ppt/i.test(norm);
-  const all = [...norm.matchAll(/(?<!\d)(\d{1,3})\s*(?:تا\s*)?(اسلایدی|اسلاید|صفحه[\u200c\s]*ای|صفحه|slides?)/gi)];
-  const m = all.find((x) => !/^صفحه/.test(x[2])) // «اسلاید» بر «صفحه» مقدم است
-    ?? all.find((x) => isPpt || /^[\s،,.:;!؟?]*$/.test(norm.slice((x.index ?? 0) + x[0].length)));
-  if (!m) return { topic: text.trim() };
-  let before = trimPunct(norm.slice(0, m.index));
-  let after = trimPunct(norm.slice((m.index ?? 0) + m[0].length));
-  // «پرستار و خانواده در ۸ اسلاید» ⇒ «در» هم حذف شود؛ فقط وقتی چیزی از موضوع باقی بماند
-  const b2 = trimPunct(before.replace(DANGLING_END, ""));
-  if (b2.length >= 3 || after.length >= 3) before = b2; // «حدود ۱۲ اسلاید درباره X» ⇒ «حدود» هم می‌رود (بخش بعدی موضوع را نگه می‌دارد)
-  let topic = trimPunct(`${before} ${after}`);
-  const t2 = trimPunct(topic.replace(DANGLING_END, "")); // مثلاً «… ۸ اسلاید با» ⇒ «با» آویزان در انتها
-  if (t2.length >= 3) topic = t2;
-  return { topic, slides: clampSlides(Number(m[1]), ABS_MAX_SLIDES) }; // سقف پلن در beginDeck بررسی می‌شود
-}
+// ---------- استخراج تعداد اسلاید و حالت از متن (منطق در parse.ts؛ این‌جا فقط سقف مطلق اعمال می‌شود) ----------
+const extractSlideCount = (text: string) => parseRequest(text, (n) => clampSlides(n, ABS_MAX_SLIDES));
 
 // ---------- پیام‌های اعتبار ----------
 const RESET_NOTE = "<i>سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
@@ -480,7 +452,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const ref = fileRefOf(msg);
   if (ref) {
     const caption = String(msg.caption ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").trim();
-    const { topic: capTopic, slides: capSlides } = extractSlideCount(caption);
+    const { topic: capTopic } = extractSlideCount(caption);
     if (capTopic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
     const gate = await wizardGate(env, chatId, uid, userId);
     if (!gate) return;
@@ -501,23 +473,23 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (!text) return await sendMessage(env, chatId, `لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست؛ یا یک فایل (${SUPPORTED_NOTE}) تا ارائه از روی محتوایش ساخته شود.`);
 
   // به‌جای ساخت فوری، کارت انتخاب (مدل / اسلاید / تصویر) نشان داده می‌شود؛ اعتبار فقط با «🚀 ساخت ارائه» کم می‌شود
-  const { topic, slides } = extractSlideCount(text);
+  const { topic, slides, mode } = extractSlideCount(text);
   if (topic.length < 3) return await sendMessage(env, chatId, "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
   if (topic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
   const gate = await wizardGate(env, chatId, uid, userId);
   if (!gate) return;
-  return await showWizard(env, chatId, uid, gate, { topic, slides, orig: text });
+  return await showWizard(env, chatId, uid, gate, { topic, slides, mode, orig: text });
 }
 
 /** بعد از خواندن فایل: پیام خطا یا کارت انتخاب ارائه. هم از مسیر درون‌خطی و هم از OcrWorkflow صدا زده می‌شود */
 export async function finishFileUpload(env: Env, chatId: number, uid: Uid, userId: number, ref: TgFileRef, caption: string, ex: Extracted, waitId: number): Promise<null> {
   if (!ex.ok) { await editMessage(env, chatId, waitId, `⚠️ ${esc(ex.error)}`); return null; }
-  const { topic: capTopic, slides: capSlides } = extractSlideCount(caption);
+  const { topic: capTopic, slides: capSlides, mode: capMode } = extractSlideCount(caption);
   const gate = await wizardGate(env, chatId, uid, userId);
   if (!gate) { await editMessage(env, chatId, waitId, "✅ فایل خوانده شد."); return null; }
   const fromName = ref.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
   const topic = capTopic.length >= 3 ? capTopic : fromName.length >= 3 && !ref.isPhoto ? fromName.slice(0, 200) : "ارائه از روی فایل ارسالی";
-  await showWizard(env, chatId, uid, gate, { topic, slides: capSlides, source: ex.text, file: ref.name, cardId: waitId, orig: caption });
+  await showWizard(env, chatId, uid, gate, { topic, slides: capSlides, mode: capMode, source: ex.text, file: ref.name, cardId: waitId, orig: caption });
   return null;
 }
 
@@ -537,7 +509,7 @@ async function wizardGate(env: Env, chatId: number, uid: Uid, userId: number): P
 }
 
 /** نمایش کارت انتخاب (مدل / اسلاید / تصویر). cardId: پیامی که باید به کارت تبدیل شود (مثلاً «در حال خواندن فایل…»)؛ خالی = پیام تازه */
-async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; caps: Caps }, o: { topic: string; slides?: number; source?: string; file?: string; cardId?: number; orig?: string }) {
+async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; caps: Caps }, o: { topic: string; slides?: number; mode?: Mode; source?: string; file?: string; cardId?: number; orig?: string }) {
   const { s, caps } = g;
   const models = modelList(env);
   const pend: Pending = {
@@ -548,7 +520,9 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,
     step: "model",
     fixed: o.slides !== undefined, // تعداد اسلاید در متن موضوع آمده؛ دوباره پرسیده نمی‌شود
-    note: o.slides !== undefined && o.slides > caps.maxSlides ? slidesLimitMsg(caps.maxSlides) : undefined,
+    ...(o.mode ? { mode: o.mode } : {}),
+    note: o.slides !== undefined && o.slides > caps.maxSlides ? slidesLimitMsg(caps.maxSlides)
+      : o.mode && o.slides !== undefined && o.slides < MODES[o.mode].minSlides ? `حالت ${MODES[o.mode].name} حداقل ${toFa(String(MODES[o.mode].minSlides))} اسلاید می‌سازد؛ تعداد اسلاید به همین مقدار می‌رسد.` : undefined,
     ...(o.source ? { source: o.source, file: o.file } : {}),
   };
   pend.step = stepsOf(env, pend)[0];

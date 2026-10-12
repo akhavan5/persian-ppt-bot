@@ -50,7 +50,7 @@ const NB = "(?<![\\p{L}\\p{N}])", NA = "(?![\\p{L}\\p{N}])"; // مرز کلمه 
 const COUNT_LEAD = "(?:(?:در|با|حدود|حداقل|حداکثر|تقریباً|تقریبا|به\\s*تعداد|در\\s*قالب)\\s+)?";
 const COUNT_NUM = `(?:[0-9۰-۹٠-٩]{1,3}|${NUM_WORD})`;
 /** «۱۰ اسلاید»، «ده اسلایدی»، «۱۲ تا اسلاید»، «10 slides» */
-const SLIDE_COUNT = new RegExp(`${COUNT_LEAD}${NB}${COUNT_NUM}\\s*(?:تا\\s*)?(?:اسلایدی|اسلاید|slides?)${NA}`, "giu");
+const SLIDE_COUNT = new RegExp(`${COUNT_LEAD}${NB}(?:${COUNT_NUM}\\s*(?:الی|تا|[-–—])\\s*)?${COUNT_NUM}\\s*(?:تا\\s*)?(?:اسلایدی|اسلاید|slides?)${NA}`, "giu"); // بازه‌ی «۵ الی ۶ اسلاید» هم کامل حذف می‌شود
 /** «صفحه» فقط وقتی تعداد اسلاید است که متن از ارائه حرف بزند (تا «سایت ۳ صفحه‌ای» دست نخورد) */
 const PAGE_COUNT = new RegExp(`${COUNT_LEAD}${NB}${COUNT_NUM}\\s*(?:تا\\s*)?صفحه(?:[\\u200c\\s]*ای)?${NA}`, "giu");
 const PPT_WORDS = /ارائه|پاورپوینت|پاور\s*پوینت|پرزنت|اسلاید|slide|presentation|ppt/i;
