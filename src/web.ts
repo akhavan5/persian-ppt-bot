@@ -252,7 +252,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   if (!isAllowed(env, user.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
   if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
 
-  const b = await readBody(req, 160_000); // متن فایل آپلودی (حداکثر ۵۰ هزار نویسه ≈ ۱۰۰ کیلوبایت UTF-8) هم در بدنه می‌آید
+  const b = await readBody(req, 250_000); // متن فایل آپلودی (حداکثر ۱۰۰ هزار نویسه ≈ ۲۰۰ کیلوبایت UTF-8 برای فارسی) هم در بدنه می‌آید
   const begin = await beginDeck(env, user.id, String(b?.topic ?? ""), {
     source: typeof b?.source === "string" ? b.source : undefined,
     slides: typeof b?.slides === "number" ? b.slides : undefined,

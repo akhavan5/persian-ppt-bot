@@ -57,7 +57,7 @@ export async function runningJob(env: Env, userId: string | number): Promise<{ b
 }
 
 /** متن فایل آپلودی: حذف نویسه‌های کنترلی و نشانگرهای پرامپت، فشرده‌سازی فاصله‌ها، سقف ۵۰ هزار نویسه */
-export const MAX_SOURCE_CHARS = 50000;
+export const MAX_SOURCE_CHARS = 100000; // یک سقف ثابت برای همه‌ی مدل‌ها (کوچک‌ترین پنجره ۱۲۸هزار توکن؛ فارسی ≈ ۲ کاراکتر/توکن) // سقف ذخیره؛ سقف واقعی هر مدل در llm.ts (sourceCapFor) اعمال می‌شود
 export function cleanSource(raw: unknown): string {
   return String(raw ?? "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
