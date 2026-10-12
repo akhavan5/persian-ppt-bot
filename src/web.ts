@@ -190,7 +190,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     user: publicUser(user),
     credit: c.unlimited
       ? { unlimited: true }
-      : { unlimited: false, total: c.total, dailyLeft: c.dailyLeft, limit: sub ? 0 : c.limit, bonus: c.bonus, plan: c.plan },
+      : { unlimited: false, total: c.total, bonus: c.bonus, plan: c.plan },
     premium,
     maxSlides,
     maxImages,

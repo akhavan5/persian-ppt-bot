@@ -58,10 +58,6 @@ export interface Env {
   ALLOWED_USER_IDS?: string;
   /** اختیاری: شناسه عددی مدیرها، با کاما. مدیرها اعتبار نامحدود دارند و به دستورهای /admin دسترسی دارند */
   ADMIN_IDS?: string;
-  /** سقف روزانه‌ی هر کاربر (پیش‌فرض ۵؛ ۰ = نامحدود) */
-  DAILY_LIMIT?: string;
-  /** اختیاری: سقف روزانه‌ی کاربران وب (اگر خالی باشد همان DAILY_LIMIT) */
-  WEB_DAILY_LIMIT?: string;
   /** ورود با گوگل (اختیاری): بدون این دو مقدار، دکمه‌ی گوگل نمایش داده نمی‌شود */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;

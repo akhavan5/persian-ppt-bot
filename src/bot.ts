@@ -17,7 +17,6 @@ import { PLANS } from "./payment";
 import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { parseRequest } from "./parse";
-import { markRefill, toggleRefill } from "./refill";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
 
 const HELP =
@@ -27,8 +26,7 @@ const HELP =
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت (عادی، دانشجویی، کسب‌وکار، معلم، دفاع پایان‌نامه)، منابع و تعداد اسلاید\n" +
-  "💳 /credit ← اعتبار، پلن و سقف‌های حساب\n" +
-  "🔔 /remind ← یادآوری شارژ روزانه (روشن/خاموش)\n" +
+  "💳 /credit ← اعتبار، پلن و سقف‌های حساب (هر کاربر جدید ۲ ارائه‌ی رایگان هدیه می‌گیرد)\n" +
   "🌐 /site ← ورود خودکار به سایت (پلن‌ها و پرداخت آنلاین)\n" +
   "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
   "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX و PDF) تا ۲۴ ساعت"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
@@ -158,8 +156,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
     if (d.noCredit) {
       await answer();
-      await markRefill(env, chatId, uid);
-      return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, tgId));
+      return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}`, await buyKbFor(env, uid, tgId));
     }
     if (d.needPlan) {
       await answer();
@@ -354,7 +351,6 @@ async function handleCallback(env: Env, cq: any) {
 const extractSlideCount = (text: string) => parseRequest(text, (n) => clampSlides(n, ABS_MAX_SLIDES));
 
 // ---------- پیام‌های اعتبار ----------
-const RESET_NOTE = "<i>سهمیه‌ی روزانه هر روز ساعت ۰۳:۳۰ بامداد (به وقت ایران) دوباره پر می‌شود.</i>";
 const supportKb = (userId: number) => kb([[{ text: "💬 پیام به پشتیبانی", url: supportLink(userId) }]]);
 
 const fmtDate = (ms: number) => {
@@ -424,18 +420,17 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
       kb([[{ text: "📤 ارسال به دوستان", url: share }]]));
   }
 
-  if (cmd === "/remind") return await sendMessage(env, chatId, await toggleRefill(env, chatId));
   if (cmd === "/credit" || cmd === "/balance") {
     const [c, sub, caps] = await Promise.all([getCredit(env, uid), getActiveSub(env, uid), getCaps(env, uid)]);
     const planName = sub ? (PLANS.find((p) => p.id === sub.plan)?.name ?? sub.plan) : "";
     const head = c.unlimited ? "💳 اعتبار شما <b>نامحدود</b> است.\n"
       : `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
-        (sub ? `• اعتبار پلن: ${toFa(String(sub.credits))}\n` : `• سهمیه‌ی امروز: ${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))}\n`) +
-        (c.bonus > 0 ? `• اعتبار اضافه: ${toFa(String(c.bonus))}\n` : "");
+        (sub ? `• اعتبار پلن: ${toFa(String(sub.credits))}\n` : "") +
+        (c.bonus > 0 ? `• اعتبار هدیه و شارژ: ${toFa(String(c.bonus))}\n` : "");
     const out = head +
       `👑 ${sub ? `پلن ${planName} تا ${fmtDate(sub.exp)}` : "پلن رایگان"}\n` +
       `📄 حداکثر ${toFa(String(caps.maxSlides))} اسلاید و 🖼 ${toFa(String(caps.maxImg))} تصویر در هر ارائه\n` +
-      (c.unlimited ? "" : `\n${sub ? "" : RESET_NOTE + "\n\n"}${BUY_SITE_NOTE}`);
+      (c.unlimited ? "" : `\n${BUY_SITE_NOTE}`);
     return await sendMessage(env, chatId, out, c.unlimited ? undefined : await buyKbFor(env, uid, userId));
   }
   if (cmd === "/start" || cmd === "/help") {
@@ -501,8 +496,7 @@ async function wizardGate(env: Env, chatId: number, uid: Uid, userId: number): P
   }
   const [s, caps, credit] = await Promise.all([getSettings(env, uid), getCaps(env, uid), getCredit(env, uid)]);
   if (!credit.unlimited && credit.total <= 0) {
-    await markRefill(env, chatId, uid);
-    await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}\n\n${RESET_NOTE}`, await buyKbFor(env, uid, userId));
+    await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}`, await buyKbFor(env, uid, userId));
     return null;
   }
   return { s, caps };

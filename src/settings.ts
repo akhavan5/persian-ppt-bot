@@ -88,16 +88,12 @@ export const isBanned = async (env: Env, userId: Uid) => (await env.KV.get(`ban:
 export const setBanned = (env: Env, userId: Uid, on: boolean) =>
   on ? env.KV.put(`ban:${userId}`, "1") : env.KV.delete(`ban:${userId}`);
 
-// ---------- اعتبار: سهمیه‌ی روزانه + اعتبار اضافه (شارژ دستی) ----------
-export const dailyLimit = (env: Env, userId?: Uid) => {
-  // کاربران وب می‌توانند سقف جدا داشته باشند (WEB_DAILY_LIMIT)؛ اگر تنظیم نشده باشد همان DAILY_LIMIT اعمال می‌شود
-  const web = userId !== undefined && isWebId(userId) && (env.WEB_DAILY_LIMIT ?? "") !== "";
-  const n = Number((web ? env.WEB_DAILY_LIMIT : env.DAILY_LIMIT) ?? "5");
-  return Number.isFinite(n) && n >= 0 ? n : 5;
-};
+// ---------- اعتبار: اعتبار هدیه/اضافه (ثبت‌نام، دعوت، شارژ دستی) + اعتبار پلن ماهانه ----------
+// سهمیه‌ی روزانه‌ی رایگان حذف شده است؛ هر حساب جدید فقط یک‌بار SIGNUP_CREDITS اعتبار هدیه می‌گیرد.
+/** اعتبار هدیه‌ی ثبت‌نام (برای هر حساب جدید وب یا ربات، فقط یک‌بار) */
+export const SIGNUP_CREDITS = 2;
 
 export const today = () => new Date().toISOString().slice(0, 10);
-const dailyKey = (userId: Uid, day = today()) => `rl:${userId}:${day}`;
 const bonusKey = (userId: Uid) => `bonus:${userId}`;
 
 export async function getBonus(env: Env, userId: Uid): Promise<number> {
@@ -107,6 +103,15 @@ export async function setBonus(env: Env, userId: Uid, n: number) {
   n = Math.max(0, Math.floor(n));
   if (n === 0) await env.KV.delete(bonusKey(userId));
   else await env.KV.put(bonusKey(userId), String(n));
+}
+
+/** اعتبار هدیه‌ی ثبت‌نام: برای هر حساب جدید فقط یک بار (کلید sg:) به اعتبار اضافه‌ی او افزوده می‌شود */
+export async function grantSignupCredit(env: Env, userId: Uid): Promise<void> {
+  if (SIGNUP_CREDITS <= 0) return;
+  const k = `sg:${userId}`;
+  if ((await env.KV.get(k)) !== null) return;
+  await env.KV.put(k, "1");
+  await setBonus(env, userId, (await getBonus(env, userId)) + SIGNUP_CREDITS);
 }
 
 // ---------- پلن ماهانه (پلاس / پرو) — فقط وب ----------
@@ -158,21 +163,15 @@ export async function maxImagesFor(env: Env, userId: Uid): Promise<number> {
   return sub ? (PLAN_MAX_IMAGES[sub.plan] ?? FREE_MAX_IMAGES) : FREE_MAX_IMAGES;
 }
 
-export type CreditSource = "daily" | "plan" | "bonus" | "none";
-export interface CreditInfo { unlimited: boolean; limit: number; used: number; dailyLeft: number; plan: number; bonus: number; total: number }
+export type CreditSource = "plan" | "bonus" | "none";
+export interface CreditInfo { unlimited: boolean; plan: number; bonus: number; total: number }
 
-/** وضعیت اعتبار بدون مصرف کردن آن. مدیرها یا DAILY_LIMIT=0 ⇒ نامحدود. */
+/** وضعیت اعتبار بدون مصرف کردن آن. فقط مدیرها نامحدودند؛ بقیه = اعتبار پلن + اعتبار هدیه/اضافه. */
 export async function getCredit(env: Env, userId: Uid): Promise<CreditInfo> {
-  const limit = dailyLimit(env, userId);
-  if (isAdmin(env, userId) || limit === 0) {
-    return { unlimited: true, limit, used: 0, dailyLeft: Infinity, plan: 0, bonus: 0, total: Infinity };
-  }
-  const [usedRaw, bonus, sub] = await Promise.all([env.KV.get(dailyKey(userId)), getBonus(env, userId), getSub(env, userId)]);
-  const used = Number(usedRaw ?? 0) || 0;
-  // تا وقتی پلن فعال (پلاس/پرو با اعتبار باقی‌مانده) دارد سهمیه‌ی روزانه‌ی رایگان ندارد؛ با پایان پلن (انقضا یا تمام شدن اعتبار) به پلن رایگان برمی‌گردد
-  const dailyLeft = sub && sub.credits > 0 ? 0 : Math.max(0, limit - used);
+  if (isAdmin(env, userId)) return { unlimited: true, plan: 0, bonus: 0, total: Infinity };
+  const [bonus, sub] = await Promise.all([getBonus(env, userId), getSub(env, userId)]);
   const plan = sub?.credits ?? 0;
-  return { unlimited: false, limit, used, dailyLeft, plan, bonus, total: dailyLeft + plan + bonus };
+  return { unlimited: false, plan, bonus, total: plan + bonus };
 }
 
 // ---------- کسر/برگشت اعتبار و قفل: عملیات «اتمی» روی D1 ----------
@@ -182,7 +181,7 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 const changed = (r: D1Result) => (r.meta?.changes ?? 0) > 0;
 const rawDb = async (env: Env): Promise<D1Database> => { await env.KV.ready(); return env.DB; };
 
-/** یک ارائه اعتبار برمی‌دارد: اول سهمیه‌ی روزانه (فقط کاربران بدون پلن فعال؛ با پایان پلن دوباره برقرار می‌شود)، بعد اعتبار پلن ماهانه، بعد اعتبار اضافه.
+/** یک ارائه اعتبار برمی‌دارد: اول اعتبار پلن ماهانه، بعد اعتبار هدیه/اضافه.
  *  هر مرحله اتمی است: اگر هم‌زمان کسی آخرین اعتبار را برداشته باشد، همین مرحله شکست می‌خورد و نوبت منبع بعدی می‌شود. */
 export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean; source: CreditSource; day: string; left: number; unlimited: boolean }> {
   const day = today();
@@ -192,16 +191,7 @@ export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean;
   const now = nowSec();
   const ok = (source: CreditSource) => ({ ok: true, source, day, left: Math.max(0, c.total - 1), unlimited: false });
 
-  // ۱) سهمیه‌ی روزانه: شمارنده فقط وقتی بالا می‌رود که کمتر از سقف باشد (ردیف منقضی‌شده مثل صفر حساب می‌شود)
-  if (c.plan === 0 && c.limit > 0) {
-    const r = await db.prepare(
-      "INSERT INTO kv (k, v, exp) VALUES (?1, '1', ?2) ON CONFLICT(k) DO UPDATE SET " +
-      "v = CASE WHEN exp IS NOT NULL AND exp <= ?3 THEN '1' ELSE CAST(CAST(v AS INTEGER) + 1 AS TEXT) END, exp = ?2 " +
-      "WHERE (exp IS NOT NULL AND exp <= ?3) OR CAST(v AS INTEGER) < ?4")
-      .bind(dailyKey(userId, day), now + 172_800, now, c.limit).run();
-    if (changed(r)) return ok("daily");
-  }
-  // ۲) اعتبار پلن ماهانه
+  // ۱) اعتبار پلن ماهانه
   if (c.plan > 0) {
     const r = await db.prepare(
       "UPDATE kv SET v = json_set(v, '$.credits', json_extract(v, '$.credits') - 1) " +
@@ -209,7 +199,7 @@ export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean;
       .bind(subKey(userId), now, Date.now()).run();
     if (changed(r)) return ok("plan");
   }
-  // ۳) اعتبار اضافه
+  // ۲) اعتبار هدیه/اضافه
   if (c.bonus > 0) {
     const r = await db.prepare(
       "UPDATE kv SET v = CAST(CAST(v AS INTEGER) - 1 AS TEXT) WHERE k = ?1 AND (exp IS NULL OR exp > ?2) AND CAST(v AS INTEGER) > 0")
@@ -223,9 +213,7 @@ export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean;
 export async function refundCredit(env: Env, userId: Uid, source: CreditSource, day: string) {
   if (source === "none") return;
   const db = await rawDb(env);
-  if (source === "daily") {
-    await db.prepare("UPDATE kv SET v = CAST(CAST(v AS INTEGER) - 1 AS TEXT) WHERE k = ?1 AND CAST(v AS INTEGER) > 0").bind(dailyKey(userId, day)).run();
-  } else if (source === "plan") {
+  if (source === "plan") {
     // اگر پلن در این فاصله تمام شده باشد، چیزی برنمی‌گردد
     await db.prepare(
       "UPDATE kv SET v = json_set(v, '$.credits', json_extract(v, '$.credits') + 1) WHERE k = ?1 AND (exp IS NULL OR exp > ?2) AND json_extract(v, '$.exp') > ?3")

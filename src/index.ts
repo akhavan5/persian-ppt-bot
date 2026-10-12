@@ -1,4 +1,3 @@
-import { REFILL_CRON, runRefillNotices } from "./refill";
 import type { Env } from "./env";
 import { handleUpdate } from "./bot";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
@@ -30,13 +29,11 @@ function noindex(res: Response): Response {
 }
 
 // تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
-const SITEMAP_LASTMOD = "2026-10-10";
+const SITEMAP_LASTMOD = "2026-10-12";
 
 export default {
   // پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی D1 (cron در wrangler.jsonc)
   async scheduled(c: ScheduledController, rawEnv: Env, ctx: ExecutionContext): Promise<void> {
-    // ۰۹:۰۰ ایران: اعلان شارژ روزانه به کاربرانی که اعتبارشان تمام شده بود؛ cron دیگر: پاکسازی
-    if (c.cron === REFILL_CRON) { ctx.waitUntil(runRefillNotices(withStore(rawEnv)).catch((e) => console.error("refill", e))); return; }
     ctx.waitUntil(withStore(rawEnv).KV.purge().catch((e) => console.error("purge", e)));
   },
 

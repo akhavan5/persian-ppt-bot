@@ -143,7 +143,7 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, args: s
     const [seen, banned, c] = await Promise.all([typeof id === "number" ? getUserSeen(env, id) : Promise.resolve(null), isBanned(env, id), getCredit(env, acct)]);
     const credit = c.unlimited
       ? "نامحدود"
-      : `${toFa(String(c.dailyLeft))} از ${toFa(String(c.limit))} (امروز) + ${toFa(String(c.plan))} پلن + ${toFa(String(c.bonus))} اضافه`;
+      : `${toFa(String(c.plan))} پلن + ${toFa(String(c.bonus))} اضافه/هدیه`;
     if (typeof id === "string") {
       return reply(
         `🌐 <b>کاربر وب</b> <code>${id}</code>\n` +

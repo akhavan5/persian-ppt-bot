@@ -8,7 +8,7 @@
  */
 import type { Env } from "./env";
 import { getUserById, hitLimit, randomToken, saveWebUser } from "./auth";
-import { isAdmin, type Uid } from "./settings";
+import { grantSignupCredit, isAdmin, type Uid } from "./settings";
 
 const LOGIN_TTL = 3600; // ثانیه؛ لینک ورود از دکمه‌های ربات (یک‌بارمصرف)
 const WEB_ID = /^w_[0-9a-f]{16}$/;
@@ -34,6 +34,7 @@ export async function ensureUid(env: Env, tgId: number, name = ""): Promise<Uid>
   const id = await profileId(tgId);
   if (!(await getUserById(env, id))) {
     await saveWebUser(env, { id, email: "", name: (name || "کاربر تلگرام").slice(0, 64), verified: false, created: Date.now() });
+    await grantSignupCredit(env, id).catch((e) => console.error("signupCredit", e)); // ۲ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
   }
   await env.KV.put(`tg2w:${tgId}`, id);
   return id;

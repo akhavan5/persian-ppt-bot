@@ -222,7 +222,7 @@ export function renderLanding(p: Page, SITE: string): string {
     <h1>${esc(p.h1[0])}<em>${esc(p.h1[1])}</em>${esc(p.h1[2])}</h1>
     <p class="lead">${esc(p.lead)}</p>
     <div class="cta-row"><a class="btn" href="/#topic">${esc(p.cta)}</a><a class="btn ghost" href="/#pricing">مشاهده‌ی تعرفه</a></div>
-    <div class="trust"><span>🆓 سهمیه‌ی رایگان روزانه</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
+    <div class="trust"><span>🆓 ۲ ارائه‌ی رایگانِ ثبت‌نام</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
   </div>
   <article>
 ${p.sections.map(renderSection).join("\n")}

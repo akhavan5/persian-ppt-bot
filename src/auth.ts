@@ -6,7 +6,7 @@
  * همه‌چیز روی همان KV فعلی است؛ هیچ منبع جدیدی لازم نیست.
  */
 import type { Env } from "./env";
-import { bumpStat } from "./settings";
+import { bumpStat, grantSignupCredit } from "./settings";
 
 export interface WebUser {
   id: string; // w_ + ۱۶ نویسه‌ی هگز
@@ -65,6 +65,7 @@ export async function createUser(env: Env, p: { email?: string; mobile?: string;
   if (u.mobile) await env.KV.put(`wm:${u.mobile}`, u.id);
   if (u.google) await env.KV.put(`wg:${u.google}`, u.id);
   await bumpStat(env, "newusers").catch(() => {});
+  await grantSignupCredit(env, u.id).catch((e) => console.error("signupCredit", e)); // ۲ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
   return u;
 }
 
