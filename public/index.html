@@ -91,6 +91,10 @@ textarea{min-height:110px;resize:vertical}
 .btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(37,99,235,.34)} .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .btn.ghost{background:#fff;color:var(--text);border:1px solid var(--line);box-shadow:none} .btn.ghost:hover{border-color:var(--primary);color:var(--primary)}
 .btn.sm{padding:7px 14px;font-size:.88rem;border-radius:10px}
+.btn.busy,.btn.busy:disabled{opacity:.85;cursor:progress;pointer-events:none}
+.btn.busy::before{content:"";width:14px;height:14px;flex:none;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.btn.busy::before{animation-duration:2.4s}}
 .btn.google{background:#fff;color:#1f1f1f;border:1px solid #dadce0;width:100%;box-shadow:none}
 .btn.block{width:100%}
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 14px;font-size:.88rem;cursor:pointer;font-weight:600}
@@ -528,6 +532,24 @@ async function api(path, { method = "GET", body } = {}) {
   if (!r.ok) { const e = new Error((data && data.error) || "خطایی رخ داد؛ دوباره امتحان کن."); e.status = r.status; e.data = data; throw e; }
   return data;
 }
+/** نشانگر «در حال پردازش» روی دکمه: تا پاسخ سرور نیامده دکمه قفل می‌شود و چرخنده + متن نشان می‌دهد (جلوی کلیک دوباره هم گرفته می‌شود).
+ *  o.disabled: بعد از پایان، دکمه قفل بماند (مثل «بساز» تا پایان کار) — o.keep: در صورت موفقیت حالت «در حال پردازش» بماند (مثل رفتن به درگاه پرداخت). */
+async function busy(btn, label, fn, o = {}) {
+  if (!btn || btn.classList.contains("busy")) return;
+  const orig = btn.textContent; btn._orig = orig;
+  btn.classList.add("busy"); btn.disabled = true; btn.textContent = label;
+  let ok = false;
+  try { const r = await fn(); ok = true; return r; }
+  finally {
+    if (!(ok && o.keep)) {
+      btn.classList.remove("busy");
+      if (!btn._cd) btn.disabled = !!o.disabled; // اگر شمارش معکوس فعال است، خودش دکمه را کنترل می‌کند
+      if (btn.textContent === label) btn.textContent = orig;
+    }
+  }
+}
+// برگشت با دکمه‌ی «عقب» مرورگر از درگاه پرداخت: دکمه‌های در حال پردازش آزاد شوند
+addEventListener("pageshow", (e) => { if (e.persisted) document.querySelectorAll(".btn.busy").forEach((b) => { b.classList.remove("busy"); b.disabled = false; if (b._orig != null) b.textContent = b._orig; }); });
 let toastT;
 function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("on"), 3200); }
 
@@ -605,7 +627,7 @@ const normMob = (v) => {
 };
 function countdown(btn, secs, label) {
   clearInterval(btn._t); let t = secs;
-  const tick = () => { btn.disabled = t > 0; btn.textContent = t > 0 ? `${label} (${fa(t)})` : label; if (t-- <= 0) clearInterval(btn._t); };
+  const tick = () => { btn._cd = t > 0; btn.disabled = t > 0; btn.textContent = t > 0 ? `${label} (${fa(t)})` : label; if (t-- <= 0) clearInterval(btn._t); };
   tick(); btn._t = setInterval(tick, 1000);
 }
 let otpMobile = "";
@@ -626,6 +648,7 @@ function renderAuthBtn() {
   const q = new URLSearchParams(location.search).get("login_error");
   if (q) { history.replaceState(null, "", "/"); openAuth("login", "", LOGIN_ERRORS[q] || "ورود ناموفق بود."); }
 }
+$("#googleBtn").addEventListener("click", (ev) => { const b = ev.currentTarget; b.classList.add("busy"); b._orig = b.textContent; b.style.pointerEvents = "none"; setTimeout(() => { b.classList.remove("busy"); b.style.pointerEvents = ""; }, 8000); });
 $("#openLogin").onclick = () => openAuth();
 $("#authClose").onclick = () => $("#authDlg").close();
 $("#buyClose").onclick = () => $("#buy").close();
@@ -634,13 +657,15 @@ $("#pfClose").onclick = () => $("#profileDlg").close();
 $("#profileDlg").addEventListener("close", () => { pendingPlan = null; }); // بستن پنجره = انصراف از خرید در انتظار
 for (const d of ["#authDlg", "#buy", "#profileDlg", "#tgBuy"]) $(d).addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 document.querySelectorAll("[data-auth]").forEach((b) => b.onclick = () => openAuth("register", "ثبت‌نام کن؛ ۲ ارائه‌ی رایگان به حسابت اضافه می‌شود."));
-document.querySelectorAll("[data-plan]").forEach((b) => b.onclick = () => buyPlan(b.dataset.plan));
+document.querySelectorAll("[data-plan]").forEach((b) => b.onclick = () => buyPlan(b.dataset.plan, b));
 
 async function sendCode(mobile) { await api("/api/auth/otp/send", { method: "POST", body: { mobile } }); }
 $("#otpForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const btn = $("#authSubmit"), msg = $("#authMsg");
-  show(msg, false); btn.disabled = true;
+  show(msg, false);
+  const label = otpMobile ? "در حال بررسی کد…" : "در حال ارسال پیامک…";
+  await busy(btn, label, async () => {
   try {
     if (!otpMobile) {
       const m = normMob($("#fMob").value);
@@ -656,12 +681,14 @@ $("#otpForm").addEventListener("submit", async (ev) => {
       await boot();
     }
   } catch (e) { msg.textContent = e.message; show(msg, true); }
-  btn.disabled = false;
+  });
 });
-$("#otpResend").onclick = async () => {
+$("#otpResend").onclick = (ev) => {
   const msg = $("#authMsg"); show(msg, false);
-  try { await sendCode(otpMobile); countdown($("#otpResend"), 60, "ارسال دوباره"); toast("کد دوباره ارسال شد"); }
-  catch (e) { msg.textContent = e.message; show(msg, true); }
+  return busy(ev.currentTarget, "در حال ارسال…", async () => {
+    try { await sendCode(otpMobile); countdown($("#otpResend"), 60, "ارسال دوباره"); toast("کد دوباره ارسال شد"); }
+    catch (e) { msg.textContent = e.message; show(msg, true); }
+  });
 };
 $("#otpEdit").onclick = otpReset;
 
@@ -691,43 +718,53 @@ function openProfile(note = "") {
   $("#profileDlg").showModal();
 }
 $("#userName").onclick = openProfile;
-$("#pfSave").onclick = async () => {
+$("#pfSave").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
-  try { const r = await api("/api/profile", { method: "PUT", body: { name: $("#pfName").value } }); me.user = r.user; $("#userName").textContent = me.user.name; $("#pfAv").textContent = me.user.name.trim().charAt(0); toast("ذخیره شد ✓"); }
-  catch (e) { msg.textContent = e.message; show(msg, true); }
+  return busy(ev.currentTarget, "در حال ذخیره…", async () => {
+    try { const r = await api("/api/profile", { method: "PUT", body: { name: $("#pfName").value } }); me.user = r.user; $("#userName").textContent = me.user.name; $("#pfAv").textContent = me.user.name.trim().charAt(0); toast("ذخیره شد ✓"); }
+    catch (e) { msg.textContent = e.message; show(msg, true); }
+  });
 };
-$("#pfMobSend").onclick = async () => {
+$("#pfMobSend").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
   const m = normMob($("#pfMob").value);
   if (!m) { msg.textContent = "شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن."; show(msg, true); return; }
-  try { await sendCode(m); show($("#pfCodeRow"), true); $("#pfCode").focus(); countdown($("#pfMobSend"), 60, "ارسال دوباره"); }
-  catch (e) { msg.textContent = e.message; show(msg, true); }
+  return busy(ev.currentTarget, "در حال ارسال پیامک…", async () => {
+    try { await sendCode(m); show($("#pfCodeRow"), true); $("#pfCode").focus(); countdown($("#pfMobSend"), 60, "ارسال دوباره"); toast("کد پیامک شد"); }
+    catch (e) { msg.textContent = e.message; show(msg, true); }
+  });
 };
-$("#pfMobVerify").onclick = async () => {
+$("#pfMobVerify").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
-  try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); toast("شماره‌ی موبایل ثبت شد ✓");
-    if (pendingPlan) { const id = pendingPlan; pendingPlan = null; $("#profileDlg").close(); buyPlan(id); } }
-  catch (e) { msg.textContent = e.message; show(msg, true); }
+  return busy(ev.currentTarget, "در حال بررسی…", async () => {
+    try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); toast("شماره‌ی موبایل ثبت شد ✓");
+      if (pendingPlan) { const id = pendingPlan; pendingPlan = null; $("#profileDlg").close(); buyPlan(id); } }
+    catch (e) { msg.textContent = e.message; show(msg, true); }
+  });
 };
 const normTg = (v) => { const s = String(v || "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\s/g, ""); return /^\d{5,15}$/.test(s) ? s : null; };
-$("#pfTgSend").onclick = async () => {
+$("#pfTgSend").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
   const t = normTg($("#pfTg").value);
   if (!t) { msg.textContent = "آیدی تلگرام معتبر نیست؛ فقط عدد است. در ربات /id را بزن و عدد را کپی کن."; show(msg, true); return; }
-  try {
-    const r = await api("/api/profile/telegram/send", { method: "POST", body: { tgId: t } });
-    if (r.already) { me.telegram = r.telegram; renderPfTg(); toast("تلگرام قبلاً وصل شده است ✓"); return; }
-    show($("#pfTgCodeRow"), true); $("#pfTgCode").focus(); countdown($("#pfTgSend"), 60, "ارسال دوباره"); toast("کد در تلگرام ارسال شد");
-  } catch (e) { msg.textContent = e.message; show(msg, true); }
+  return busy(ev.currentTarget, "در حال ارسال کد…", async () => {
+    try {
+      const r = await api("/api/profile/telegram/send", { method: "POST", body: { tgId: t } });
+      if (r.already) { me.telegram = r.telegram; renderPfTg(); toast("تلگرام قبلاً وصل شده است ✓"); return; }
+      show($("#pfTgCodeRow"), true); $("#pfTgCode").focus(); countdown($("#pfTgSend"), 60, "ارسال دوباره"); toast("کد در تلگرام ارسال شد");
+    } catch (e) { msg.textContent = e.message; show(msg, true); }
+  });
 };
-$("#pfTgVerify").onclick = async () => {
+$("#pfTgVerify").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
-  try {
-    const r = await api("/api/profile/telegram/verify", { method: "POST", body: { code: $("#pfTgCode").value } });
-    toast("تلگرام به حساب وصل شد ✓");
-    await boot(); // اعتبار/پلنِ منتقل‌شده از ربات هم به‌روز شود
-    if (me) { me.telegram = me.telegram || r.telegram; renderPfTg(); }
-  } catch (e) { msg.textContent = e.message; show(msg, true); }
+  return busy(ev.currentTarget, "در حال اتصال…", async () => {
+    try {
+      const r = await api("/api/profile/telegram/verify", { method: "POST", body: { code: $("#pfTgCode").value } });
+      toast("تلگرام به حساب وصل شد ✓");
+      await boot(); // اعتبار/پلنِ منتقل‌شده از ربات هم به‌روز شود
+      if (me) { me.telegram = me.telegram || r.telegram; renderPfTg(); }
+    } catch (e) { msg.textContent = e.message; show(msg, true); }
+  });
 };
 $("#logout").onclick = async () => { $("#profileDlg").close(); try { await api("/api/auth/logout", { method: "POST" }); } catch {} tracking++; me = null; jobView(null); $("#go").disabled = false; await boot(); };
 
@@ -846,7 +883,7 @@ function renderBuy() {
       h("h3", {}, `👑 پلن ${p.name}`),
       h("div", { class: "pp" }, fa(p.price), h("small", {}, " هزار تومان / ماه")),
       h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, `تا ${fa(p.maxSlides)} اسلاید در هر ارائه`), h("li", {}, `تا ${fa(p.maxImages)} تصویر در هر ارائه`)),
-      h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: () => buyPlan(p.id) }, mine ? `تمدید ${fa(p.days)} روزه` : `خرید پلن ${p.name}`));
+      h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: (ev) => buyPlan(p.id, ev.currentTarget) }, mine ? `تمدید ${fa(p.days)} روزه` : `خرید پلن ${p.name}`));
   }));
   $("#buyNote").textContent = cfg.payEnabled
     ? "پلن‌ها ۳۰ روزه‌اند و تمدید خودکار ندارند. پرداخت آنلاین و امن از طریق درگاه دیجی‌پی است و پلن بلافاصله فعال می‌شود؛ تمدید همان پلن پیش از پایان، ۳۰ روز و اعتبار جدید را به پلن فعلی اضافه می‌کند؛ اما خرید پلنِ دیگر، پلن فعلی را منقضی می‌کند و پلن جدید از همان لحظه شروع می‌شود."
@@ -862,7 +899,7 @@ $("#upgradeBtn").onclick = () => openBuy();
 async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderCredit(); } } catch {} }
 
 let pendingPlan = null;
-async function buyPlan(id) {
+async function buyPlan(id, btn) {
   if (!me) { $("#buy").close(); openAuth("register", "برای خرید پلن، ابتدا وارد شو یا ثبت‌نام کن."); return; }
   const plan = me.plans.find((p) => p.id === id); if (!plan) return;
   // خرید پلنِ دیگر، پلن فعلی را (با روز و اعتبار باقی‌مانده) منقضی می‌کند؛ قبل از ادامه هشدار بده
@@ -873,10 +910,14 @@ async function buyPlan(id) {
   if (!cfg.payEnabled) { window.open(plan.url, "_blank", "noopener"); return; }
   // درگاه شماره‌ی موبایل خریدار را الزامی می‌کند؛ اگر حساب شماره ندارد (مثلاً ورود با گوگل)، پنجره‌ی پروفایل برای تایید شماره باز می‌شود و بعد از تایید، خرید ادامه پیدا می‌کند
   if (!me.user.mobile && cfg.otp) { pendingPlan = id; $("#buy").close(); openProfile("برای پرداخت، شماره‌ی موبایلت را تایید کن؛ بعد از تایید به درگاه می‌روی."); return; }
-  try {
-    const r = await api("/api/pay/start", { method: "POST", body: { plan: id } });
-    location.href = r.url;
-  } catch (e) { toast(e.message); }
+  const go = async () => {
+    try {
+      const r = await api("/api/pay/start", { method: "POST", body: { plan: id } });
+      location.href = r.url;
+    } catch (e) { toast(e.message); throw e; }
+  };
+  // تا رفتن به درگاه دیجی‌پی دکمه در حالت «در حال انتقال» می‌ماند؛ در خطا آزاد می‌شود
+  if (btn) await busy(btn, "در حال انتقال به درگاه…", go, { keep: true }).catch(() => {}); else await go().catch(() => {});
 }
 // ورود خودکار از دکمه‌های ربات تلگرام: ‎/?buy=1 بعد از ورود، پنجره‌ی پلن‌ها را باز می‌کند
 function handleTgLogin() {
@@ -917,16 +958,18 @@ function handleTgBuy() {
       h("h3", {}, `👑 پلن ${p.name}`),
       h("div", { class: "pp" }, fa(p.price), h("small", {}, " هزار تومان / ماه")),
       h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, `تا ${fa(p.maxSlides)} اسلاید در هر ارائه`), h("li", {}, `تا ${fa(p.maxImages)} تصویر در هر ارائه`)),
-      h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: () => tgPay(p.id) }, `خرید پلن ${p.name}`));
+      h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: (ev) => tgPay(p.id, ev.currentTarget) }, `خرید پلن ${p.name}`));
   }));
   $("#tgBuy").showModal();
 }
-async function tgPay(planId) {
+async function tgPay(planId, btn) {
   const err = $("#tgBuyErr"); show(err, false);
-  try {
+  const go = async () => {
     const r = await api("/api/pay/tg", { method: "POST", body: { token: tgToken, plan: planId, mobile: $("#tgMobile").value } });
     location.href = r.url;
-  } catch (e) { err.textContent = e.message; show(err, true); }
+  };
+  try { await busy(btn, "در حال انتقال به درگاه…", go, { keep: true }); }
+  catch (e) { err.textContent = e.message; show(err, true); }
 }
 function tgDone(p, planId, bot) {
   const plan = (cfg.plans || []).find((x) => x.id === planId);
@@ -1095,9 +1138,9 @@ $("#go").onclick = async () => {
     openAuth("register", "برای ساخت ارائه وارد شو یا ثبت‌نام کن؛ موضوعت حفظ می‌شود و بعد از ورود ساخته می‌شود.");
     return;
   }
-  $("#go").disabled = true;
   try {
-    const r = await api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), imageCount: Number($("#imgCount").value), ...(srcText ? { source: srcText } : {}) } });
+    // تا شروع کار، دکمه «در حال ارسال…» نشان می‌دهد؛ بعد از موفقیت قفل می‌ماند تا پایان ساخت (track آزادش می‌کند)
+    const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), imageCount: Number($("#imgCount").value), ...(srcText ? { source: srcText } : {}) } }), { disabled: true });
     $("#jobText").textContent = "⏳ در صف…"; jobView("run");
     $("#job").scrollIntoView({ behavior: "smooth", block: "center" });
     refreshMe(); track(r.jobId);

@@ -155,8 +155,11 @@ export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ e
   const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
   const code = String(n).padStart(6, "0");
   const exp = Math.floor(Date.now() / 1000) + OTP_TTL;
-  await env.KV.put(`ot:${mobile}`, JSON.stringify({ h: await otpHash(code, mobile), exp }), { expiration: exp });
-  await env.KV.delete(`otf:${mobile}`); // کد تازه ⇒ شمارنده‌ی تلاش ناموفق از صفر
+  const oh = await otpHash(code, mobile);
+  await Promise.all([
+    env.KV.put(`ot:${mobile}`, JSON.stringify({ h: oh, exp }), { expiration: exp }),
+    env.KV.delete(`otf:${mobile}`), // کد تازه ⇒ شمارنده‌ی تلاش ناموفق از صفر
+  ]);
 
   const token = (env.SMS_API_TOKEN ?? "").trim().replace(/^Bearer\s+/i, "");
   const template = Number.isFinite(Number(env.SMS_TEMPLATE)) && String(env.SMS_TEMPLATE ?? "").trim() !== "" ? Number(env.SMS_TEMPLATE) : 1;

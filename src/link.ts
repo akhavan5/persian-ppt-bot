@@ -122,8 +122,11 @@ export async function startTgLink(env: Env, uid: string, ip: string, raw: unknow
 
   const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
   const exp = Math.floor(Date.now() / 1000) + TG_CODE_TTL;
-  await env.KV.put(`tgk:${uid}`, JSON.stringify({ h: await codeHash(uid, tgId, code), tg: tgId, exp }), { expiration: exp });
-  await env.KV.delete(`tgkf:${uid}`); // کد تازه ⇒ شمارنده‌ی تلاش ناموفق از صفر
+  const h = await codeHash(uid, tgId, code);
+  await Promise.all([
+    env.KV.put(`tgk:${uid}`, JSON.stringify({ h, tg: tgId, exp }), { expiration: exp }),
+    env.KV.delete(`tgkf:${uid}`), // کد تازه ⇒ شمارنده‌ی تلاش ناموفق از صفر
+  ]);
 
   try {
     await sendMessage(env, tgId,
