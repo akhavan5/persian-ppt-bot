@@ -2,15 +2,14 @@
  * دریافت فایل از تلگرام و تبدیل آن به متن (منبع محتوای ارائه)، هم‌ارز آپلود فایل در نسخه‌ی وب.
  * - txt/md/csv/json/html: مستقیم
  * - docx / pptx / xlsx: با JSZip (بدون هزینه‌ی هوش مصنوعی)
- * - PDF: Workers AI toMarkdown (رایگان برای PDF)؛ اگر لایه‌ی متن نداشت (اسکن) ← OCR با مدل vision کلودفلر (vision-ocr.ts)
- *   PDFِ ترکیبی (متن + اسکرین‌شات/تصویر؛ مثل سؤال‌های کوییز که از Word خروجی گرفته‌اند): متنِ هر صفحه + OCR تصویرهای همان صفحه، به ترتیب صفحه
+ * - PDF: Workers AI toMarkdown (رایگان برای PDF)؛ اگر متنِ قابل‌قبولی داشت، مثل بقیه‌ی فایل‌های متنی همان متن برگردانده می‌شود و اصلاً OCR نمی‌شود
+ *   (حتی اگر تصویر هم داخلش باشد). فقط PDFِ بدون لایه‌ی متن (اسکن) ← OCR با مدل vision کلودفلر (vision-ocr.ts)
  * - تصویر (عکس یا فایل png/jpg): OCR با مدل vision کلودفلر
  * سقف دانلود ربات‌های تلگرام ۲۰ مگابایت است؛ سقف این‌جا ۱۵ مگابایت (مثل وب).
  */
 import JSZip from "jszip";
 import type { Env } from "./env";
-import { ocrImages, ocrSmart, VISION_MAX_IMAGE_BYTES, VISION_MAX_PAGES } from "./vision-ocr";
-import { countPdfPages, extractPdfImages, type PdfImage } from "./pdf-images";
+import { ocrSmart, VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { tg } from "./telegram";
 
@@ -74,8 +73,11 @@ async function readXlsx(zip: JSZip): Promise<string> {
   return out.join("\n\n");
 }
 
-/** میانگین نویسه‌ی متنی در هر صفحه که بالاتر از آن، تصویرهای PDF را تزئینی فرض می‌کنیم و OCR نمی‌زنیم */
-const MIXED_TEXT_PER_PAGE = 1200;
+/**
+ * حداقل نویسه‌ی متنی (بدون فاصله) در کل فایل تا PDF «متنی» حساب شود و اصلاً OCR نشود.
+ * فقط مجموع متن کل فایل ملاک است (نه میانگین هر صفحه)؛ PDFِ ترکیبی (متن + تصویر) هم متنِ خودش را دارد و مثل فایل متنی خوانده می‌شود.
+ */
+const MIN_TEXT_CHARS = 60;
 /** خروجی toMarkdown را به صفحه‌ها می‌شکند و عنوان فایل، بخش Metadata و سرتیترهای ساختاری را حذف می‌کند */
 function splitPages(md: string): { page: number; text: string }[] {
   const body = md
@@ -85,23 +87,6 @@ function splitPages(md: string): { page: number; text: string }[] {
   const marks = Array.from(body.matchAll(/^#{1,6}\s*Page\s*(\d+)\s*$/gim));
   if (!marks.length) return [{ page: 0, text: tidy(body) }];
   return marks.map((m, i) => ({ page: Number(m[1]), text: tidy(body.slice(m.index! + m[0].length, marks[i + 1]?.index ?? body.length)) }));
-}
-
-/** متن هر صفحه + متن OCR تصویرهای همان صفحه (تصویرها قبل از متن؛ در کوییزها صورت سؤال معمولاً بالای توضیح است) */
-function mergePages(pages: { page: number; text: string }[], imgs: PdfImage[], texts: string[]): string {
-  const by = new Map<number, { img: string[]; text: string }>();
-  const slot = (n: number) => by.get(n) ?? (by.set(n, { img: [], text: "" }), by.get(n)!);
-  for (const p of pages) slot(p.page).text = p.text;
-  imgs.forEach((im, i) => { const t = (texts[i] ?? "").trim(); if (t) slot(im.page).img.push(t); });
-  const keys = Array.from(by.keys()).sort((a, b) => a - b);
-  return keys
-    .map((n) => {
-      const s = by.get(n)!;
-      const part = [...s.img, s.text].filter(Boolean).join("\n\n");
-      return part && n > 0 && keys.length > 1 ? `# صفحه ${n}\n${part}` : part;
-    })
-    .filter(Boolean)
-    .join("\n\n");
 }
 
 async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: string | number): Promise<Extracted> {
@@ -119,34 +104,14 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: strin
   const pages = splitPages(text);
   // طول متن واقعی (بدون عنوان/Metadata/سرتیتر صفحه)؛ وگرنه اسکن به‌اشتباه «متنی» تشخیص داده می‌شود.
   const realLen = pages.reduce((n, p) => n + p.text.replace(/\s+/g, "").length, 0);
-  if (realLen < 60) {
-    // بدون لایه‌ی متن ⇒ اسکن ⇒ OCR با مدل vision (صفحه‌به‌صفحه)
-    if (await ocrLimitHit(env, userId)) return fail(`سقف روزانه‌ی تبدیل تصویر/اسکن به متن تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`);
-    return ocrSmart(env, bytes, "application/pdf");
-  }
-
   const plain = pages.map((p) => p.text).filter(Boolean).join("\n\n");
-  // PDFِ ترکیبی: متن دارد، ولی بخش مهمی از محتوا (سؤال، جدول، فرمول، گزینه) تصویر است و در لایه‌ی متن نیست
-  // CPU: استخراج/بازفشرده‌سازی تصویرها سنگین است (روی PDFِ ۱۶۷ صفحه‌ای Worker با «exceeded CPU time limit» کشته شد)؛
-  // پس اول با شمارش ارزان صفحه‌ها بررسی می‌شود که متن کافی هست یا نه، و فقط اگر کم بود سراغ تصویرها می‌رویم.
-  const u8 = new Uint8Array(bytes);
-  const pageCount = Math.max(countPdfPages(u8), pages.length, 1);
-  if (realLen / pageCount >= MIXED_TEXT_PER_PAGE) return { ok: true, text: plain };
-  let found: { images: PdfImage[]; pages: number } = { images: [], pages: 0 };
-  try { found = await extractPdfImages(u8, undefined, { limit: VISION_MAX_PAGES, maxBytes: VISION_MAX_IMAGE_BYTES }); } catch (e) { console.error("pdf images", e instanceof Error ? e.message : e); }
-  const imgs = found.images.slice(0, VISION_MAX_PAGES);
-  const perPage = realLen / Math.max(found.pages || pageCount, 1);
-  if (!imgs.length || perPage >= MIXED_TEXT_PER_PAGE) return { ok: true, text: plain };
 
-  if (await ocrLimitHit(env, userId)) return fail(`این PDF بخش‌هایی به‌صورت تصویر دارد و سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`);
-  let texts: string[] = [];
-  try {
-    texts = await ocrImages(env, imgs);
-  } catch (e) {
-    console.error("pdf mixed ocr", e instanceof Error ? e.message.slice(0, 200) : e);
-  }
-  // اگر OCR چیزی برنگرداند، mergePages فقط همان متن لایه‌ی متنی را برمی‌گرداند (بدون خطا)
-  return { ok: true, text: mergePages(pages, imgs, texts) };
+  // متنِ قابل‌قبول در کل فایل ⇒ مثل هر فایل متنی دیگر؛ هیچ OCRی (و هیچ مصرف سقف OCRی) در کار نیست
+  if (realLen >= MIN_TEXT_CHARS) return { ok: true, text: plain };
+
+  // لایه‌ی متن ندارد ⇒ اسکن ⇒ OCR با مدل vision (صفحه‌به‌صفحه)
+  if (await ocrLimitHit(env, userId)) return fail(`سقف روزانه‌ی تبدیل تصویر/اسکن به متن تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`);
+  return ocrSmart(env, bytes, "application/pdf");
 }
 
 /** عکس/تصویر ← متن با OCR (سقف روزانه: اعتبار ساخت ارائه + ۲، مثل وب) */
@@ -210,7 +175,7 @@ export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: stri
 
 /**
  * از بایت‌های فایل به متن؛ هسته‌ی مشترک ربات تلگرام و نسخه‌ی وب (web-ocr-workflow.ts)،
- * پس هر دو دقیقاً یک مسیر را می‌روند: toMarkdown ← (اسکن) OCR با مدل vision ← (ترکیبی) متن + OCR تصویرها.
+ * پس هر دو دقیقاً یک مسیر را می‌روند: toMarkdown ← (فقط اگر متنِ قابل‌قبولی نداشت = اسکن) OCR با مدل vision.
  */
 export async function extractFileBytes(env: Env, bytes: ArrayBuffer, name: string, mime: string, userId: string | number): Promise<Extracted> {
   const ext = extOf(name, mime);

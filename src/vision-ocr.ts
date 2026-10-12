@@ -3,7 +3,7 @@
  * نه بایندینگ. جایگزین ocr.space که برای فارسی و PDF چندصفحه‌ای قابل‌اعتماد نبود.
  *
  * - تصویر (png/jpg): مستقیم به مدل vision داده می‌شود.
- * - PDF اسکن‌شده یا دارای تصویر: تصویرهای صفحه‌ها از داخل PDF بیرون کشیده و یکی‌یکی خوانده می‌شود (pdf-images.ts: JPEG مستقیم، Flate ← PNG).
+ * - PDF اسکن‌شده (بدون لایه‌ی متن؛ PDFِ دارای متن اصلاً به این‌جا نمی‌رسد، tg-file.ts): تصویرهای صفحه‌ها از داخل PDF بیرون کشیده و یکی‌یکی خوانده می‌شود (pdf-images.ts: JPEG مستقیم، Flate ← PNG).
  *   PDFی که تصویرش JBIG2/CCITT/Indexed باشد پشتیبانی نمی‌شود و پیام راهنما برمی‌گردد.
  * - ترتیب مدل‌ها (ارزان ← گران): gemma-4 ← qwen3.8 ← mistral-small؛ با OCR_VISION_MODELS (با کاما) قابل تغییر است.
  * - ocr.space فقط برای PDFی که JPEG قابل‌استخراج ندارد و ≤۱ مگابایت است باقی مانده است.
@@ -97,9 +97,6 @@ async function readEach(env: Env, imgs: { bytes: Uint8Array; mime: string }[]): 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, imgs.length) }, worker));
   return out;
 }
-
-/** متن هر تصویر جداگانه (به همان ترتیب ورودی؛ تصویر بدون متن = رشته‌ی خالی). برای حالت ترکیبی «متن + تصویر» در PDF */
-export const ocrImages = (env: Env, imgs: PdfImage[]): Promise<string[]> => readEach(env, imgs);
 
 async function readMany(env: Env, imgs: { bytes: Uint8Array; mime: string }[]): Promise<OcrResult> {
   const out = await readEach(env, imgs);
