@@ -114,7 +114,7 @@ export async function ocrSmart(env: Env, bytes: ArrayBuffer, mime: string): Prom
   const u8 = new Uint8Array(bytes);
   let imgs: { bytes: Uint8Array; mime: string }[];
   if (mime === "application/pdf") {
-    const found = await extractPdfImages(u8).catch((e) => { console.error("pdf images", e instanceof Error ? e.message : e); return { images: [] as PdfImage[], pages: 0 }; });
+    const found = await extractPdfImages(u8, undefined, { limit: VISION_MAX_PAGES, maxBytes: VISION_MAX_IMAGE_BYTES }).catch((e) => { console.error("pdf images", e instanceof Error ? e.message : e); return { images: [] as PdfImage[], pages: 0 }; });
     if (!found.images.length) {
       if (u8.byteLength <= OCR_MAX_BYTES) return ocrSpace(env, bytes, mime);
       return { ok: false, error: "این PDF اسکن است ولی تصاویر صفحه‌هایش در قالب قابل‌خواندن نیست؛ صفحه‌ها را به‌صورت عکس (JPG) بفرست." };

@@ -58,8 +58,15 @@ async function flateToPng(raw: Uint8Array, w: number, h: number, ch: number, pre
 
 const latin1 = (u8: Uint8Array) => new TextDecoder("latin1").decode(u8); // هر بایت ← یک نویسه؛ فقط برای اندیس‌گذاری
 
-export async function extractPdfImages(bytes: Uint8Array, minSide = MIN_SIDE): Promise<PdfImages> {
+/** تعداد صفحه‌ها فقط با شمارش شیءهای Page (ارزان؛ بدون باز کردن تصویرها). PDFهایی که شیءها را در Object Stream فشرده کرده‌اند ممکن است ۰ بدهند. */
+export function countPdfPages(bytes: Uint8Array): number {
+  return latin1(bytes).match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0;
+}
+
+/** limit: بعد از رسیدن به این تعداد تصویرِ قابل‌استفاده استخراج متوقف می‌شود؛ maxBytes: تصویرِ بزرگ‌تر از این کنار گذاشته می‌شود (CPU کمتر؛ هر دو اختیاری) */
+export async function extractPdfImages(bytes: Uint8Array, minSide = MIN_SIDE, opts: { limit?: number; maxBytes?: number } = {}): Promise<PdfImages> {
   const s = latin1(bytes);
+  const limit = opts.limit ?? Infinity, maxBytes = opts.maxBytes ?? Infinity;
 
   // نگاشت شماره‌ی شیء تصویر ← شماره‌ی صفحه (به ترتیب شیءهای Page در فایل)
   const pageOf = new Map<number, number>();
@@ -88,7 +95,7 @@ export async function extractPdfImages(bytes: Uint8Array, minSide = MIN_SIDE): P
   const images: PdfImage[] = [];
   const re = /(?<!end)stream\r?\n/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(s))) {
+  while (images.length < limit && (m = re.exec(s))) {
     const start = m.index + m[0].length;
     const dictFrom = Math.max(s.lastIndexOf("obj", m.index) - 16, m.index - 2000); // ۱۶ نویسه‌ی قبل از «obj» تا شماره‌ی شیء هم در برش بیاید
     const dict = s.slice(dictFrom, m.index);
@@ -109,7 +116,7 @@ export async function extractPdfImages(bytes: Uint8Array, minSide = MIN_SIDE): P
     const filters = (dict.match(/\/Filter\s*(\[[^\]]*\]|\/\w+)/)?.[1] ?? "").match(/\/\w+/g) ?? [];
 
     if (filters.length === 1 && filters[0] === "/DCTDecode") {
-      if (data.length > 1000 && data[0] === 0xff && data[1] === 0xd8) images.push({ bytes: data, mime: "image/jpeg", page, w, h });
+      if (data.length > 1000 && data.length <= maxBytes && data[0] === 0xff && data[1] === 0xd8) images.push({ bytes: data, mime: "image/jpeg", page, w, h });
     } else if (filters.length === 1 && filters[0] === "/FlateDecode") {
       const ch = channelsOf(dict);
       const bpc = Number(dict.match(/\/BitsPerComponent\s+(\d+)/)?.[1] ?? 0);
@@ -118,7 +125,7 @@ export async function extractPdfImages(bytes: Uint8Array, minSide = MIN_SIDE): P
       if (pred >= 10 && (Number(dict.match(/\/Columns\s+(\d+)/)?.[1] ?? 1) !== w || Number(dict.match(/\/Colors\s+(\d+)/)?.[1] ?? 1) !== ch)) continue;
       try {
         const p = await flateToPng(data, w, h, ch, pred);
-        if (p) images.push({ bytes: p, mime: "image/png", page, w, h });
+        if (p && p.length <= maxBytes) images.push({ bytes: p, mime: "image/png", page, w, h });
       } catch (e) {
         console.error("pdf flate image", e instanceof Error ? e.message : e);
       }

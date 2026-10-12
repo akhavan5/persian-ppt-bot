@@ -10,7 +10,7 @@
 import JSZip from "jszip";
 import type { Env } from "./env";
 import { ocrImages, ocrSmart, VISION_MAX_IMAGE_BYTES, VISION_MAX_PAGES } from "./vision-ocr";
-import { extractPdfImages, type PdfImage } from "./pdf-images";
+import { countPdfPages, extractPdfImages, type PdfImage } from "./pdf-images";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { tg } from "./telegram";
 
@@ -127,10 +127,15 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: strin
 
   const plain = pages.map((p) => p.text).filter(Boolean).join("\n\n");
   // PDFِ ترکیبی: متن دارد، ولی بخش مهمی از محتوا (سؤال، جدول، فرمول، گزینه) تصویر است و در لایه‌ی متن نیست
+  // CPU: استخراج/بازفشرده‌سازی تصویرها سنگین است (روی PDFِ ۱۶۷ صفحه‌ای Worker با «exceeded CPU time limit» کشته شد)؛
+  // پس اول با شمارش ارزان صفحه‌ها بررسی می‌شود که متن کافی هست یا نه، و فقط اگر کم بود سراغ تصویرها می‌رویم.
+  const u8 = new Uint8Array(bytes);
+  const pageCount = Math.max(countPdfPages(u8), pages.length, 1);
+  if (realLen / pageCount >= MIXED_TEXT_PER_PAGE) return { ok: true, text: plain };
   let found: { images: PdfImage[]; pages: number } = { images: [], pages: 0 };
-  try { found = await extractPdfImages(new Uint8Array(bytes)); } catch (e) { console.error("pdf images", e instanceof Error ? e.message : e); }
-  const imgs = found.images.filter((i) => i.bytes.byteLength <= VISION_MAX_IMAGE_BYTES).slice(0, VISION_MAX_PAGES);
-  const perPage = realLen / Math.max(found.pages || pages.length, 1);
+  try { found = await extractPdfImages(u8, undefined, { limit: VISION_MAX_PAGES, maxBytes: VISION_MAX_IMAGE_BYTES }); } catch (e) { console.error("pdf images", e instanceof Error ? e.message : e); }
+  const imgs = found.images.slice(0, VISION_MAX_PAGES);
+  const perPage = realLen / Math.max(found.pages || pageCount, 1);
   if (!imgs.length || perPage >= MIXED_TEXT_PER_PAGE) return { ok: true, text: plain };
 
   if (await ocrLimitHit(env, userId)) return fail(`این PDF بخش‌هایی به‌صورت تصویر دارد و سقف روزانه‌ی تبدیل تصویر به متن تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`);
