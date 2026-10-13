@@ -23,6 +23,8 @@
 - [pptساز چیست؟](https://pptsaz.ir/ppt-saz): معرفی سرویس و نام‌های مشابه آن
 - [پاورپوینت ساز هوش مصنوعی](https://pptsaz.ir/ai-powerpoint-maker): ساخت اسلاید با AI؛ چه کارهایی را بسپاری و چه چیزهایی را خودت بررسی کنی
 - [پاورپوینت ساز آنلاین](https://pptsaz.ir/online-powerpoint-maker): ساخت پاورپوینت بدون نصب با مرورگر کامپیوتر و گوشی
+- [پاورپوینت ساز ایرانی](https://pptsaz.ir/iranian-powerpoint-maker): پرداخت ریالی با درگاه دیجی‌پی، بدون کارت بین‌المللی؛ پنج معیار انتخاب ابزار برای کاربر ایرانی
+- [قالب پاورپوینت فارسی](https://pptsaz.ir/persian-powerpoint-templates): پنج تم رنگی، سه فونت و چیدمان راست‌به‌چپ به‌جای دانلود قالب
 - [جایگزین فارسی Gamma](https://pptsaz.ir/gamma-alternative): مقایسه‌ی Gamma و pptساز برای فارسی‌زبان‌ها و آزمون ۵ دقیقه‌ای انتخاب
 - [پاورپوینت ساز فارسی یا Canva](https://pptsaz.ir/canva-alternative): مقایسه‌ی قالب و طراحی گرافیکی با ساخت سریع PPTX فارسی و آزمون ۱۰ دقیقه‌ای
 - [اسلاید ساز و ارائه ساز](https://pptsaz.ir/slide-maker): ساخت اسلاید و ارائه با هوش مصنوعی؛ چیدمان‌ها و نحوه‌ی کار
@@ -66,6 +68,7 @@
 - [نمونه پاورپوینت مدیریت زمان](https://pptsaz.ir/blog/time-management-presentation-sample): آیزنهاور، پومودورو و اهداف اسمارت
 - [چطور از ارائه‌ات دفاع کنی](https://pptsaz.ir/blog/how-to-defend-your-presentation): پرسش و پاسخ، نقد و مشکل فنی
 - [سؤال‌های متداول داوران](https://pptsaz.ir/blog/defense-judges-common-questions): مقصود هر پرسش و روش آماده‌شدن
+- [ابزارهای هوش مصنوعی ساخت پاورپوینت ۱۴۰۵](https://pptsaz.ir/blog/foreign-ai-presentation-tools-persian-test): Gamma، PopAi، Beautiful.ai، SlideSpeak و دیگران؛ آزمون ده‌دقیقه‌ای فارسی
 - [مقایسه‌ی صادقانه‌ی pptساز با رقبا](https://pptsaz.ir/blog/pptsaz-honest-comparison): Gamma، Canva، ChatGPT، PowerPoint؛ نقاط قوت و ضعف
 
 ## نکات

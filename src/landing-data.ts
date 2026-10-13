@@ -289,7 +289,7 @@ const BASE_PAGES: Page[] = [
       { q: "آیا برای مدرسان دانشگاه هم مناسب است؟", a: "بله. فقط سطح مخاطب را در موضوع بنویس، مثلاً «برای دانشجویان کارشناسی»، و در صورت نیاز تعداد اسلاید را با پلن‌های پلاس یا پرو بیشتر کن." },
       { q: "آیا ساخت اسلاید درسی رایگان است؟", a: "بله، با ۲ ارائه‌ی رایگانِ ثبت‌نام تا ۸ اسلاید و ۱ تصویر در هر ارائه می‌سازی. برای اسلاید و تصویر بیشتر پلن‌های ماهانه وجود دارد." },
     ],
-    related: ["student", "free", "business", "ppt-saz", "konkur-presentation", "clergy-presentation"],
+    related: ["student", "free", "business", "ppt-saz", "konkur-presentation", "clergy-presentation", "ppt-with-images"],
   },
 
   // ───────────────────────── اداری و کسب‌وکار ─────────────────────────
@@ -375,7 +375,7 @@ const BASE_PAGES: Page[] = [
       { q: "برای ارائه‌ی بلندتر چه پلنی لازم است؟", a: "پلن رایگان تا ۸ اسلاید دارد. پلن پلاس (۱۹۹ هزار تومان در ماه) تا ۲۰ اسلاید و پلن پرو (۳۴۹ هزار تومان در ماه) تا ۳۵ اسلاید در هر ارائه می‌سازد؛ هر دو ۳۰ روزه‌اند و تمدید خودکار ندارند." },
       { q: "آیا اعداد و تحلیل‌های ساخته‌شده قابل اتکا هستند؟", a: "نه بدون بررسی. ابزار از داده‌های سازمان تو خبر ندارد و عددها نمونه‌اند؛ پیش از ارائه همه‌ی اعداد و ادعاها را با منبع واقعی تطبیق بده." },
     ],
-    related: ["teacher", "free", "student", "ppt-saz"],
+    related: ["teacher", "free", "student", "ppt-saz", "persian-powerpoint-templates"],
   },
 
   // ───────────────────────── رایگان ─────────────────────────
@@ -513,7 +513,7 @@ const BASE_PAGES: Page[] = [
       { q: "خروجی PDF هم دارد؟", a: "بله. علاوه بر فایل PPTX، پیش‌نمایش در مرورگر و خروجی PDF هم در دسترس است و برای دیدن آن‌ها لازم نیست فونت فارسی نصب کنی." },
       { q: "چرا فارسی در بعضی ابزارها به‌هم می‌ریزد؟", a: "بسیاری از ابزارها برای متن چپ‌به‌راست طراحی شده‌اند و راست‌به‌چپ، ارقام یا فونت فارسی در آن‌ها جابه‌جا می‌شود. راهنمای آزمون ده‌دقیقه‌ای را در [انتخاب بهترین سایت ساخت پاورپوینت](/blog/best-ai-powerpoint-makers-persian) ببین." },
     ],
-    related: ["student", "teacher", "compare", "telegram-bot", "ai-powerpoint-maker", "online-powerpoint-maker", "thesis-defense", "ppt-saz"],
+    related: ["student", "teacher", "compare", "telegram-bot", "ai-powerpoint-maker", "online-powerpoint-maker", "thesis-defense", "ppt-saz", "iranian-powerpoint-maker"],
   },
 
   // ───────────────────────── مقایسه‌ی ابزارها ─────────────────────────
@@ -591,7 +591,7 @@ const BASE_PAGES: Page[] = [
       { q: "ChatGPT می‌تواند جای ابزار ساخت پاورپوینت را بگیرد؟", a: "برای نوشتن متن و ساختار اسلایدها بله. برای ساخت فایل کامل با چیدمان و راست‌به‌چپ، بسته به ابزار و قابلیت‌های فعال معمولاً کار دستی در PowerPoint لازم است." },
       { q: "pptساز از ابزارهای خارجی بهتر است؟", a: "برای نیاز مشخصی بهتر است: ساخت سریع پاورپوینت فارسی راست‌به‌چپ با پرداخت ریالی. برای قالب‌های گرافیکی متنوع یا ویرایش بصری آنلاین، ابزارهای طراحی امکانات بیشتری دارند." },
     ],
-    related: ["free", "gamma-alternative", "canva-alternative", "ai-powerpoint-maker", "telegram-bot", "student", "ppt-saz"],
+    related: ["free", "gamma-alternative", "canva-alternative", "ai-powerpoint-maker", "telegram-bot", "student", "ppt-saz", "iranian-powerpoint-maker", "persian-powerpoint-templates"],
   },
 
   // ───────────────────────── تلگرام و گوشی ─────────────────────────
@@ -661,7 +661,7 @@ const BASE_PAGES: Page[] = [
       { q: "چطور ارائه‌ی رایگان بیشتر بگیرم؟", a: "با دستور /invite لینک اختصاصی می‌گیری و به ازای هر دوستی که با آن وارد ربات شود، ۱ ارائه‌ی رایگان به اعتبارت اضافه می‌شود (حداکثر ۲۰ دعوت)." },
       { q: "فونت فارسی روی گوشی درست دیده می‌شود؟", a: "اگر Vazirmatn نصب نباشد ممکن است فونت جایگزین شود. Tahoma و Arial انتخاب امن‌تری‌اند و پیش‌نمایش مرورگر و PDF هم بدون نصب فونت درست دیده می‌شوند." },
     ],
-    related: ["free", "compare", "student", "ppt-saz"],
+    related: ["free", "compare", "student", "ppt-saz", "iranian-powerpoint-maker"],
   },
 
   // ───────────────────────── pptساز (برند) ─────────────────────────
@@ -733,7 +733,7 @@ const BASE_PAGES: Page[] = [
       { q: "ربات تلگرام هم دارد؟", a: "بله، همراه این سایت یک ربات تلگرامی ارائه می‌شود که با همان سیستم ساخت ارائه کار می‌کند." },
       { q: "آیا محتوای ساخته‌شده همیشه درست است؟", a: "متن را هوش مصنوعی می‌نویسد و ممکن است اشتباه داشته باشد؛ پیش از ارائه حتماً آن را بررسی کن." },
     ],
-    related: ["ai-powerpoint-maker", "online-powerpoint-maker", "student", "teacher", "business", "free", "compare", "telegram-bot"],
+    related: ["ai-powerpoint-maker", "online-powerpoint-maker", "student", "teacher", "business", "free", "compare", "telegram-bot", "iranian-powerpoint-maker"],
   },
 ];
 
