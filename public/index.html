@@ -57,10 +57,14 @@ header.top{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.86);bac
 header .in{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.08rem;color:var(--text);text-decoration:none}
 .brand i{font-style:normal;display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;font-size:20px;box-shadow:0 6px 16px rgba(37,99,235,.3)}
-nav.links{display:flex;gap:16px}
-nav.links a{color:var(--muted);text-decoration:none;font-size:.92rem;font-weight:600}
+nav.links{display:flex;gap:14px;flex-wrap:nowrap;min-width:0}
+nav.links a{color:var(--muted);text-decoration:none;font-size:.92rem;font-weight:600;white-space:nowrap}
 nav.links a:hover{color:var(--primary)}
-@media(max-width:900px){nav.links{display:none}}
+.brand{white-space:nowrap;flex-shrink:0}
+header .row{flex-wrap:nowrap;flex-shrink:0}
+header .chip{white-space:nowrap}
+header #userName{max-width:140px;overflow:hidden;text-overflow:ellipsis;display:inline-block}
+@media(max-width:1180px){nav.links{display:none}}
 /* گوشی: هدر فشرده؛ نام برند کوچک‌تر و نوار کاربر (ارتقا / اعتبار / نام) در یک ردیف کنار برند یا زیر آن */
 @media(max-width:560px){
   header .in{flex-wrap:wrap;min-height:0;padding-top:8px;padding-bottom:8px;row-gap:8px;column-gap:8px}
