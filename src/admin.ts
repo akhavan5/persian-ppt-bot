@@ -12,8 +12,8 @@ import { PLANS, activatePlan, payEnabled } from "./payment";
 import { runningJob } from "./deck-service";
 import { toEn, toFa } from "./util";
 
-/** دستورهای متنی مدیر (دستورهای قدیمی برای سازگاری حفظ شده‌اند؛ /admin و /panel پنل دکمه‌ای را باز می‌کنند) */
-export const ADMIN_CMDS = new Set(["/admin", "/panel", "/cancel", "/stats", "/broadcast", "/grant", "/user", "/users", "/decks", "/ban", "/unban"]);
+/** دستورهای متنی مدیر: فقط ورود به پنل و لغو ورودی در انتظار؛ بقیه‌ی کارها با دکمه‌های پنل انجام می‌شود */
+export const ADMIN_CMDS = new Set(["/admin", "/panel", "/cancel"]);
 
 type Btn = { text: string; callback_data?: string; url?: string };
 type Screen = { text: string; kb: Btn[][] };
@@ -399,7 +399,6 @@ async function systemScreen(env: Env): Promise<Screen> {
       `🔗 وب‌هوک: ${info?.url ? "✅ فعال" : "❌ تنظیم نشده"} · در صف: ${fa(info?.pending_update_count ?? 0)}${hookErr}`,
     kb: [
       [cb("📜 گزارش اقدامات مدیر", "ad:lg"), cb("🧹 پاکسازی منقضی‌ها", "ad:pg")],
-      [cb("📖 راهنمای دستورها", "ad:hp")],
       [cb("🔄 تازه‌سازی", "ad:sy"), ...backHome],
     ],
   };
@@ -412,21 +411,6 @@ async function logScreen(env: Env): Promise<Screen> {
     kb: [[cb("🔙 سیستم", "ad:sy"), ...backHome]],
   };
 }
-
-const ADMIN_HELP =
-  "🛠 <b>دستورهای مدیر</b>\n\n" +
-  "/admin ← پنل دکمه‌ایِ کامل (پیشنهادی)\n" +
-  "/stats ← آمار امروز و ۷ روز اخیر\n" +
-  "/broadcast <code>متن</code> ← پیام همگانی به همه‌ی کاربران (با تایید)\n" +
-  "/users ← ۱۰ کاربر اخیر (نام + لینک پروفایل)\n" +
-  "/decks ← ۱۰ ارائه‌ی اخیر ساخته‌شده (با دکمه‌ی دریافت فایل)\n" +
-  "/user <code>شناسه</code> ← کارت مدیریت یک کاربر\n" +
-  "/grant <code>شناسه تعداد</code> ← افزودن اعتبار (عدد منفی = کم کردن)\n" +
-  "<i>برای کاربر وب، شناسه‌ی w_… که در پیام خرید می‌آید را بنویس.</i>\n" +
-  "/ban <code>شناسه</code> ← مسدود کردن کاربر\n" +
-  "/unban <code>شناسه</code> ← رفع انسداد\n" +
-  "/cancel ← لغو ورودی در انتظار (جستجو، پیام و…)\n\n" +
-  "<i>شناسه‌ی عددی کاربر را خودش با /id می‌تواند ببیند.</i>";
 
 // ---------- اقدام‌ها (مشترک بین دستور متنی و دکمه) ----------
 async function applyGrant(env: Env, adminId: number, id: Uid, n: number): Promise<{ before: number; after: number; note: string; who: Ident }> {
@@ -470,7 +454,7 @@ async function applyPlan(env: Env, adminId: number, id: Uid, planId: string): Pr
 }
 
 async function previewBroadcast(env: Env, chatId: number, body: string) {
-  if (!body) return sendMessage(env, chatId, "متن پیام را بعد از دستور بنویس؛ مثلاً:\n<code>/broadcast سلام! قابلیت جدید اضافه شد.</code>");
+  if (!body) return sendMessage(env, chatId, "متن پیام خالی است؛ از /admin ← 📣 پیام همگانی دوباره شروع کن.");
   if (body.length > 3500) return sendMessage(env, chatId, "متن بیش از حد طولانی است (حداکثر ۳۵۰۰ کاراکتر).");
   await env.KV.put(`bc:${chatId}`, body, { expirationTtl: 600 });
   const { users } = await getStats(env, 1);
@@ -483,33 +467,10 @@ const toMarkup = (s: Screen) => ({ reply_markup: { inline_keyboard: s.kb } });
 const sendScreen = (env: Env, chatId: number, s: Screen) => sendMessage(env, chatId, s.text, toMarkup(s));
 
 // ---------- دستورهای متنی ----------
-export async function handleAdmin(env: Env, chatId: number, cmd: string, args: string[], raw = "", adminId = chatId) {
-  const reply = (t: string) => sendMessage(env, chatId, t);
-
-  if (cmd === "/admin" || cmd === "/panel") { await clearInput(env, adminId).catch(() => {}); return sendScreen(env, chatId, await homeScreen(env)); }
-  if (cmd === "/cancel") { await clearInput(env, adminId).catch(() => {}); return reply("✅ لغو شد."); }
-
-  if (cmd === "/stats") return sendScreen(env, chatId, await statsScreen(env, 7));
-
-  if (cmd === "/users") return sendScreen(env, chatId, await usersScreen(env, "t", 0));
-
-  if (cmd === "/decks") return sendScreen(env, chatId, await decksScreen(env));
-
-  if (cmd === "/broadcast") return await previewBroadcast(env, chatId, raw.replace(/^\S+\s*/, "").trim()); // متن خام با خط‌های جدید
-
-  const id = parseId(args[0]);
-  if (id === null) return reply("شناسه‌ی عددی کاربر را بعد از دستور بنویس؛ مثلاً: <code>" + cmd + " 123456789</code>");
-
-  if (cmd === "/grant") {
-    const n = Math.trunc(Number(toEn(args[1] ?? "")));
-    if (!Number.isFinite(n) || n === 0 || Math.abs(n) > 1000) return reply("تعداد باید یک عدد صحیح غیر صفر و حداکثر ۱۰۰۰ باشد؛ مثلاً: <code>/grant " + id + " 10</code>");
-    const r = await applyGrant(env, adminId, id, n);
-    return reply(`✅ اعتبار اضافه‌ی <code>${id}</code>: ${fa(r.before)} ← ${fa(r.after)}${r.note}`);
-  }
-  if (cmd === "/ban") return reply((await applyBan(env, adminId, id, true)) ? `⛔️ کاربر <code>${id}</code> مسدود شد.` : "مدیر را نمی‌شود مسدود کرد.");
-  if (cmd === "/unban") { await applyBan(env, adminId, id, false); return reply(`✅ انسداد کاربر <code>${id}</code> برداشته شد.`); }
-  if (cmd === "/user") return sendScreen(env, chatId, await userCard(env, id));
-  return reply("دستور ناشناخته است.");
+export async function handleAdmin(env: Env, chatId: number, cmd: string, _args: string[], _raw = "", adminId = chatId) {
+  await clearInput(env, adminId).catch(() => {});
+  if (cmd === "/cancel") return sendMessage(env, chatId, "✅ لغو شد.");
+  return sendScreen(env, chatId, await homeScreen(env)); // /admin و /panel
 }
 
 // ---------- ورودی متنی منتظر ----------
@@ -608,7 +569,6 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "dk": return await show(await decksScreen(env));
       case "sy": return await show(await systemScreen(env));
       case "lg": return await show(await logScreen(env));
-      case "hp": return await show({ text: ADMIN_HELP, kb: [[cb("🔙 سیستم", "ad:sy"), ...backHome]] });
       case "pg": {
         const n = await env.KV.purge();
         await logAction(env, adminId, `پاکسازی ${n} ردیف منقضی`);
@@ -672,7 +632,7 @@ export async function handleBroadcastCallback(env: Env, cq: any) {
     await env.KV.delete(key);
     return await editMessage(env, chatId, mid, "❌ ارسال همگانی لغو شد.");
   }
-  if (text === null) return await editMessage(env, chatId, mid, "⌛️ این پیش‌نویس منقضی شده است؛ دوباره /broadcast بزن.");
+  if (text === null) return await editMessage(env, chatId, mid, "⌛️ این پیش‌نویس منقضی شده است؛ دوباره از /admin ← 📣 پیام همگانی شروع کن.");
   await env.KV.delete(key); // جلوگیری از ارسال دوباره با دو بار زدن دکمه
   try {
     await env.BROADCAST_WORKFLOW.create({ id: `bc-${Date.now()}`, params: { adminChatId: chatId, text } });
