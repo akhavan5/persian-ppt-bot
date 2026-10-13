@@ -4,7 +4,7 @@ import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { adminIds } from "./settings";
 import { withStore } from "./store";
 import { handleWeb } from "./web";
-import { findLanding, landingSitemapEntries, renderLanding } from "./landing";
+import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from "./landing";
 import { blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
 
 export { DeckWorkflow } from "./workflow";
@@ -108,12 +108,7 @@ export default {
       if (landing.trailingSlash) return Response.redirect(`${SITE}/${landing.page.slug}${url.search}`, 301);
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
       const html = renderLanding(landing.page, SITE);
-      return new Response(req.method === "HEAD" ? null : html, {
-        headers: {
-          "content-type": "text/html; charset=utf-8", "content-language": "fa", "cache-control": "public, max-age=300", vary: "Accept-Encoding",
-          "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "strict-origin-when-cross-origin",
-        },
-      });
+      return new Response(req.method === "HEAD" ? null : html, { headers: HTML_HEADERS });
     }
     // وبلاگ: فهرست /blog و مقاله‌ها /blog/<slug> (HTML از blog.ts ساخته می‌شود)
     const blog = findBlog(url.pathname);
@@ -121,19 +116,14 @@ export default {
       if (blog.kind === "trailing") return Response.redirect(`${SITE}${blog.to}${url.search}`, 301);
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
       const html = blog.kind === "index" ? renderBlogIndex(SITE) : renderPost(blog.post, SITE);
-      return new Response(req.method === "HEAD" ? null : html, {
-        headers: {
-          "content-type": "text/html; charset=utf-8", "content-language": "fa", "cache-control": "public, max-age=300", vary: "Accept-Encoding",
-          "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "strict-origin-when-cross-origin",
-        },
-      });
+      return new Response(req.method === "HEAD" ? null : html, { headers: HTML_HEADERS });
     }
     // صفحه‌ی اصلی: نشانه‌ی __ORIGIN__ (canonical، og:url، داده‌ی ساختاریافته) با دامنه‌ی واقعی جایگزین می‌شود
     if (url.pathname === "/" && (req.method === "GET" || req.method === "HEAD")) {
       const res = await env.ASSETS.fetch(req);
       if (!res.ok) return res;
       const h = new Headers(res.headers);
-      h.delete("content-length"); h.set("cache-control", "public, max-age=300"); h.set("content-type", "text/html; charset=utf-8"); h.set("content-language", "fa"); h.set("vary", "Accept-Encoding");
+      h.delete("content-length"); h.set("cache-control", HTML_HEADERS["cache-control"]); h.set("content-type", "text/html; charset=utf-8"); h.set("content-language", "fa"); h.set("vary", "Accept-Encoding");
       return new Response((await res.text()).replaceAll("__ORIGIN__", SITE), { status: 200, headers: h });
     }
 

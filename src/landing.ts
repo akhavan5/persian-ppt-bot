@@ -12,6 +12,39 @@ export const inline = (s: string) => esc(s)
 export const plain = (s: string) => s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
 export const jsonLd = (o: unknown) => JSON.stringify(o).replace(/</g, "\\u003c");
 
+export const fa = (n: number) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[+d]);
+export const faDate = (iso: string) => new Intl.DateTimeFormat("fa-IR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(iso + "T00:00:00Z"));
+
+/** گره‌های مشترک داده‌ی ساختاریافته‌ی همه‌ی صفحه‌های Worker (سازمان و وب‌سایت)؛ یک‌جا تعریف شده تا با صفحه‌ی اصلی هماهنگ بماند. */
+export function siteNodes(SITE: string) {
+  return [
+    {
+      "@type": "Organization", "@id": `${SITE}/#org`, name: BRAND, alternateName: ["pptsaz.ir", "پاورپوینت ساز", "pptساز"], url: `${SITE}/`,
+      logo: { "@type": "ImageObject", url: `${SITE}/icon-512.png`, width: 512, height: 512 }, sameAs: ["https://t.me/pptsaz_bot"],
+      contactPoint: { "@type": "ContactPoint", email: "info@pptsaz.ir", contactType: "customer support", areaServed: "IR", availableLanguage: "fa" },
+    },
+    { "@type": "WebSite", "@id": `${SITE}/#website`, name: BRAND, alternateName: "pptsaz.ir", url: `${SITE}/`, inLanguage: "fa-IR", publisher: { "@id": `${SITE}/#org` } },
+  ];
+}
+
+/** سربرگ‌های امنیتی و کش مشترک پاسخ‌های HTML ساخته‌شده در Worker. stale-while-revalidate: بازدید بعد از انقضا هم فوری جواب می‌گیرد. */
+export const HTML_HEADERS: Record<string, string> = {
+  "content-type": "text/html; charset=utf-8", "content-language": "fa",
+  "cache-control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400", vary: "Accept-Encoding",
+  "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()", "strict-transport-security": "max-age=31536000; includeSubDomains",
+};
+
+/** اگر صفحه بخش «مرحله‌ای» (steps) دارد، همان مراحل ظاهرشده را به‌صورت HowTo معرفی می‌کند (بدون متن اضافه که در صفحه دیده نشود). */
+export function howToNode(url: string, sections: Section[]) {
+  const sec = sections.find((x) => x.steps && x.steps.length >= 3);
+  if (!sec?.steps) return undefined;
+  return {
+    "@type": "HowTo", "@id": `${url}#howto`, name: sec.h2, inLanguage: "fa-IR", isPartOf: { "@id": `${url}#webpage` },
+    step: sec.steps.map((x, i) => ({ "@type": "HowToStep", position: i + 1, name: x.t, text: plain(x.d) })),
+  };
+}
+
 /** مسیر → صفحه‌ی سئو (با یا بدون اسلش پایانی). */
 export function findLanding(pathname: string): { page: Page; trailingSlash: boolean } | undefined {
   const m = /^\/([a-z0-9-]+)(\/?)$/.exec(pathname);
@@ -97,6 +130,10 @@ footer ul{list-style:none;padding:0;margin:0}
 footer li{margin-bottom:4px}
 footer a{color:var(--muted);text-decoration:none}footer a:hover{color:var(--primary)}
 .copy{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
+.skip{position:absolute;inset-inline-start:12px;top:-60px;z-index:50;background:var(--primary);color:#fff;padding:8px 16px;border-radius:0 0 10px 10px;text-decoration:none;font-weight:700}
+.skip:focus{top:0}
+.upd{color:var(--muted);font-size:.86rem;margin:10px 0 0}
+a:focus-visible,summary:focus-visible,.btn:focus-visible{outline:3px solid #93b4f8;outline-offset:2px;border-radius:6px}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}`;
 
 export function renderSection(s: Section): string {
@@ -150,6 +187,7 @@ const ARTICLES_FOR: Record<string, string[]> = {
   "telegram-bot": ["ai-powerpoint-mobile-telegram", "ai-powerpoint-faq-persian", "ai-powerpoint-step-by-step"],
   "ai-powerpoint-maker": ["ai-powerpoint-prompt-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-step-by-step"],
   "online-powerpoint-maker": ["ai-powerpoint-step-by-step", "ai-powerpoint-mobile-telegram", "best-way-persian-powerpoint"],
+  "canva-alternative": ["pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "persian-powerpoint-design", "ai-powerpoint-faq-persian"],
   "gamma-alternative": ["pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
   "slide-maker": ["ai-powerpoint-step-by-step", "persian-powerpoint-design", "how-many-slides"],
   "pitch-deck": ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides", "entrepreneurship-presentation-sample"],
@@ -172,14 +210,14 @@ export function renderLanding(p: Page, SITE: string): string {
   const articles = (ARTICLES_FOR[p.slug] ?? []).map((s) => POST_BY_SLUG.get(s)).filter((x) => !!x);
   const related = p.related.map((slug) => PAGE_BY_SLUG.get(slug)).filter((x): x is Page => !!x);
 
+  const howTo = howToNode(url, p.sections);
   const ld = {
     "@context": "https://schema.org",
     "@graph": [
-      { "@type": "Organization", "@id": `${SITE}/#org`, name: BRAND, url: `${SITE}/`, logo: { "@type": "ImageObject", url: `${SITE}/icon-512.png`, width: 512, height: 512 } },
-      { "@type": "WebSite", "@id": `${SITE}/#website`, name: BRAND, alternateName: "pptsaz.ir", url: `${SITE}/`, inLanguage: "fa-IR", publisher: { "@id": `${SITE}/#org` } },
+      ...siteNodes(SITE),
       {
         "@type": "WebPage", "@id": `${url}#webpage`, url, name: p.title, description: p.desc, inLanguage: "fa-IR",
-        isPartOf: { "@id": `${SITE}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` },
+        isPartOf: { "@id": `${SITE}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` }, publisher: { "@id": `${SITE}/#org` }, mainEntity: { "@id": `${url}#faq` },
         primaryImageOfPage: { "@type": "ImageObject", url: `${SITE}/og-image.png`, width: 1200, height: 630 }, dateModified: p.updated,
         ...(p.audience ? { audience: { "@type": "Audience", audienceType: p.audience } } : {}),
       },
@@ -194,6 +232,7 @@ export function renderLanding(p: Page, SITE: string): string {
         "@type": "FAQPage", "@id": `${url}#faq`, isPartOf: { "@id": `${url}#webpage` }, inLanguage: "fa-IR",
         mainEntity: p.faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: plain(f.a) } })),
       },
+      ...(howTo ? [howTo] : []),
     ],
   };
 
@@ -238,6 +277,7 @@ export function renderLanding(p: Page, SITE: string): string {
 <style>${CSS}</style>
 </head>
 <body>
+<a class="skip" href="#main">رفتن به محتوا</a>
 <header class="top">
   <div class="wrap wide in">
     <a class="brand" href="/" aria-label="${BRAND}"><i>📊</i><span>${BRAND}</span></a>
@@ -245,13 +285,14 @@ export function renderLanding(p: Page, SITE: string): string {
     <a class="btn sm" href="/#topic">ساخت رایگان</a>
   </div>
 </header>
-<main class="wrap">
+<main class="wrap" id="main">
   <nav class="crumb" aria-label="مسیر صفحه"><ol><li><a href="/">${BRAND}</a></li><li><span aria-current="page">${esc(p.nav)}</span></li></ol></nav>
   <div class="hero">
     <h1>${esc(p.h1[0])}<em>${esc(p.h1[1])}</em>${esc(p.h1[2])}</h1>
     <p class="lead">${esc(p.lead)}</p>
     <div class="cta-row"><a class="btn" href="/#topic">${esc(p.cta)}</a><a class="btn ghost" href="/#pricing">مشاهده‌ی تعرفه</a></div>
     <div class="trust"><span>🆓 ۲ ارائه‌ی رایگانِ ثبت‌نام</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
+    <p class="upd">آخرین به‌روزرسانی: <time datetime="${p.updated}">${faDate(p.updated)}</time></p>
   </div>
   <article>
 ${p.sections.map(renderSection).join("\n")}

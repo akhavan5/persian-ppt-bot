@@ -1,7 +1,7 @@
 // رندر وبلاگ: فهرست /blog و مقاله‌ها /blog/<slug>. داده‌ها در blog-data.ts هستند.
 import { PAGES, PAGE_BY_SLUG } from "./landing-data";
 import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
-import { BRAND, CSS, esc, inline, jsonLd, plain, renderFooter, renderSection } from "./landing";
+import { BRAND, CSS, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
 const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، نوشتن موضوع برای هوش مصنوعی و مقایسه‌ی صادقانه‌ی ابزارها.";
@@ -40,8 +40,6 @@ export function blogSitemapEntries(site: string): string {
   return url(`${site}/blog`, newest, "0.7") + POSTS.map((p) => url(`${site}/blog/${p.slug}`, p.updated, "0.6")).join("");
 }
 
-const fa = (n: number) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[+d]);
-const faDate = (iso: string) => new Intl.DateTimeFormat("fa-IR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(iso + "T00:00:00Z"));
 
 function words(p: Post): number {
   const t = [p.h1, ...p.tldr, ...p.intro, ...p.sections.flatMap((s) => [s.h2, ...(s.paras ?? []), ...(s.list ?? []), ...(s.after ?? []), ...(s.steps ?? []).flatMap((x) => [x.t, x.d]), ...(s.table?.rows.flat() ?? []), ...(s.chips ?? [])]), ...p.faq.flatMap((f) => [f.q, f.a])].map(plain).join(" ");
@@ -94,6 +92,7 @@ ${o.article ? `<meta property="article:published_time" content="${o.article.publ
 function shell(site: string, current: string, main: string): string {
   const nav = PAGES.filter((x) => x.slug !== "ppt-saz" && x.menu !== false).map((x) => `<a href="/${x.slug}">${esc(x.nav)}</a>`).join("") + `<a href="/blog"${current === "blog" ? ' aria-current="page"' : ""}>وبلاگ</a><a href="/#pricing">تعرفه</a>`;
   return `<body>
+<a class="skip" href="#main">رفتن به محتوا</a>
 <header class="top">
   <div class="wrap wide in">
     <a class="brand" href="/" aria-label="${BRAND}"><i>📊</i><span>${BRAND}</span></a>
@@ -122,9 +121,8 @@ export function renderBlogIndex(site: string): string {
   const ld = {
     "@context": "https://schema.org",
     "@graph": [
-      { "@type": "Organization", "@id": `${site}/#org`, name: BRAND, url: `${site}/`, logo: { "@type": "ImageObject", url: `${site}/icon-512.png`, width: 512, height: 512 } },
-      { "@type": "WebSite", "@id": `${site}/#website`, name: BRAND, alternateName: "pptsaz.ir", url: `${site}/`, inLanguage: "fa-IR", publisher: { "@id": `${site}/#org` } },
-      { "@type": "CollectionPage", "@id": `${url}#webpage`, url, name: BLOG_TITLE, description: BLOG_DESC, inLanguage: "fa-IR", isPartOf: { "@id": `${site}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` } },
+      ...siteNodes(site),
+      { "@type": "CollectionPage", "@id": `${url}#webpage`, dateModified: POSTS.map((x) => x.updated).sort().at(-1), url, name: BLOG_TITLE, description: BLOG_DESC, inLanguage: "fa-IR", isPartOf: { "@id": `${site}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` } },
       { "@type": "BreadcrumbList", "@id": `${url}#breadcrumb`, itemListElement: [{ "@type": "ListItem", position: 1, name: BRAND, item: `${site}/` }, { "@type": "ListItem", position: 2, name: "وبلاگ", item: url }] },
       { "@type": "ItemList", itemListElement: POSTS.map((p, i) => ({ "@type": "ListItem", position: i + 1, url: `${site}/blog/${p.slug}`, name: p.h1 })) },
     ],
@@ -133,7 +131,7 @@ export function renderBlogIndex(site: string): string {
   const cats = [...new Set(POSTS.map((p) => p.category))].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
   const card = (p: Post) => `    <a class="post" href="/blog/${p.slug}"><span class="tag">${esc(p.category)}</span><b>${esc(p.h1)}</b><p>${esc(p.desc)}</p><small>${faDate(p.date)} · ${fa(readMin(p))} دقیقه مطالعه</small></a>`;
   const groups = cats.map((c, i) => `  <h2 class="cat" id="c${i + 1}">${esc(c)}</h2>\n  <div class="posts">\n${POSTS.filter((p) => p.category === c).sort((a, b) => b.date.localeCompare(a.date)).map(card).join("\n")}\n  </div>`).join("\n");
-  const main = `<main class="wrap wide">
+  const main = `<main class="wrap wide" id="main">
   <nav class="crumb" aria-label="مسیر صفحه"><ol><li><a href="/">${BRAND}</a></li><li><span aria-current="page">وبلاگ</span></li></ol></nav>
   <div class="hero">
     <h1>وبلاگ <em>پاورپوینت‌ساز فارسی</em></h1>
@@ -146,6 +144,15 @@ ${groups}
   return head({ title: BLOG_TITLE, desc: BLOG_DESC, url, site, type: "website", ld, imgAlt: "وبلاگ پاورپوینت‌ساز فارسی" }) + "\n" + shell(site, "blog", main);
 }
 
+/** مقاله‌ی قبلی و بعدی در همان دسته (لینک‌دهی داخلی و پیمایش). */
+function adjacent(p: Post): string {
+  const same = POSTS.filter((x) => x.category === p.category).sort((a, b) => b.date.localeCompare(a.date) || a.slug.localeCompare(b.slug));
+  const i = same.findIndex((x) => x.slug === p.slug);
+  const items = [same[i + 1] && { label: "مقاله‌ی قبلی", post: same[i + 1] }, same[i - 1] && { label: "مقاله‌ی بعدی", post: same[i - 1] }].filter((x): x is { label: string; post: Post } => !!x);
+  if (!items.length) return "";
+  return `    <nav class="rel" aria-label="مقاله‌های هم‌دسته" style="margin:18px 0">${items.map((x) => `<a href="/blog/${x.post.slug}">${esc(x.post.nav)}<span>${x.label} در «${esc(p.category)}»</span></a>`).join("")}</nav>\n`;
+}
+
 export function renderPost(p: Post, site: string): string {
   const url = `${site}/blog/${p.slug}`;
   const landing = PAGE_BY_SLUG.get(p.landing);
@@ -153,11 +160,10 @@ export function renderPost(p: Post, site: string): string {
   const ld = {
     "@context": "https://schema.org",
     "@graph": [
-      { "@type": "Organization", "@id": `${site}/#org`, name: BRAND, url: `${site}/`, logo: { "@type": "ImageObject", url: `${site}/icon-512.png`, width: 512, height: 512 } },
-      { "@type": "WebSite", "@id": `${site}/#website`, name: BRAND, alternateName: "pptsaz.ir", url: `${site}/`, inLanguage: "fa-IR", publisher: { "@id": `${site}/#org` } },
+      ...siteNodes(site),
       {
         "@type": "BlogPosting", "@id": `${url}#article`, mainEntityOfPage: { "@id": `${url}#webpage` }, headline: p.h1, description: p.desc, inLanguage: "fa-IR",
-        datePublished: p.date, dateModified: p.updated, wordCount: words(p), articleSection: p.category,
+        datePublished: p.date, dateModified: p.updated, wordCount: words(p), articleSection: p.category, timeRequired: `PT${readMin(p)}M`, keywords: [p.category, "پاورپوینت", "ارائه فارسی"].join("، "), isAccessibleForFree: true,
         author: { "@id": `${site}/#org` }, publisher: { "@id": `${site}/#org` }, image: { "@type": "ImageObject", url: `${site}/og-image.png`, width: 1200, height: 630 },
       },
       { "@type": "WebPage", "@id": `${url}#webpage`, url, name: p.title, description: p.desc, inLanguage: "fa-IR", isPartOf: { "@id": `${site}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` }, primaryImageOfPage: { "@type": "ImageObject", url: `${site}/og-image.png`, width: 1200, height: 630 } },
@@ -172,7 +178,7 @@ export function renderPost(p: Post, site: string): string {
       { "@type": "FAQPage", "@id": `${url}#faq`, isPartOf: { "@id": `${url}#webpage` }, inLanguage: "fa-IR", mainEntity: p.faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: plain(f.a) } })) },
     ],
   };
-  const main = `<main class="wrap">
+  const main = `<main class="wrap" id="main">
   <nav class="crumb" aria-label="مسیر صفحه"><ol><li><a href="/">${BRAND}</a></li><li><a href="/blog">وبلاگ</a></li><li><span aria-current="page">${esc(p.nav)}</span></li></ol></nav>
   <div class="hero" style="padding-bottom:6px">
     <h1>${esc(p.h1)}</h1>
@@ -187,7 +193,7 @@ ${p.sections.map(renderBlogSection).join("\n")}
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
     </section>
-    <section>
+${adjacent(p)}    <section>
       <h2>مقاله‌های مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/blog/${r.slug}">${esc(r.nav)}<span>${esc(r.category)}</span></a>`).join("")}${landing ? `<a href="/${landing.slug}">${esc(landing.nav)}<span>ابزار ساخت</span></a>` : ""}</div>
     </section>
