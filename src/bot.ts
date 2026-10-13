@@ -6,7 +6,7 @@ import {
   maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
-import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleBroadcastCallback } from "./admin";
+import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
 import { listFiles, loadFile } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
@@ -293,6 +293,7 @@ async function handleCallback(env: Env, cq: any) {
   if (blocked) return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id });
 
   const [act, a, b] = String(cq.data ?? "").split(":");
+  if (act === "ad") return await handlePanelCallback(env, cq);
   if (act === "bc") return await handleBroadcastCallback(env, cq);
   if (act === "af") return await handleAdminFileCallback(env, cq);
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
@@ -390,7 +391,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const isNew = await touchUser(env, userId, msg.from.username, name).catch((e) => { console.error("touchUser", e); return false; });
   if (!admin) await noteActive(env, userId, msg.from.username, name).catch((e) => console.error("noteActive", e)); // فهرست «کاربران اخیر» مدیر؛ خود مدیرها در آن نمی‌آیند
 
-  if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args, text);
+  if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args, text, userId);
+  // ورودی در انتظار پنل مدیر (جستجو، مقدار اعتبار، متن پیام…): پیام متنی بعدی مدیر همان است
+  if (admin && !cmd && text && !msg.document && !msg.photo && (await handleAdminInput(env, chatId, userId, text).catch((e) => { console.error("admin input", e); return false; }))) return;
 
   if (cmd === "/site") {
     return await sendMessage(env, chatId, "🌐 با دکمه‌ی زیر بدون ثبت‌نام و رمز، با همین حساب تلگرامت وارد سایت می‌شوی (پلن‌ها، پرداخت آنلاین، پروفایل).",

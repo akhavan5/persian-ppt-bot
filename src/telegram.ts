@@ -69,7 +69,8 @@ export const BOT_COMMANDS = [
 /** منوی دستورهای مدیر (فقط برای چت خود مدیرها ثبت می‌شود) */
 export const ADMIN_COMMANDS = [
   ...BOT_COMMANDS,
-  { command: "admin", description: "راهنمای دستورهای مدیر" },
+  { command: "admin", description: "پنل مدیریت (دکمه‌ای)" },
+  { command: "cancel", description: "لغو ورودی در انتظار پنل" },
   { command: "stats", description: "آمار کاربران و ارائه‌ها" },
   { command: "broadcast", description: "پیام همگانی: /broadcast متن" },
   { command: "users", description: "۱۰ کاربر اخیر (با لینک پروفایل)" },
