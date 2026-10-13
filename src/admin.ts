@@ -298,20 +298,30 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
 async function decksScreen(env: Env): Promise<Screen> {
   const list = await getDeckLog(env);
   if (!list.length) return { text: "🗂 هنوز ارائه‌ای ثبت نشده است؛ از این به بعد هر ارائه‌ی ساخته‌شده در این فهرست ثبت می‌شود.", kb: [backHome] };
+  // نوع کاربر از روی خودِ حساب تشخیص داده می‌شود (نه از ثبت منبع هر ارائه):
+  // وبی = از سایت ثبت‌نام کرده (ایمیل/موبایل/گوگل دارد)؛ تلگرامی = شناسه‌ی عددی یا پروفایل خودکار ربات. 🔗 = وبی که تلگرام هم وصل کرده
+  const kindOf = async (uid: Uid): Promise<string> => {
+    if (typeof uid === "number") return "✈️ تلگرامی";
+    const w = await getUserById(env, uid).catch(() => null);
+    if (!w || !(w.email || w.mobile || w.google)) return "✈️ تلگرامی";
+    const linked = Number(await env.KV.get(`w2tg:${uid}`).catch(() => null)) > 0;
+    return linked ? "🌐 وبی 🔗" : "🌐 وبی";
+  };
+  const kinds = new Map<string, string>();
+  for (const x of list) if (!kinds.has(String(x.userId))) kinds.set(String(x.userId), await kindOf(x.userId));
   const lines = list.map((x, i) =>
     `${fa(i + 1)}. <b>${esc(x.title.slice(0, 60))}</b> (${fa(x.slides)} اسلاید)\n` +
-    `    👤 ${userLink(x.userId, x.n, x.u)} · <code>${x.userId}</code> · 🕒 ${fmtTime(x.t)}` +
+    `    👤 ${typeof x.userId === "number" ? userLink(x.userId, x.n, x.u) : `<b>${esc(x.n || String(x.userId))}</b>`}` +
+    ` · ${kinds.get(String(x.userId))} · <code>${x.userId}</code> · 🕒 ${fmtTime(x.t)}` +
     (x.o ? `\n    ✍️ <i>${esc(x.o.slice(0, 200))}</i>` : ""));
   // فایل‌ها فقط ۲۴ ساعت (و ۳ فایل آخر هر کاربر) نگه داشته می‌شوند؛ برای قدیمی‌تر دکمه‌ی دریافت نمی‌گذاریم
   const fresh = Date.now() - 24 * 3600 * 1000;
-  const kb: Btn[][] = list.map((x, i) => {
-    const r: Btn[] = [];
-    if (x.t > fresh) r.push(cb(`📥 ${fa(i + 1)}. ${x.title.slice(0, 22)}`, `af:${x.userId}:${x.id}`));
-    r.push(cb(`👤 ${fa(i + 1)}`, `ad:u:${x.userId}`));
-    return r;
-  });
+  const kb: Btn[][] = list
+    .map((x, i) => ({ x, i }))
+    .filter(({ x }) => x.t > fresh)
+    .map(({ x, i }) => [cb(`📥 ${fa(i + 1)}. ${x.title.slice(0, 40)}`, `af:${x.userId}:${x.id}`)]);
   kb.push([cb("🔄 تازه‌سازی", "ad:dk"), ...backHome]);
-  return { text: `🗂 <b>${fa(list.length)} ارائه‌ی اخیر</b> (به وقت ایران)\n\n${lines.join("\n")}\n\n<i>📥 فقط برای فایل‌های ۲۴ ساعت اخیر؛ 👤 کارت کاربر.</i>`, kb };
+  return { text: `🗂 <b>${fa(list.length)} ارائه‌ی اخیر</b> (به وقت ایران)\n\n${lines.join("\n")}\n\n<i>دکمه‌ی 📥 فقط برای فایل‌های ۲۴ ساعت اخیر است.</i>`, kb };
 }
 
 async function userFilesScreen(env: Env, id: Uid): Promise<Screen> {
