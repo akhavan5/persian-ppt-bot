@@ -1,10 +1,10 @@
 // رندر وبلاگ: فهرست /blog و مقاله‌ها /blog/<slug>. داده‌ها در blog-data.ts هستند.
 import { PAGES, PAGE_BY_SLUG } from "./landing-data";
 import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
-import { BRAND, CSS, esc, inline, jsonLd, plain, renderSection } from "./landing";
+import { BRAND, CSS, esc, inline, jsonLd, plain, renderFooter, renderSection } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
-const BLOG_DESC = "راهنمای کاربردی ساخت و ارائه‌ی پاورپوینت فارسی: ساختار دفاعیه، تعداد اسلاید، ایده‌ی موضوع، طراحی راست‌به‌چپ، نوشتن موضوع برای هوش مصنوعی و ارائه‌ی بدون استرس.";
+const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، نوشتن موضوع برای هوش مصنوعی و مقایسه‌ی صادقانه‌ی ابزارها.";
 
 const EXTRA_CSS = `
 .meta{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;color:var(--muted);font-size:.86rem;margin:0 0 18px}
@@ -19,7 +19,9 @@ const EXTRA_CSS = `
 .post p{margin:0;color:var(--muted);font-size:.92rem;flex:1}
 .tag{align-self:flex-start;background:var(--soft);color:var(--primary);border-radius:999px;padding:1px 12px;font-size:.78rem;font-weight:700}
 .post small{color:var(--muted)}
-h2[id]{scroll-margin-top:80px}`;
+h2[id]{scroll-margin-top:80px}
+.cat{font-size:1.2rem;margin:30px 0 0;font-weight:800;scroll-margin-top:80px}
+.cats{justify-content:center;margin:0 0 6px}`;
 
 /** مسیر → فهرست وبلاگ یا یک مقاله. */
 export function findBlog(pathname: string): { kind: "index" } | { kind: "post"; post: Post } | { kind: "trailing"; to: string } | undefined {
@@ -47,7 +49,7 @@ function words(p: Post): number {
 }
 const readMin = (p: Post) => Math.max(1, Math.round(words(p) / 200));
 
-function head(o: { title: string; desc: string; url: string; site: string; type: "website" | "article"; ld: unknown; imgAlt: string }): string {
+function head(o: { title: string; desc: string; url: string; site: string; type: "website" | "article"; ld: unknown; imgAlt: string; article?: { published: string; modified: string; section: string } }): string {
   const { title, desc, url, site } = o;
   return `<!doctype html>
 <html lang="fa" dir="rtl">
@@ -64,7 +66,7 @@ function head(o: { title: string; desc: string; url: string; site: string; type:
 <link rel="alternate" hreflang="x-default" href="${url}">
 <meta property="og:type" content="${o.type}">
 <meta property="og:locale" content="fa_IR">
-<meta property="og:site_name" content="${BRAND}">
+${o.article ? `<meta property="article:published_time" content="${o.article.published}">\n<meta property="article:modified_time" content="${o.article.modified}">\n<meta property="article:section" content="${esc(o.article.section)}">\n<meta property="article:author" content="${BRAND}">\n` : ""}<meta property="og:site_name" content="${BRAND}">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${url}">
@@ -91,8 +93,6 @@ function head(o: { title: string; desc: string; url: string; site: string; type:
 
 function shell(site: string, current: string, main: string): string {
   const nav = PAGES.filter((x) => x.slug !== "ppt-saz" && x.menu !== false).map((x) => `<a href="/${x.slug}">${esc(x.nav)}</a>`).join("") + `<a href="/blog"${current === "blog" ? ' aria-current="page"' : ""}>وبلاگ</a><a href="/#pricing">تعرفه</a>`;
-  const guides = PAGES.map((x) => `<li><a href="/${x.slug}">${esc(x.nav)}</a></li>`).join("");
-  const arts = POSTS.map((x) => `<li><a href="/blog/${x.slug}">${esc(x.nav)}</a></li>`).join("");
   return `<body>
 <header class="top">
   <div class="wrap wide in">
@@ -102,19 +102,7 @@ function shell(site: string, current: string, main: string): string {
   </div>
 </header>
 ${main}
-<footer>
-  <div class="wrap wide">
-    <div class="ft">
-      <div>
-        <a class="brand" href="/"><i>📊</i><span>${BRAND}</span></a>
-        <p style="margin-top:10px;color:var(--muted)">از یک موضوع ساده تا ارائه‌ای کامل و آماده‌ی نمایش؛ فارسی، راست‌به‌چپ و قابل‌ویرایش.</p>
-      </div>
-      <div><h4>راهنماها</h4><ul>${guides}</ul></div>
-      <div><h4>از وبلاگ</h4><ul>${arts}<li><a href="/blog">همه‌ی مقاله‌ها</a></li></ul></div>
-    </div>
-    <div class="copy">© ${BRAND} (pptsaz.ir) — همه‌ی حقوق محفوظ است.</div>
-  </div>
-</footer>
+${renderFooter()}
 </body>
 </html>
 `;
@@ -141,16 +129,18 @@ export function renderBlogIndex(site: string): string {
       { "@type": "ItemList", itemListElement: POSTS.map((p, i) => ({ "@type": "ListItem", position: i + 1, url: `${site}/blog/${p.slug}`, name: p.h1 })) },
     ],
   };
-  const sorted = [...POSTS].sort((a, b) => b.date.localeCompare(a.date));
+  const ORDER = ["نمونه اسلاید به اسلاید", "دفاع پایان‌نامه", "هوش مصنوعی", "مقایسه ابزارها", "راهنمای جامع", "اصول ارائه", "ارائه و سخنرانی", "ایده و موضوع", "طراحی", "طراحی ارائه", "رفع مشکل"];
+  const cats = [...new Set(POSTS.map((p) => p.category))].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
+  const card = (p: Post) => `    <a class="post" href="/blog/${p.slug}"><span class="tag">${esc(p.category)}</span><b>${esc(p.h1)}</b><p>${esc(p.desc)}</p><small>${faDate(p.date)} · ${fa(readMin(p))} دقیقه مطالعه</small></a>`;
+  const groups = cats.map((c, i) => `  <h2 class="cat" id="c${i + 1}">${esc(c)}</h2>\n  <div class="posts">\n${POSTS.filter((p) => p.category === c).sort((a, b) => b.date.localeCompare(a.date)).map(card).join("\n")}\n  </div>`).join("\n");
   const main = `<main class="wrap wide">
   <nav class="crumb" aria-label="مسیر صفحه"><ol><li><a href="/">${BRAND}</a></li><li><span aria-current="page">وبلاگ</span></li></ol></nav>
   <div class="hero">
     <h1>وبلاگ <em>پاورپوینت‌ساز فارسی</em></h1>
-    <p class="lead">راهنمای کاربردی ساخت و ارائه‌ی پاورپوینت فارسی: ساختار دفاعیه، تعداد اسلاید، ایده‌ی موضوع، طراحی راست‌به‌چپ و ارائه‌ی بدون استرس.</p>
+    <p class="lead">راهنمای کاربردی ساخت و ارائه‌ی پاورپوینت فارسی: نمونه‌ی اسلاید به اسلاید، دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ و مقایسه‌ی صادقانه‌ی ابزارها.</p>
+    <div class="chips cats">${cats.map((c, i) => `<a href="#c${i + 1}">${esc(c)}</a>`).join("")}</div>
   </div>
-  <div class="posts">
-${sorted.map((p) => `    <a class="post" href="/blog/${p.slug}"><span class="tag">${esc(p.category)}</span><b>${esc(p.h1)}</b><p>${esc(p.desc)}</p><small>${faDate(p.date)} · ${fa(readMin(p))} دقیقه مطالعه</small></a>`).join("\n")}
-  </div>
+${groups}
   <article><section class="final"><h2>یک پیش‌نویس سریع می‌خواهی؟</h2><p>موضوع را بنویس و ظرف چند دقیقه فایل PPTX فارسی و قابل‌ویرایش را بگیر.</p><a class="btn" href="/#topic">✨ رایگان شروع کن</a></section></article>
 </main>`;
   return head({ title: BLOG_TITLE, desc: BLOG_DESC, url, site, type: "website", ld, imgAlt: "وبلاگ پاورپوینت‌ساز فارسی" }) + "\n" + shell(site, "blog", main);
@@ -208,5 +198,5 @@ ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a
     </section>
   </article>
 </main>`;
-  return head({ title: p.title, desc: p.desc, url, site, type: "article", ld, imgAlt: p.h1 }) + "\n" + shell(site, "post", main);
+  return head({ title: p.title, desc: p.desc, url, site, type: "article", ld, imgAlt: p.h1, article: { published: p.date, modified: p.updated, section: p.category } }) + "\n" + shell(site, "post", main);
 }

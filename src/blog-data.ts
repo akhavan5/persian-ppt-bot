@@ -3,6 +3,7 @@
 // متن‌ها ساده‌اند (HTML ندارند). لینک داخلی: [متن](/مسیر). از " در متن فارسی استفاده نکن؛ از « » استفاده کن.
 import type { Section } from "./landing-data";
 import { EXTRA_POSTS } from "./blog-data-extra";
+import { GUIDE_POSTS } from "./blog-data-guides";
 
 export type BlogSection = Section & { chips?: string[] };
 
@@ -103,7 +104,7 @@ const BASE_POSTS: Post[] = [
           "کاربرد عملی یافته‌ها چیست؟",
           "اگر دوباره شروع می‌کردی چه چیزی را تغییر می‌دادی؟",
         ],
-        after: ["چند اسلاید پیوست آماده کن (جدول‌های تکمیلی، تحلیل‌های اضافه) تا اگر پرسشی خواست، سریع پاسخ را نشان بدهی. برای تمرین، اسلاید «پرسش‌های پایانی» را هم در ابزار فعال کن."],
+        after: ["چند اسلاید پیوست آماده کن (جدول‌های تکمیلی، تحلیل‌های اضافه) تا اگر پرسشی خواست، سریع پاسخ را نشان بدهی. برای تمرین، اسلاید «پرسش‌های پایانی» را هم در ابزار فعال کن. فهرست کامل‌تر پرسش‌ها را در [سؤال‌های متداول داوران](/blog/defense-judges-common-questions) و تکنیک پاسخ‌دادن را در [چطور از ارائه‌ات دفاع کنی](/blog/how-to-defend-your-presentation) ببین."],
       },
       {
         h2: "قبل از روز دفاع چه کارهایی بکنیم؟",
@@ -128,7 +129,7 @@ const BASE_POSTS: Post[] = [
       { q: "نمودار بهتر است یا جدول؟", a: "برای نشان دادن روند یا مقایسه، نمودار سریع‌تر فهمیده می‌شود. جدول وقتی مناسب است که اعداد دقیق مهم‌اند و تعداد ردیف‌ها کم است؛ جدول‌های بزرگ را به پیوست ببر." },
       { q: "آیا می‌توانم از ابزار هوش مصنوعی برای ساخت دفاعیه استفاده کنم؟", a: "از نظر فنی بله؛ ولی قوانین دانشگاه‌ها فرق دارد و ابزار از داده‌های واقعی تو خبر ندارد. خروجی را پیش‌نویس ببین، داده‌ها و منابع را خودت جایگزین و بررسی کن و پیش از استفاده از استاد راهنما بپرس." },
     ],
-    related: ["how-many-slides", "thesis-defense-powerpoint-how-to", "persian-powerpoint-design"],
+    related: ["how-many-slides", "thesis-defense-powerpoint-how-to", "defense-judges-common-questions", "how-to-defend-your-presentation", "persian-powerpoint-design"],
     landing: "thesis-defense",
     cta: "✨ پیش‌نویس دفاعیه بساز",
   },
@@ -214,7 +215,7 @@ const BASE_POSTS: Post[] = [
       { q: "اسلاید عنوان و منابع جزو تعداد حساب می‌شوند؟", a: "بله، ولی چون سریع‌تر رد می‌شوند، در عمل زمان کمتری می‌گیرند. در جدول بالا هر دو شمرده شده‌اند." },
       { q: "اگر استاد تعداد اسلاید مشخصی خواسته چه کنم؟", a: "از همان تعداد پیروی کن و ساختار را با آن تطبیق بده؛ جدول بالا فقط راهنمای کلی است." },
     ],
-    related: ["class-presentation-tips", "thesis-defense-slides-guide", "persian-powerpoint-design"],
+    related: ["class-presentation-tips", "thesis-defense-slides-guide", "ai-presentation-sample-slides", "persian-powerpoint-design"],
     landing: "student",
     cta: "✨ پیش‌نویس ارائه بساز",
   },
@@ -337,7 +338,7 @@ const BASE_POSTS: Post[] = [
           "آیا مخاطب من به این موضوع علاقه دارد یا به آن نیاز دارد؟",
           "آیا موضوع با درس یا هدف ارائه می‌خواند و استاد یا مدیر آن را تأیید می‌کند؟",
         ],
-        after: ["بعد از انتخاب موضوع، نکته‌هایی درباره‌ی نوشتن آن برای ابزار هوش مصنوعی در مقاله‌ی [چطور با هوش مصنوعی پاورپوینت بسازیم](/blog/ai-powerpoint-topic-tips) آمده است."],
+        after: ["بعد از انتخاب موضوع، نکته‌هایی درباره‌ی نوشتن آن برای ابزار هوش مصنوعی در مقاله‌ی [چطور با هوش مصنوعی پاورپوینت بسازیم](/blog/ai-powerpoint-topic-tips) آمده است. برای موضوع‌های پرتکرار، ساختار اسلاید به اسلاید هم نوشته‌ایم: [هوش مصنوعی](/blog/ai-presentation-sample-slides)، [کارآفرینی](/blog/entrepreneurship-presentation-sample)، [سلامت روان](/blog/mental-health-presentation-sample) و [مدیریت زمان](/blog/time-management-presentation-sample)."],
       },
     ],
     faq: [
@@ -346,7 +347,7 @@ const BASE_POSTS: Post[] = [
       { q: "آیا ایده‌ها برای تکلیف دانشگاهی مناسب‌اند؟", a: "بسیاری مناسب‌اند، ولی موضوع تکلیف را باید با استاد هماهنگ کنی و محتوا و منابع را خودت بررسی و تکمیل کنی." },
       { q: "چند موضوع را می‌توانم رایگان امتحان کنم؟", a: "با ثبت‌نام ۲ ارائه‌ی رایگان هدیه می‌گیری و پاورپوینت رایگان تا ۸ اسلاید می‌سازد. برای ارائه‌ی بلندتر پلن‌های ماهانه وجود دارد." },
     ],
-    related: ["ai-powerpoint-topic-tips", "how-many-slides", "class-presentation-tips"],
+    related: ["ai-powerpoint-topic-tips", "how-many-slides", "class-presentation-tips", "ai-presentation-sample-slides", "entrepreneurship-presentation-sample", "mental-health-presentation-sample", "time-management-presentation-sample"],
     landing: "free",
     cta: "✨ یک موضوع را امتحان کن",
   },
@@ -625,7 +626,7 @@ const BASE_POSTS: Post[] = [
       { q: "اگر وسط ارائه چیزی را فراموش کردم چه کنم؟", a: "آرام بمان، به اسلاید یا یادداشت نگاه کن و ادامه بده. معمولاً شنونده‌ها از آنچه می‌خواستی بگویی خبر ندارند و اشتباه کوچک را متوجه نمی‌شوند." },
       { q: "چند بار باید ارائه را تمرین کنم؟", a: "حداقل سه بار بلند و با زمان‌سنج، ترجیحاً یک بار جلوی کسی. اگر ارائه مهم‌تر یا طولانی‌تر است، بیشتر تمرین کن." },
     ],
-    related: ["how-many-slides", "thesis-defense-slides-guide", "persian-powerpoint-design"],
+    related: ["how-many-slides", "thesis-defense-slides-guide", "how-to-defend-your-presentation", "persian-powerpoint-design"],
     landing: "student",
     cta: "✨ پیش‌نویس ارائه بساز",
   },
@@ -929,7 +930,7 @@ const BASE_POSTS: Post[] = [
       { q: "همه‌ی منابع را روی اسلاید بیاورم؟", a: "نه. فقط منابع کلیدی را در اسلاید منابع بیاور و برای هر عدد یا نمودار مهم منبعش را کنار آن بنویس. فهرست کامل در خود پایان‌نامه است." },
       { q: "اگر داور پرسشی بپرسد که جوابش را نمی‌دانم چه کنم؟", a: "آرام و صادقانه بگو دقیقاً این مورد را بررسی نکرده‌ای، نزدیک‌ترین یافته‌ی پژوهشت را بگو و آن را به‌عنوان مسیر پژوهش بعدی ثبت کن. حدس‌زدن با لحن مطمئن معمولاً بدتر از صداقت است." },
     ],
-    related: ["thesis-defense-slides-guide", "how-many-slides", "persian-powerpoint-design"],
+    related: ["thesis-defense-slides-guide", "defense-judges-common-questions", "how-to-defend-your-presentation", "how-many-slides"],
     landing: "thesis-defense",
     cta: "✨ پیش‌نویس دفاعیه بساز",
   },
@@ -1155,7 +1156,7 @@ const BASE_POSTS: Post[] = [
       {
         h2: "pptساز کجا مناسب است و کجا نه؟",
         paras: [
-          "pptساز سازنده‌ی مستقیم PPTX است: از موضوع، فایل راست‌به‌چپ و قابل‌ویرایش با جدول، نمودار و یادداشت سخنرانی می‌سازد، حالت دانشجویی دارد و پلن رایگانش تا ۸ اسلاید می‌دهد. در عوض قالب آماده‌ی قابل‌دانلود، تبدیل مستقیم فایل Word یا PDF به اسلاید و ویرایشگر گرافیکی آنلاین ندارد. برای ارائه‌ی سریع فارسی مناسب است؛ برای ارائه‌ی بسیار گرافیکی ابزارهای طراحی گزینه‌ی بهتری‌اند. [ساخت رایگان](/free) را امتحان کن و با آزمون بالا بسنج.",
+          "pptساز سازنده‌ی مستقیم PPTX است: از موضوع، فایل راست‌به‌چپ و قابل‌ویرایش با جدول، نمودار و یادداشت سخنرانی می‌سازد، حالت دانشجویی دارد و پلن رایگانش تا ۸ اسلاید می‌دهد. ورودی‌اش موضوع، متن یا فایل (Word، PDF و ...) است. در عوض قالب آماده‌ی قابل‌دانلود و ویرایشگر گرافیکی آنلاین ندارد. برای ارائه‌ی سریع فارسی مناسب است؛ برای ارائه‌ی بسیار گرافیکی ابزارهای طراحی گزینه‌ی بهتری‌اند. [ساخت رایگان](/free) را امتحان کن و با آزمون بالا بسنج.",
         ],
       },
     ],
@@ -1165,7 +1166,7 @@ const BASE_POSTS: Post[] = [
       { q: "آیا می‌شود ساخت پاورپوینت را کاملاً رایگان انجام داد؟", a: "بیشتر ابزارها سطح رایگان دارند، با سقف اسلاید یا تعداد ساخت. در pptساز ۲ ارائه‌ی رایگان هدیه‌ی ثبت‌نام و تا ۸ اسلاید در هر ارائه داری." },
       { q: "چرا فایل ابزارهای خارجی در فارسی به‌هم می‌ریزد؟", a: "چون بسیاری از آن‌ها برای متن چپ‌به‌راست طراحی شده‌اند. اگر چنین شد، فونت و جهت متن را در Slide Master اصلاح کن؛ راهنما: [اصول طراحی پاورپوینت فارسی](/blog/persian-powerpoint-design)." },
     ],
-    related: ["ai-powerpoint-step-by-step", "chatgpt-powerpoint-persian", "persian-powerpoint-design"],
+    related: ["pptsaz-honest-comparison", "ai-powerpoint-step-by-step", "chatgpt-powerpoint-persian", "persian-powerpoint-design"],
     landing: "compare",
     cta: "✨ با موضوع خودت امتحان کن",
   },
@@ -1238,7 +1239,7 @@ const BASE_POSTS: Post[] = [
       { q: "متن ChatGPT را چطور فارسی و راست‌چین کنیم؟", a: "متن را با Paste as Text بچسبان، جهت راست‌به‌چپ را در Slide Master تنظیم کن و فونت فارسی انتخاب کن." },
       { q: "تفاوت ChatGPT با pptساز چیست؟", a: "ChatGPT بیشتر متن می‌دهد و ساخت فایل با توست؛ pptساز از موضوع، فایل PPTX راست‌به‌چپ می‌سازد." },
     ],
-    related: ["best-ai-powerpoint-makers-persian", "ai-powerpoint-topic-tips", "ai-powerpoint-step-by-step"],
+    related: ["best-ai-powerpoint-makers-persian", "pptsaz-honest-comparison", "ai-powerpoint-topic-tips", "ai-powerpoint-step-by-step"],
     landing: "free",
     cta: "✨ فایل آماده را رایگان بساز",
   },
@@ -1294,7 +1295,7 @@ const BASE_POSTS: Post[] = [
       { q: "آیا نیاز به نصب برنامه دارد؟", a: "نه. ابزارهای آنلاین در مرورگر کار می‌کنند. برای باز کردن فایل PPTX به PowerPoint، LibreOffice یا Google Slides نیاز داری." },
       { q: "چطور فایل را ویرایش کنم؟", a: "فایل PPTX را در PowerPoint باز کن؛ متن، جدول و نمودار قابل‌ویرایش‌اند." },
     ],
-    related: ["best-ai-powerpoint-makers-persian", "ai-powerpoint-step-by-step", "chatgpt-powerpoint-persian"],
+    related: ["best-ai-powerpoint-makers-persian", "pptsaz-honest-comparison", "ai-powerpoint-step-by-step", "chatgpt-powerpoint-persian"],
     landing: "free",
     cta: "✨ همین حالا رایگان بساز",
   },
@@ -1359,7 +1360,8 @@ const BASE_POSTS: Post[] = [
 
 ];
 
-// مقاله‌های راهنمای جامع، پرامپت، نمودار، RTL، فونت و رفع مشکل در blog-data-extra.ts هستند
-export const POSTS: Post[] = [...BASE_POSTS, ...EXTRA_POSTS];
+// مقاله‌های راهنمای جامع، پرامپت، نمودار، RTL، فونت و رفع مشکل در blog-data-extra.ts؛
+// نمونه‌ی اسلاید به اسلاید، دفاع از ارائه، پرسش‌های داوران و مقایسه‌ی صادقانه با رقبا در blog-data-guides.ts هستند
+export const POSTS: Post[] = [...BASE_POSTS, ...EXTRA_POSTS, ...GUIDE_POSTS];
 
 export const POST_BY_SLUG = new Map(POSTS.map((p) => [p.slug, p]));

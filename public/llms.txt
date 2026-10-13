@@ -31,6 +31,12 @@
 - [پاورپوینت دانش‌آموزی](https://pptsaz.ir/school-presentation): ارائه‌ی ساده برای تحقیق مدرسه
 - [پاورپوینت ساز با عکس](https://pptsaz.ir/ppt-with-images): تصویرهای هوش‌مصنوعی اسلاید و تعداد تصویر هر پلن
 - [متن سخنرانی پاورپوینت](https://pptsaz.ir/speaker-notes): یادداشت سخنرانی هر اسلاید و روش تمرین
+- [پاورپوینت پزشکی و پرستاری](https://pptsaz.ir/medical-presentation): ارائه‌ی کیس، ژورنال کلاب و آموزش به بیمار؛ نکته‌ی حریم خصوصی و بررسی دقت
+- [پاورپوینت مهندسی و پروژه‌ی فنی](https://pptsaz.ir/engineering-presentation): ساختار ارائه‌ی پروژه، گزارش و دفاعیه‌ی مهندسی
+- [پاورپوینت حقوق](https://pptsaz.ir/law-presentation): تحلیل رأی با IRAC، مقایسه‌ی قوانین و بررسی مواد قانونی
+- [پاورپوینت مدیریت و MBA](https://pptsaz.ir/management-presentation): مطالعه‌ی موردی، SWOT، PESTEL و گزارش مدیریتی
+- [پاورپوینت برای روحانیون و مبلغان](https://pptsaz.ir/clergy-presentation): سخنرانی، درس اخلاق و جلسه‌ی قرآن؛ بررسی آیات و روایات
+- [پاورپوینت دانش‌آموزان کنکوری](https://pptsaz.ir/konkur-presentation): جمع‌بندی فصل و برنامه‌ی مطالعه
 
 ## وبلاگ
 - [وبلاگ](https://pptsaz.ir/blog): راهنماهای ساخت و ارائه‌ی پاورپوینت فارسی
@@ -51,6 +57,13 @@
 - [اسلاید فارسی راست‌به‌چپ](https://pptsaz.ir/blog/persian-rtl-slides): تنظیم RTL و Slide Master
 - [بهترین فونت فارسی پاورپوینت](https://pptsaz.ir/blog/best-persian-font-powerpoint): Vazirmatn، Tahoma و Arial
 - [مشکل به‌هم‌ریختگی فارسی در PowerPoint](https://pptsaz.ir/blog/fix-persian-powerpoint-broken): علت‌ها و راه‌حل‌ها
+- [نمونه پاورپوینت هوش مصنوعی](https://pptsaz.ir/blog/ai-presentation-sample-slides): ساختار اسلاید به اسلاید و زمان‌بندی
+- [نمونه پاورپوینت کارآفرینی](https://pptsaz.ir/blog/entrepreneurship-presentation-sample): بوم مدل کسب‌وکار، MVP و تأمین مالی
+- [نمونه پاورپوینت سلامت روان](https://pptsaz.ir/blog/mental-health-presentation-sample): ارائه‌ی آموزشی و نکته‌های موضوع حساس
+- [نمونه پاورپوینت مدیریت زمان](https://pptsaz.ir/blog/time-management-presentation-sample): آیزنهاور، پومودورو و اهداف اسمارت
+- [چطور از ارائه‌ات دفاع کنی](https://pptsaz.ir/blog/how-to-defend-your-presentation): پرسش و پاسخ، نقد و مشکل فنی
+- [سؤال‌های متداول داوران](https://pptsaz.ir/blog/defense-judges-common-questions): مقصود هر پرسش و روش آماده‌شدن
+- [مقایسه‌ی صادقانه‌ی pptساز با رقبا](https://pptsaz.ir/blog/pptsaz-honest-comparison): Gamma، Canva، ChatGPT، PowerPoint؛ نقاط قوت و ضعف
 
 ## نکات
 - زبان: فارسی؛ خروجی: PPTX سازگار با PowerPoint، LibreOffice و Google Slides

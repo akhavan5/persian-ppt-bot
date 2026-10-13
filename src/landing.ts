@@ -1,6 +1,6 @@
 // رندر صفحه‌های سئو (کلیدواژه‌ای). داده‌ها در landing-data.ts هستند.
 import { PAGES, PAGE_BY_SLUG, type Page, type Section } from "./landing-data";
-import { POST_BY_SLUG } from "./blog-data";
+import { POSTS, POST_BY_SLUG } from "./blog-data";
 
 export const BRAND = "پاورپوینت‌ساز فارسی";
 
@@ -93,6 +93,7 @@ footer{margin-top:34px;border-top:1px solid var(--line);background:#fff;padding:
 @media(max-width:720px){.ft{grid-template-columns:1fr}}
 footer h4{margin:0 0 8px;font-size:.95rem}
 footer ul{list-style:none;padding:0;margin:0}
+.ft .all{grid-column:1/-1}.ft ul.cols{columns:200px 3;column-gap:22px}.ft ul.cols li{break-inside:avoid}
 footer li{margin-bottom:4px}
 footer a{color:var(--muted);text-decoration:none}footer a:hover{color:var(--primary)}
 .copy{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
@@ -112,29 +113,57 @@ export function renderSection(s: Section): string {
   return h + `</section>`;
 }
 
+/** فوتر مشترک صفحه‌های سئو و وبلاگ: ردیف اول (برند، مخاطب‌ها، پیوندهای سایت) و دو فهرست کامل راهنماها و مقاله‌ها. */
+export function renderFooter(): string {
+  const audiences = PAGES.filter((x) => x.audience).map((x) => `<li><a href="/${x.slug}">${esc(x.nav)}</a></li>`).join("");
+  const guides = PAGES.filter((x) => !x.audience).map((x) => `<li><a href="/${x.slug}">${esc(x.nav)}</a></li>`).join("");
+  const arts = POSTS.map((x) => `<li><a href="/blog/${x.slug}">${esc(x.nav)}</a></li>`).join("");
+  return `<footer>
+  <div class="wrap wide">
+    <div class="ft">
+      <div>
+        <a class="brand" href="/"><i>📊</i><span>${BRAND}</span></a>
+        <p style="margin-top:10px;color:var(--muted)">از یک موضوع ساده تا ارائه‌ای کامل و آماده‌ی نمایش؛ فارسی، راست‌به‌چپ و قابل‌ویرایش.</p>
+      </div>
+      <div><h4>برای چه کسانی؟</h4><ul>${audiences}</ul></div>
+      <div><h4>پیوندهای سایت</h4><ul><li><a href="/#features">ویژگی‌ها</a></li><li><a href="/#how">نحوه‌ی کار</a></li><li><a href="/#usecases">مخاطبان</a></li><li><a href="/#pricing">تعرفه</a></li><li><a href="/#faq">پرسش‌های متداول</a></li><li><a href="/blog">وبلاگ</a></li><li><a href="/#contact">تماس با ما</a></li></ul></div>
+      <div class="all"><h4>راهنماها</h4><ul class="cols">${guides}</ul></div>
+      <div class="all"><h4>از وبلاگ</h4><ul class="cols">${arts}<li><a href="/blog">همه‌ی مقاله‌ها</a></li></ul></div>
+    </div>
+    <div class="copy">© ${BRAND} (pptsaz.ir) — همه‌ی حقوق محفوظ است.</div>
+  </div>
+</footer>`;
+}
+
 // مقاله‌های وبلاگ مرتبط با هر صفحه (برای لینک‌دهی داخلی)
 const ARTICLES_FOR: Record<string, string[]> = {
-  student: ["how-many-slides", "class-presentation-tips", "ai-powerpoint-prompt-persian"],
-  "thesis-defense": ["thesis-defense-slides-guide", "thesis-defense-powerpoint-how-to", "how-many-slides"],
-  teacher: ["persian-powerpoint-design", "how-many-slides", "presentation-topic-ideas"],
-  business: ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides"],
+  student: ["how-many-slides", "class-presentation-tips", "ai-powerpoint-prompt-persian", "ai-presentation-sample-slides", "time-management-presentation-sample"],
+  "thesis-defense": ["thesis-defense-slides-guide", "thesis-defense-powerpoint-how-to", "defense-judges-common-questions", "how-to-defend-your-presentation", "how-many-slides"],
+  teacher: ["persian-powerpoint-design", "how-many-slides", "presentation-topic-ideas", "class-presentation-tips"],
+  business: ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides", "entrepreneurship-presentation-sample"],
   free: ["ai-powerpoint-step-by-step", "free-powerpoint-templates-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
-  "ppt-saz": ["best-way-persian-powerpoint", "best-persian-font-powerpoint", "ai-powerpoint-step-by-step"],
-  compare: ["best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
+  "ppt-saz": ["best-way-persian-powerpoint", "best-persian-font-powerpoint", "ai-powerpoint-step-by-step", "pptsaz-honest-comparison"],
+  compare: ["pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
   "text-to-pptx": ["ai-powerpoint-prompt-persian", "best-way-persian-powerpoint", "ai-powerpoint-charts"],
   "word-to-pptx": ["best-way-persian-powerpoint", "fix-persian-powerpoint-broken", "persian-rtl-slides"],
   "pdf-to-pptx": ["best-way-persian-powerpoint", "thesis-defense-slides-guide", "ai-powerpoint-prompt-persian"],
   "telegram-bot": ["ai-powerpoint-mobile-telegram", "ai-powerpoint-faq-persian", "ai-powerpoint-step-by-step"],
   "ai-powerpoint-maker": ["ai-powerpoint-prompt-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-step-by-step"],
   "online-powerpoint-maker": ["ai-powerpoint-step-by-step", "ai-powerpoint-mobile-telegram", "best-way-persian-powerpoint"],
-  "gamma-alternative": ["best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
+  "gamma-alternative": ["pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
   "slide-maker": ["ai-powerpoint-step-by-step", "persian-powerpoint-design", "how-many-slides"],
-  "pitch-deck": ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides"],
-  "proposal-presentation": ["thesis-defense-slides-guide", "how-many-slides", "class-presentation-tips"],
+  "pitch-deck": ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides", "entrepreneurship-presentation-sample"],
+  "proposal-presentation": ["thesis-defense-slides-guide", "defense-judges-common-questions", "how-many-slides", "class-presentation-tips"],
   "article-presentation": ["ai-powerpoint-prompt-persian", "best-way-persian-powerpoint", "how-many-slides"],
-  "school-presentation": ["class-presentation-tips", "presentation-topic-ideas", "how-many-slides"],
+  "school-presentation": ["class-presentation-tips", "presentation-topic-ideas", "how-many-slides", "time-management-presentation-sample"],
   "ppt-with-images": ["persian-powerpoint-design", "ai-powerpoint-step-by-step", "free-powerpoint-templates-persian"],
-  "speaker-notes": ["class-presentation-tips", "how-many-slides", "ai-powerpoint-prompt-persian"],
+  "speaker-notes": ["class-presentation-tips", "how-to-defend-your-presentation", "how-many-slides", "ai-powerpoint-prompt-persian"],
+  "medical-presentation": ["mental-health-presentation-sample", "thesis-defense-slides-guide", "how-many-slides", "persian-rtl-slides"],
+  "engineering-presentation": ["thesis-defense-slides-guide", "defense-judges-common-questions", "ai-powerpoint-charts", "persian-rtl-slides"],
+  "law-presentation": ["defense-judges-common-questions", "how-to-defend-your-presentation", "thesis-defense-slides-guide", "how-many-slides"],
+  "management-presentation": ["entrepreneurship-presentation-sample", "ai-powerpoint-charts", "how-many-slides", "persian-powerpoint-design"],
+  "clergy-presentation": ["class-presentation-tips", "persian-powerpoint-design", "best-persian-font-powerpoint", "how-many-slides"],
+  "konkur-presentation": ["time-management-presentation-sample", "class-presentation-tips", "how-many-slides", "presentation-topic-ideas"],
 };
 
 export function renderLanding(p: Page, SITE: string): string {
@@ -152,6 +181,7 @@ export function renderLanding(p: Page, SITE: string): string {
         "@type": "WebPage", "@id": `${url}#webpage`, url, name: p.title, description: p.desc, inLanguage: "fa-IR",
         isPartOf: { "@id": `${SITE}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` },
         primaryImageOfPage: { "@type": "ImageObject", url: `${SITE}/og-image.png`, width: 1200, height: 630 }, dateModified: p.updated,
+        ...(p.audience ? { audience: { "@type": "Audience", audienceType: p.audience } } : {}),
       },
       {
         "@type": "BreadcrumbList", "@id": `${url}#breadcrumb`,
@@ -168,7 +198,6 @@ export function renderLanding(p: Page, SITE: string): string {
   };
 
   const nav = PAGES.filter((x) => x.slug !== "ppt-saz" && x.menu !== false).map((x) => `<a href="/${x.slug}"${x.slug === p.slug ? ' aria-current="page"' : ""}>${esc(x.nav)}</a>`).join("") + `<a href="/blog">وبلاگ</a><a href="/#pricing">تعرفه</a>`;
-  const guides = PAGES.map((x) => `<li><a href="/${x.slug}">${esc(x.nav)}</a></li>`).join("") + `<li><a href="/blog">وبلاگ</a></li>`;
 
   return `<!doctype html>
 <html lang="fa" dir="rtl">
@@ -250,19 +279,7 @@ ${articles.length ? `    <section>
     </section>
   </article>
 </main>
-<footer>
-  <div class="wrap wide">
-    <div class="ft">
-      <div>
-        <a class="brand" href="/"><i>📊</i><span>${BRAND}</span></a>
-        <p style="margin-top:10px;color:var(--muted)">از یک موضوع ساده تا ارائه‌ای کامل و آماده‌ی نمایش؛ فارسی، راست‌به‌چپ و قابل‌ویرایش.</p>
-      </div>
-      <div><h4>راهنماها</h4><ul>${guides}</ul></div>
-      <div><h4>پیوندهای سایت</h4><ul><li><a href="/#features">ویژگی‌ها</a></li><li><a href="/#how">نحوه‌ی کار</a></li><li><a href="/#pricing">تعرفه</a></li><li><a href="/#faq">پرسش‌های متداول</a></li><li><a href="/#contact">تماس با ما</a></li></ul></div>
-    </div>
-    <div class="copy">© ${BRAND} (pptsaz.ir) — همه‌ی حقوق محفوظ است.</div>
-  </div>
-</footer>
+${renderFooter()}
 </body>
 </html>
 `;
