@@ -19,11 +19,11 @@ export const faDate = (iso: string) => new Intl.DateTimeFormat("fa-IR", { dateSt
 export function siteNodes(SITE: string) {
   return [
     {
-      "@type": "Organization", "@id": `${SITE}/#org`, name: BRAND, alternateName: ["pptsaz.ir", "پاورپوینت ساز", "pptساز"], url: `${SITE}/`,
-      logo: { "@type": "ImageObject", url: `${SITE}/icon-512.png`, width: 512, height: 512 }, sameAs: ["https://t.me/pptsaz_bot"],
-      contactPoint: { "@type": "ContactPoint", email: "info@pptsaz.ir", contactType: "customer support", areaServed: "IR", availableLanguage: "fa" },
+      "@type": "Organization", "@id": `${SITE}/#org`, name: BRAND, alternateName: ["pptsaz", "pptsaz.ir", "پاورپوینت ساز فارسی", "پاورپوینت ساز"], url: `${SITE}/`,
+      logo: { "@type": "ImageObject", url: `${SITE}/icon-512.png`, width: 512, height: 512 }, description: "ابزار آنلاین ساخت پاورپوینت فارسی و قابل‌ویرایش با هوش مصنوعی", email: "info@pptsaz.ir",
+      contactPoint: { "@type": "ContactPoint", email: "info@pptsaz.ir", url: "https://t.me/pptsaz_bot", contactType: "customer support", areaServed: "IR", availableLanguage: "fa" }, sameAs: ["https://t.me/pptsaz_bot"],
     },
-    { "@type": "WebSite", "@id": `${SITE}/#website`, name: BRAND, alternateName: "pptsaz.ir", url: `${SITE}/`, inLanguage: "fa-IR", publisher: { "@id": `${SITE}/#org` } },
+    { "@type": "WebSite", "@id": `${SITE}/#website`, name: BRAND, alternateName: ["پاورپوینت ساز فارسی", "پاورپوینت ساز", "pptsaz.ir"], url: `${SITE}/`, inLanguage: "fa-IR", publisher: { "@id": `${SITE}/#org` } },
   ];
 }
 
@@ -161,6 +161,7 @@ export function renderFooter(): string {
       <div>
         <a class="brand" href="/"><i>📊</i><span>${BRAND}</span></a>
         <p style="margin-top:10px;color:var(--muted)">از یک موضوع ساده تا ارائه‌ای کامل و آماده‌ی نمایش؛ فارسی، راست‌به‌چپ و قابل‌ویرایش.</p>
+        <p style="margin-top:8px;color:var(--muted)">تماس: <a href="https://t.me/pptsaz_bot" rel="noopener" target="_blank">@pptsaz_bot</a> · <a href="mailto:info@pptsaz.ir">info@pptsaz.ir</a></p>
       </div>
       <div><h4>برای چه کسانی؟</h4><ul>${audiences}</ul></div>
       <div><h4>پیوندهای سایت</h4><ul><li><a href="/#features">ویژگی‌ها</a></li><li><a href="/#how">نحوه‌ی کار</a></li><li><a href="/#usecases">مخاطبان</a></li><li><a href="/#pricing">تعرفه</a></li><li><a href="/#faq">پرسش‌های متداول</a></li><li><a href="/blog">وبلاگ</a></li><li><a href="/#contact">تماس با ما</a></li></ul></div>
