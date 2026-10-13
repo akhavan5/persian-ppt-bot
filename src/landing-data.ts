@@ -117,7 +117,7 @@ const BASE_PAGES: Page[] = [
       { q: "فایل روی رایانه‌ی کلاس درست باز می‌شود؟", a: "فایل PPTX استاندارد است و در PowerPoint، LibreOffice و Google Slides باز می‌شود. فونت Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد؛ Tahoma و Arial همه‌جا کار می‌کنند." },
       { q: "برای ارائه‌ی ۱۰ دقیقه‌ای چند اسلاید لازم است؟", a: "به‌طور معمول حدود ۸ تا ۱۰ اسلاید، با حساب یک تا دو دقیقه برای هر اسلاید. زمان دقیق را با استاد هماهنگ کن." },
     ],
-    related: ["thesis-defense", "text-to-pptx", "word-to-pptx", "pdf-to-pptx", "medical-presentation", "engineering-presentation", "law-presentation", "management-presentation", "konkur-presentation"],
+    related: ["thesis-defense", "text-to-pptx", "word-to-pptx", "pdf-to-pptx", "medical-presentation", "engineering-presentation", "law-presentation", "management-presentation", "konkur-presentation", "ready-made-powerpoint"],
   },
 
   // ───────────────────────── دفاع پایان‌نامه ─────────────────────────
@@ -382,7 +382,7 @@ const BASE_PAGES: Page[] = [
   {
     slug: "free",
     nav: "ساخت رایگان",
-    title: "پاورپوینت ساز رایگان و آنلاین | ساخت پاورپوینت با هوش مصنوعی بدون نصب",
+    title: "پاورپوینت ساز رایگان و آنلاین | ساخت پاورپوینت با هوش مصنوعی بدون نصب ۱۴۰۵",
     desc: "پاورپوینت ساز رایگان و آنلاین با هوش مصنوعی: ۲ ارائه‌ی رایگان هدیه‌ی ثبت‌نام، بدون نصب برنامه و با خروجی PPTX فارسی و راست‌به‌چپ. محدودیت‌ها را شفاف ببین.",
     h1: ["", "پاورپوینت ساز رایگان", " و آنلاین؛ ساخت پاورپوینت با هوش مصنوعی"],
     lead: "بدون نصب برنامه و بدون پرداخت، با ۲ ارائه‌ی رایگانِ ثبت‌نام پاورپوینت فارسی بساز؛ مدل‌های رایگان هوش مصنوعی برای همه در دسترس‌اند.",
@@ -513,14 +513,14 @@ const BASE_PAGES: Page[] = [
       { q: "خروجی PDF هم دارد؟", a: "بله. علاوه بر فایل PPTX، پیش‌نمایش در مرورگر و خروجی PDF هم در دسترس است و برای دیدن آن‌ها لازم نیست فونت فارسی نصب کنی." },
       { q: "چرا فارسی در بعضی ابزارها به‌هم می‌ریزد؟", a: "بسیاری از ابزارها برای متن چپ‌به‌راست طراحی شده‌اند و راست‌به‌چپ، ارقام یا فونت فارسی در آن‌ها جابه‌جا می‌شود. راهنمای آزمون ده‌دقیقه‌ای را در [انتخاب بهترین سایت ساخت پاورپوینت](/blog/best-ai-powerpoint-makers-persian) ببین." },
     ],
-    related: ["student", "teacher", "compare", "telegram-bot", "ai-powerpoint-maker", "online-powerpoint-maker", "thesis-defense", "ppt-saz", "iranian-powerpoint-maker"],
+    related: ["student", "teacher", "compare", "telegram-bot", "ai-powerpoint-maker", "online-powerpoint-maker", "thesis-defense", "ppt-saz", "iranian-powerpoint-maker", "ready-made-powerpoint"],
   },
 
   // ───────────────────────── مقایسه‌ی ابزارها ─────────────────────────
   {
     slug: "compare",
     nav: "مقایسه ابزارها",
-    title: "مقایسه‌ی سایت‌های ساخت پاورپوینت با هوش مصنوعی؛ Gamma، Canva و pptساز",
+    title: "مقایسه‌ی سایت‌های ساخت پاورپوینت با هوش مصنوعی ۱۴۰۵؛ Gamma، Canva و pptساز",
     desc: "بهترین سایت ساخت پاورپوینت با هوش مصنوعی برای فارسی کدام است؟ چهار دسته ابزار، پنج معیار انتخاب و جدول مقایسه‌ی Gamma، Canva، ChatGPT و pptساز.",
     h1: ["مقایسه‌ی ", "سایت‌های ساخت پاورپوینت", " با هوش مصنوعی"],
     lead: "همه‌ی ابزارها یک چیز را قول می‌دهند: ارائه در چند دقیقه. تفاوت در فارسی بودن خروجی، قابل‌ویرایش بودن فایل، سقف رایگان و روش پرداخت است. این صفحه کمکت می‌کند ابزار مناسب خودت را انتخاب کنی.",

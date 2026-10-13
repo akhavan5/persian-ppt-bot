@@ -60,7 +60,8 @@ export function landingSitemapEntries(site: string): string {
 
 export const LANDING_PATHS = PAGES.map((p) => `/${p.slug}`);
 
-export const CSS = `@font-face{font-family:Vazirmatn;font-style:normal;font-weight:100 900;font-display:swap;src:url(https://fonts.gstatic.com/s/vazirmatn/v16/Dxxo8j6PP2D_kU2muijlGMWWMmk.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+export const CSS = `@font-face{font-family:Vazirmatn;font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/Vazirmatn-Regular.woff2) format("woff2"),url(https://fonts.gstatic.com/s/vazirmatn/v16/Dxxo8j6PP2D_kU2muijlGMWWMmk.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+@font-face{font-family:Vazirmatn;font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/Vazirmatn-Bold.woff2) format("woff2"),url(https://fonts.gstatic.com/s/vazirmatn/v16/Dxxo8j6PP2D_kU2muijlGMWWMmk.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
 :root{--bg:#f8faff;--card:#fff;--text:#0f1b33;--muted:#5b6b86;--line:#e3e9f5;--primary:#2563eb;--primary-2:#06b6d4;--soft:#eef4ff;--radius:16px;--shadow:0 1px 2px rgba(15,27,51,.05),0 10px 30px rgba(37,99,235,.08)}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:70px}
@@ -175,26 +176,26 @@ export function renderFooter(): string {
 
 // مقاله‌های وبلاگ مرتبط با هر صفحه (برای لینک‌دهی داخلی)
 const ARTICLES_FOR: Record<string, string[]> = {
-  student: ["how-many-slides", "class-presentation-tips", "ai-powerpoint-prompt-persian", "ai-presentation-sample-slides", "time-management-presentation-sample"],
+  student: ["how-many-slides", "class-presentation-tips", "ai-powerpoint-prompt-persian", "ai-presentation-sample-slides", "time-management-presentation-sample", "make-powerpoint-from-scratch"],
   "thesis-defense": ["thesis-defense-slides-guide", "thesis-defense-powerpoint-how-to", "defense-judges-common-questions", "how-to-defend-your-presentation", "how-many-slides"],
   teacher: ["persian-powerpoint-design", "how-many-slides", "presentation-topic-ideas", "class-presentation-tips"],
   business: ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides", "entrepreneurship-presentation-sample"],
-  free: ["ai-powerpoint-step-by-step", "free-powerpoint-templates-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
+  free: ["ai-powerpoint-step-by-step", "free-powerpoint-templates-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian", "powerpoint-ai-without-credit-card-persian"],
   "ppt-saz": ["best-way-persian-powerpoint", "best-persian-font-powerpoint", "ai-powerpoint-step-by-step", "pptsaz-honest-comparison"],
-  compare: ["foreign-ai-presentation-tools-persian-test", "pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
+  compare: ["foreign-ai-presentation-tools-persian-test", "pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian", "gemini-copilot-powerpoint-persian"],
   "text-to-pptx": ["ai-powerpoint-prompt-persian", "best-way-persian-powerpoint", "ai-powerpoint-charts"],
   "word-to-pptx": ["best-way-persian-powerpoint", "fix-persian-powerpoint-broken", "persian-rtl-slides"],
   "pdf-to-pptx": ["best-way-persian-powerpoint", "thesis-defense-slides-guide", "ai-powerpoint-prompt-persian"],
   "telegram-bot": ["ai-powerpoint-mobile-telegram", "ai-powerpoint-faq-persian", "ai-powerpoint-step-by-step"],
-  "ai-powerpoint-maker": ["ai-powerpoint-prompt-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-step-by-step"],
-  "online-powerpoint-maker": ["ai-powerpoint-step-by-step", "ai-powerpoint-mobile-telegram", "best-way-persian-powerpoint"],
+  "ai-powerpoint-maker": ["ai-powerpoint-prompt-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-step-by-step", "gemini-copilot-powerpoint-persian"],
+  "online-powerpoint-maker": ["ai-powerpoint-step-by-step", "ai-powerpoint-mobile-telegram", "best-way-persian-powerpoint", "make-powerpoint-from-scratch"],
   "canva-alternative": ["foreign-ai-presentation-tools-persian-test", "pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "persian-powerpoint-design", "ai-powerpoint-faq-persian"],
-  "gamma-alternative": ["foreign-ai-presentation-tools-persian-test", "pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian"],
+  "gamma-alternative": ["foreign-ai-presentation-tools-persian-test", "pptsaz-honest-comparison", "best-ai-powerpoint-makers-persian", "chatgpt-powerpoint-persian", "ai-powerpoint-faq-persian", "gemini-copilot-powerpoint-persian"],
   "slide-maker": ["ai-powerpoint-step-by-step", "persian-powerpoint-design", "how-many-slides"],
   "pitch-deck": ["ai-powerpoint-charts", "persian-powerpoint-design", "how-many-slides", "entrepreneurship-presentation-sample"],
   "proposal-presentation": ["thesis-defense-slides-guide", "defense-judges-common-questions", "how-many-slides", "class-presentation-tips"],
   "article-presentation": ["ai-powerpoint-prompt-persian", "best-way-persian-powerpoint", "how-many-slides"],
-  "school-presentation": ["class-presentation-tips", "presentation-topic-ideas", "how-many-slides", "time-management-presentation-sample"],
+  "school-presentation": ["class-presentation-tips", "presentation-topic-ideas", "how-many-slides", "time-management-presentation-sample", "make-powerpoint-from-scratch"],
   "ppt-with-images": ["persian-powerpoint-design", "ai-powerpoint-step-by-step", "free-powerpoint-templates-persian"],
   "speaker-notes": ["class-presentation-tips", "how-to-defend-your-presentation", "how-many-slides", "ai-powerpoint-prompt-persian"],
   "medical-presentation": ["mental-health-presentation-sample", "thesis-defense-slides-guide", "how-many-slides", "persian-rtl-slides"],
@@ -202,9 +203,10 @@ const ARTICLES_FOR: Record<string, string[]> = {
   "law-presentation": ["defense-judges-common-questions", "how-to-defend-your-presentation", "thesis-defense-slides-guide", "how-many-slides"],
   "management-presentation": ["entrepreneurship-presentation-sample", "ai-powerpoint-charts", "how-many-slides", "persian-powerpoint-design"],
   "clergy-presentation": ["class-presentation-tips", "persian-powerpoint-design", "best-persian-font-powerpoint", "how-many-slides"],
-  "iranian-powerpoint-maker": ["foreign-ai-presentation-tools-persian-test", "best-ai-powerpoint-makers-persian", "pptsaz-honest-comparison", "ai-powerpoint-faq-persian"],
+  "iranian-powerpoint-maker": ["foreign-ai-presentation-tools-persian-test", "best-ai-powerpoint-makers-persian", "pptsaz-honest-comparison", "ai-powerpoint-faq-persian", "powerpoint-ai-without-credit-card-persian", "gemini-copilot-powerpoint-persian"],
   "persian-powerpoint-templates": ["free-powerpoint-templates-persian", "best-persian-font-powerpoint", "persian-powerpoint-design", "persian-rtl-slides"],
   "konkur-presentation": ["time-management-presentation-sample", "class-presentation-tips", "how-many-slides", "presentation-topic-ideas"],
+  "ready-made-powerpoint": ["free-powerpoint-templates-persian", "presentation-topic-ideas", "class-presentation-tips", "persian-powerpoint-design", "make-powerpoint-from-scratch"],
 };
 
 /** مقاله → صفحه‌های فرودی که به آن لینک می‌دهند؛ برای لینک برگشتی از مقاله به صفحه‌های ابزار (لینک‌دهی داخلی دوطرفه). */
@@ -281,8 +283,8 @@ export function renderLanding(p: Page, SITE: string): string {
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" href="https://fonts.gstatic.com/s/vazirmatn/v16/Dxxo8j6PP2D_kU2muijlGMWWMmk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <script type="application/ld+json">${jsonLd(ld)}</script>
 <style>${CSS}</style>
 </head>

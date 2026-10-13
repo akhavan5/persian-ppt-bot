@@ -40,6 +40,7 @@
 - [پاورپوینت مدیریت و MBA](https://pptsaz.ir/management-presentation): مطالعه‌ی موردی، SWOT، PESTEL و گزارش مدیریتی
 - [پاورپوینت برای روحانیون و مبلغان](https://pptsaz.ir/clergy-presentation): سخنرانی، درس اخلاق و جلسه‌ی قرآن؛ بررسی آیات و روایات
 - [پاورپوینت دانش‌آموزان کنکوری](https://pptsaz.ir/konkur-presentation): جمع‌بندی فصل و برنامه‌ی مطالعه
+- [پاورپوینت آماده یا ساخت اختصاصی](https://pptsaz.ir/ready-made-powerpoint): فرق فایل آماده‌ی دانلودی با پیش‌نویس اختصاصی، چک‌لیست استفاده؛ pptساز فایل آماده‌ی دانلودی ندارد
 
 ## وبلاگ
 - [وبلاگ](https://pptsaz.ir/blog): راهنماهای ساخت و ارائه‌ی پاورپوینت فارسی
@@ -50,7 +51,7 @@
 - [ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-topic-tips): نوشتن موضوع و بررسی خروجی
 - [ارائه‌ی کلاسی بدون استرس](https://pptsaz.ir/blog/class-presentation-tips): تمرین، اجرا و پرسش و پاسخ
 - [انتخاب بهترین سایت ساخت پاورپوینت](https://pptsaz.ir/blog/best-ai-powerpoint-makers-persian): دسته‌ها، معیارها و آزمون ده‌دقیقه‌ای فارسی
-- [ساخت پاورپوینت با ChatGPT](https://pptsaz.ir/blog/chatgpt-powerpoint-persian): پرامپت آماده و محدودیت‌های فارسی
+- [ساخت پاورپوینت با ChatGPT (چت‌جی‌پی‌تی)](https://pptsaz.ir/blog/chatgpt-powerpoint-persian): پرامپت آماده و محدودیت‌های فارسی
 - [پرسش‌های رایج ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-faq-persian): فارسی، رایگان، گوشی و ChatGPT
 - [ساخت پاورپوینت با گوشی و تلگرام](https://pptsaz.ir/blog/ai-powerpoint-mobile-telegram): راهنمای قدم‌به‌قدم
 - [راهنمای گام‌به‌گام ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-step-by-step): هفت قدم از نوشتن موضوع تا فایل آماده
@@ -70,6 +71,9 @@
 - [سؤال‌های متداول داوران](https://pptsaz.ir/blog/defense-judges-common-questions): مقصود هر پرسش و روش آماده‌شدن
 - [ابزارهای هوش مصنوعی ساخت پاورپوینت ۱۴۰۵](https://pptsaz.ir/blog/foreign-ai-presentation-tools-persian-test): Gamma، PopAi، Beautiful.ai، SlideSpeak و دیگران؛ آزمون ده‌دقیقه‌ای فارسی
 - [مقایسه‌ی صادقانه‌ی pptساز با رقبا](https://pptsaz.ir/blog/pptsaz-honest-comparison): Gamma، Canva، ChatGPT، PowerPoint؛ نقاط قوت و ضعف
+- [درست کردن پاورپوینت از صفر](https://pptsaz.ir/blog/make-powerpoint-from-scratch): آموزش هشت‌قدمی برای مبتدی‌ها؛ از فهرست اسلایدها تا خروجی
+- [ساخت پاورپوینت با Gemini و Copilot](https://pptsaz.ir/blog/gemini-copilot-powerpoint-persian): شرط دسترسی، زبان خروجی و آزمون ده‌دقیقه‌ای فارسی
+- [پاورپوینت با هوش مصنوعی بدون کارت بین‌المللی و فیلترشکن](https://pptsaz.ir/blog/powerpoint-ai-without-credit-card-persian): چک‌لیست دسترسی، پرداخت و حریم خصوصی
 
 ## نکات
 - زبان: فارسی؛ خروجی: PPTX سازگار با PowerPoint، LibreOffice و Google Slides
