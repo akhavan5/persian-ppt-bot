@@ -62,6 +62,10 @@ async function rows(env: Env, sql: string, ...binds: unknown[]): Promise<{ k: st
   const d = await db(env);
   return (await d.prepare(sql).bind(...binds).all<{ k: string; v: string }>()).results ?? [];
 }
+/** «کاربران وب»: پروفایلی که خود کاربر از وب ساخته (ایمیل، موبایل یا گوگل دارد)، چه تلگرام وصل کرده باشد چه نه.
+ *  پروفایل‌های خودکارِ ربات (بدون ایمیل/موبایل/گوگل) شمرده نمی‌شوند. */
+const WEB_ONLY =
+  "(COALESCE(json_extract(v,'$.email'),'') != '' OR COALESCE(json_extract(v,'$.mobile'),'') != '' OR json_extract(v,'$.google') IS NOT NULL)";
 const likeArg = (s: string) => "%" + s.replace(/[\\%_]/g, "\\$&") + "%";
 
 // ---------- گزارش اقدامات مدیر ----------
@@ -99,7 +103,7 @@ async function homeScreen(env: Env): Promise<Screen> {
   const day = new Date().toISOString().slice(0, 10);
   const [tgUsers, webOnly, subs, banned, st] = await Promise.all([
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "seen:", "seen:" + MAXC),
-    count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND NOT EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || substr(kv.k, 4))", "wu:", "wu:" + MAXC),
+    count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY}`, "wu:", "wu:" + MAXC),
     activeSubCount(env),
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "ban:", "ban:" + MAXC),
     statsByDay(env),
@@ -108,7 +112,7 @@ async function homeScreen(env: Env): Promise<Screen> {
   return {
     text:
       "🛠 <b>پنل مدیریت</b>\n\n" +
-      `👥 کاربران تلگرام: <b>${fa(tgUsers)}</b> · 🌐 فقط وب: <b>${fa(webOnly)}</b>\n` +
+      `👥 کاربران تلگرام: <b>${fa(tgUsers)}</b> · 🌐 وب: <b>${fa(webOnly)}</b>\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
       `📅 امروز: ▶️ ${fa(t.started ?? 0)} · ✅ ${fa(t.ok ?? 0)} · ❌ ${fa(t.fail ?? 0)} · 🆕 ${fa(t.newusers ?? 0)}\n\n` +
       "<i>یک بخش را انتخاب کن. برای مدیریت یک کاربر، شناسه یا نامش را در «جستجو» بنویس.</i>",
@@ -191,7 +195,7 @@ const pager = (base: string, page: number, more: boolean): Btn[] => {
 };
 
 async function usersScreen(env: Env, kind: "t" | "w", page: number): Promise<Screen> {
-  const tabs: Btn[] = [cb(kind === "t" ? "• کاربران تلگرام" : "کاربران تلگرام", "ad:us:t:0"), cb(kind === "w" ? "• فقط وب" : "فقط وب", "ad:us:w:0")];
+  const tabs: Btn[] = [cb(kind === "t" ? "• کاربران تلگرام" : "کاربران تلگرام", "ad:us:t:0"), cb(kind === "w" ? "• کاربران وب" : "کاربران وب", "ad:us:w:0")];
   const items: { id: Uid; label: string; line: string }[] = [];
   let total = 0;
   if (kind === "t") {
@@ -203,17 +207,20 @@ async function usersScreen(env: Env, kind: "t" | "w", page: number): Promise<Scr
       items.push({ id, label: v.n || (v.u ? "@" + v.u : String(id)), line: `${userLink(id, v.n, v.u)}${v.u ? ` (@${esc(v.u)})` : ""}\n    🆔 <code>${id}</code> · 🕒 ${fmtTime(v.t)}` });
     }
   } else {
-    total = await count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND NOT EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || substr(kv.k, 4))", "wu:", "wu:" + MAXC);
+    total = await count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY}`, "wu:", "wu:" + MAXC);
     const rs = await rows(env,
-      "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND NOT EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || substr(kv.k, 4)) ORDER BY json_extract(v,'$.created') DESC LIMIT ?3 OFFSET ?4",
+      `SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY} ORDER BY json_extract(v,'$.created') DESC LIMIT ?3 OFFSET ?4`,
       "wu:", "wu:" + MAXC, PAGE, page * PAGE);
     for (const r of rs) {
-      const id = r.k.slice(3); const v = json<{ name?: string; email?: string; mobile?: string; created?: number }>(r.v);
-      if (!WEB_ID.test(id) || !v) continue;
-      items.push({ id, label: v.name || v.email || v.mobile || id, line: `<b>${esc(v.name || "—")}</b> 🌐\n    ${v.email ? esc(v.email) : v.mobile ? esc(v.mobile) : "—"} · 🕒 ${v.created ? fmtTime(v.created) : "—"}` });
+      const wid = r.k.slice(3); const v = json<{ name?: string; email?: string; mobile?: string; created?: number }>(r.v);
+      if (!WEB_ID.test(wid) || !v) continue;
+      const t = Number(await env.KV.get(`w2tg:${wid}`).catch(() => null));
+      const linked = Number.isSafeInteger(t) && t > 0;
+      const id: Uid = linked ? t : wid; // وصل‌شده به تلگرام: کارت با شناسه‌ی تلگرام باز می‌شود
+      items.push({ id, label: (linked ? "🔗 " : "") + (v.name || v.email || v.mobile || wid), line: `<b>${esc(v.name || "—")}</b> ${linked ? "🔗" : "🌐"}\n    ${v.email ? esc(v.email) : v.mobile ? esc(v.mobile) : "—"} · 🕒 ${v.created ? fmtTime(v.created) : "—"}` });
     }
   }
-  const head = kind === "t" ? "👥 <b>کاربران تلگرام</b> (جدیدترین اول، به وقت ایران)" : "🌐 <b>کاربران فقط‌وب</b> (بدون تلگرام وصل‌شده)";
+  const head = kind === "t" ? "👥 <b>کاربران تلگرام</b> (جدیدترین اول، به وقت ایران)" : "🌐 <b>کاربران وب</b> (ثبت‌نام‌شده از سایت؛ 🔗 = تلگرام هم وصل کرده)";
   return {
     text: `${head}\nکل: ${fa(total)}\n\n` + (items.length ? items.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.line}`).join("\n") : "موردی نیست.") + "\n\n<i>برای مدیریت، روی نام کاربر بزن.</i>",
     kb: [
