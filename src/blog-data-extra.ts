@@ -439,7 +439,7 @@ export const EXTRA_POSTS: Post[] = [
     nav: "مشکل به‌هم‌ریختگی فارسی در PowerPoint",
     title: "مشکل به‌هم‌ریختگی فارسی در PowerPoint؛ علت‌ها و راه‌حل‌ها",
     h1: "مشکل به‌هم‌ریختگی فارسی در PowerPoint؛ علت‌ها و راه‌حل‌ها",
-    desc: "چرا متن فارسی در PowerPoint به‌هم می‌ریزد؟ علت‌های رایج مثل نبود فونت، جهت پاراگراف، نقطه‌های جابه‌جا و بازکردن در Google Slides یا LibreOffice و راه‌حل هر کدام.",
+    desc: "چرا متن فارسی در PowerPoint به‌هم می‌ریزد؟ نبود فونت، جهت پاراگراف، نقطه‌های جابه‌جا و بازکردن در Google Slides یا LibreOffice؛ علت و راه‌حل هر کدام.",
     category: "رفع مشکل",
     date: D,
     updated: D,

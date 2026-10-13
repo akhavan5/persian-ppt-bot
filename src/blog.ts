@@ -1,7 +1,7 @@
 // رندر وبلاگ: فهرست /blog و مقاله‌ها /blog/<slug>. داده‌ها در blog-data.ts هستند.
-import { PAGES, PAGE_BY_SLUG } from "./landing-data";
+import { PAGES, PAGE_BY_SLUG, type Page } from "./landing-data";
 import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
-import { BRAND, CSS, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
+import { BRAND, CSS, LANDINGS_FOR_POST, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
 const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، نوشتن موضوع برای هوش مصنوعی و مقایسه‌ی صادقانه‌ی ابزارها.";
@@ -155,7 +155,8 @@ function adjacent(p: Post): string {
 
 export function renderPost(p: Post, site: string): string {
   const url = `${site}/blog/${p.slug}`;
-  const landing = PAGE_BY_SLUG.get(p.landing);
+  // صفحه‌ی اصلی مقاله + صفحه‌هایی که خودشان این مقاله را پیشنهاد می‌دهند (حداکثر ۴ لینک)
+  const tools = [...new Set([p.landing, ...(LANDINGS_FOR_POST.get(p.slug) ?? [])])].map((x) => PAGE_BY_SLUG.get(x)).filter((x): x is Page => !!x).slice(0, 4);
   const related = p.related.map((s) => POST_BY_SLUG.get(s)).filter((x): x is Post => !!x);
   const ld = {
     "@context": "https://schema.org",
@@ -195,7 +196,7 @@ ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a
     </section>
 ${adjacent(p)}    <section>
       <h2>مقاله‌های مرتبط</h2>
-      <div class="rel">${related.map((r) => `<a href="/blog/${r.slug}">${esc(r.nav)}<span>${esc(r.category)}</span></a>`).join("")}${landing ? `<a href="/${landing.slug}">${esc(landing.nav)}<span>ابزار ساخت</span></a>` : ""}</div>
+      <div class="rel">${related.map((r) => `<a href="/blog/${r.slug}">${esc(r.nav)}<span>${esc(r.category)}</span></a>`).join("")}${tools.map((x) => `<a href="/${x.slug}">${esc(x.nav)}<span>ابزار ساخت</span></a>`).join("")}</div>
     </section>
     <section class="final">
       <h2>آماده‌ای پیش‌نویس بگیری؟</h2>

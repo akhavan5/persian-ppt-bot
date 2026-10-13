@@ -51,7 +51,9 @@
 - [ساخت پاورپوینت با ChatGPT](https://pptsaz.ir/blog/chatgpt-powerpoint-persian): پرامپت آماده و محدودیت‌های فارسی
 - [پرسش‌های رایج ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-faq-persian): فارسی، رایگان، گوشی و ChatGPT
 - [ساخت پاورپوینت با گوشی و تلگرام](https://pptsaz.ir/blog/ai-powerpoint-mobile-telegram): راهنمای قدم‌به‌قدم
-
+- [راهنمای گام‌به‌گام ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-step-by-step): هفت قدم از نوشتن موضوع تا فایل آماده
+- [ساخت پاورپوینت دفاع پایان‌نامه در ۷ مرحله](https://pptsaz.ir/blog/thesis-defense-powerpoint-how-to): از فصل‌ها تا روز دفاع
+- [قالب پاورپوینت رایگان و فارسی‌سازی آن](https://pptsaz.ir/blog/free-powerpoint-templates-persian): منبع‌ها، چک‌لیست انتخاب و فارسی‌سازی قدم‌به‌قدم
 - [بهترین روش ساخت پاورپوینت فارسی](https://pptsaz.ir/blog/best-way-persian-powerpoint): راهنمای جامع شش‌مرحله‌ای
 - [نوشتن پرامپت برای پاورپوینت](https://pptsaz.ir/blog/ai-powerpoint-prompt-persian): فرمول و نمونه‌پرامپت‌های آماده
 - [نمودار در پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-charts): نوع نمودار، داده و ارقام فارسی

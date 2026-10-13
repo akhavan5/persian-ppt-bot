@@ -204,6 +204,13 @@ const ARTICLES_FOR: Record<string, string[]> = {
   "konkur-presentation": ["time-management-presentation-sample", "class-presentation-tips", "how-many-slides", "presentation-topic-ideas"],
 };
 
+/** مقاله → صفحه‌های فرودی که به آن لینک می‌دهند؛ برای لینک برگشتی از مقاله به صفحه‌های ابزار (لینک‌دهی داخلی دوطرفه). */
+export const LANDINGS_FOR_POST: Map<string, string[]> = (() => {
+  const m = new Map<string, string[]>();
+  for (const [page, slugs] of Object.entries(ARTICLES_FOR)) for (const s of slugs) m.set(s, [...(m.get(s) ?? []), page]);
+  return m;
+})();
+
 export function renderLanding(p: Page, SITE: string): string {
   const url = `${SITE}/${p.slug}`;
   const h1Text = p.h1.join("");
