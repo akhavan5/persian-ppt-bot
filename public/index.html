@@ -65,6 +65,14 @@ header .row{flex-wrap:nowrap;flex-shrink:0}
 header .chip{white-space:nowrap}
 header #userName{max-width:140px;overflow:hidden;text-overflow:ellipsis;display:inline-block}
 @media(max-width:1180px){nav.links{display:none}}
+/* منوی موبایل/تبلت (زیر ۱۱۸۰px) */
+.menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line);background:#fff;border-radius:11px;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--text);flex-shrink:0}
+@media(max-width:1180px){
+  .menu-btn{display:inline-flex}
+  nav.links.open{display:flex;flex-direction:column;gap:0;position:absolute;top:100%;inset-inline:0;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 14px 28px rgba(15,23,42,.12);padding:6px 18px 12px}
+  nav.links.open a{padding:12px 4px;font-size:1rem;border-bottom:1px solid var(--line)}
+  nav.links.open a:last-child{border-bottom:0}
+}
 /* گوشی: هدر فشرده؛ نام برند کوچک‌تر و نوار کاربر (ارتقا / اعتبار / نام) در یک ردیف کنار برند یا زیر آن */
 @media(max-width:560px){
   header .in{flex-wrap:wrap;min-height:0;padding-top:8px;padding-bottom:8px;row-gap:8px;column-gap:8px}
@@ -78,7 +86,7 @@ header #userName{max-width:140px;overflow:hidden;text-overflow:ellipsis;display:
 }
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-bottom:18px}
-h1{font-size:clamp(1.6rem,4.2vw,2.5rem);margin:0 0 12px;line-height:1.5;font-weight:800}
+h1{font-size:clamp(1.6rem,4.2vw,2.5rem);margin:0 0 12px;line-height:1.5;font-weight:800;text-wrap:balance}
 h1 em{font-style:normal;background:linear-gradient(135deg,var(--primary),var(--primary-2));-webkit-background-clip:text;background-clip:text;color:transparent;padding:.25em .1em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 h2{font-size:1.4rem;margin:0 0 6px;font-weight:800} h3{font-size:1.02rem;margin:0 0 6px}
 .muted{color:var(--muted);font-size:.92rem}
@@ -123,6 +131,9 @@ textarea{min-height:110px;resize:vertical}
 .upchip button{border:0;background:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;line-height:1;color:var(--muted)}
 .upchip button:hover{color:var(--danger)}
 .trust{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:.88rem;margin:10px 0 30px}
+@media(max-width:560px){.trust{display:grid;grid-template-columns:1fr 1fr;gap:10px 8px;justify-items:start;padding:0 6px}.trust span{white-space:nowrap}}
+#upHint{text-wrap:pretty}
+#go{padding:14px 34px;font-size:1.05rem;min-width:140px}
 .bar{height:6px;border-radius:99px;background:var(--soft);overflow:hidden;margin:14px 0 4px}
 .bar::after{content:"";display:block;height:100%;width:35%;border-radius:99px;background:linear-gradient(90deg,var(--primary),var(--primary-2));animation:slide 1.4s ease-in-out infinite}
 @keyframes slide{0%{margin-inline-start:-35%}100%{margin-inline-start:100%}}
@@ -243,8 +254,9 @@ address{font-style:normal}
 <body>
 <header class="top">
   <div class="wrap in">
+    <button class="menu-btn" id="menuBtn" type="button" aria-label="منو" aria-expanded="false" aria-controls="mainNav">☰</button>
     <a class="brand" href="/" aria-label="پاورپوینت‌ساز فارسی"><i>📊</i><span>پاورپوینت‌ساز فارسی</span></a>
-    <nav class="links" aria-label="منوی اصلی"><a href="#features">ویژگی‌ها</a><a href="#how">نحوه‌ی کار</a><a href="#usecases">مخاطبان</a><a href="#pricing">تعرفه</a><a href="#faq">پرسش‌ها</a><a href="/blog">وبلاگ</a><a href="#about">درباره‌ی ما</a><a href="#contact">تماس با ما</a></nav>
+    <nav class="links" id="mainNav" aria-label="منوی اصلی"><a href="#features">ویژگی‌ها</a><a href="#how">نحوه‌ی کار</a><a href="#usecases">مخاطبان</a><a href="#pricing">تعرفه</a><a href="#faq">پرسش‌ها</a><a href="/blog">وبلاگ</a><a href="#about">درباره‌ی ما</a><a href="#contact">تماس با ما</a></nav>
     <div class="row" id="guestBar" hidden>
       <button class="btn sm" id="openLogin" type="button">ورود / ثبت‌نام</button>
     </div>
@@ -1268,5 +1280,13 @@ boot();
   } catch (e) { /* بی‌اثر */ }
 })();
 </script>
-</body>
+<script>
+(function(){var b=document.getElementById("menuBtn"),n=document.getElementById("mainNav");if(!b||!n)return;
+function set(o){n.classList.toggle("open",o);b.setAttribute("aria-expanded",o);b.textContent=o?"✕":"☰"}
+b.addEventListener("click",function(){set(!n.classList.contains("open"))});
+n.addEventListener("click",function(e){if(e.target.closest("a"))set(false)});
+document.addEventListener("keydown",function(e){if(e.key==="Escape")set(false)});
+matchMedia("(min-width:1181px)").addEventListener("change",function(m){if(m.matches)set(false)});
+})();
+</script></body>
 </html>
