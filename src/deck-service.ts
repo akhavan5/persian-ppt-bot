@@ -136,9 +136,12 @@ export interface Delivery { chatId: number; statusMessageId: number; channel: "w
 
 /** ساخت نمونه‌ی Workflow. شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow. در صورت شکست، اعتبار برمی‌گردد و false برمی‌گرداند. */
 export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid: string | number, jobId: string, d: Delivery): Promise<boolean> {
+  // متن اصلی کاربر برای گزارش مدیر (مثل تلگرام برای وب هم ثبت می‌شود). اگر فایل گذاشته، با 📎 مشخص می‌شود (و اگر متنی نداده، نام/موضوع فایل)
+  const typed = (d.orig ?? (d.channel === "web" ? b.topic : "")).replace(/\s+/g, " ").trim();
+  const orig = (b.source ? `📎 ${typed || b.topic}` : typed).slice(0, 300);
   const params: DeckParams = {
     chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId,
-    topic: b.topic, ...(d.orig ? { orig: d.orig } : {}), ...(b.source ? { source: b.source } : {}), settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
+    topic: b.topic, ...(orig ? { orig } : {}), ...(b.source ? { source: b.source } : {}), settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
   };
   try {
     if (d.channel === "web") await env.KV.put(`job:${jobId}`, "⏳ در صف…", { expirationTtl: 3600 });
