@@ -11,6 +11,7 @@ import { hasKey, modelList } from "./llm";
 import { PLANS, activatePlan, payEnabled } from "./payment";
 import { runningJob } from "./deck-service";
 import { toEn, toFa } from "./util";
+import { AUDIENCES, isAudience, listAudience, type Audience } from "./broadcast";
 
 /** دستورهای متنی مدیر: فقط ورود به پنل و لغو ورودی در انتظار؛ بقیه‌ی کارها با دکمه‌های پنل انجام می‌شود */
 export const ADMIN_CMDS = new Set(["/admin", "/panel", "/cancel"]);
@@ -463,14 +464,24 @@ async function applyPlan(env: Env, adminId: number, id: Uid, planId: string): Pr
   return `✅ پلن ${p.name} فعال شد${sub ? ` تا ${fmtDay(sub.exp)} با ${fa(sub.credits)} اعتبار` : ""}.`;
 }
 
+const audKey = (chatId: number) => `bca:${chatId}`;
+/** پیش‌نمایش پیام همگانی با انتخاب مخاطبان (دکمه‌ی انتخاب‌شده با • مشخص است) */
+async function broadcastView(env: Env, chatId: number, body: string): Promise<Screen> {
+  const raw = await env.KV.get(audKey(chatId));
+  const aud: Audience = isAudience(raw) ? raw : "all";
+  const n = (await listAudience(env, aud)).length;
+  const chip = (a: Audience) => cb(`${a === aud ? "• " : ""}${AUDIENCES[a]}`, `ad:ba:${a}`);
+  return {
+    text: `📣 <b>پیش‌نمایش پیام همگانی</b>\n\n${esc(body)}\n\n— — —\n🎯 مخاطبان: <b>${AUDIENCES[aud]}</b> — حدود ${fa(n)} کاربر تلگرام (مسدودها حذف می‌شوند)`,
+    kb: [[chip("all"), chip("plan")], [chip("free"), chip("nocredit")], [cb("✅ ارسال", "bc:y"), cb("❌ لغو", "bc:n")]],
+  };
+}
 async function previewBroadcast(env: Env, chatId: number, body: string) {
   if (!body) return sendMessage(env, chatId, "متن پیام خالی است؛ از /admin ← 📣 پیام همگانی دوباره شروع کن.");
   if (body.length > 3500) return sendMessage(env, chatId, "متن بیش از حد طولانی است (حداکثر ۳۵۰۰ کاراکتر).");
   await env.KV.put(`bc:${chatId}`, body, { expirationTtl: 600 });
-  const { users } = await getStats(env, 1);
-  return await sendMessage(env, chatId,
-    `📣 <b>پیش‌نمایش پیام همگانی</b>\n\n${esc(body)}\n\n— — —\nبه حدود ${fa(users)} کاربر ارسال می‌شود.`,
-    { reply_markup: { inline_keyboard: [[cb("✅ ارسال برای همه", "bc:y"), cb("❌ لغو", "bc:n")]] } });
+  await env.KV.put(audKey(chatId), "all", { expirationTtl: 600 });
+  return await sendScreen(env, chatId, await broadcastView(env, chatId, body));
 }
 
 const toMarkup = (s: Screen) => ({ reply_markup: { inline_keyboard: s.kb } });
@@ -585,6 +596,12 @@ export async function handlePanelCallback(env: Env, cq: any) {
         await answer(`🧹 ${n} ردیف منقضی پاک شد.`, true);
         return await editMessage(env, chatId, mid, (await systemScreen(env)).text, toMarkup(await systemScreen(env)));
       }
+      case "ba": {
+        const body = await env.KV.get(`bc:${chatId}`);
+        if (body === null || !isAudience(b)) return await show({ text: "⌛️ این پیش‌نویس منقضی شده است؛ دوباره از 📣 پیام همگانی شروع کن.", kb: [backHome] });
+        await env.KV.put(audKey(chatId), b, { expirationTtl: 600 });
+        return await show(await broadcastView(env, chatId, body));
+      }
       case "se": return await prompt({ k: "search" }, "🔎 <b>جستجوی کاربر</b>\nشناسه‌ی عددی، شناسه‌ی w_…، @نام‌کاربری، یا بخشی از نام/ایمیل/موبایل را بفرست.", "ad:h");
       case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.", "ad:h");
     }
@@ -640,17 +657,21 @@ export async function handleBroadcastCallback(env: Env, cq: any) {
   const text = await env.KV.get(key);
   if (act === "n") {
     await env.KV.delete(key);
+    await env.KV.delete(audKey(chatId));
     return await editMessage(env, chatId, mid, "❌ ارسال همگانی لغو شد.");
   }
   if (text === null) return await editMessage(env, chatId, mid, "⌛️ این پیش‌نویس منقضی شده است؛ دوباره از /admin ← 📣 پیام همگانی شروع کن.");
+  const rawAud = await env.KV.get(audKey(chatId));
+  const audience: Audience = isAudience(rawAud) ? rawAud : "all";
   await env.KV.delete(key); // جلوگیری از ارسال دوباره با دو بار زدن دکمه
+  await env.KV.delete(audKey(chatId));
   try {
-    await env.BROADCAST_WORKFLOW.create({ id: `bc-${Date.now()}`, params: { adminChatId: chatId, text } });
+    await env.BROADCAST_WORKFLOW.create({ id: `bc-${Date.now()}`, params: { adminChatId: chatId, text, audience } });
   } catch (e) {
     console.error("broadcast create failed", e);
     return await editMessage(env, chatId, mid, "❌ شروع ارسال ممکن نشد. دوباره امتحان کن.");
   }
-  await logAction(env, cq.from.id, `پیام همگانی (${text.length} نویسه)`);
+  await logAction(env, cq.from.id, `پیام همگانی به «${AUDIENCES[audience]}» (${text.length} نویسه)`);
   await editMessage(env, chatId, mid, "⏳ ارسال همگانی شروع شد. وقتی تمام شد، گزارش را همین‌جا می‌فرستم.");
 }
 
