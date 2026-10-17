@@ -431,7 +431,7 @@ async function preview(env: Env, user: WebUser, id: string): Promise<Response> {
     headers: {
       "content-type": "text/html; charset=utf-8",
       // اسکریپت فقط با nonce؛ فونت و استایل فقط از Google Fonts؛ تصویر فقط از همین سایت
-      "content-security-policy": `default-src 'none'; img-src 'self'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      "content-security-policy": `default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       ...SEC_HEADERS,
     },
   });

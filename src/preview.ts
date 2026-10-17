@@ -9,6 +9,7 @@ import type { Chart, Deck, Slide } from "./types";
 import { FONT_URL, FONT_URL_ALT, THEMES, iconOf, isBFont, type Theme } from "./themes";
 import { toFa } from "./util";
 import { fitSize } from "./pptx";
+import { BISMILLAH_IMG } from "./bismillah-img";
 import { BISMILLAH, RAIL, academicPalette, badgeColor, pillRow, railDots } from "./template";
 
 const W = 13.333, M = 0.8;
@@ -94,11 +95,11 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
         text(pos.x + 0.3, 5.1, pos.w - 0.6, 1.25, [sub[i]], fitSize([sub[i]], pos.w - 0.6, 1.25, 22, 14, false, 0), t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 })).join("") };
   };
   const acBismillah = (): R => {
-    const tw = W - 4.8;
+    const cw = 6.6, ch = 6.1, cx = (W - cw) / 2, cy = (7.5 - ch) / 2, ih = ch - 1.0, iw = ih * BISMILLAH_IMG.w / BISMILLAH_IMG.h;
     return { bg: A.bg, num: false, html:
       shape(-1.6, -1.8, 4.6, 4.6, t.accent, "ellipse", 28) + shape(10.6, 4.9, 4.6, 4.6, t.primary, "ellipse", 22) +
-      round(2.0, 1.85, W - 4.0, 3.8, A.card, t.primary, 0.3, 2) + round(W / 2 - 0.6, 2.3, 1.2, 0.1, t.accent, undefined, 0.05) +
-      text(2.4, 2.55, tw, 2.6, [BISMILLAH], fitSize([BISMILLAH], tw, 2.6, 48, 30, false, 0), A.head, { bold: true, align: "center", valign: "middle", space: 0 }) };
+      round(cx, cy, cw, ch, "FFFFFF", t.primary, 0.3, 2) + round(W / 2 - 0.6, cy + 0.3, 1.2, 0.1, t.accent, undefined, 0.05) +
+      box((W - iw) / 2, cy + 0.65, iw, ih, `<img src="data:image/png;base64,${BISMILLAH_IMG.b64}" alt="${BISMILLAH}" style="object-fit:contain">`) };
   };
   const acSection = (sd: Slide, n: number): R => {
     const tw = W - 2 * M - 2.8;
@@ -222,7 +223,6 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
 
   // ---------- انتخاب چیدمان (همان شرط‌های pptx.ts: داده‌ی ناقص ⇒ اسلاید فهرستی) ----------
   let sec = 0;
-  const off = ac ? 1 : 0; // اسلاید «بسم‌الله» فقط در قالب آکادمیک؛ شماره‌ی اسلاید = جایگاه واقعی در فایل
   const pageRules: string[] = [];
   const slides = deck.slides.map((sd, i) => {
     const lay = sd.layout;
@@ -243,7 +243,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
       : lay === "questions" ? numbered(sd)
       : bullets(sd);
     const num = !r.num ? "" : ac
-      ? shape(0.55, 6.82, 0.5, 0.5, t.primary, "ellipse") + text(0.55, 6.82, 0.5, 0.5, [String(i + 1 + off)], 12, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) + (lay === "quote" && sd.quote ? "" : railHtml(i, deck.slides.length))
+      ? shape(0.55, 6.82, 0.5, 0.5, t.primary, "ellipse") + text(0.55, 6.82, 0.5, 0.5, [String(i + 1)], 12, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) + (lay === "quote" && sd.quote ? "" : railHtml(i, deck.slides.length))
       : text(0.6, 6.95, 1.0, 0.3, [String(i + 1)], 11, t.muted, { align: "left", space: 0 });
     // یادداشت سخنرانی مثل پیش‌نمایش وب زیر اسلاید می‌آید؛ در PDF ربات هم همان کادر در همان صفحه (فونت بر اساس طول متن کم می‌شود تا جا شود)
     const nlen = sd.notes ? sd.notes.length : 0;

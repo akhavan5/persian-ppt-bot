@@ -3,6 +3,7 @@ import PptxGenJS from "pptxgenjs";
 import type { Deck, Slide } from "./types";
 import { THEMES, iconOf, type Theme } from "./themes";
 import { toFa } from "./util";
+import { BISMILLAH_IMG } from "./bismillah-img";
 import { BISMILLAH, RAIL, academicPalette, badgeColor, isTemplate, pillRow, railDots } from "./template";
 
 const W = 13.333, H = 7.5, M = 0.8; // اسلاید 16:9 و حاشیه (اینچ)
@@ -163,7 +164,6 @@ class Builder {
     this.text(s, M, 0.55, W - 2 * M, 1.0, [text], size, this.t.primary, { bold: true, valign: "middle", space: 0 });
   }
 
-  /** شماره‌ی اسلاید = جایگاه واقعی در فایل (اسلاید «بسم‌الله» هم شمرده می‌شود) */
   private number(s: PptxGenJS.Slide, n: number) {
     if (this.ac) {
       this.shape(s, 0.55, 6.82, 0.5, 0.5, this.t.primary, "ellipse");
@@ -183,16 +183,16 @@ class Builder {
     });
   }
 
-  /** اسلاید ابتدایی «بسم‌الله» (قالب آکادمیک): کارت سفید گرد روی زمینه‌ی خاکستری، مثل اسلاید سوم اسلایدمستر */
+  /** اسلاید ابتدایی «بسم‌الله» (قالب آکادمیک): خط‌نویسی روی کارت سفید گرد؛ کارت روی هر تمی سفید می‌ماند تا خط مشکی دیده شود */
   private acBismillah() {
     const t = this.t, A = this.A, s = this.slide(A.bg);
     this.shape(s, -1.6, -1.8, 4.6, 4.6, t.accent, "ellipse", 28);
     this.shape(s, 10.6, 4.9, 4.6, 4.6, t.primary, "ellipse", 22);
-    this.round(s, 2.0, 1.85, W - 4.0, 3.8, A.card, t.primary, 0.3, 2);
-    this.round(s, W / 2 - 0.6, 2.3, 1.2, 0.1, t.accent, undefined, 0.05);
-    const tw = W - 4.8;
-    this.text(s, 2.4, 2.55, tw, 2.6, [BISMILLAH], fitSize([BISMILLAH], tw, 2.6, 48, 30, false, 0), A.head,
-      { bold: true, align: "center", valign: "middle", space: 0 });
+    const cw = 6.6, ch = 6.1, cx = (W - cw) / 2, cy = (H - ch) / 2;
+    this.round(s, cx, cy, cw, ch, "FFFFFF", t.primary, 0.3, 2);
+    this.round(s, W / 2 - 0.6, cy + 0.3, 1.2, 0.1, t.accent, undefined, 0.05);
+    const ih = ch - 1.0, iw = ih * BISMILLAH_IMG.w / BISMILLAH_IMG.h;
+    s.addImage({ data: `image/png;base64,${BISMILLAH_IMG.b64}`, x: (W - iw) / 2, y: cy + 0.65, w: iw, h: ih, altText: BISMILLAH });
     return s;
   }
 
@@ -459,8 +459,7 @@ class Builder {
   // ---------- ساخت نهایی ----------
   async build(deck: Deck): Promise<Uint8Array> {
     let sec = 0;
-    const off = this.ac ? 1 : 0; // اسلاید «بسم‌الله» فقط در قالب آکادمیک؛ تصویرها و یادداشت‌ها با شماره‌ی اصلی اسلایدها (i) می‌مانند
-    if (this.ac) this.acBismillah();
+    if (this.ac) this.acBismillah(); // اسلاید «بسم‌الله» فقط در قالب آکادمیک؛ در شماره‌گذاری نمی‌آید
     deck.slides.forEach((sd, i) => {
       const lay = sd.layout;
       let s: PptxGenJS.Slide;
@@ -480,7 +479,7 @@ class Builder {
       else if (lay === "sources") s = this.numbered(sd, "منابع پیشنهادی برای مطالعه‌ی بیشتر؛ پیش از ارجاع، وجود و صحت آن‌ها را بررسی کنید.");
       else if (lay === "questions") s = this.numbered(sd);
       else s = this.bullets(sd);
-      if (lay !== "title" && lay !== "closing" && lay !== "section") this.number(s, i + 1 + off);
+      if (lay !== "title" && lay !== "closing" && lay !== "section") this.number(s, i + 1);
       if (this.ac && lay !== "title" && lay !== "closing" && lay !== "section" && !(lay === "quote" && sd.quote)) this.rail(s, i, deck.slides.length);
       if (sd.notes) s.addNotes(this.txt(sd.notes));
     });

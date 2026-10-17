@@ -15,7 +15,7 @@ export type TemplateKey = keyof typeof TEMPLATES;
 export const DEFAULT_TEMPLATE: TemplateKey = "academic";
 export const isTemplate = (v: unknown): v is TemplateKey => typeof v === "string" && Object.hasOwn(TEMPLATES, v);
 
-/** متن اسلاید ابتدایی قالب آکادمیک (قبل از اسلاید عنوان)؛ شماره‌ی اسلایدها شامل همین اسلاید است، مثل فایل اسلایدمستر */
+/** متن جایگزین (alt) خط‌نویسی اسلاید ابتدایی قالب آکادمیک؛ خود اسلاید از تصویر bismillah-img.ts ساخته می‌شود و در شماره‌گذاری نمی‌آید */
 export const BISMILLAH = "بسم الله الرحمن الرحیم";
 
 /** رنگ‌های قالب آکادمیک بر پایه‌ی تم: روی تم روشن زمینه‌ی خاکستری روشن (مثل اسلایدمستر) با کارت سفید؛ روی تم تیره همان رنگ‌های خود تم */
