@@ -79,7 +79,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       const found: Research = event.payload.source
         ? { notes: "", images: [] }
         : await step.do("research", { retries: { limit: 0, delay: "1 second" }, timeout: "45 seconds" },
-          () => researchTopic(this.env, topic)).catch((): Research => ({ notes: "", images: [] }));
+          () => researchTopic(this.env, topic, settings.model)).catch((): Research => ({ notes: "", images: [] }));
       contentOpts.research = found.notes;
 
       const outline = await step.do("outline", LLM_STEP, () =>

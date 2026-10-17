@@ -12,6 +12,7 @@
  * متغیرهای اختیاری: WEB_SEARCH=off (خاموش کردن کامل)، TAVILY_API_KEY
  */
 import type { Env } from "./env";
+import { askJson } from "./llm";
 
 interface Hit { src: string; title: string; text: string; /** موتور جستجو: wiki-fa | wiki-en | ddg | tavily */ via: string }
 
@@ -87,6 +88,34 @@ export function searchQuery(topic: string): string {
   if (changed) q = q.replace(LEAD_BARE, "").replace(TRAIL_FILLER, "");
   q = q.replace(/\s+/g, " ").trim();
   return q.length >= 2 ? q : orig.trim();
+}
+
+/** استخراج عبارت جستجو با LLM؛ هر خطا/خروجی نامعتبر ⇒ برگشت به searchQuery (regex) */
+export async function extractQuery(env: Env, topic: string, modelId?: string): Promise<string> {
+  const fallback = searchQuery(topic);
+  try {
+    const prompt =
+`از درخواست کاربر برای ساخت ارائه، فقط «موضوع علمی» را برای جستجوی گوگل بیرون بکش.
+قوانین:
+- دستور ساخت، تعداد اسلاید، طراحی، رنگ، فونت، تصویر، یادداشت، خروجی و فهرست اسلایدها را حذف کن.
+- نام پایه/درس را فقط وقتی نگه دار که خودِ موضوع به آن وابسته است (مثلاً «درس ۳ مطالعات هشتم»).
+- زبان خروجی همان زبان موضوع باشد؛ حداکثر ۱۲ کلمه؛ بدون نقل‌قول و توضیح.
+فقط JSON بده: {"query":"..."}
+
+درخواست کاربر:
+${String(topic ?? "").slice(0, 1500)}`;
+    const j = (await Promise.race([
+      askJson(env, prompt, 120, modelId),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000)),
+    ])) as any;
+    const q = String(j?.query ?? "").replace(/\s+/g, " ").trim();
+    if (q.length < 2 || q.length > 150) return fallback;
+    console.log("research-query-llm", q);
+    return q;
+  } catch (e) {
+    console.error("extractQuery", e instanceof Error ? e.message : e);
+    return fallback;
+  }
 }
 
 /** ویکی‌پدیا: جستجوی متنی + چکیده‌ی مقاله‌ها در یک درخواست */
@@ -182,9 +211,8 @@ const BAD_HOSTS = /(facebook|instagram|twitter|(^|\.)x\.com|t\.me|telegram|youtu
 
 const safe = (name: string, p: Promise<Hit[]>): Promise<Hit[]> => p.catch((e) => { console.error("search", name, e instanceof Error ? e.message : e); return []; });
 
-async function researchNotes(env: Env, topic: string, sink: FoundImage[]): Promise<string> {
+async function researchNotes(env: Env, q: string, sink: FoundImage[]): Promise<string> {
   try {
-    const q = searchQuery(topic);
     // هر سه منبع (Tavily، ویکی‌پدیا، DuckDuckGo) موازی اجرا می‌شوند. اگر کلید Tavily تنظیم باشد، Tavily اولویت دارد
     // (۸ نتیجه، اولین نوبت و بدون فیلتر)؛ نتیجه‌های ویکی/DDG همیشه از فیلتر ارتباط رد می‌شوند.
     const useTav = !!env.TAVILY_API_KEY;
@@ -232,11 +260,8 @@ async function researchNotes(env: Env, topic: string, sink: FoundImage[]): Promi
   }
 }
 
-const queryOf = searchQuery;
-
 /** تصویر اصلی مقاله‌های ویکی‌پدیای فارسی که عنوانشان به موضوع می‌خورد (رایگان، با مجوز مشخص) */
-async function wikiImages(topic: string): Promise<FoundImage[]> {
-  const q = queryOf(topic);
+async function wikiImages(q: string): Promise<FoundImage[]> {
   const u = new URL("https://fa.wikipedia.org/w/api.php");
   const p: Record<string, string> = { action: "query", format: "json", formatversion: "2", generator: "search", gsrsearch: q.slice(0, 250), gsrlimit: "4", prop: "pageimages", piprop: "thumbnail", pithumbsize: "1000", pilimit: "4" };
   for (const k in p) u.searchParams.set(k, p[k]);
@@ -252,12 +277,13 @@ async function wikiImages(topic: string): Promise<FoundImage[]> {
 }
 
 /** پژوهش پشت‌صحنه: یادداشت متنی برای مدل + تصاویر مرتبط برای اسلایدها. در هر مشکلی خالی. */
-export async function researchTopic(env: Env, topic: string): Promise<Research> {
+export async function researchTopic(env: Env, topic: string, modelId?: string): Promise<Research> {
   if (!searchEnabled(env)) return EMPTY;
+  const q = await extractQuery(env, topic, modelId); // یک بار؛ برای یادداشت‌ها و تصاویر
   const sink: FoundImage[] = [];
   const [notes, wiki] = await Promise.all([
-    researchNotes(env, topic, sink).catch(() => ""),
-    wikiImages(topic).catch((e) => { console.error("wikiImages", e instanceof Error ? e.message : e); return [] as FoundImage[]; }),
+    researchNotes(env, q, sink).catch(() => ""),
+    wikiImages(q).catch((e) => { console.error("wikiImages", e instanceof Error ? e.message : e); return [] as FoundImage[]; }),
   ]);
   const seen = new Set<string>();
   const images = [...sink, ...wiki].filter((i) => !seen.has(i.url) && seen.add(i.url)).slice(0, 14);
