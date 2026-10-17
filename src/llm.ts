@@ -392,7 +392,7 @@ function structureRules(o: ContentOpts): string {
 export async function makeOutline(env: Env, topic: string, n: number, tone: string, o: ContentOpts = {}): Promise<Outline> {
   if (!hasKey(env)) return mockOutline(topic, n, o);
   const data = await ask(env, `Create the outline of a presentation in Persian.
-Topic: ${topic}
+Topic: ${topic}\nNote: words in the topic that only describe the deck\'s language or format (e.g. «انگلیسی- فارسی», «دو زبانه», «bilingual») are NOT the subject; the subject is the remaining words. For a bilingual request keep the slides in Persian and put the key English term in parentheses.
 Number of slides (including title and closing): ${n}
 Tone: ${TONES[tone] ?? tone}
 Audience: ${audienceOf(o)}${researchBlock(o)}${sourceBlock(o)}
@@ -429,7 +429,7 @@ export async function makeDeck(env: Env, topic: string, title: string, outline: 
     const scope = nb === 1 ? "" : `\nThe deck has ${outline.length} slides in total: ${ctx}\nWrite ONLY slides ${a + 1} to ${z} (${slice.length} slides) — return exactly ${slice.length} slide objects, in this order.\n`;
     const edges = [a === 0 ? `- the first slide is "title" (title + subtitle).` : "", z === outline.length ? `- the last slide is "closing" (short thanks/CTA in title, optional bullets).` : ""].filter(Boolean).join("\n");
     const data = await askRetry(env, `Write the full content of this Persian presentation.
-Topic: ${topic}
+Topic: ${topic}\nNote: words in the topic that only describe the deck\'s language or format (e.g. «انگلیسی- فارسی», «دو زبانه», «bilingual») are NOT the subject; the subject is the remaining words. For a bilingual request keep the slides in Persian and put the key English term in parentheses.
 Title: ${title}
 Tone: ${TONES[tone] ?? tone}
 Audience: ${audienceOf(o)}${researchBlock(o)}${sourceBlock(o)}${scope}

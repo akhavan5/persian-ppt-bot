@@ -53,6 +53,13 @@ const COUNT_NUM = `(?:[0-9۰-۹٠-٩]{1,3}|${NUM_WORD})`;
 const SLIDE_COUNT = new RegExp(`${COUNT_LEAD}${NB}(?:${COUNT_NUM}\\s*(?:الی|تا|[-–—])\\s*)?${COUNT_NUM}\\s*(?:تا\\s*)?(?:اسلایدی|اسلاید|slides?)${NA}`, "giu"); // بازه‌ی «۵ الی ۶ اسلاید» هم کامل حذف می‌شود
 /** «صفحه» فقط وقتی تعداد اسلاید است که متن از ارائه حرف بزند (تا «سایت ۳ صفحه‌ای» دست نخورد) */
 const PAGE_COUNT = new RegExp(`${COUNT_LEAD}${NB}${COUNT_NUM}\\s*(?:تا\\s*)?صفحه(?:[\\u200c\\s]*ای)?${NA}`, "giu");
+/** مشخصات زبان/قالب ارائه («پاورپوینت انگلیسی- فارسی»، «ارائه دو زبانه»، «اسلاید به انگلیسی») موضوع نیستند؛ فقط وقتی بلافاصله بعد از واژه‌ی ارائه بیایند حذف می‌شوند (تا موضوعی مثل «ترجمه انگلیسی به فارسی» دست نخورد) */
+const LANG = "(?:انگلیسی|فارسی|english|persian|farsi)(?!\s*(?:\u200c|[-–—])?\s*(?:سازی|ساز))";
+const PPT_HEAD = "(?:پاور\\s*پوینت|پرزنتیشن|ارائه|اسلایدها|اسلاید|powerpoint|presentation|slides?)(?:\\s*های)?";
+const TOPIC_MARK = "(?=\\s+(?:درباره|در\\s*باره|در\\s*مورد|پیرامون|راجع|با\\s+موضوع|به\\s+موضوع|در\\s+حوزه|در\\s+خصوص|about|on)(?![\\p{L}\\p{N}]))";
+/** فقط حالت‌های بی‌ابهام: «دو زبانه»، جفت زبان («انگلیسی- فارسی»)، «به (زبان) انگلیسی»، یا یک زبان که بلافاصله بعدش «درباره/در مورد…» بیاید.
+ *  «پاورپوینت زبان انگلیسی برای کودکان» یا «پاورپوینت فارسی‌سازی…» موضوع‌اند و دست نمی‌خورند. */
+const LANG_SPEC = new RegExp(`${NB}(${PPT_HEAD})\\s+(?:دو\\s*زبانه|دوزبانه|bilingual|${LANG}\\s*(?:[-–—/]|\\s+و\\s+|\\s+به\\s+|\\s+)\\s*${LANG}|به\\s+(?:زبان\\s+)?${LANG}|${LANG}${TOPIC_MARK})${NA}`, "giu");
 const PPT_WORDS = /ارائه|پاورپوینت|پاور\s*پوینت|پرزنت|اسلاید|slide|presentation|ppt/i;
 /** واژه‌های درخواست («یک پاورپوینت … برام بساز») که ربطی به موضوع ندارند */
 const REQ_NOISE = new RegExp(
@@ -71,7 +78,7 @@ const TRAIL_FILLER = /(?:[\s،,.:;!؟?\-–—]+(?:و|را|رو|از|در|به|�
 /** عبارت تمیز برای موتورهای جستجو: بدون تعداد اسلاید و بدون جمله‌ی درخواست ساخت. اگر چیزی نماند، متن اصلی. */
 export function searchQuery(topic: string): string {
   const orig = String(topic ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "");
-  let q = orig.replace(SLIDE_COUNT, " ");
+  let q = orig.replace(LANG_SPEC, "$1").replace(SLIDE_COUNT, " ");
   if (PPT_WORDS.test(q)) q = q.replace(PAGE_COUNT, " ");
   q = q.replace(REQ_NOISE, " ");
   const changed = q.replace(/\s+/g, " ").trim() !== orig.replace(/\s+/g, " ").trim(); // آیا چیزی از جمله‌ی درخواست حذف شد؟
