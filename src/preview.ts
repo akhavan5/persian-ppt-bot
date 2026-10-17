@@ -6,10 +6,10 @@
  * اندازه‌ها با واحد cqw (درصد عرض اسلاید) هستند: ۱ اینچ = ۷٫۵cqw و ۱pt = ۰٫۱۰۴cqw؛ پس همه‌چیز با عرض صفحه مقیاس می‌گیرد.
  */
 import type { Chart, Deck, Slide } from "./types";
-import { FONT_URL, FONT_URL_ALT, THEMES, iconOf, type Theme } from "./themes";
+import { FONT_URL, FONT_URL_ALT, THEMES, iconOf, isBFont, type Theme } from "./themes";
 import { toFa } from "./util";
 import { fitSize } from "./pptx";
-import { RAIL, academicPalette, badgeColor, pillRow, railDots } from "./template";
+import { BISMILLAH, RAIL, academicPalette, badgeColor, pillRow, railDots } from "./template";
 
 const W = 13.333, M = 0.8;
 
@@ -44,7 +44,7 @@ export interface PreviewOpts {
 interface TOpts { bold?: boolean; align?: "right" | "center" | "left"; valign?: "top" | "middle" | "bottom"; bullet?: boolean | "number"; space?: number; emoji?: boolean }
 
 export function renderPreview(deck: Deck, o: PreviewOpts): string {
-  const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
+  const t: Theme = THEMES[o.theme] ?? THEMES.violet;
   const ac = o.template === "academic", A = academicPalette(t), bgc = ac ? A.bg : t.bg;
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const fontName = /^[\w -]{1,40}$/.test(o.font) ? o.font : "Vazirmatn";
@@ -71,12 +71,12 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   const bc = (i: number) => (ac ? badgeColor(t, i) : t.primary);
   const title = (s: string) => ac
     ? round(M, 0.45, W - 2 * M, 0.95, A.card, t.primary, 0.475, 1.25) + shape(W - M - 0.55, 0.45 + 0.475 - 0.14, 0.28, 0.28, t.accent, "ellipse") +
-      text(M + 0.7, 0.45, W - 2 * M - 1.4, 0.95, [s], fitSize([s], W - 2 * M - 1.4, 0.95, 32, 20, false, 0), t.primary, { bold: true, align: "center", valign: "middle", space: 0 })
+      text(M + 0.7, 0.45, W - 2 * M - 1.4, 0.95, [s], fitSize([s], W - 2 * M - 1.4, 0.95, 34, 20, false, 0), t.primary, { bold: true, align: "center", valign: "middle", space: 0 })
     : text(M, 0.55, W - 2 * M, 1.0, [s], fitSize([s], W - 2 * M, 1.0, 34, 22, false, 0), t.primary, { bold: true, valign: "middle", space: 0 });
   /** نوار پیشرفت کناری (قالب آکادمیک) */
   const railHtml = (i: number, n: number) => {
     const { ys, active } = railDots(i, n);
-    return shape(RAIL.x - 0.01, RAIL.top, 0.02, RAIL.bottom - RAIL.top, t.muted, "rect", 45) +
+    return box(RAIL.x, RAIL.top, 0, RAIL.bottom - RAIL.top, "", `border-left:${P(1)} dashed #${t.muted}`) +
       ys.map((y, k) => (k === active ? shape(RAIL.x - 0.13, y - 0.13, 0.26, 0.26, t.accent, "ellipse") : shape(RAIL.x - 0.06, y - 0.06, 0.12, 0.12, t.muted, "ellipse", 70))).join("");
   };
 
@@ -90,8 +90,15 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
       round(M, 1.2, W - 2 * M, 3.55, A.card, t.primary, 0.3, 2) + round(W - M - 1.6, 1.55, 1.0, 0.1, t.accent, undefined, 0.05) +
       text(M + 0.6, 1.8, tw, 2.8, [sd.title], fitSize([sd.title], tw, 2.8, 46, 26, false, 0), A.head, { bold: true, align: closing ? "center" : "right", valign: "middle", space: 0 }) +
       pillRow(sub.length, W, M).map((pos, i) =>
-        round(pos.x, 5.15, pos.w, 0.85, i % 2 ? t.accent : t.primary, undefined, 0.425) +
-        text(pos.x + 0.25, 5.15, pos.w - 0.5, 0.85, [sub[i]], fitSize([sub[i]], pos.w - 0.5, 0.85, 20, 13, false, 0), t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 })).join("") };
+        round(pos.x, 5.1, pos.w, 1.25, i % 2 ? t.accent : t.primary, undefined, 0.5) +
+        text(pos.x + 0.3, 5.1, pos.w - 0.6, 1.25, [sub[i]], fitSize([sub[i]], pos.w - 0.6, 1.25, 22, 14, false, 0), t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 })).join("") };
+  };
+  const acBismillah = (): R => {
+    const tw = W - 4.8;
+    return { bg: A.bg, num: false, html:
+      shape(-1.6, -1.8, 4.6, 4.6, t.accent, "ellipse", 28) + shape(10.6, 4.9, 4.6, 4.6, t.primary, "ellipse", 22) +
+      round(2.0, 1.85, W - 4.0, 3.8, A.card, t.primary, 0.3, 2) + round(W / 2 - 0.6, 2.3, 1.2, 0.1, t.accent, undefined, 0.05) +
+      text(2.4, 2.55, tw, 2.6, [BISMILLAH], fitSize([BISMILLAH], tw, 2.6, 48, 30, false, 0), A.head, { bold: true, align: "center", valign: "middle", space: 0 }) };
   };
   const acSection = (sd: Slide, n: number): R => {
     const tw = W - 2 * M - 2.8;
@@ -215,6 +222,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
 
   // ---------- انتخاب چیدمان (همان شرط‌های pptx.ts: داده‌ی ناقص ⇒ اسلاید فهرستی) ----------
   let sec = 0;
+  const off = ac ? 1 : 0; // اسلاید «بسم‌الله» فقط در قالب آکادمیک؛ شماره‌ی اسلاید = جایگاه واقعی در فایل
   const pageRules: string[] = [];
   const slides = deck.slides.map((sd, i) => {
     const lay = sd.layout;
@@ -235,7 +243,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
       : lay === "questions" ? numbered(sd)
       : bullets(sd);
     const num = !r.num ? "" : ac
-      ? shape(0.55, 6.82, 0.5, 0.5, t.primary, "ellipse") + text(0.55, 6.82, 0.5, 0.5, [String(i + 1)], 12, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) + (lay === "quote" ? "" : railHtml(i, deck.slides.length))
+      ? shape(0.55, 6.82, 0.5, 0.5, t.primary, "ellipse") + text(0.55, 6.82, 0.5, 0.5, [String(i + 1 + off)], 12, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) + (lay === "quote" && sd.quote ? "" : railHtml(i, deck.slides.length))
       : text(0.6, 6.95, 1.0, 0.3, [String(i + 1)], 11, t.muted, { align: "left", space: 0 });
     // یادداشت سخنرانی مثل پیش‌نمایش وب زیر اسلاید می‌آید؛ در PDF ربات هم همان کادر در همان صفحه (فونت بر اساس طول متن کم می‌شود تا جا شود)
     const nlen = sd.notes ? sd.notes.length : 0;
@@ -246,10 +254,16 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
     return `<div class="item${o.pdf ? ` p${i}` : ""}"><div class="sl"><section class="slide" style="background:#${r.bg}">${r.html}${num}</section></div>${notes}</div>`;
   }).join("\n");
 
+  const bism = ac
+    ? `<div class="item${o.pdf ? " pb" : ""}"><div class="sl"><section class="slide" style="background:#${A.bg}">${acBismillah().html}</section></div></div>\n`
+    : "";
+  if (ac && o.pdf) pageRules.unshift("@page pb{size:13.333in 7.5in;margin:0}.item.pb{page:pb;height:7.5in}");
   const pageH = pdfPageHeight(deck);
   const cssVars = `--font:"${fontName}","Vazirmatn",Tahoma,Arial,sans-serif`;
   const vazir = fontName === "Vazirmatn";
-  const note = vazir
+  const note = isBFont(fontName)
+    ? `فونت انتخابی (${esc(fontName)}) باید روی دستگاهت نصب باشد؛ فایل PPTX با همان فونت باز می‌شود، ولی این پیش‌نمایش و PDF اگر فونت روی دستگاه نصب نباشد با Vazirmatn نمایش داده می‌شود.`
+    : vazir
     ? `این پیش‌نمایش و PDF با فونت Vazirmatn ساخته می‌شود. برای نمایش درست فایل PPTX روی دستگاهت، فونت را نصب کن؛ دانلود مستقیم: <a href="${FONT_URL}" download rel="noopener">Vazirmatn.zip</a> · <a href="${FONT_URL_ALT}" download rel="noopener">فایل TTF</a>`
     : `فونت انتخابی (${esc(fontName)}) روی بیشتر دستگاه‌ها نصب است؛ اگر در پیش‌نمایش متفاوت دیدی، فایل PPTX هم همین‌طور باز می‌شود.`;
   const id = encodeURIComponent(o.id);
@@ -311,7 +325,7 @@ ${o.pdf ? "" : `<header class="bar"><h1>👁 ${esc(deck.title)}</h1>
 <div class="act"><a class="btn" href="/api/files/${id}" rel="nofollow">⬇️ دانلود PPTX</a><button class="btn" id="pdf" type="button">📄 ذخیره PDF</button><a class="btn ghost" href="/">بازگشت به سایت</a></div></header>
 <p class="hint">برای PDF روی «ذخیره PDF» بزن و در پنجره‌ی چاپ، مقصد را <b>Save as PDF</b> بگذار (حاشیه: هیچ). ${note}</p>`}
 <main>
-${slides}
+${bism}${slides}
 </main>
 ${o.pdf ? "" : `<script nonce="${o.nonce}">
 document.getElementById("pdf").onclick=function(){window.print()};

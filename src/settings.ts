@@ -8,7 +8,7 @@ import { modelList } from "./llm";
 export type Uid = number | string;
 export const isWebId = (id: Uid) => typeof id === "string" && id.startsWith("w_");
 
-export const DEFAULTS: Settings = { theme: "ocean", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, mode: "normal", sources: false, questions: false };
+export const DEFAULTS: Settings = { theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, mode: "normal", sources: false, questions: false };
 export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 
 // ---------- سقف اسلاید (فقط وب): رایگان ۸، پلاس ۲۰، پرو ۳۵ ----------

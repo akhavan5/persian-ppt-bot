@@ -3,7 +3,7 @@ import PptxGenJS from "pptxgenjs";
 import type { Deck, Slide } from "./types";
 import { THEMES, iconOf, type Theme } from "./themes";
 import { toFa } from "./util";
-import { RAIL, academicPalette, badgeColor, isTemplate, pillRow, railDots } from "./template";
+import { BISMILLAH, RAIL, academicPalette, badgeColor, isTemplate, pillRow, railDots } from "./template";
 
 const W = 13.333, H = 7.5, M = 0.8; // اسلاید 16:9 و حاشیه (اینچ)
 
@@ -74,14 +74,17 @@ class Builder {
   private ac: boolean;
   private A: ReturnType<typeof academicPalette>;
   private font: string;
+  /** ضریب اندازه‌ی فونت: B Nazanin در همان نقطه کوچک‌تر از Vazirmatn دیده می‌شود */
+  private fs: number;
   private digits: boolean;
   private images: Map<number, Uint8Array>;
 
   constructor(o: BuildOptions) {
-    this.t = THEMES[o.theme ?? "ocean"] ?? THEMES.ocean;
+    this.t = THEMES[o.theme ?? "violet"] ?? THEMES.violet;
     this.ac = isTemplate(o.template) && o.template === "academic";
     this.A = academicPalette(this.t);
     this.font = o.font ?? "Vazirmatn";
+    this.fs = this.font === "B Nazanin" ? 1.1 : 1;
     this.digits = o.persianDigits ?? true;
     this.images = o.images ?? new Map();
     this.p.defineLayout({ name: "WIDE", width: W, height: H });
@@ -136,7 +139,7 @@ class Builder {
         lang: "fa-IR",
         align: o.align ?? "right",
         fontFace: o.font ?? this.font,
-        fontSize: size,
+        fontSize: o.font ? size : Math.round(size * this.fs * 2) / 2,
         bold: !!o.bold,
         color,
         lineSpacingMultiple: 1.15,
@@ -153,13 +156,14 @@ class Builder {
       this.round(s, M, 0.45, W - 2 * M, 0.95, this.A.card, this.t.primary, 0.475, 1.25);
       this.shape(s, W - M - 0.55, 0.45 + 0.475 - 0.14, 0.28, 0.28, this.t.accent, "ellipse");
       const tw = W - 2 * M - 1.4;
-      this.text(s, M + 0.7, 0.45, tw, 0.95, [text], fitSize([text], tw, 0.95, 32, 20, false, 0), this.t.primary, { bold: true, align: "center", valign: "middle", space: 0 });
+      this.text(s, M + 0.7, 0.45, tw, 0.95, [text], fitSize([text], tw, 0.95, 34, 20, false, 0), this.t.primary, { bold: true, align: "center", valign: "middle", space: 0 });
       return;
     }
     const size = fitSize([text], W - 2 * M, 1.0, 34, 22, false, 0);
     this.text(s, M, 0.55, W - 2 * M, 1.0, [text], size, this.t.primary, { bold: true, valign: "middle", space: 0 });
   }
 
+  /** شماره‌ی اسلاید = جایگاه واقعی در فایل (اسلاید «بسم‌الله» هم شمرده می‌شود) */
   private number(s: PptxGenJS.Slide, n: number) {
     if (this.ac) {
       this.shape(s, 0.55, 6.82, 0.5, 0.5, this.t.primary, "ellipse");
@@ -172,11 +176,24 @@ class Builder {
   /** نوار پیشرفت کناری (قالب آکادمیک): یک نقطه برای هر اسلاید (حداکثر ۱۲)، نقطه‌ی فعال نارنجی و بزرگ‌تر */
   private rail(s: PptxGenJS.Slide, i: number, n: number) {
     const { ys, active } = railDots(i, n);
-    this.shape(s, RAIL.x - 0.01, RAIL.top, 0.02, RAIL.bottom - RAIL.top, this.t.muted, "roundRect", 45);
+    s.addShape(this.p.ShapeType.line, { x: RAIL.x, y: RAIL.top, w: 0, h: RAIL.bottom - RAIL.top, line: { color: this.t.muted, width: 1, dashType: "dash" } });
     ys.forEach((y, k) => {
       if (k === active) this.shape(s, RAIL.x - 0.13, y - 0.13, 0.26, 0.26, this.t.accent, "ellipse");
       else this.shape(s, RAIL.x - 0.06, y - 0.06, 0.12, 0.12, this.t.muted, "ellipse", 70);
     });
+  }
+
+  /** اسلاید ابتدایی «بسم‌الله» (قالب آکادمیک): کارت سفید گرد روی زمینه‌ی خاکستری، مثل اسلاید سوم اسلایدمستر */
+  private acBismillah() {
+    const t = this.t, A = this.A, s = this.slide(A.bg);
+    this.shape(s, -1.6, -1.8, 4.6, 4.6, t.accent, "ellipse", 28);
+    this.shape(s, 10.6, 4.9, 4.6, 4.6, t.primary, "ellipse", 22);
+    this.round(s, 2.0, 1.85, W - 4.0, 3.8, A.card, t.primary, 0.3, 2);
+    this.round(s, W / 2 - 0.6, 2.3, 1.2, 0.1, t.accent, undefined, 0.05);
+    const tw = W - 4.8;
+    this.text(s, 2.4, 2.55, tw, 2.6, [BISMILLAH], fitSize([BISMILLAH], tw, 2.6, 48, 30, false, 0), A.head,
+      { bold: true, align: "center", valign: "middle", space: 0 });
+    return s;
   }
 
   private acTitle(sd: Slide, closing: boolean) {
@@ -190,8 +207,8 @@ class Builder {
       { bold: true, align: closing ? "center" : "right", valign: "middle", space: 0 });
     const sub = (sd.subtitle ? [sd.subtitle] : sd.bullets.slice(0, 3)).filter(Boolean);
     pillRow(sub.length, W, M).forEach((pos, i) => {
-      this.round(s, pos.x, 5.15, pos.w, 0.85, i % 2 ? t.accent : t.primary, undefined, 0.425);
-      this.text(s, pos.x + 0.25, 5.15, pos.w - 0.5, 0.85, [sub[i]], fitSize([sub[i]], pos.w - 0.5, 0.85, 20, 13, false, 0), t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
+      this.round(s, pos.x, 5.1, pos.w, 1.25, i % 2 ? t.accent : t.primary, undefined, 0.5);
+      this.text(s, pos.x + 0.3, 5.1, pos.w - 0.6, 1.25, [sub[i]], fitSize([sub[i]], pos.w - 0.6, 1.25, 22, 14, false, 0), t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
     });
     return s;
   }
@@ -442,6 +459,8 @@ class Builder {
   // ---------- ساخت نهایی ----------
   async build(deck: Deck): Promise<Uint8Array> {
     let sec = 0;
+    const off = this.ac ? 1 : 0; // اسلاید «بسم‌الله» فقط در قالب آکادمیک؛ تصویرها و یادداشت‌ها با شماره‌ی اصلی اسلایدها (i) می‌مانند
+    if (this.ac) this.acBismillah();
     deck.slides.forEach((sd, i) => {
       const lay = sd.layout;
       let s: PptxGenJS.Slide;
@@ -461,7 +480,7 @@ class Builder {
       else if (lay === "sources") s = this.numbered(sd, "منابع پیشنهادی برای مطالعه‌ی بیشتر؛ پیش از ارجاع، وجود و صحت آن‌ها را بررسی کنید.");
       else if (lay === "questions") s = this.numbered(sd);
       else s = this.bullets(sd);
-      if (lay !== "title" && lay !== "closing" && lay !== "section") this.number(s, i + 1);
+      if (lay !== "title" && lay !== "closing" && lay !== "section") this.number(s, i + 1 + off);
       if (this.ac && lay !== "title" && lay !== "closing" && lay !== "section" && !(lay === "quote" && sd.quote)) this.rail(s, i, deck.slides.length);
       if (sd.notes) s.addNotes(this.txt(sd.notes));
     });

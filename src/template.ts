@@ -1,23 +1,27 @@
 /**
  * «قالب» اسلاید = سبک چیدمان و تزئین (مستقل از «تم رنگی»).
  *  classic  : همان طراحی قبلی (بدون هیچ تغییری).
- *  academic : قاب‌های گرد با خط‌دور، عنوان داخل کپسول، کپسول‌های رنگی، شماره‌ی گرد و نوار پیشرفت کناری.
+ *  academic : قالب پیش‌فرض؛ برگرفته از «نسخه‌ی اسلایدمستر»: اسلاید «بسم‌الله» در ابتدا، قاب‌های گرد با خط‌دور، عنوان داخل کپسول،
+ *             کپسول‌های رنگی، شماره‌ی گرد و نوار پیشرفت کناری (خط‌چین).
  * pptx.ts و preview.ts هر دو از همین ثابت‌ها استفاده می‌کنند تا فایل و پیش‌نمایش یکی بمانند.
  */
 import type { Theme } from "./themes";
 
 export const TEMPLATES = {
+  academic: { name: "آکادمیک مدرن", emoji: "🎓", hint: "اسلاید «بسم‌الله» در ابتدا، کارت‌های گرد، عنوان قاب‌دار، کپسول‌های رنگی و نوار پیشرفت کناری؛ مناسب دفاع و ارائه‌ی رسمی" },
   classic: { name: "کلاسیک", emoji: "🎨", hint: "طراحی ساده و تخت؛ همان قالب همیشگی" },
-  academic: { name: "آکادمیک مدرن", emoji: "🎓", hint: "کارت‌های گرد، عنوان قاب‌دار، کپسول‌های رنگی و نوار پیشرفت کناری؛ مناسب دفاع و ارائه‌ی رسمی" },
 } as const;
 export type TemplateKey = keyof typeof TEMPLATES;
-export const DEFAULT_TEMPLATE: TemplateKey = "classic";
+export const DEFAULT_TEMPLATE: TemplateKey = "academic";
 export const isTemplate = (v: unknown): v is TemplateKey => typeof v === "string" && Object.hasOwn(TEMPLATES, v);
 
-/** رنگ‌های قالب آکادمیک بر پایه‌ی تم: روی تم روشن زمینه‌ی خاکستری خیلی روشن با کارت سفید؛ روی تم تیره همان رنگ‌های خود تم */
+/** متن اسلاید ابتدایی قالب آکادمیک (قبل از اسلاید عنوان)؛ شماره‌ی اسلایدها شامل همین اسلاید است، مثل فایل اسلایدمستر */
+export const BISMILLAH = "بسم الله الرحمن الرحیم";
+
+/** رنگ‌های قالب آکادمیک بر پایه‌ی تم: روی تم روشن زمینه‌ی خاکستری روشن (مثل اسلایدمستر) با کارت سفید؛ روی تم تیره همان رنگ‌های خود تم */
 export function academicPalette(t: Theme) {
   const light = t.bg.toUpperCase() === "FFFFFF";
-  return { bg: light ? "F3F3F8" : t.bg, card: light ? "FFFFFF" : t.surface, head: light ? t.dark : t.onPrimary, line: t.primary };
+  return { bg: light ? "EBEBF0" : t.bg, card: light ? "FFFFFF" : t.surface, head: light ? t.dark : t.onPrimary, line: t.primary };
 }
 
 /** رنگ کپسول/دایره‌ی شماره‌دار: به‌نوبت رنگ اصلی و رنگ تأکید */

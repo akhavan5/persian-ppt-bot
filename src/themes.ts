@@ -32,7 +32,9 @@ export const TONES: Record<string, string> = {
   persuasive: "متقاعدکننده و انگیزشی",
 };
 
-export const FONTS = ["Vazirmatn", "Tahoma", "Arial"] as const;
+export const FONTS = ["Vazirmatn", "B Nazanin", "B Titr", "Tahoma", "Arial"] as const;
+/** فونت‌های سری B (نازنین، تیتر): جزو فونت‌های رایج ویندوز/آفیس فارسی‌اند ولی با ربات همراه نیستند؛ باید روی دستگاه نمایش‌دهنده نصب باشند */
+export const isBFont = (f: string) => f === "B Nazanin" || f === "B Titr";
 
 /** آیکن کارت‌ها: مدل فقط نام (کلید) را می‌نویسد و ایموجی از این جدول می‌آید؛ نام ناشناخته = ستاره */
 export const ICONS: Record<string, string> = {
@@ -48,4 +50,6 @@ export const FONT_URL_ALT = "https://pptsaz.ir/fonts/Vazirmatn-Regular.ttf";
 /** یادداشت نصب فونت برای کپشن تلگرام (HTML)؛ فقط وقتی فونت انتخابی Vazirmatn است */
 export const fontCaption = (font: string) => font === "Vazirmatn"
   ? `\n\n🔤 برای نمایش درست، فونت <a href="${FONT_URL}">Vazirmatn</a> را روی دستگاهت نصب کن؛ یا در /settings فونت Tahoma را انتخاب کن.`
-  : "";
+  : isBFont(font)
+    ? `\n\n🔤 فونت ${font} باید روی دستگاه نمایش‌دهنده نصب باشد؛ اگر نصب نیست، در /settings فونت Tahoma را انتخاب کن.`
+    : "";
