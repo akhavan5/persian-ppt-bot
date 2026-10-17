@@ -35,7 +35,7 @@ export async function ensureUid(env: Env, tgId: number, name = ""): Promise<Uid>
   const id = await profileId(tgId);
   if (!(await getUserById(env, id))) {
     await saveWebUser(env, { id, email: "", name: (name || "کاربر تلگرام").slice(0, 64), verified: false, created: Date.now() });
-    await grantSignupCredit(env, id).catch((e) => console.error("signupCredit", e)); // ۲ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
+    await grantSignupCredit(env, id).catch((e) => console.error("signupCredit", e)); // ۳ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
   }
   await env.KV.put(`tg2w:${tgId}`, id);
   await env.KV.put(`w2tg:${id}`, String(tgId)); // نگاشت معکوس: برای نمایش تلگرام وصل‌شده در پروفایل وب

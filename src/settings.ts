@@ -91,7 +91,7 @@ export const setBanned = (env: Env, userId: Uid, on: boolean) =>
 // ---------- اعتبار: اعتبار هدیه/اضافه (ثبت‌نام، دعوت، شارژ دستی) + اعتبار پلن ماهانه ----------
 // سهمیه‌ی روزانه‌ی رایگان حذف شده است؛ هر حساب جدید فقط یک‌بار SIGNUP_CREDITS اعتبار هدیه می‌گیرد.
 /** اعتبار هدیه‌ی ثبت‌نام (برای هر حساب جدید وب یا ربات، فقط یک‌بار) */
-export const SIGNUP_CREDITS = 2;
+export const SIGNUP_CREDITS = 3;
 
 export const today = () => new Date().toISOString().slice(0, 10);
 const bonusKey = (userId: Uid) => `bonus:${userId}`;

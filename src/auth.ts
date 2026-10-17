@@ -65,7 +65,7 @@ export async function createUser(env: Env, p: { email?: string; mobile?: string;
   if (u.mobile) await env.KV.put(`wm:${u.mobile}`, u.id);
   if (u.google) await env.KV.put(`wg:${u.google}`, u.id);
   await bumpStat(env, "newusers").catch(() => {});
-  await grantSignupCredit(env, u.id).catch((e) => console.error("signupCredit", e)); // ۲ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
+  await grantSignupCredit(env, u.id).catch((e) => console.error("signupCredit", e)); // ۳ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
   return u;
 }
 
