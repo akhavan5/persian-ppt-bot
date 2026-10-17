@@ -56,6 +56,20 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
   if (!j.ok) throw new Error(`Telegram sendDocument: ${j.description ?? r.status}`);
 }
 
+/** ارسال عکس (پیش‌نمایش داخل چت). سقف تلگرام: ۱۰ مگابایت و مجموع عرض+ارتفاع ≤ ۱۰۰۰۰ پیکسل */
+export async function sendPhoto(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, mime = "image/png") {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("caption", caption);
+  form.append("parse_mode", "HTML");
+  form.append("photo", new Blob([data], { type: mime }), filename);
+  const r = await fetch(`${apiBase(env)}/bot${env.TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+    method: "POST", body: form, signal: AbortSignal.timeout(120_000),
+  });
+  const j = (await r.json()) as any;
+  if (!j.ok) throw new Error(`Telegram sendPhoto: ${j.description ?? r.status}`);
+}
+
 export const BOT_COMMANDS = [
   { command: "start", description: "شروع و راهنما" },
   { command: "settings", description: "تنظیمات (تم، لحن، فونت، تعداد اسلاید)" },

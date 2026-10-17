@@ -14,7 +14,7 @@ import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
-import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
+import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, posterEnabled, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { parseRequest } from "./parse";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
@@ -24,12 +24,13 @@ const HELP =
   "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد مرحله‌به‌مرحله <b>مدل، تعداد اسلاید و تعداد تصویر</b> را انتخاب می‌کنی و ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
+  "🖼 در مرحله‌های آخر می‌توانی یک <b>پوستر (اینفوگرافیک)</b> و یک <b>جزوه‌ی Word</b> هم همراه ارائه بگیری؛ هر کدام ۱ اعتبار جدا هزینه دارد.\n\n" +
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت (عادی، دانشجویی، کسب‌وکار، معلم، دفاع پایان‌نامه)، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب (هر کاربر جدید ۲ ارائه‌ی رایگان هدیه می‌گیرد)\n" +
   "🌐 /site ← ورود خودکار به سایت pptsaz.ir (پلن‌ها و پرداخت آنلاین)\n" +
   "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
-  "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX و PDF) تا ۲۴ ساعت\n\n" +
+  "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX، PDF، پوستر و جزوه) تا ۲۴ ساعت\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
 type Btn = { text: string; callback_data?: string; url?: string };
@@ -94,18 +95,23 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
 }
 
 // ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← تعداد تصویر) ----------
-type Step = "model" | "slides" | "imgs";
+type Step = "model" | "slides" | "imgs" | "poster" | "handout";
+/** پوستر (اینفوگرافیک) همراه ارائه: none = نه، wide = افقی، tall = عمودی */
+type PosterChoice = "none" | "wide" | "tall";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
-interface Pending { /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string }
+interface Pending { /** جزوه‌ی Word همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
 
-/** مرحله‌ها به ترتیب: مدل (فقط اگر بیش از یکی باشد)، اسلاید (اگر کاربر در متن موضوع تعداد را نوشته باشد پرسیده نمی‌شود)، تصویر */
+/** مرحله‌ها به ترتیب: مدل (فقط اگر بیش از یکی باشد)، اسلاید (اگر کاربر در متن موضوع تعداد را نوشته باشد پرسیده نمی‌شود)، تصویر،
+ *  پوستر (اینفوگرافیک) همراه ارائه — فقط وقتی Browser Rendering وصل است. ارائه همیشه ساخته می‌شود؛ پوستر اختیاری است و هزینه‌ی اضافه ندارد */
 const stepsOf = (env: Env, p: Pending): Step[] => [
   ...(modelList(env).length > 1 ? (["model"] as Step[]) : []),
   ...(p.fixed ? [] : (["slides"] as Step[])),
   "imgs",
+  ...(posterEnabled(env) ? (["poster"] as Step[]) : []),
+  "handout",
 ];
 
 function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
@@ -124,8 +130,21 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   } else if (p.step === "slides") {
     ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (MODES[p.mode ?? s.mode].minSlides ? `\n<i>${MODES[p.mode ?? s.mode].emoji} حالت ${MODES[p.mode ?? s.mode].name} حداقل ${toFa(String(MODES[p.mode ?? s.mode].minSlides))} اسلاید می‌سازد.</i>` : "");
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
+  } else if (p.step === "poster") {
+    ask = "🖼 <b>پوستر (اینفوگرافیک)</b> هم همراه ارائه ساخته شود؟\n<i>یک تصویر تک‌صفحه‌ای با تصویر تزئینی از خلاصه‌ی موضوع، مناسب اشتراک‌گذاری. هزینه‌ی پوستر ۱ اعتبار (جدا از ارائه) است و اگر ساخته نشود برمی‌گردد. چیدمان پیش‌فرض افقی است؛ عمودی برای پیام‌رسان مناسب‌تر است.</i>";
+    opts = [
+      [{ text: mark(p.poster === "wide", "🖥 پوستر افقی (پیش‌فرض) — ۱ اعتبار"), callback_data: "p:poster:wide" }],
+      [{ text: mark(p.poster === "tall", "📱 پوستر عمودی — ۱ اعتبار"), callback_data: "p:poster:tall" }],
+      [{ text: mark((p.poster ?? "none") === "none", "بدون پوستر"), callback_data: "p:poster:none" }],
+    ];
+  } else if (p.step === "handout") {
+    ask = "📝 <b>جزوه‌ی Word</b> (حدود ۲ صفحه، همراه یک تصویر) هم همراه ارائه ساخته شود؟\n<i>خلاصه‌ی توضیحی و مناسب مطالعه از همان موضوع. هزینه‌ی جزوه ۱ اعتبار (جدا از ارائه) است و اگر ساخته نشود برمی‌گردد. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
+    opts = [
+      [{ text: mark(p.handout === true, "📝 با جزوه — ۱ اعتبار"), callback_data: "p:handout:1" }],
+      [{ text: mark(p.handout !== true, "بدون جزوه"), callback_data: "p:handout:0" }],
+    ];
   } else {
-    ask = "🖼 <b>تعداد تصویر</b> را انتخاب کن:\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>";
+    ask = "🖼 <b>تعداد تصویر</b> را انتخاب کن:" + (steps[steps.length - 1] === "imgs" ? "\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>" : "");
     opts = chunk(Array.from({ length: ABS_MAX_IMAGES + 1 }, (_, n) => ({
       text: lock(n > caps.maxImg, mark(p.imgs === n, n === 0 ? "بدون تصویر" : toFa(String(n)))), callback_data: `p:imgs:${n}`,
     })), 4);
@@ -151,7 +170,8 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 
 /** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
 async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
-  const begin = await beginDeck(env, uid, p.topic, { slides: p.slides, imageCount: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
+  const wantPoster = p.poster === "wide" || p.poster === "tall";
+  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout === true, slides: p.slides, imageCount: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
   if (!begin.ok) {
     const d = begin.denied;
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
@@ -171,9 +191,10 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     await answer();
     const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
     await editMessage(env, chatId, mid,
-      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید)…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`,
+      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout ? " + جزوه" : ""})…\nمعمولاً ${wantPoster || p.handout ? "۲ تا ۴" : "۱ تا ۲"} دقیقه طول می‌کشد.${creditLine}`,
       { reply_markup: { inline_keyboard: [] } });
-    const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig });
+    const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig },
+      wantPoster && posterEnabled(env) ? { layout: p.poster as "wide" | "tall" } : undefined);
     if (!ok) {
       return await editMessage(env, chatId, mid, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.").catch(() => {});
     }
@@ -224,6 +245,12 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
     if (!(Number(b) >= 3)) return await answer();
     if (Number(b) > caps.maxSlides) return await answer(slidesLimitMsg(caps.maxSlides), true);
     p.slides = clampSlides(Number(b), caps.maxSlides); s.slides = p.slides; p.note = undefined;
+  } else if (a === "handout") {
+    if (b !== "0" && b !== "1") return await answer();
+    p.handout = b === "1";
+  } else if (a === "poster") {
+    if (b !== "none" && b !== "wide" && b !== "tall") return await answer();
+    p.poster = b;
   } else if (a === "imgs") {
     if (!(Number.isInteger(Number(b)) && Number(b) >= 0 && Number(b) <= ABS_MAX_IMAGES)) return await answer();
     if (Number(b) > caps.maxImg) return await answer(imagesLimitMsg(caps.maxImg), true);
@@ -303,7 +330,9 @@ async function handleCallback(env: Env, cq: any) {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
     const f = await loadFile(env, uid, a);
     if (!f) return await sendMessage(env, chatId, "⌛️ این فایل منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).");
-    return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>`);
+    return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>`,
+      /\.(png|jpe?g)$/i.test(f.entry.name) ? { mime: /\.png$/i.test(f.entry.name) ? "image/png" : "image/jpeg" }
+        : /\.docx$/i.test(f.entry.name) ? { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" } : undefined);
   }
   const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);
   let view = mainMenu(env, s, caps);
@@ -410,10 +439,14 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const list = await listFiles(env, uid);
     if (!list.length) return await sendMessage(env, chatId, "📁 فایلی برای ۲۴ ساعت اخیر نداری. فایل هر ارائه بعد از ساخته شدن تا ۲۴ ساعت اینجا می‌ماند.");
     return await sendMessage(env, chatId, "📁 <b>فایل‌های ۲۴ ساعت اخیر</b>\nبرای دریافت دوباره، یکی را بزن:",
-      kb(list.map((f) => [
-        { text: `📥 ${f.title.slice(0, 32)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` },
-        ...(env.BROWSER ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),
-      ])));
+      kb(list.map((f) => /\.(png|jpe?g)$/i.test(f.name)
+        ? [{ text: `🖼 ${f.title.slice(0, 32)} (پوستر)`, callback_data: `f:${f.id}` }]
+        : /\.docx$/i.test(f.name)
+        ? [{ text: `📝 ${f.title.slice(0, 32)} (جزوه)`, callback_data: `f:${f.id}` }]
+        : [
+          { text: `📥 ${f.title.slice(0, 32)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` },
+          ...(env.BROWSER ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),
+        ])));
   }
   if (cmd === "/invite") {
     const me = await tg<{ username?: string }>(env, "getMe");
@@ -516,6 +549,8 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     slides: Math.min(o.slides ?? s.slides, caps.maxSlides),
     imgs: imgCountOf(s, caps),
     model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,
+    poster: "wide", // پیش‌فرض: با پوستر افقی
+    handout: false, // جزوه‌ی Word: پیش‌فرض خاموش (۱ اعتبار)
     step: "model",
     fixed: o.slides !== undefined, // تعداد اسلاید در متن موضوع آمده؛ دوباره پرسیده نمی‌شود
     ...(o.mode ? { mode: o.mode } : {}),

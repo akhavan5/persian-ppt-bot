@@ -7,7 +7,7 @@ import type { Deck } from "./types";
 export interface FileEntry { id: string; name: string; title: string; slides: number; t: number }
 
 const TTL = 24 * 60 * 60; // ثانیه
-const KEEP = 3; // آخرین چند فایل هر کاربر
+const KEEP = 9; // آخرین چند فایل هر کاربر (ارائه و پوستر همراهش هر کدام یک فایل‌اند)
 const MAX_BYTES = 24 * 1024 * 1024; // سقف مقدار در KV ۲۵ مگابایت است
 
 const fileKey = (userId: Uid, id: string) => `file:${userId}:${id}`;

@@ -77,6 +77,9 @@ async function viaApi(env: Env, query: string): Promise<Uint8Array | null> {
   }
 }
 
+/** برای تصویر تزئینی اینفوگرافیک (infographic-workflow.ts): همان مسیر ساخت تصویر اسلایدها؛ اگر API تصویر ندهد null */
+export const generateImage = viaApi;
+
 const words = (t: string) => new Set(t.toLowerCase().replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\u200c/g, " ").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
 
 /** دانلود تصویر واقعی پیدا‌شده در جستجو؛ فقط JPEG/PNG با اندازه‌ی معقول (وگرنه null و تصویر بعدی/ساخت با هوش مصنوعی) */

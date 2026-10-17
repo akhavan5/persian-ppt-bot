@@ -32,7 +32,7 @@ export async function cachedPdf(env: Env, userId: Uid, id: string): Promise<Uint
 }
 
 /** راه‌اندازی مرورگر؛ اگر کلودفلر به‌خاطر محدودیت تعداد مرورگر تازه در دقیقه/هم‌زمانی ۴۲۹ داد، چند بار با فاصله دوباره تلاش می‌کند */
-async function launchWithRetry(env: Env) {
+export async function launchWithRetry(env: Env) {
   const waits = [3000, 7000, 12000];
   for (let i = 0; ; i++) {
     try {

@@ -15,7 +15,7 @@ import {
   googleEnabled, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
   sessionCookie, type WebUser,
 } from "./auth";
-import { beginDeck, imagesLimitMsg, launchDeck, runningJob, slidesLimitMsg } from "./deck-service";
+import { beginDeck, imagesLimitMsg, launchDeck, posterEnabled, runningJob, slidesLimitMsg } from "./deck-service";
 import { OCR_TYPES } from "./extract";
 import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { TG_MAX_FILE, extractFileBytes } from "./tg-file";
@@ -77,6 +77,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       slideChoices: WEB_SLIDE_CHOICES,
       freeMaxSlides: FREE_MAX_SLIDES,
       freeMaxImages: FREE_MAX_IMAGES,
+      // پوستر (اینفوگرافیک) اختیاری همراه ارائه با ۱ اعتبار جدا؛ فقط وقتی Browser Rendering وصل است
+      poster: posterEnabled(env),
       // مدل‌های ارائه‌دهنده‌ی دوم (extra) فقط برای دارندگان پلن‌اند: free=false
       models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: !m.extra })),
       plans: PLANS,
@@ -121,9 +123,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   if (path === "/api/files" && method === "GET") {
     const list = await listFiles(env, user.id);
-    return json({ files: list.map((f) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t })) });
+    return json({ files: list.map((f) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name) })) });
   }
-  if (path.startsWith("/api/files/") && method === "GET") return download(env, user, path.slice("/api/files/".length));
+  if (path.startsWith("/api/files/") && method === "GET") return download(env, user, path.slice("/api/files/".length), url.searchParams.get("inline") === "1");
 
   return err("پیدا نشد", 404);
 }
@@ -273,7 +275,11 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
 
   const b = await readBody(req, 300_000); // متن فایل آپلودی (حداکثر ۱۲۰ هزار نویسه ≈ ۲۴۰ کیلوبایت UTF-8 برای فارسی) هم در بدنه می‌آید
+  // پوستر اختیاری همراه ارائه، ۱ اعتبار دیگر: "wide" | "tall"؛ هر مقدار دیگر = بدون پوستر
+  const posterWant = (b?.poster === "wide" || b?.poster === "tall") && posterEnabled(env) ? { layout: b.poster as "wide" | "tall" } : undefined;
   const begin = await beginDeck(env, user.id, String(b?.topic ?? ""), {
+    poster: !!posterWant,
+    handout: b?.handout === true,
     source: typeof b?.source === "string" ? b.source : undefined,
     slides: typeof b?.slides === "number" ? b.slides : undefined,
     imageCount: typeof b?.imageCount === "number" ? b.imageCount : undefined,
@@ -285,7 +291,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
 
   // شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow؛ پیشوندش شناسه‌ی کاربر است تا مالکیت بدون خواندن KV بررسی شود
   const jobId = `${user.id}-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
-  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web" }))) {
+  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web" }, posterWant))) {
     return err("شروع ساخت ارائه ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن.", 503);
   }
   return json({ jobId });
@@ -355,8 +361,11 @@ async function jobStatus(env: Env, user: WebUser, id: string): Promise<Response>
   const st = await inst.status();
 
   if (st.status === "complete") {
-    const o = (st.output ?? {}) as { title?: string; slides?: number; name?: string };
-    return json({ state: "done", title: o.title ?? "", slides: o.slides ?? 0, name: o.name ?? "presentation.pptx" });
+    const o = (st.output ?? {}) as { title?: string; slides?: number; name?: string; poster?: "ok" | "failed"; handout?: "ok" | "failed" };
+    // poster: "ok" ⇒ فایل پوستر با شناسه‌ی «<کار>-poster» ذخیره شده؛ "failed" ⇒ ارائه آماده است ولی پوستر ساخته نشد
+    return json({ state: "done", title: o.title ?? "", slides: o.slides ?? 0, name: o.name ?? "presentation.pptx", ...(o.poster ? { poster: o.poster, ...(o.poster === "ok" ? { posterId: `${id}-poster` } : {}) } : {}),
+      // جزوه‌ی Word همراه: "ok" ⇒ فایل با شناسه‌ی «<کار>-handout»؛ "failed" ⇒ ساخته نشد و اعتبارش برگشت
+      ...(o.handout ? { handout: o.handout, ...(o.handout === "ok" ? { handoutId: `${id}-handout` } : {}) } : {}) });
   }
   if (st.status === "errored" || st.status === "terminated") {
     return json({ state: "error", message: "ساخت ارائه با خطا مواجه شد؛ اعتبارت برگردانده شد. چند دقیقه بعد دوباره امتحان کن." });
@@ -365,15 +374,24 @@ async function jobStatus(env: Env, user: WebUser, id: string): Promise<Response>
   return json({ state: "running", message });
 }
 
-async function download(env: Env, user: WebUser, id: string): Promise<Response> {
+/** پوستر به‌صورت تصویر PNG/JPG ذخیره می‌شود (پسوند تصویر)؛ ارائه‌ها PPTX */
+const isPosterFile = (name: string) => /\.(png|jpe?g)$/i.test(name);
+const isHandoutFile = (name: string) => /\.docx$/i.test(name);
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/** inline=true: نمایش در تگ img (پیش‌نمایش پوستر)؛ وگرنه دانلود */
+async function download(env: Env, user: WebUser, id: string, inline = false): Promise<Response> {
   if (!/^[\w-]{1,100}$/.test(id)) return err("پیدا نشد", 404);
   const f = await loadFileDirect(env, user.id, id);
   if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
-  const ascii = "presentation.pptx";
+  const poster = isPosterFile(f.entry.name);
+  const png = /\.png$/i.test(f.entry.name);
+  const docx = isHandoutFile(f.entry.name);
+  const ascii = poster ? `poster.${png ? "png" : "jpg"}` : docx ? "handout.docx" : "presentation.pptx";
   return new Response(f.data, {
     headers: {
-      "content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "content-disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
+      "content-type": poster ? (png ? "image/png" : "image/jpeg") : docx ? DOCX_MIME : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "content-disposition": `${poster && inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
       ...SEC_HEADERS,
     },
   });

@@ -118,6 +118,13 @@ textarea{min-height:110px;resize:vertical}
 .msg.err{background:#fdecea;color:var(--danger)} .msg.info{background:var(--soft);color:#1d4ed8}
 .hero{text-align:center;padding:46px 0 26px;max-width:780px;margin:0 auto}
 .hero p.lead{font-size:1.08rem;color:var(--muted);margin:0 0 6px}
+.posterBox{margin-top:12px;border:2px dashed var(--line);border-radius:14px;padding:10px 14px}
+.posterBox .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.posterBox .pOn{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700}
+.posterBox select:disabled{opacity:.5}
+.posterBox select{flex:1 1 220px;min-width:0}
+.posterBox .free{display:inline-block;margin-inline-start:6px;font-size:.74rem;background:#e7f7ee;color:#18794e;border-radius:99px;padding:1px 9px;font-weight:700}
+.posterImg{display:block;max-width:100%;max-height:520px;margin:0 auto 12px;border-radius:12px;border:1px solid var(--line);background:#f4f5f8}
 .gen{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:12px;align-items:end}
 @media(max-width:560px){.gen{grid-template-columns:1fr}}
 .maker{max-width:780px;margin:0 auto 18px;text-align:right;border-color:#cfdcf7}
@@ -294,6 +301,20 @@ address{font-style:normal}
       <div><label for="imgCount" style="margin-top:0">تعداد تصویر</label><select id="imgCount"></select></div>
       <button class="btn" id="go" type="button">✨ بساز</button>
     </div>
+    <div class="posterBox" id="posterBox" hidden>
+      <label class="pOn" style="margin-top:0"><input type="checkbox" id="pOn"> 🖼 پوستر (اینفوگرافیک) هم ساخته شود <span class="free">+۱ اعتبار</span></label>
+      <div class="row">
+        <select id="pChoice" aria-label="چیدمان پوستر" disabled>
+          <option value="wide">پوستر افقی (پیش‌فرض؛ سه‌ستونه، مناسب نمایش روی صفحه)</option>
+          <option value="tall">پوستر عمودی (دوستونه، مناسب پیام‌رسان)</option>
+        </select>
+      </div>
+      <div class="muted" style="margin-top:6px;font-size:.82rem" id="pHint">یک تصویر تک‌صفحه‌ای با تصویر تزئینی از خلاصه‌ی موضوع. هزینه‌ی پوستر ۱ اعتبار (جدا از ارائه) است، اگر ساخته نشود برمی‌گردد و ساخت حدود یک دقیقه بیشتر طول می‌کشد.</div>
+    </div>
+    <div class="posterBox" id="handoutBox">
+      <label class="pOn" style="margin-top:0"><input type="checkbox" id="hOn"> 📝 جزوه‌ی Word هم ساخته شود <span class="free">+۱ اعتبار</span></label>
+      <div class="muted" style="margin-top:6px;font-size:.82rem">جزوه‌ی مطالعه‌ی حدود ۲ صفحه‌ای (فایل DOCX قابل‌ویرایش) همراه یک تصویر. اگر ساخته نشود، اعتبارش برمی‌گردد.</div>
+    </div>
     <div id="genMsg" class="msg err" role="alert" hidden></div>
   </section>
 
@@ -307,12 +328,17 @@ address{font-style:normal}
     </div>
     <div id="jobDone" hidden>
       <h2 style="font-size:1.1rem">✅ آماده شد</h2>
+      <img class="posterImg" id="doneImg" alt="پیش‌نمایش پوستر" hidden>
       <p style="margin:0 0 12px"><strong id="doneTitle"></strong><span class="muted" id="doneSlides"></span></p>
       <div class="doneBtns">
         <a class="btn ghost" id="doneView" href="#" target="_blank" rel="noopener">👁 پیش‌نمایش در مرورگر</a>
         <a class="btn ghost" id="donePdf" href="#" target="_blank" rel="noopener">📄 خروجی PDF</a>
         <button class="btn" id="doneDl" type="button">⬇️ دانلود فایل PPTX</button>
+        <button class="btn" id="donePosterDl" type="button" hidden>🖼 دانلود پوستر</button>
+        <button class="btn" id="doneHandoutDl" type="button" hidden>📝 دانلود جزوه (Word)</button>
       </div>
+      <p class="muted" id="doneHandoutFail" hidden>⚠️ ساخت جزوه ناموفق بود؛ ارائه‌ات آماده است و اعتبار جزوه برگردانده شد.</p>
+      <p class="muted" id="donePosterFail" hidden>⚠️ ساخت پوستر ناموفق بود؛ ارائه‌ات آماده است و اعتبار پوستر برگردانده شد.</p>
       <p class="muted fontNote" id="doneFont" hidden>🔤 برای نمایش درست فایل PPTX روی دستگاهت، فونت <b>Vazirmatn</b> را نصب کن: <a href="/fonts/Vazirmatn.zip" download>دانلود مستقیم فونت</a>. پیش‌نمایش و PDF بدون نصب فونت درست دیده می‌شوند.</p>
     </div>
     <div id="jobErr" hidden><div class="msg err" id="jobErrText"></div></div>
@@ -605,7 +631,7 @@ async function boot() {
     const r = await api("/api/me");
     me = r.user ? r : null;
   } catch (e) { toast("ارتباط با سرور برقرار نشد؛ صفحه را دوباره باز کن."); return; }
-  renderCommon();
+  renderCommon(); initPoster();
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
   if (me) { if ($("#authDlg").open) $("#authDlg").close(); renderApp(); } else renderAuthBtn();
   handlePayReturn();
@@ -1172,6 +1198,24 @@ $("#upBox").addEventListener("drop", (e) => { if (!extracting && !srcText) onFil
 // ---------- ساخت ارائه ----------
 function jobView(state) { show($("#job"), !!state); show($("#jobRun"), state === "run"); show($("#jobDone"), state === "done"); show($("#jobErr"), state === "err"); }
 $("#topic").addEventListener("input", (e) => store.set("topic", e.target.value));
+// پوستر اختیاری همراه ارائه (فقط وقتی سرور فعالش کرده)؛ انتخاب کاربر در همین نشست یادآوری می‌شود
+function initPoster() {
+  if (!cfg) return;
+  show($("#posterBox"), !!cfg.poster);
+  let v = "wide"; try { const x = sessionStorage.getItem("poster"); if (x !== null) v = x; } catch {} // پیش‌فرض: با پوستر افقی؛ خاموش‌کردنِ کاربر ("") یادآوری می‌شود
+  $("#pOn").checked = cfg.poster && (v === "wide" || v === "tall");
+  $("#pChoice").value = v === "tall" ? "tall" : "wide"; // پیش‌فرض افقی
+  $("#pChoice").disabled = !$("#pOn").checked;
+}
+function savePoster() {
+  $("#pChoice").disabled = !$("#pOn").checked;
+  try { sessionStorage.setItem("poster", $("#pOn").checked ? $("#pChoice").value : ""); } catch {}
+}
+$("#pOn").addEventListener("change", savePoster);
+$("#hOn").checked = (() => { try { return sessionStorage.getItem("handout") === "1"; } catch { return false; } })();
+$("#hOn").addEventListener("change", () => { try { sessionStorage.setItem("handout", $("#hOn").checked ? "1" : "0"); } catch {} });
+$("#pChoice").addEventListener("change", savePoster);
+
 $("#go").onclick = async () => {
   const msg = $("#genMsg"); show(msg, false);
   if (extracting) { msg.textContent = "صبر کن تا خواندن فایل تمام شود."; show(msg, true); return; }
@@ -1184,7 +1228,7 @@ $("#go").onclick = async () => {
   }
   try {
     // تا شروع کار، دکمه «در حال ارسال…» نشان می‌دهد؛ بعد از موفقیت قفل می‌ماند تا پایان ساخت (track آزادش می‌کند)
-    const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), imageCount: Number($("#imgCount").value), ...(srcText ? { source: srcText } : {}) } }), { disabled: true });
+    const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), imageCount: Number($("#imgCount").value), ...(srcText ? { source: srcText } : {}), ...(cfg.poster && $("#pOn").checked ? { poster: $("#pChoice").value } : {}), ...($("#hOn").checked ? { handout: true } : {}) } }), { disabled: true });
     $("#jobText").textContent = "⏳ در صف…"; jobView("run");
     $("#job").scrollIntoView({ behavior: "smooth", block: "center" });
     refreshMe(); track(r.jobId);
@@ -1215,6 +1259,21 @@ async function track(jobId) {
       $("#doneDl").onclick = (ev) => download(jobId, ev.currentTarget);
       $("#doneView").href = $("#donePdf").href = previewUrl(jobId);
       $("#doneFont").hidden = !(me && me.settings && me.settings.font === "Vazirmatn");
+      // پوستر همراه: پیش‌نمایش + دانلود (فایل تازه ممکن است چند ثانیه برای KV دیده نشود؛ در خطا چند بار دوباره امتحان می‌شود)
+      const img = $("#doneImg"), pDl = $("#donePosterDl");
+      img.hidden = pDl.hidden = true; img.removeAttribute("src");
+      $("#donePosterFail").hidden = s.poster !== "failed";
+      $("#doneHandoutFail").hidden = s.handout !== "failed";
+      const hDl = $("#doneHandoutDl"); hDl.hidden = !(s.handout === "ok" && s.handoutId);
+      if (!hDl.hidden) hDl.onclick = (ev) => download(s.handoutId, ev.currentTarget);
+      if (s.poster === "ok" && s.posterId) {
+        const src = "/api/files/" + encodeURIComponent(s.posterId) + "?inline=1";
+        let tries = 0;
+        img.onerror = () => { if (++tries <= 10) setTimeout(() => { img.src = src + "&r=" + tries; }, 3000); else img.hidden = true; };
+        img.onload = () => { img.hidden = false; };
+        img.src = src;
+        pDl.hidden = false; pDl.onclick = (ev) => download(s.posterId, ev.currentTarget);
+      }
       jobView("done"); loadFiles();
     } else { $("#jobErrText").textContent = s.message; jobView("err"); }
     return;
@@ -1256,9 +1315,11 @@ async function loadFiles() {
   box.replaceChildren(...list.map((f) => {
     const hrs = Math.max(1, Math.ceil((f.t + 86400000 - Date.now()) / 3600000));
     return h("div", { class: "file" },
-      h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${fa(f.slides)} اسلاید · تا ${fa(hrs)} ساعت دیگر`)),
+      h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${f.poster ? "پوستر" : f.handout ? "جزوه (Word)" : fa(f.slides) + " اسلاید"} · تا ${fa(hrs)} ساعت دیگر`)),
       h("div", { class: "fa" },
-        h("a", { class: "btn ghost sm", href: previewUrl(f.id), target: "_blank", rel: "noopener" }, "👁 پیش‌نمایش / PDF"),
+        f.handout ? null : f.poster
+          ? h("a", { class: "btn ghost sm", href: "/api/files/" + encodeURIComponent(f.id) + "?inline=1", target: "_blank", rel: "noopener" }, "👁 نمایش")
+          : h("a", { class: "btn ghost sm", href: previewUrl(f.id), target: "_blank", rel: "noopener" }, "👁 پیش‌نمایش / PDF"),
         h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => download(f.id, ev.currentTarget) }, "⬇️ دانلود")));
   }));
 }

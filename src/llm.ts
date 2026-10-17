@@ -190,6 +190,9 @@ async function ask(env: Env, prompt: string, maxTokens = 6000, modelId?: string)
   throw last instanceof Error ? last : new Error("invalid JSON");
 }
 
+/** برای اینفوگرافیک (infographic.ts): همان ask با یک بار تلاش مجدد برای JSON نامعتبر */
+export { ask as askJson };
+
 /** یک بار تلاش مجدد برای خطای گذرا (تایم‌اوت، ۴۲۹، ۵xx)؛ خطای قطعی (کلید/مدل نادرست) بلافاصله پرتاب می‌شود. */
 async function askRetry(env: Env, prompt: string, maxTokens: number, modelId?: string): Promise<any> {
   try { return await ask(env, prompt, maxTokens, modelId); }

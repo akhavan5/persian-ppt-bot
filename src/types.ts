@@ -77,4 +77,8 @@ export interface DeckParams {
   credit: "plan" | "bonus" | "none";
   /** روز (UTC) کسر اعتبار */
   day: string;
+  /** پوستر (اینفوگرافیک) همراه ارائه، در همین Workflow؛ ۱ اعتبار جدا (credit/day: منبع و روز کسر برای برگشت در شکست)، همیشه با تصویر تزئینی. خالی = فقط ارائه */
+  poster?: { layout: "wide" | "tall"; credit: "plan" | "bonus" | "none"; day: string };
+  /** جزوه‌ی Word (حدود ۲ صفحه با یک تصویر) همراه ارائه، در همین Workflow؛ ۱ اعتبار جدا. خالی = بدون جزوه */
+  handout?: { credit: "plan" | "bonus" | "none"; day: string };
 }
