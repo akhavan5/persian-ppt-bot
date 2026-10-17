@@ -127,7 +127,14 @@ textarea{min-height:110px;resize:vertical}
 .posterImg{display:block;max-width:100%;max-height:520px;margin:0 auto 12px;border-radius:12px;border:1px solid var(--line);background:#f4f5f8}
 .gen{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;align-items:end}
 .goRow{margin-top:14px;display:flex;justify-content:center}
-.goRow .btn{min-width:180px}
+.goRow .btn{min-width:300px;padding-inline:40px;min-height:54px;font-size:1.12rem;position:relative;overflow:hidden;box-shadow:0 8px 24px rgba(37,99,235,.32);animation:goGlow 2.8s ease-in-out infinite}
+.goRow .btn::after{content:"";position:absolute;top:0;bottom:0;inset-inline-start:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.38),transparent);transform:skewX(-20deg);animation:goShine 3.4s ease-in-out infinite;pointer-events:none}
+.goRow .btn:disabled,.goRow .btn.busy{animation:none}
+.goRow .btn:disabled::after,.goRow .btn.busy::after{display:none}
+@keyframes goShine{0%,55%{inset-inline-start:-60%}100%{inset-inline-start:130%}}
+@keyframes goGlow{0%,100%{box-shadow:0 8px 24px rgba(37,99,235,.28)}50%{box-shadow:0 10px 32px rgba(37,99,235,.5)}}
+@media(max-width:560px){.goRow .btn{width:100%;min-width:0}}
+@media(prefers-reduced-motion:reduce){.goRow .btn,.goRow .btn::after{animation:none}}
 @media(max-width:560px){.gen{grid-template-columns:1fr}}
 .maker{max-width:780px;margin:0 auto 18px;text-align:right;border-color:#cfdcf7}
 .ex{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
