@@ -174,12 +174,12 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         if (!posterOk) notes.push("⚠️ ساخت پوستر ناموفق بود؛ اعتبار پوستر برگردانده شد.");
       }
 
-      // جزوه‌ی Word (حدود ۲ صفحه با یک تصویر) همراه ارائه؛ مثل پوستر: خطایش فقط اعتبار خودش را برمی‌گرداند
+      // جزوه‌ی Word (حدود ۳ صفحه با یک تصویر) همراه ارائه؛ مثل پوستر: خطایش فقط اعتبار خودش را برمی‌گرداند
       if (handout) {
         let handoutOk = false;
         try {
           const hnotes = found.notes || (event.payload.source ? event.payload.source.slice(0, 8000) : "");
-          const hd = await step.do("handout-content", { retries: { limit: 1, delay: "10 seconds" }, timeout: "3 minutes" }, () =>
+          const hd = await step.do("handout-content", { retries: { limit: 1, delay: "10 seconds" }, timeout: "5 minutes" }, () =>
             guard(async () => {
               await status("📝 نوشتن جزوه‌ی Word…");
               return makeHandout(this.env, topic, deck, { tone: settings.tone, model: settings.model, research: hnotes });

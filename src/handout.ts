@@ -1,5 +1,5 @@
 /**
- * جزوه‌ی Word (حدود ۲ صفحه، با یک تصویر) همراه ارائه.
+ * جزوه‌ی Word (حدود ۳ صفحه، با یک تصویر) همراه ارائه.
  * مسیر: محتوای همان ارائه + یادداشت‌های پژوهش ← JSON ساختاریافته از مدل (makeHandout) ← فایل DOCX راست‌به‌چپ (buildDocx).
  * DOCX با JSZip (که پروژه از قبل دارد) و XML خام ساخته می‌شود؛ پس وابستگی تازه‌ای لازم نیست.
  */
@@ -22,16 +22,16 @@ export function normalizeHandout(data: any, topic: string): Handout {
   const sections: HandoutSection[] = (Array.isArray(data?.sections) ? data.sections : []).slice(0, 5)
     .map((s: any): HandoutSection => ({
       heading: str(s?.heading ?? s?.title).slice(0, 90),
-      text: str(s?.text ?? s?.paragraph).slice(0, 900),
+      text: str(s?.text ?? s?.paragraph).slice(0, 1300),
       bullets: strArr(s?.bullets).slice(0, 4).map((b) => b.slice(0, 200)),
     }))
     .filter((s: HandoutSection) => s.heading && (s.text || s.bullets.length));
   if (sections.length < 2) throw new Error("model returned no valid handout");
   return {
     title: str(data?.title).slice(0, 140) || topic,
-    intro: str(data?.intro).slice(0, 700),
+    intro: str(data?.intro).slice(0, 800),
     sections,
-    keypoints: strArr(data?.keypoints).slice(0, 6).map((k) => k.slice(0, 200)),
+    keypoints: strArr(data?.keypoints).slice(0, 7).map((k) => k.slice(0, 200)),
     image_query: str(data?.image_query).slice(0, 200),
   };
 }
@@ -52,7 +52,7 @@ export async function makeHandout(env: Env, topic: string, deck: Deck, o: { tone
   const notes = o.research
     ? `\nBackground notes from a live web search (may be partial; more up to date than your memory; never copy sentences, never mention "search" or "notes"; ignore unrelated snippets):\n${o.research.slice(0, 4000)}\n`
     : "";
-  const prompt = `Write a concise Persian STUDY HANDOUT (جزوه) of about two A4 pages (about 520 to 620 Persian words in total) that a student could read before or after the presentation below.
+  const prompt = `Write a concise Persian STUDY HANDOUT (جزوه) of about THREE A4 pages (about 900 to 1000 Persian words in total, do not write less than 850) that a student could read before or after the presentation below.
 Topic: ${topic}
 Presentation title: ${deck.title}
 Tone: ${TONES[o.tone ?? ""] ?? TONES.educational}
@@ -61,14 +61,14 @@ ${deckDigest(deck)}
 ${notes}
 Rules:
 - Natural, fluent Persian prose with correct half-spaces (نیم‌فاصله). Explain, connect ideas and give a short example where useful; do not just repeat the slide bullets.
-- Exactly 4 sections. Each section: a short heading (max 7 words), one paragraph of 70 to 100 words, and 0 to 3 short bullets (max 14 words each) only when a list really helps.
-- "intro": 2 sentences (40 to 60 words) saying what the reader will learn.
-- "keypoints": 4 or 5 one-line takeaways (max 16 words each).
+- Exactly 5 sections. Each section: a short heading (max 7 words), one rich paragraph of 130 to 160 words, and 2 to 3 short bullets (max 14 words each) that add a concrete point or example.
+- "intro": 3 sentences (60 to 80 words) saying what the reader will learn.
+- "keypoints": 5 or 6 one-line takeaways (max 16 words each).
 - Never invent statistics, quotes, names or sources. If unsure of a number, stay general.
 - Output language is Persian; only "image_query" is English.
 Return ONLY one JSON object with exactly this shape:
 {"title":"short Persian title (max 12 words)","intro":"...","sections":[{"heading":"...","text":"...","bullets":["..."]}],"keypoints":["..."],"image_query":"English description of ONE concrete illustration that matches the topic (objects, setting; no text, no abstract words; max 14 words)"}`;
-  const data = await askJson(env, prompt, 4200, o.model);
+  const data = await askJson(env, prompt, 7000, o.model);
   return normalizeHandout(data, topic);
 }
 

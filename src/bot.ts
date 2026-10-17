@@ -138,7 +138,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
       [{ text: mark((p.poster ?? "none") === "none", "بدون پوستر"), callback_data: "p:poster:none" }],
     ];
   } else if (p.step === "handout") {
-    ask = "📝 <b>جزوه‌ی Word</b> هم ساخته شود؟ (۱ اعتبار)\n<i>جزوه‌ی مطالعه‌ی حدود دو صفحه‌ای به‌صورت فایل Word قابل‌ویرایش، شامل مقدمه، چند بخش توضیحی و نکات کلیدی. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
+    ask = "📝 <b>جزوه‌ی Word</b> هم ساخته شود؟ (۱ اعتبار)\n<i>جزوه‌ی مطالعه‌ی حدود سه صفحه‌ای به‌صورت فایل Word قابل‌ویرایش، شامل مقدمه، چند بخش توضیحی و نکات کلیدی. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
     opts = [
       [{ text: mark(p.handout !== false, "📝 با جزوه — ۱ اعتبار"), callback_data: "p:handout:1" }],
       [{ text: mark(p.handout === false, "بدون جزوه"), callback_data: "p:handout:0" }],
