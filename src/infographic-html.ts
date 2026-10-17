@@ -9,7 +9,7 @@ import type { IgBlock, IgLayout, Infographic } from "./infographic";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export const IG_WIDTH: Record<IgLayout, number> = { wide: 1800, tall: 1200 };
+export const IG_WIDTH: Record<IgLayout, number> = { wide: 2100, tall: 1200 };
 
 export interface IgRenderOpts {
   theme: string;
@@ -25,7 +25,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
   const W = IG_WIDTH[o.layout];
   const cols = o.layout === "wide" ? 3 : 2;
-  const base = o.layout === "wide" ? 29 : 27;
+  const base = o.layout === "wide" ? 29 : 24;
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
   const dark = t.bg.toUpperCase() < "808080"; // پس‌زمینه‌ی تیره (مثل تم نیمه‌شب)
@@ -147,7 +147,7 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 .top .tt{flex:1;min-width:0}
 .top h1{margin:0;font-size:${base * 2.1}px;line-height:1.35;font-weight:800}
 .top p{margin:${base * 0.4}px 0 0;font-size:${base * 0.95}px;opacity:.82}
-.top img{width:${o.layout === "wide" ? 380 : 260}px;height:${o.layout === "wide" ? 220 : 160}px;object-fit:cover;border-radius:${base * 0.7}px;border:3px solid var(--ac);flex:none}
+.top img{width:${Math.round(base * (o.layout === "wide" ? 15.2 : 10.8))}px;height:${Math.round(base * (o.layout === "wide" ? 8.8 : 6.7))}px;object-fit:cover;border-radius:${base * 0.7}px;border:3px solid var(--ac);flex:none}
 .wrap{padding:${base * 1.2}px ${base * 1.4}px ${base * 0.6}px}
 .cols{display:flex;gap:${base * 1.1}px;align-items:flex-start}
 .col{flex:1;min-width:0}
