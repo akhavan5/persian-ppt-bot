@@ -179,11 +179,12 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       if (handout) {
         let handoutOk = false;
         try {
-          const hnotes = found.notes || (event.payload.source ? event.payload.source.slice(0, 8000) : "");
+          const hsource = event.payload.source || "";
+          const hnotes = hsource ? "" : found.notes;
           const hd = await step.do("handout-content", { retries: { limit: 1, delay: "10 seconds" }, timeout: "5 minutes" }, () =>
             guard(async () => {
               await status("📝 نوشتن جزوه‌ی Word…");
-              return makeHandout(this.env, topic, deck, { tone: settings.tone, model: settings.model, research: hnotes });
+              return makeHandout(this.env, hsource ? deck.title : topic, deck, { tone: settings.tone, model: settings.model, research: hnotes, source: hsource || undefined });
             }));
           await step.do("handout-build", { retries: { limit: 1, delay: "5 seconds" }, timeout: "4 minutes" }, async () => {
             await status("📝 ساخت فایل جزوه…");
