@@ -2,6 +2,7 @@
 import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
+import { TEMPLATES, isTemplate } from "./template";
 import {
   FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
   EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
@@ -72,6 +73,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       google: googleEnabled(env),
       otp: otpEnabled(env),
       payEnabled: payEnabled(env),
+      templates: Object.entries(TEMPLATES).map(([key, v]) => ({ key, name: v.name, emoji: v.emoji, hint: v.hint })),
       themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent })),
       tones: TONES,
       fonts: FONTS,
@@ -232,6 +234,7 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
   if (!b) return err("درخواست نامعتبر");
   const s = await getSettings(env, user.id);
   if (typeof b.theme === "string" && b.theme in THEMES) s.theme = b.theme;
+  if (isTemplate(b.template)) s.template = b.template;
   if (typeof b.tone === "string" && b.tone in TONES) s.tone = b.tone;
   if (typeof b.font === "string" && (FONTS as readonly string[]).includes(b.font)) s.font = b.font;
   if (isMode(b.mode)) s.mode = b.mode;
@@ -424,7 +427,7 @@ async function preview(env: Env, user: WebUser, id: string): Promise<Response> {
   const p = await loadPreview(env, user.id, id);
   if (!p) return page("پیش‌نمایش پیدا نشد یا منقضی شده است (ارائه‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
   const nonce = randomToken(12);
-  return new Response(renderPreview(p.deck, { id, theme: p.theme, font: p.font, digits: p.digits, images: p.images, nonce }), {
+  return new Response(renderPreview(p.deck, { id, theme: p.theme, template: p.template, font: p.font, digits: p.digits, images: p.images, nonce }), {
     headers: {
       "content-type": "text/html; charset=utf-8",
       // اسکریپت فقط با nonce؛ فونت و استایل فقط از Google Fonts؛ تصویر فقط از همین سایت

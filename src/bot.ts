@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { Mode, Settings } from "./types";
 import { FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
+import { TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, getActiveSub, getCredit, getSettings, isAdmin, isAllowed, isBanned,
   maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
@@ -52,7 +53,9 @@ function mainMenu(env: Env, s: Settings, caps: Caps) {
   const model = models.find((m) => m.id === s.model) ?? models[0];
   const modeBtn: Btn = { text: `${MODES[s.mode].emoji} حالت: ${MODES[s.mode].name}`, callback_data: "t:mode" };
   const n = imgCountOf(s, caps);
+  const tpl = TEMPLATES[(isTemplate(s.template) ? s.template : "classic") as TemplateKey];
   const rows: Btn[][] = [
+    [{ text: `${tpl.emoji} قالب: ${tpl.name}`, callback_data: "m:tpl" }],
     [{ text: `🎨 تم: ${THEMES[s.theme].name}`, callback_data: "m:theme" }, { text: `🗣 لحن: ${TONES[s.tone]}`, callback_data: "m:tone" }],
     [{ text: `🔤 فونت: ${s.font}`, callback_data: "m:font" }, { text: `📄 اسلاید: ${toFa(String(Math.min(s.slides, caps.maxSlides)))}`, callback_data: "m:slides" }],
     [{ text: `🖼 تصویر: ${n ? toFa(String(n)) : "خاموش"}`, callback_data: "m:imgs" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
@@ -68,7 +71,11 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
   const mark = (on: boolean, t: string) => (on ? `✔️ ${t}` : t);
   const lock = (locked: boolean, t: string) => (locked ? `🔒 ${t}` : t);
   let title = "", opts: Btn[] = [];
-  if (kind === "theme") {
+  if (kind === "tpl") {
+    title = "🖼 قالب اسلاید\n<i>قالب، چیدمان و تزئین اسلایدها را تعیین می‌کند و جدا از «تم رنگی» است. برای بهترین نتیجه‌ی «آکادمیک مدرن»، تم «بنفش و نارنجی» را هم انتخاب کن.</i>\n\n" +
+      Object.values(TEMPLATES).map((v) => `${v.emoji} <b>${v.name}</b>: ${v.hint}`).join("\n");
+    opts = Object.entries(TEMPLATES).map(([k, v]) => ({ text: mark((isTemplate(s.template) ? s.template : "classic") === k, `${v.emoji} ${v.name}`), callback_data: `v:tpl:${k}` }));
+  } else if (kind === "theme") {
     title = "🎨 تم رنگی";
     opts = Object.entries(THEMES).map(([k, v]) => ({ text: mark(s.theme === k, v.name), callback_data: `v:theme:${k}` }));
   } else if (kind === "tone") {
@@ -357,6 +364,7 @@ async function handleCallback(env: Env, cq: any) {
     view = mainMenu(env, s, caps);
   } else if (act === "v") {
     if (a === "theme" && b in THEMES) s.theme = b;
+    if (a === "tpl" && isTemplate(b)) s.template = b;
     if (a === "tone" && b in TONES) s.tone = b;
     if (a === "font" && (FONTS as readonly string[]).includes(b)) s.font = b;
     if (a === "slides" && Number(b) >= 3) {

@@ -3,6 +3,7 @@ import PptxGenJS from "pptxgenjs";
 import type { Deck, Slide } from "./types";
 import { THEMES, iconOf, type Theme } from "./themes";
 import { toFa } from "./util";
+import { RAIL, academicPalette, badgeColor, isTemplate, pillRow, railDots } from "./template";
 
 const W = 13.333, H = 7.5, M = 0.8; // اسلاید 16:9 و حاشیه (اینچ)
 
@@ -55,6 +56,8 @@ interface TextOpts {
 
 export interface BuildOptions {
   theme?: string;
+  /** قالب اسلاید (classic | academic)؛ ناشناخته/خالی = classic */
+  template?: string;
   font?: string;
   persianDigits?: boolean;
   images?: Map<number, Uint8Array>;
@@ -68,12 +71,16 @@ export async function buildPptx(deck: Deck, opts: BuildOptions = {}): Promise<Ui
 class Builder {
   private p = new PptxGenJS();
   private t: Theme;
+  private ac: boolean;
+  private A: ReturnType<typeof academicPalette>;
   private font: string;
   private digits: boolean;
   private images: Map<number, Uint8Array>;
 
   constructor(o: BuildOptions) {
     this.t = THEMES[o.theme ?? "ocean"] ?? THEMES.ocean;
+    this.ac = isTemplate(o.template) && o.template === "academic";
+    this.A = academicPalette(this.t);
     this.font = o.font ?? "Vazirmatn";
     this.digits = o.persianDigits ?? true;
     this.images = o.images ?? new Map();
@@ -101,6 +108,24 @@ class Builder {
     });
   }
 
+  /** مستطیل گرد با خط‌دور اختیاری (قالب آکادمیک) */
+  private round(s: PptxGenJS.Slide, x: number, y: number, w: number, h: number, fill: string, line?: string, r?: number, lw = 1.25) {
+    s.addShape(this.p.ShapeType.roundRect, {
+      x, y, w, h, fill: { color: fill },
+      line: line ? { color: line, width: lw } : ({ type: "none" } as any),
+      rectRadius: Math.min(r ?? 0.05 * Math.min(w, h), Math.min(w, h) / 2),
+    });
+  }
+
+  /** کارت پس‌زمینه: کلاسیک = همان سطح ساده‌ی قبلی؛ آکادمیک = کارت سفید گرد با خط‌دور */
+  private card(s: PptxGenJS.Slide, x: number, y: number, w: number, h: number) {
+    if (this.ac) this.round(s, x, y, w, h, this.A.card, this.t.primary, 0.2, 1);
+    else this.shape(s, x, y, w, h, this.t.surface);
+  }
+  private bgc() { return this.ac ? this.A.bg : this.t.bg; }
+  /** رنگ دایره‌ی شماره‌دار/آیکن */
+  private bc(i: number) { return this.ac ? badgeColor(this.t, i) : this.t.primary; }
+
   private text(s: PptxGenJS.Slide, x: number, y: number, w: number, h: number, paras: string[],
     size: number, color: string, o: TextOpts = {}) {
     const runs = paras.map((para) => ({
@@ -124,16 +149,68 @@ class Builder {
   }
 
   private title(s: PptxGenJS.Slide, text: string) {
+    if (this.ac) {
+      this.round(s, M, 0.45, W - 2 * M, 0.95, this.A.card, this.t.primary, 0.475, 1.25);
+      this.shape(s, W - M - 0.55, 0.45 + 0.475 - 0.14, 0.28, 0.28, this.t.accent, "ellipse");
+      const tw = W - 2 * M - 1.4;
+      this.text(s, M + 0.7, 0.45, tw, 0.95, [text], fitSize([text], tw, 0.95, 32, 20, false, 0), this.t.primary, { bold: true, align: "center", valign: "middle", space: 0 });
+      return;
+    }
     const size = fitSize([text], W - 2 * M, 1.0, 34, 22, false, 0);
     this.text(s, M, 0.55, W - 2 * M, 1.0, [text], size, this.t.primary, { bold: true, valign: "middle", space: 0 });
   }
 
   private number(s: PptxGenJS.Slide, n: number) {
+    if (this.ac) {
+      this.shape(s, 0.55, 6.82, 0.5, 0.5, this.t.primary, "ellipse");
+      this.text(s, 0.55, 6.82, 0.5, 0.5, [String(n)], 12, this.t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
+      return;
+    }
     this.text(s, 0.6, 6.95, 1.0, 0.3, [String(n)], 11, this.t.muted, { align: "left", space: 0 });
+  }
+
+  /** نوار پیشرفت کناری (قالب آکادمیک): یک نقطه برای هر اسلاید (حداکثر ۱۲)، نقطه‌ی فعال نارنجی و بزرگ‌تر */
+  private rail(s: PptxGenJS.Slide, i: number, n: number) {
+    const { ys, active } = railDots(i, n);
+    this.shape(s, RAIL.x - 0.01, RAIL.top, 0.02, RAIL.bottom - RAIL.top, this.t.muted, "roundRect", 45);
+    ys.forEach((y, k) => {
+      if (k === active) this.shape(s, RAIL.x - 0.13, y - 0.13, 0.26, 0.26, this.t.accent, "ellipse");
+      else this.shape(s, RAIL.x - 0.06, y - 0.06, 0.12, 0.12, this.t.muted, "ellipse", 70);
+    });
+  }
+
+  private acTitle(sd: Slide, closing: boolean) {
+    const t = this.t, A = this.A, s = this.slide(A.bg);
+    this.shape(s, -1.6, -1.8, 4.6, 4.6, t.accent, "ellipse", 28);
+    this.shape(s, 10.6, 4.9, 4.6, 4.6, t.primary, "ellipse", 22);
+    this.round(s, M, 1.2, W - 2 * M, 3.55, A.card, t.primary, 0.3, 2);
+    this.round(s, W - M - 1.6, 1.55, 1.0, 0.1, t.accent, undefined, 0.05);
+    const tw = W - 2 * M - 1.2;
+    this.text(s, M + 0.6, 1.8, tw, 2.8, [sd.title], fitSize([sd.title], tw, 2.8, 46, 26, false, 0), A.head,
+      { bold: true, align: closing ? "center" : "right", valign: "middle", space: 0 });
+    const sub = (sd.subtitle ? [sd.subtitle] : sd.bullets.slice(0, 3)).filter(Boolean);
+    pillRow(sub.length, W, M).forEach((pos, i) => {
+      this.round(s, pos.x, 5.15, pos.w, 0.85, i % 2 ? t.accent : t.primary, undefined, 0.425);
+      this.text(s, pos.x + 0.25, 5.15, pos.w - 0.5, 0.85, [sub[i]], fitSize([sub[i]], pos.w - 0.5, 0.85, 20, 13, false, 0), t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
+    });
+    return s;
+  }
+
+  private acSection(sd: Slide, n: number) {
+    const t = this.t, s = this.slide(t.primary);
+    this.shape(s, -1.5, 4.2, 5.5, 5.5, t.dark, "ellipse", 45);
+    this.shape(s, 10.4, -2.0, 5.0, 5.0, t.accent, "ellipse", 25);
+    this.shape(s, W - M - 2.0, 2.3, 1.7, 1.7, t.accent, "ellipse");
+    this.text(s, W - M - 2.0, 2.3, 1.7, 1.7, [String(n)], 60, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
+    const tw = W - 2 * M - 2.8;
+    this.text(s, M + 0.4, 2.2, tw, 1.9, [sd.title], fitSize([sd.title], tw, 1.9, 44, 26, false, 0), t.onPrimary, { bold: true, valign: "middle", space: 0 });
+    if (sd.subtitle) this.text(s, M + 0.4, 4.4, W - 2 * M - 0.8, 1.0, [sd.subtitle], 20, t.onPrimary);
+    return s;
   }
 
   // ---------- چیدمان‌ها ----------
   private titleLike(sd: Slide, closing: boolean) {
+    if (this.ac) return this.acTitle(sd, closing);
     const s = this.slide(this.t.primary);
     this.shape(s, -2.2, 3.6, 6.5, 6.5, this.t.accent, "ellipse", 22);
     this.shape(s, 9.6, -2.4, 5.2, 5.2, this.t.dark, "ellipse", 55);
@@ -149,6 +226,7 @@ class Builder {
   }
 
   private section(sd: Slide, n: number) {
+    if (this.ac) return this.acSection(sd, n);
     const s = this.slide(this.t.dark);
     this.shape(s, -1.5, 4.2, 5.5, 5.5, this.t.primary, "ellipse", 60);
     const tw = W - 2 * M - 1;
@@ -160,9 +238,10 @@ class Builder {
   }
 
   private bullets(sd: Slide) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
-    this.shape(s, M, 1.8, W - 2 * M, 4.85, this.t.surface);
+    this.card(s, M, 1.8, W - 2 * M, 4.85);
+    if (this.ac) this.round(s, W - M - 0.32, 2.2, 0.1, 4.25, this.t.accent, undefined, 0.05);
     const paras = sd.bullets.length ? sd.bullets : [""];
     const iw = W - 2 * M - 1.0, ih = 4.1;
     this.text(s, M + 0.5, 2.15, iw, ih, paras, fitSize(paras, iw, ih, 26, 15, true), this.t.text,
@@ -171,12 +250,12 @@ class Builder {
   }
 
   private imageText(sd: Slide, img: Uint8Array) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
     // عکس‌های واقعی وب نسبت‌های مختلفی دارند و گاهی متن/لوگو در لبه‌هایشان است؛ با cover لبه‌ها بریده می‌شد.
     // با sizing=contain کل تصویر (بدون برش و بدون کشیدگی) وسط کادر می‌نشیند؛ پشتش کادر هم‌رنگ سطح اسلاید است.
     // w/h = ابعاد (نسبت) خود تصویر، و sizing.w/h = اندازه‌ی کادر
-    this.shape(s, M, 1.8, IMAGE_BOX.w, IMAGE_BOX.h, this.t.surface);
+    this.card(s, M, 1.8, IMAGE_BOX.w, IMAGE_BOX.h);
     const png = img[0] === 0x89 && img[1] === 0x50; // امضای PNG
     const d = imageSize(img), aspect = d && d.w > 0 && d.h > 0 ? d.w / d.h : 1; // نسبت واقعی تصویر (عکس‌های واقعی مربع نیستند)
     s.addImage({
@@ -192,13 +271,16 @@ class Builder {
 
   /** ۲ یا ۳ ستون (مقایسه، سه محور)؛ ستون اول سمت راست */
   private columns(sd: Slide, n: 2 | 3) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
     const gap = n === 3 ? 0.3 : 0.4, cw = (W - 2 * M - gap * (n - 1)) / n, pad = n === 3 ? 0.25 : 0.35;
     sd.columns.slice(0, n).forEach((col, i) => {
       const x = W - M - (i + 1) * cw - i * gap;
-      this.shape(s, x, 1.8, cw, 4.85, this.t.surface);
-      this.text(s, x + pad, 2.05, cw - 2 * pad, 0.7, [col.heading], n === 3 ? 22 : 24, this.t.primary, { bold: true, valign: "middle" });
+      this.card(s, x, 1.8, cw, 4.85);
+      if (this.ac) {
+        this.round(s, x + 0.2, 2.0, cw - 0.4, 0.75, this.bc(i), undefined, 0.375);
+        this.text(s, x + 0.35, 2.0, cw - 0.7, 0.75, [col.heading], n === 3 ? 20 : 22, this.t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
+      } else this.text(s, x + pad, 2.05, cw - 2 * pad, 0.7, [col.heading], n === 3 ? 22 : 24, this.t.primary, { bold: true, valign: "middle" });
       const b = col.bullets.length ? col.bullets : [""];
       this.text(s, x + pad, 2.95, cw - 2 * pad, 3.4, b, fitSize(b, cw - 2 * pad, 3.4, n === 3 ? 20 : 22, 14, true), this.t.text, { bullet: true });
     });
@@ -207,13 +289,14 @@ class Builder {
 
   /** خط زمان: مرحله‌ی اول سمت راست؛ تاریخ/عنوان بالای خط و توضیح زیر آن */
   private timeline(sd: Slide) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
     const st = sd.steps!.slice(0, 6), n = st.length, tw = W - 2 * M, cw = tw / n, ly = 3.4, w = cw - 0.2;
     this.shape(s, M, ly - 0.03, tw, 0.06, this.t.muted);
     st.forEach((x, i) => {
       const cx = W - M - (i + 0.5) * cw;
-      this.shape(s, cx - 0.3, ly - 0.3, 0.6, 0.6, this.t.primary, "ellipse");
+      this.shape(s, cx - 0.3, ly - 0.3, 0.6, 0.6, this.bc(i), "ellipse");
+      if (this.ac) this.card(s, cx - w / 2, 3.85, w, 2.85);
       this.text(s, cx - 0.3, ly - 0.3, 0.6, 0.6, [String(i + 1)], 18, this.t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
       this.text(s, cx - w / 2, 2.0, w, 0.85, [x.label], fitSize([x.label], w, 0.85, 22, 14, false, 0), this.t.primary, { bold: true, align: "center", valign: "bottom", space: 0 });
       this.text(s, cx - w / 2, 3.95, w, 2.65, [x.text], fitSize([x.text], w, 2.65, 20, 13, false, 0), this.t.text, { align: "center", space: 0 });
@@ -223,13 +306,13 @@ class Builder {
 
   /** فرایند: کارت‌های شماره‌دار با فلش به چپ (جهت خواندن فارسی) */
   private process(sd: Slide) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
     const st = sd.steps!.slice(0, 5), n = st.length, gap = 0.55, cw = (W - 2 * M - gap * (n - 1)) / n;
     st.forEach((x, i) => {
       const x0 = W - M - (i + 1) * cw - i * gap;
-      this.shape(s, x0, 2.0, cw, 3.9, this.t.surface);
-      this.shape(s, x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, this.t.primary, "ellipse");
+      this.card(s, x0, 2.0, cw, 3.9);
+      this.shape(s, x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, this.bc(i), "ellipse");
       this.text(s, x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, [String(i + 1)], 20, this.t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
       this.text(s, x0 + 0.2, 3.1, cw - 0.4, 0.85, [x.label], fitSize([x.label], cw - 0.4, 0.85, 22, 14, false, 0), this.t.primary, { bold: true, align: "center", valign: "middle", space: 0 });
       this.text(s, x0 + 0.2, 4.0, cw - 0.4, 1.7, [x.text], fitSize([x.text], cw - 0.4, 1.7, 18, 13, false, 0), this.t.text, { align: "center", space: 0 });
@@ -252,13 +335,13 @@ class Builder {
 
   /** کارت‌های آیکن‌دار (۲ تا ۴ مورد)؛ آیکن ایموجی داخل دایره */
   private icons(sd: Slide) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
     const items = sd.items!.slice(0, 4), n = items.length, gap = 0.35, cw = (W - 2 * M - gap * (n - 1)) / n;
     items.forEach((it, i) => {
       const x0 = W - M - (i + 1) * cw - i * gap;
-      this.shape(s, x0, 1.9, cw, 4.3, this.t.surface);
-      this.shape(s, x0 + cw / 2 - 0.55, 2.2, 1.1, 1.1, this.t.primary, "ellipse");
+      this.card(s, x0, 1.9, cw, 4.3);
+      this.shape(s, x0 + cw / 2 - 0.55, 2.2, 1.1, 1.1, this.bc(i), "ellipse");
       this.text(s, x0 + cw / 2 - 0.55, 2.2, 1.1, 1.1, [iconOf(it.icon)], 34, this.t.onPrimary, { align: "center", valign: "middle", space: 0, font: "Segoe UI Emoji" });
       this.text(s, x0 + 0.2, 3.55, cw - 0.4, 0.85, [it.heading], fitSize([it.heading], cw - 0.4, 0.85, 22, 14, false, 0), this.t.primary, { bold: true, align: "center", valign: "middle", space: 0 });
       this.text(s, x0 + 0.25, 4.45, cw - 0.5, 1.55, [it.text], fitSize([it.text], cw - 0.5, 1.55, 18, 13, false, 0), this.t.text, { align: "center", space: 0 });
@@ -267,13 +350,13 @@ class Builder {
   }
 
   private stats(sd: Slide) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
     const stats = sd.stats.slice(0, 4);
     const n = Math.max(1, stats.length), gap = 0.35, cw = (W - 2 * M - gap * (n - 1)) / n;
     stats.forEach((st, i) => {
       const x = W - M - (i + 1) * cw - i * gap;
-      this.shape(s, x, 2.0, cw, 3.0, this.t.surface);
+      this.card(s, x, 2.0, cw, 3.0);
       this.text(s, x + 0.2, 2.3, cw - 0.4, 1.3, [st.value], st.value.length <= 6 ? 48 : 32, this.t.primary,
         { bold: true, align: "center", valign: "middle", space: 0 });
       this.text(s, x + 0.25, 3.7, cw - 0.5, 1.1, [st.label], fitSize([st.label], cw - 0.5, 1.1, 20, 13, false, 0),
@@ -284,7 +367,7 @@ class Builder {
   }
 
   private table(sd: Slide) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
     const t = sd.table!;
     const n = t.headers.length, tw = W - 2 * M;
@@ -299,14 +382,14 @@ class Builder {
     });
     const rows = [
       rev(t.headers).map((h) => cell(h, this.t.onPrimary, this.t.primary, true)),
-      ...t.rows.map((r, i) => rev(r).map((c) => cell(c, this.t.text, i % 2 ? this.t.bg : this.t.surface))),
+      ...t.rows.map((r, i) => rev(r).map((c) => cell(c, this.t.text, i % 2 ? (this.ac ? this.A.card : this.t.bg) : this.t.surface))),
     ];
     s.addTable(rows as any, { x: M, y: 1.85, w: tw, colW: Array(n).fill(tw / n), rowH });
     return s;
   }
 
   private chart(sd: Slide) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
     const c = sd.chart!;
     const hasText = sd.bullets.length > 0;
@@ -317,8 +400,10 @@ class Builder {
     const stacked = c.type === "stacked";
     const type = c.type === "line" ? this.p.ChartType.line : c.type === "pie" ? this.p.ChartType.pie : c.type === "doughnut" ? this.p.ChartType.doughnut : this.p.ChartType.bar;
     const font = { fontFace: this.font, color: this.t.text } as const;
+    const cwid = hasText ? 7.0 : W - 2 * M;
+    if (this.ac) this.card(s, M, 1.8, cwid, 4.55);
     s.addChart(type, data as any, {
-      x: M, y: 1.8, w: hasText ? 7.0 : W - 2 * M, h: 4.55,
+      x: this.ac ? M + 0.15 : M, y: this.ac ? 1.9 : 1.8, w: this.ac ? cwid - 0.3 : cwid, h: this.ac ? 4.35 : 4.55,
       chartColors: ring ? palette.slice(0, labels.length) : palette.slice(0, data.length),
       showLegend: ring || data.length > 1, legendPos: "b", legendFontFace: this.font, legendFontSize: 14, legendColor: this.t.text,
       catAxisLabelFontFace: this.font, catAxisLabelFontSize: 14, catAxisLabelColor: this.t.text,
@@ -341,9 +426,10 @@ class Builder {
 
   /** فهرست شماره‌دار: برای «منابع» و «پرسش‌های پایانی» */
   private numbered(sd: Slide, foot?: string) {
-    const s = this.slide(this.t.bg);
+    const s = this.slide(this.bgc());
     this.title(s, sd.title);
-    this.shape(s, M, 1.8, W - 2 * M, foot ? 4.5 : 4.85, this.t.surface);
+    this.card(s, M, 1.8, W - 2 * M, foot ? 4.5 : 4.85);
+    if (this.ac) this.round(s, W - M - 0.32, 2.15, 0.1, foot ? 4.0 : 4.25, this.t.accent, undefined, 0.05);
     const colBullets = sd.columns.flatMap((c) => c.bullets);
     const paras = sd.bullets.length ? sd.bullets : colBullets.length ? colBullets : [""];
     const iw = W - 2 * M - 1.0, ih = foot ? 3.8 : 4.1;
@@ -376,6 +462,7 @@ class Builder {
       else if (lay === "questions") s = this.numbered(sd);
       else s = this.bullets(sd);
       if (lay !== "title" && lay !== "closing" && lay !== "section") this.number(s, i + 1);
+      if (this.ac && lay !== "title" && lay !== "closing" && lay !== "section" && !(lay === "quote" && sd.quote)) this.rail(s, i, deck.slides.length);
       if (sd.notes) s.addNotes(this.txt(sd.notes));
     });
     this.p.title = deck.title;

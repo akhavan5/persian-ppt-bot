@@ -66,7 +66,7 @@ export async function buildDeckPdf(env: Env, userId: Uid, id: string): Promise<P
     }
   }
 
-  const html = renderPreview(p.deck, { id, theme: p.theme, font: p.font, digits: p.digits, images: p.images, nonce: "", pdf: pdfImgs });
+  const html = renderPreview(p.deck, { id, theme: p.theme, template: p.template, font: p.font, digits: p.digits, images: p.images, nonce: "", pdf: pdfImgs });
   const browser = await launchWithRetry(env);
   try {
     const page = await browser.newPage();

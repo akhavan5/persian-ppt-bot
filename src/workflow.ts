@@ -101,12 +101,12 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
           const images = settings.images ? await fetchImages(this.env, deck.slides, maxImages, web, found.images) : new Map();
           const bytes = await buildPptx(deck, {
-            theme: settings.theme, font: settings.font, persianDigits: settings.digits, images,
+            theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images,
           });
           const filename = safeFilename(deck.title);
           // متن اسلایدها برای پیش‌نمایش و PDF؛ خطا در ذخیره نباید ساخت ارائه را خراب کند
           await savePreview(this.env, userId, event.instanceId, {
-            deck, theme: settings.theme, font: settings.font, digits: settings.digits, images: [...images.keys()],
+            deck, theme: settings.theme, template: settings.template, font: settings.font, digits: settings.digits, images: [...images.keys()],
           }).catch((err) => console.error("savePreview", err));
           if (web) {
             // وب: فایل فقط در KV ذخیره می‌شود و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام باید شکست بخورد (تلاش مجدد/برگشت اعتبار)

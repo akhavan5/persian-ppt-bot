@@ -1,13 +1,14 @@
 import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
+import { DEFAULT_TEMPLATE, isTemplate } from "./template";
 import { modelList } from "./llm";
 
 /** شناسه‌ی کاربر: عددی برای تلگرام، رشته‌ی «w_…» برای کاربران وب */
 export type Uid = number | string;
 export const isWebId = (id: Uid) => typeof id === "string" && id.startsWith("w_");
 
-export const DEFAULTS: Settings = { theme: "ocean", font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, mode: "normal", sources: false, questions: false };
+export const DEFAULTS: Settings = { theme: "ocean", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, mode: "normal", sources: false, questions: false };
 export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 
 // ---------- سقف اسلاید (فقط وب): رایگان ۸، پلاس ۲۰، پرو ۳۵ ----------
@@ -28,6 +29,7 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   const raw = (await env.KV.get(`u:${userId}`, "json")) as Partial<Settings> | null;
   const s = { ...DEFAULTS, ...(raw ?? {}) };
   if (!(s.theme in THEMES)) s.theme = DEFAULTS.theme;
+  s.template = isTemplate(s.template) ? s.template : DEFAULT_TEMPLATE;
   if (!(s.tone in TONES)) s.tone = DEFAULTS.tone;
   if (!(FONTS as readonly string[]).includes(s.font)) s.font = DEFAULTS.font;
   s.slides = clampSlides(Number(s.slides) || DEFAULTS.slides, ABS_MAX_SLIDES);

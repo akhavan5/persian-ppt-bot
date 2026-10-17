@@ -9,6 +9,7 @@ import type { Chart, Deck, Slide } from "./types";
 import { FONT_URL, FONT_URL_ALT, THEMES, iconOf, type Theme } from "./themes";
 import { toFa } from "./util";
 import { fitSize } from "./pptx";
+import { RAIL, academicPalette, badgeColor, pillRow, railDots } from "./template";
 
 const W = 13.333, M = 0.8;
 
@@ -34,6 +35,8 @@ export function pdfSlideHeight(notes?: string): number {
 
 export interface PreviewOpts {
   id: string; theme: string; font: string; digits: boolean; images: number[]; nonce: string;
+  /** قالب اسلاید (classic | academic)؛ خالی = classic */
+  template?: string;
   /** حالت PDF سمت سرور (ربات تلگرام): شماره‌ی اسلاید ← تصویر به‌صورت data: URI؛ نوار بالا، راهنما و اسکریپت حذف می‌شوند */
   pdf?: Record<number, string>;
 }
@@ -42,6 +45,7 @@ interface TOpts { bold?: boolean; align?: "right" | "center" | "left"; valign?: 
 
 export function renderPreview(deck: Deck, o: PreviewOpts): string {
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
+  const ac = o.template === "academic", A = academicPalette(t), bgc = ac ? A.bg : t.bg;
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const fontName = /^[\w -]{1,40}$/.test(o.font) ? o.font : "Vazirmatn";
   const hasImg = new Set(o.images);
@@ -60,12 +64,45 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
       `display:flex;flex-direction:column;justify-content:${jc};font-size:${P(size)};color:#${color};text-align:${op.align ?? "right"};` +
       `font-weight:${op.bold ? 700 : 400};--sp:${P(sp)};${op.emoji ? "font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;" : ""}`);
   };
-  const title = (s: string) => text(M, 0.55, W - 2 * M, 1.0, [s], fitSize([s], W - 2 * M, 1.0, 34, 22, false, 0), t.primary, { bold: true, valign: "middle", space: 0 });
+  /** مستطیل گرد با خط‌دور اختیاری (قالب آکادمیک) */
+  const round = (x: number, y: number, w: number, h: number, fill: string, line?: string, r?: number, lw = 1.25) =>
+    box(x, y, w, h, "", `background:#${fill};border-radius:${I(Math.min(r ?? 0.05 * Math.min(w, h), Math.min(w, h) / 2))};${line ? `border:${P(lw)} solid #${line};` : ""}`);
+  const card = (x: number, y: number, w: number, h: number) => (ac ? round(x, y, w, h, A.card, t.primary, 0.2, 1) : shape(x, y, w, h, t.surface));
+  const bc = (i: number) => (ac ? badgeColor(t, i) : t.primary);
+  const title = (s: string) => ac
+    ? round(M, 0.45, W - 2 * M, 0.95, A.card, t.primary, 0.475, 1.25) + shape(W - M - 0.55, 0.45 + 0.475 - 0.14, 0.28, 0.28, t.accent, "ellipse") +
+      text(M + 0.7, 0.45, W - 2 * M - 1.4, 0.95, [s], fitSize([s], W - 2 * M - 1.4, 0.95, 32, 20, false, 0), t.primary, { bold: true, align: "center", valign: "middle", space: 0 })
+    : text(M, 0.55, W - 2 * M, 1.0, [s], fitSize([s], W - 2 * M, 1.0, 34, 22, false, 0), t.primary, { bold: true, valign: "middle", space: 0 });
+  /** نوار پیشرفت کناری (قالب آکادمیک) */
+  const railHtml = (i: number, n: number) => {
+    const { ys, active } = railDots(i, n);
+    return shape(RAIL.x - 0.01, RAIL.top, 0.02, RAIL.bottom - RAIL.top, t.muted, "rect", 45) +
+      ys.map((y, k) => (k === active ? shape(RAIL.x - 0.13, y - 0.13, 0.26, 0.26, t.accent, "ellipse") : shape(RAIL.x - 0.06, y - 0.06, 0.12, 0.12, t.muted, "ellipse", 70))).join("");
+  };
 
   // ---------- چیدمان‌ها: خروجی {bg, html} ----------
   type R = { bg: string; html: string; num: boolean };
 
+  const acTitle = (sd: Slide, closing: boolean): R => {
+    const tw = W - 2 * M - 1.2, sub = (sd.subtitle ? [sd.subtitle] : sd.bullets.slice(0, 3)).filter(Boolean);
+    return { bg: A.bg, num: false, html:
+      shape(-1.6, -1.8, 4.6, 4.6, t.accent, "ellipse", 28) + shape(10.6, 4.9, 4.6, 4.6, t.primary, "ellipse", 22) +
+      round(M, 1.2, W - 2 * M, 3.55, A.card, t.primary, 0.3, 2) + round(W - M - 1.6, 1.55, 1.0, 0.1, t.accent, undefined, 0.05) +
+      text(M + 0.6, 1.8, tw, 2.8, [sd.title], fitSize([sd.title], tw, 2.8, 46, 26, false, 0), A.head, { bold: true, align: closing ? "center" : "right", valign: "middle", space: 0 }) +
+      pillRow(sub.length, W, M).map((pos, i) =>
+        round(pos.x, 5.15, pos.w, 0.85, i % 2 ? t.accent : t.primary, undefined, 0.425) +
+        text(pos.x + 0.25, 5.15, pos.w - 0.5, 0.85, [sub[i]], fitSize([sub[i]], pos.w - 0.5, 0.85, 20, 13, false, 0), t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 })).join("") };
+  };
+  const acSection = (sd: Slide, n: number): R => {
+    const tw = W - 2 * M - 2.8;
+    return { bg: t.primary, num: false, html:
+      shape(-1.5, 4.2, 5.5, 5.5, t.dark, "ellipse", 45) + shape(10.4, -2.0, 5.0, 5.0, t.accent, "ellipse", 25) + shape(W - M - 2.0, 2.3, 1.7, 1.7, t.accent, "ellipse") +
+      text(W - M - 2.0, 2.3, 1.7, 1.7, [String(n)], 60, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) +
+      text(M + 0.4, 2.2, tw, 1.9, [sd.title], fitSize([sd.title], tw, 1.9, 44, 26, false, 0), t.onPrimary, { bold: true, valign: "middle", space: 0 }) +
+      (sd.subtitle ? text(M + 0.4, 4.4, W - 2 * M - 0.8, 1.0, [sd.subtitle], 20, t.onPrimary) : "") };
+  };
   const titleLike = (sd: Slide, closing: boolean): R => {
+    if (ac) return acTitle(sd, closing);
     const align = closing ? "center" : "right", tw = W - 2 * M - 1;
     const sub = sd.subtitle ? [sd.subtitle] : sd.bullets.slice(0, 3);
     return { bg: t.primary, num: false, html:
@@ -74,6 +111,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
       (sub.length ? text(M + 0.5, 4.3, tw, 1.6, sub, fitSize(sub, tw, 1.6, 24, 16), t.onPrimary, { align }) : "") };
   };
   const section = (sd: Slide, n: number): R => {
+    if (ac) return acSection(sd, n);
     const tw = W - 2 * M - 1;
     return { bg: t.dark, num: false, html:
       shape(-1.5, 4.2, 5.5, 5.5, t.primary, "ellipse", 60) +
@@ -83,31 +121,32 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   };
   const bullets = (sd: Slide): R => {
     const paras = sd.bullets.length ? sd.bullets : [""], iw = W - 2 * M - 1.0, ih = 4.1;
-    return { bg: t.bg, num: true, html: title(sd.title) + shape(M, 1.8, W - 2 * M, 4.85, t.surface) +
+    return { bg: bgc, num: true, html: title(sd.title) + card(M, 1.8, W - 2 * M, 4.85) + (ac ? round(W - M - 0.32, 2.2, 0.1, 4.25, t.accent, undefined, 0.05) : "") +
       text(M + 0.5, 2.15, iw, ih, paras, fitSize(paras, iw, ih, 26, 15, true), t.text, { bullet: true, valign: "middle" }) };
   };
   const imageText = (sd: Slide, i: number): R => {
     const tx0 = W / 2 + 0.1, tw = W / 2 - M - 0.1, paras = sd.bullets.length ? sd.bullets : [""];
     const iw = W / 2 - M - 0.3, ih = 4.85;
-    return { bg: t.bg, num: true, html: title(sd.title) +
-      shape(M, 1.8, iw, ih, t.surface) + // پشت تصویر (مثل فایل pptx): کل تصویر بدون برش دیده می‌شود
+    return { bg: bgc, num: true, html: title(sd.title) +
+      card(M, 1.8, iw, ih) + // پشت تصویر (مثل فایل pptx): کل تصویر بدون برش دیده می‌شود
       box(M, 1.8, iw, ih, (o.pdf?.[i] ? `<img src="${o.pdf[i]}" alt="" style="object-fit:contain">` : `<img data-src="/api/files/${encodeURIComponent(o.id)}/img/${i}" alt="" style="object-fit:contain">`), "overflow:hidden;border-radius:" + I(0.1)) +
       text(tx0, 1.8, tw, 4.85, paras, fitSize(paras, tw, 4.85, 24, 15, true), t.text, { bullet: true, valign: "middle" }) };
   };
   const columns = (sd: Slide, n: 2 | 3): R => {
     const gap = n === 3 ? 0.3 : 0.4, cw = (W - 2 * M - gap * (n - 1)) / n, pad = n === 3 ? 0.25 : 0.35;
-    return { bg: t.bg, num: true, html: title(sd.title) + sd.columns.slice(0, n).map((col, i) => {
+    return { bg: bgc, num: true, html: title(sd.title) + sd.columns.slice(0, n).map((col, i) => {
       const x = W - M - (i + 1) * cw - i * gap, b = col.bullets.length ? col.bullets : [""];
-      return shape(x, 1.8, cw, 4.85, t.surface) +
-        text(x + pad, 2.05, cw - 2 * pad, 0.7, [col.heading], n === 3 ? 22 : 24, t.primary, { bold: true, valign: "middle" }) +
+      return card(x, 1.8, cw, 4.85) +
+        (ac ? round(x + 0.2, 2.0, cw - 0.4, 0.75, bc(i), undefined, 0.375) + text(x + 0.35, 2.0, cw - 0.7, 0.75, [col.heading], n === 3 ? 20 : 22, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 })
+          : text(x + pad, 2.05, cw - 2 * pad, 0.7, [col.heading], n === 3 ? 22 : 24, t.primary, { bold: true, valign: "middle" })) +
         text(x + pad, 2.95, cw - 2 * pad, 3.4, b, fitSize(b, cw - 2 * pad, 3.4, n === 3 ? 20 : 22, 14, true), t.text, { bullet: true });
     }).join("") };
   };
   const stats = (sd: Slide): R => {
     const st = sd.stats.slice(0, 4), n = Math.max(1, st.length), gap = 0.35, cw = (W - 2 * M - gap * (n - 1)) / n;
-    return { bg: t.bg, num: true, html: title(sd.title) + st.map((s, i) => {
+    return { bg: bgc, num: true, html: title(sd.title) + st.map((s, i) => {
       const x = W - M - (i + 1) * cw - i * gap;
-      return shape(x, 2.0, cw, 3.0, t.surface) +
+      return card(x, 2.0, cw, 3.0) +
         text(x + 0.2, 2.3, cw - 0.4, 1.3, [s.value], s.value.length <= 6 ? 48 : 32, t.primary, { bold: true, align: "center", valign: "middle", space: 0 }) +
         text(x + 0.25, 3.7, cw - 0.5, 1.1, [s.label], fitSize([s.label], cw - 0.5, 1.1, 20, 13, false, 0), t.muted, { align: "center", space: 0 });
     }).join("") + (sd.bullets.length ? text(M, 5.4, W - 2 * M, 1.2, sd.bullets.slice(0, 2), 18, t.text, { bullet: true }) : "") };
@@ -118,21 +157,21 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
     const rowH = Math.min(0.8, 4.7 / (tb.rows.length + 1));
     const row = (cells: string[], bg: string, color: string, bold: boolean) =>
       `<tr style="background:#${bg};color:#${color};font-weight:${bold ? 700 : 400};height:${I(rowH)}">${cells.map((c) => `<td>${tx(c)}</td>`).join("")}</tr>`;
-    const body = row(tb.headers, t.primary, t.onPrimary, true) + tb.rows.map((r, i) => row(r, i % 2 ? t.bg : t.surface, t.text, false)).join("");
-    return { bg: t.bg, num: true, html: title(sd.title) +
+    const body = row(tb.headers, t.primary, t.onPrimary, true) + tb.rows.map((r, i) => row(r, i % 2 ? (ac ? A.card : t.bg) : t.surface, t.text, false)).join("");
+    return { bg: bgc, num: true, html: title(sd.title) +
       box(M, 1.85, W - 2 * M, rowH * (tb.rows.length + 1), `<table style="--bd:#${t.muted}">${body}</table>`, `font-size:${P(size)}`) };
   };
   const chart = (sd: Slide): R => {
     const c = sd.chart!, hasText = sd.bullets.length > 0, cw = hasText ? 7.0 : W - 2 * M;
-    return { bg: t.bg, num: true, html: title(sd.title) + box(M, 1.8, cw, 4.55, chartSvg(c, cw, 4.55, t, tx)) +
+    return { bg: bgc, num: true, html: title(sd.title) + (ac ? card(M, 1.8, cw, 4.55) + box(M + 0.15, 1.9, cw - 0.3, 4.35, chartSvg(c, cw - 0.3, 4.35, t, tx)) : box(M, 1.8, cw, 4.55, chartSvg(c, cw, 4.55, t, tx))) +
       (hasText ? text(M + 7.3, 1.8, W - M - (M + 7.3), 4.55, sd.bullets.slice(0, 3), fitSize(sd.bullets.slice(0, 3), W - M - (M + 7.3), 4.55, 22, 14, true), t.text, { bullet: true, valign: "middle" }) : "") +
       text(M, 6.45, W - 2 * M, 0.35, ["داده‌ها تقریبی‌اند؛ پیش از ارائه با منبع معتبر تطبیق دهید."], 11, t.muted, { space: 0 }) };
   };
   const timeline = (sd: Slide): R => {
     const st = sd.steps!.slice(0, 6), n = st.length, tw = W - 2 * M, cw = tw / n, ly = 3.4, w = cw - 0.2;
-    return { bg: t.bg, num: true, html: title(sd.title) + shape(M, ly - 0.03, tw, 0.06, t.muted) + st.map((x, i) => {
+    return { bg: bgc, num: true, html: title(sd.title) + shape(M, ly - 0.03, tw, 0.06, t.muted) + st.map((x, i) => {
       const cx = W - M - (i + 0.5) * cw;
-      return shape(cx - 0.3, ly - 0.3, 0.6, 0.6, t.primary, "ellipse") +
+      return shape(cx - 0.3, ly - 0.3, 0.6, 0.6, bc(i), "ellipse") + (ac ? card(cx - w / 2, 3.85, w, 2.85) : "") +
         text(cx - 0.3, ly - 0.3, 0.6, 0.6, [String(i + 1)], 18, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) +
         text(cx - w / 2, 2.0, w, 0.85, [x.label], fitSize([x.label], w, 0.85, 22, 14, false, 0), t.primary, { bold: true, align: "center", valign: "bottom", space: 0 }) +
         text(cx - w / 2, 3.95, w, 2.65, [x.text], fitSize([x.text], w, 2.65, 20, 13, false, 0), t.text, { align: "center", space: 0 });
@@ -140,9 +179,9 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   };
   const process = (sd: Slide): R => {
     const st = sd.steps!.slice(0, 5), n = st.length, gap = 0.55, cw = (W - 2 * M - gap * (n - 1)) / n;
-    return { bg: t.bg, num: true, html: title(sd.title) + st.map((x, i) => {
+    return { bg: bgc, num: true, html: title(sd.title) + st.map((x, i) => {
       const x0 = W - M - (i + 1) * cw - i * gap;
-      return shape(x0, 2.0, cw, 3.9, t.surface) + shape(x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, t.primary, "ellipse") +
+      return card(x0, 2.0, cw, 3.9) + shape(x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, bc(i), "ellipse") +
         text(x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, [String(i + 1)], 20, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) +
         text(x0 + 0.2, 3.1, cw - 0.4, 0.85, [x.label], fitSize([x.label], cw - 0.4, 0.85, 22, 14, false, 0), t.primary, { bold: true, align: "center", valign: "middle", space: 0 }) +
         text(x0 + 0.2, 4.0, cw - 0.4, 1.7, [x.text], fitSize([x.text], cw - 0.4, 1.7, 18, 13, false, 0), t.text, { align: "center", space: 0 }) +
@@ -159,9 +198,9 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   };
   const icons = (sd: Slide): R => {
     const items = sd.items!.slice(0, 4), n = items.length, gap = 0.35, cw = (W - 2 * M - gap * (n - 1)) / n;
-    return { bg: t.bg, num: true, html: title(sd.title) + items.map((it, i) => {
+    return { bg: bgc, num: true, html: title(sd.title) + items.map((it, i) => {
       const x0 = W - M - (i + 1) * cw - i * gap;
-      return shape(x0, 1.9, cw, 4.3, t.surface) + shape(x0 + cw / 2 - 0.55, 2.2, 1.1, 1.1, t.primary, "ellipse") +
+      return card(x0, 1.9, cw, 4.3) + shape(x0 + cw / 2 - 0.55, 2.2, 1.1, 1.1, bc(i), "ellipse") +
         text(x0 + cw / 2 - 0.55, 2.2, 1.1, 1.1, [iconOf(it.icon)], 34, t.onPrimary, { align: "center", valign: "middle", space: 0, emoji: true }) +
         text(x0 + 0.2, 3.55, cw - 0.4, 0.85, [it.heading], fitSize([it.heading], cw - 0.4, 0.85, 22, 14, false, 0), t.primary, { bold: true, align: "center", valign: "middle", space: 0 }) +
         text(x0 + 0.25, 4.45, cw - 0.5, 1.55, [it.text], fitSize([it.text], cw - 0.5, 1.55, 18, 13, false, 0), t.text, { align: "center", space: 0 });
@@ -169,7 +208,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   };
   const numbered = (sd: Slide, foot?: string): R => {
     const colBullets = sd.columns.flatMap((c) => c.bullets), paras = sd.bullets.length ? sd.bullets : colBullets.length ? colBullets : [""], iw = W - 2 * M - 1.0, ih = foot ? 3.8 : 4.1;
-    return { bg: t.bg, num: true, html: title(sd.title) + shape(M, 1.8, W - 2 * M, foot ? 4.5 : 4.85, t.surface) +
+    return { bg: bgc, num: true, html: title(sd.title) + card(M, 1.8, W - 2 * M, foot ? 4.5 : 4.85) + (ac ? round(W - M - 0.32, 2.15, 0.1, foot ? 4.0 : 4.25, t.accent, undefined, 0.05) : "") +
       text(M + 0.5, 2.1, iw, ih, paras, fitSize(paras, iw, ih, foot ? 22 : 26, 14, true, 12), t.text, { bullet: "number", valign: "middle", space: 12 }) +
       (foot ? text(M, 6.45, W - 2 * M, 0.35, [foot], 11, t.muted, { space: 0 }) : "") };
   };
@@ -195,7 +234,9 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
       : lay === "sources" ? numbered(sd, "منابع پیشنهادی برای مطالعه‌ی بیشتر؛ پیش از ارجاع، وجود و صحت آن‌ها را بررسی کنید.")
       : lay === "questions" ? numbered(sd)
       : bullets(sd);
-    const num = r.num ? text(0.6, 6.95, 1.0, 0.3, [String(i + 1)], 11, t.muted, { align: "left", space: 0 }) : "";
+    const num = !r.num ? "" : ac
+      ? shape(0.55, 6.82, 0.5, 0.5, t.primary, "ellipse") + text(0.55, 6.82, 0.5, 0.5, [String(i + 1)], 12, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) + (lay === "quote" ? "" : railHtml(i, deck.slides.length))
+      : text(0.6, 6.95, 1.0, 0.3, [String(i + 1)], 11, t.muted, { align: "left", space: 0 });
     // یادداشت سخنرانی مثل پیش‌نمایش وب زیر اسلاید می‌آید؛ در PDF ربات هم همان کادر در همان صفحه (فونت بر اساس طول متن کم می‌شود تا جا شود)
     const nlen = sd.notes ? sd.notes.length : 0;
     const npt = notesPt(nlen);

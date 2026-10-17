@@ -10,6 +10,7 @@ export const THEMES: Record<string, Theme> = {
   forest: { name: "جنگل", bg: "FFFFFF", surface: "EAF5EE", primary: "2F7D5B", dark: "1D4D38", accent: "E0A93B", text: "1E2B24", muted: "6A7B71", onPrimary: "FFFFFF" },
   sunset: { name: "غروب", bg: "FFFFFF", surface: "FDEFE7", primary: "D9482B", dark: "8E2A16", accent: "F2A541", text: "2B1E1A", muted: "8A7168", onPrimary: "FFFFFF" },
   royal: { name: "سلطنتی", bg: "FFFFFF", surface: "F0ECF9", primary: "5B3FA6", dark: "3A2673", accent: "E05CA0", text: "231B33", muted: "756B8A", onPrimary: "FFFFFF" },
+  violet: { name: "بنفش و نارنجی", bg: "FFFFFF", surface: "EEE9FF", primary: "6B3FF5", dark: "3F23A0", accent: "FF9225", text: "262335", muted: "7A7790", onPrimary: "FFFFFF" },
   midnight: { name: "نیمه‌شب", bg: "0F172A", surface: "1E293B", primary: "4F46E5", dark: "0B1120", accent: "22D3EE", text: "F1F5F9", muted: "94A3B8", onPrimary: "FFFFFF" },
 };
 

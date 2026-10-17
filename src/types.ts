@@ -39,6 +39,8 @@ export type Mode = "normal" | "student" | "business" | "teacher" | "thesis";
 
 export interface Settings {
   theme: string;
+  /** قالب اسلاید: classic | academic (فهرست: TEMPLATES در template.ts)؛ خالی = classic */
+  template?: string;
   font: string;
   slides: number;
   tone: string;

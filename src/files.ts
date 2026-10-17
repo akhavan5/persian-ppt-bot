@@ -60,7 +60,7 @@ export async function loadFile(env: Env, userId: Uid, id: string): Promise<{ ent
 // ---------- پیش‌نمایش در مرورگر (و خروجی PDF از روی همان صفحه) ----------
 // متن اسلایدها در D1 (از طریق env.KV) نگه داشته می‌شود: نوشتن D1 سهمیه‌ی ۱۰۰ هزار در روز دارد و به سهمیه‌ی ۱۰۰۰ نوشتنِ KV واقعی دست نمی‌زند.
 // تصویرها جدا ذخیره نمی‌شوند؛ از خود فایل PPTX (که در KV است) بیرون کشیده می‌شوند.
-export interface PreviewData { deck: Deck; theme: string; font: string; digits: boolean; /** شماره‌ی اسلایدهایی که تصویر دارند */ images: number[] }
+export interface PreviewData { deck: Deck; theme: string; /** قالب اسلاید؛ ارائه‌های قدیمی خالی‌اند = classic */ template?: string; font: string; digits: boolean; /** شماره‌ی اسلایدهایی که تصویر دارند */ images: number[] }
 const previewKey = (userId: Uid, id: string) => `dk:${userId}:${id}`;
 
 export async function savePreview(env: Env, userId: Uid, id: string, p: PreviewData): Promise<void> {

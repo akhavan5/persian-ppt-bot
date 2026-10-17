@@ -366,6 +366,8 @@ address{font-style:normal}
     <section class="card">
       <details id="setBox">
         <summary>⚙️ تنظیمات ظاهر و محتوا</summary>
+        <label>قالب</label><div class="themes" id="tpls"></div>
+        <div class="muted" id="tplHint" style="margin-top:6px;font-size:.82rem"></div>
         <label>تم رنگی</label><div class="themes" id="themes"></div>
         <div class="grid2">
           <div><label for="tone">لحن</label><select id="tone"></select></div>
@@ -898,6 +900,11 @@ function syncSettings() {
   $("#questions").checked = !!s.questions || s.mode === "teacher";
   $("#questions").disabled = s.mode === "teacher";
   renderModels();
+  $("#tpls").replaceChildren(...(cfg.templates || []).map((t) =>
+    h("button", { type: "button", class: "theme", "aria-pressed": String((s.template || "classic") === t.key), onclick: () => saveSetting({ template: t.key }) },
+      h("span", {}, t.emoji), t.name)));
+  const curTpl = (cfg.templates || []).find((t) => t.key === (s.template || "classic"));
+  $("#tplHint").textContent = curTpl ? curTpl.hint + (curTpl.key === "academic" && s.theme !== "violet" ? " — برای بهترین ظاهر، تم «بنفش و نارنجی» را هم انتخاب کنید." : "") : "";
   $("#themes").replaceChildren(...cfg.themes.map((t) =>
     h("button", { type: "button", class: "theme", "aria-pressed": String(s.theme === t.key), onclick: () => saveSetting({ theme: t.key }) },
       h("b", { style: `background:linear-gradient(135deg,#${t.primary},#${t.accent})` }), t.name)));
