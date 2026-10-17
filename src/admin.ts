@@ -685,4 +685,12 @@ export async function handleAdminFileCallback(env: Env, cq: any) {
   const f = (typeof userId === "string" || Number.isSafeInteger(userId)) && fid ? await loadFile(env, userId, fid) : null;
   if (!f) return await sendMessage(env, chatId, "⌛️ این فایل دیگر در دسترس نیست (فایل‌ها ۲۴ ساعت و حداکثر ۳ فایل آخر هر کاربر نگه داشته می‌شوند).");
   await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`);
+  // اگر برای همین ارائه پوستر یا جزوه هم ساخته شده (و هنوز نگه داشته می‌شود)، همراهش فرستاده می‌شود
+  if (/-(poster|handout)$/.test(fid)) return;
+  for (const [suffix, label] of [["poster", "🖼 پوستر"], ["handout", "📘 جزوه"]] as const) {
+    const extra = await loadFile(env, userId, `${fid}-${suffix}`).catch(() => null);
+    if (!extra) continue;
+    await sendDocument(env, chatId, new Uint8Array(extra.data), extra.entry.name, `${label} · <b>${esc(extra.entry.title)}</b>\n👤 <code>${userId}</code>`)
+      .catch((err) => console.error("admin send extra", suffix, err));
+  }
 }
