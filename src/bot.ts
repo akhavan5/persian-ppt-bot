@@ -131,14 +131,14 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
     ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (MODES[p.mode ?? s.mode].minSlides ? `\n<i>${MODES[p.mode ?? s.mode].emoji} حالت ${MODES[p.mode ?? s.mode].name} حداقل ${toFa(String(MODES[p.mode ?? s.mode].minSlides))} اسلاید می‌سازد.</i>` : "");
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
   } else if (p.step === "poster") {
-    ask = "🖼 <b>پوستر (اینفوگرافیک)</b> هم ساخته شود؟ (۱ اعتبار)\n<i>خلاصه‌ی موضوع در یک تصویر تک‌صفحه‌ای، با تیتر، بخش‌های رنگی، جدول و نکته‌ی پایانی؛ مناسب اشتراک‌گذاری و چاپ. افقی برای نمایش روی صفحه و عمودی برای پیام‌رسان است.</i>";
+    ask = "🖼 <b>پوستر (اینفوگرافیک)</b> هم ساخته شود؟ (۱ اعتبار)\n<i>پوستر آموزشی آماده‌ی اشتراک‌گذاری و چاپ، با تیتر، بخش‌های رنگی، جدول و نکته‌ی پایانی. افقی برای نمایش روی صفحه و عمودی برای پیام‌رسان است.</i>";
     opts = [
       [{ text: mark(p.poster === "wide", "🖥 پوستر افقی (پیش‌فرض) — ۱ اعتبار"), callback_data: "p:poster:wide" }],
       [{ text: mark(p.poster === "tall", "📱 پوستر عمودی — ۱ اعتبار"), callback_data: "p:poster:tall" }],
       [{ text: mark((p.poster ?? "none") === "none", "بدون پوستر"), callback_data: "p:poster:none" }],
     ];
   } else if (p.step === "handout") {
-    ask = "📝 <b>جزوه‌ی Word</b> هم ساخته شود؟ (۱ اعتبار)\n<i>جزوه‌ی مطالعه‌ی حدود دو صفحه‌ای به‌صورت فایل Word قابل‌ویرایش، شامل مقدمه، چند بخش توضیحی، نکات کلیدی و یک تصویر. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
+    ask = "📝 <b>جزوه‌ی Word</b> هم ساخته شود؟ (۱ اعتبار)\n<i>جزوه‌ی مطالعه‌ی حدود دو صفحه‌ای به‌صورت فایل Word قابل‌ویرایش، شامل مقدمه، چند بخش توضیحی و نکات کلیدی. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
     opts = [
       [{ text: mark(p.handout !== false, "📝 با جزوه — ۱ اعتبار"), callback_data: "p:handout:1" }],
       [{ text: mark(p.handout === false, "بدون جزوه"), callback_data: "p:handout:0" }],
