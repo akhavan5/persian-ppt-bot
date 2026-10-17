@@ -23,7 +23,9 @@ const SYSTEM =
 /** مدل‌هایی که پیش‌فرض «فکر» می‌کنند و باید برای خروجی JSON خاموش شوند */
 const THINKERS = /qwen3|qwen-3|glm|gemma-?4/i;
 /** مدل‌هایی که فکر کردنشان خاموش نمی‌شود (فقط توکن بیشتر می‌خواهند): DeepSeek-R1 با تگ <think>، gpt-oss با reasoning_effort */
-const ALWAYS_THINK = /deepseek-r1|gpt-oss|\bo\d/i;
+const ALWAYS_THINK = /deepseek-r1|deepseek-reasoner|deepseek-v[4-9]|gpt-oss|\bo\d/i;
+/** مدل‌هایی که فکر کردنشان با پارامتر reasoning (سبک OpenRouter) کم می‌شود؛ اگر سرویس نپذیرد (۴۰۰) حذف و دوباره تلاش می‌شود */
+const REASONING_LOW = /deepseek-v[4-9]|deepseek-reasoner/i;
 /** Claude از طریق گیت‌وی: ممکن است «فکر کردن» روشن باشد و کل سقف توکن را بخورد (finish=length با متن خالی) */
 const CLAUDE = /claude/i;
 
@@ -107,6 +109,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
     if (THINKERS.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
     if (/gpt-oss/i.test(String(body.model))) body.reasoning_effort = "low"; // کم‌فکر ⇒ سریع‌تر و پاسخ کامل‌تر
+    if (REASONING_LOW.test(String(body.model))) body.reasoning = { effort: "low" };
     if (CLAUDE.test(String(body.model))) body.thinking = { type: "disabled" }; // برای JSON لازم نیست؛ اگر گیت‌وی نپذیرد (۴۰۰) پایین‌تر حذف و دوباره تلاش می‌شود
     const picked = resolveModel(env, modelId);
     // مدل ارائه‌دهنده‌ی دوم: مستقیم به گیت‌وی و کلید خودش (بدون چرخش حساب‌های کلودفلر)
@@ -137,6 +140,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
       delete body.response_format; // برخی سرویس‌ها response_format یا chat_template_kwargs را نمی‌پذیرند
       delete body.chat_template_kwargs;
       delete body.reasoning_effort;
+      delete body.reasoning;
       delete body.thinking;
       r = await call();
     }
@@ -217,6 +221,7 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
   };
   if (THINKERS.test(picked.model)) body.chat_template_kwargs = { enable_thinking: false };
   if (/gpt-oss/i.test(picked.model)) body.reasoning_effort = "low";
+  if (REASONING_LOW.test(picked.model)) body.reasoning = { effort: "low" };
   if (CLAUDE.test(picked.model)) body.thinking = { type: "disabled" };
   const extraBase = (env.EXTRA_LLM_BASE_URL ?? "").trim().replace(/\/+$/, "");
   const extraKey = (env.EXTRA_LLM_API_KEY ?? "").trim();
@@ -228,7 +233,7 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
   };
   let r = await call();
   if (r.status === 400) { // برخی سرویس‌ها فیلدهای اضافی را نمی‌پذیرند
-    delete body.chat_template_kwargs; delete body.reasoning_effort; delete body.thinking;
+    delete body.chat_template_kwargs; delete body.reasoning_effort; delete body.reasoning; delete body.thinking;
     r = await call();
   }
   if (!r.ok) await failFrom(r, "LLM");
