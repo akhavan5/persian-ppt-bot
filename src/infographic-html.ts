@@ -104,7 +104,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const colHtml = new Array<string>(cols).fill("");
   ig.sections.forEach((s, i) => {
     const k = heights.indexOf(Math.min(...heights));
-    colHtml[k] += `<section class="pn"><header><span class="no">${num(i + 1)}</span><h2>${tx(s.title)}</h2></header><div class="bd">${s.blocks.map(block).join("")}</div></section>`;
+    colHtml[k] += `<section class="pn" data-i="${i}"><header><span class="no">${num(i + 1)}</span><h2>${tx(s.title)}</h2></header><div class="bd">${s.blocks.map(block).join("")}</div></section>`;
     heights[k] += base * 3.6 + s.blocks.reduce((a, b) => a + estimate(b) + base * 0.6, 0) + base * 1.1;
   });
   const panels = colHtml.filter(Boolean).map((h) => `<div class="col">${h}</div>`).join("");
@@ -121,6 +121,17 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const katexRun = hasTex
     ? `<script>try{document.querySelectorAll("[data-tex]").forEach(function(e){try{window.katex.render(e.getAttribute("data-tex"),e,{throwOnError:true,displayMode:true})}catch(x){}})}catch(x){}</script>`
     : "";
+
+  // توازن ستون‌ها با ارتفاع واقعی: بعد از بارگذاری فونت، ارتفاع هر پنل اندازه گرفته می‌شود و بهترین چیدمان (کمترین ارتفاع بلندترین ستون) انتخاب می‌شود.
+  // اگر اجرای اسکریپت ممکن نشد، همان چیدمان تخمینی بالا می‌ماند.
+  const balance = `<script>(function(){function go(){try{var cols=[].slice.call(document.querySelectorAll(".col")),n=cols.length;if(n<2)return;
+var ps=[].slice.call(document.querySelectorAll(".pn"));ps.sort(function(a,b){return a.getAttribute("data-i")-b.getAttribute("data-i")});
+var m=ps.length,h=ps.map(function(p){return p.offsetHeight}),total=Math.pow(n,m);if(total>70000)return;
+var best=0,bs=1e12;for(var k=0;k<total;k++){var x=k,s=[],i,top=-1,ok=true;for(i=0;i<n;i++)s.push(0);
+for(i=0;i<m;i++){var c=x%n;x=Math.floor(x/n);if(c>top+1){ok=false;break}if(c>top)top=c;s[c]+=h[i]}
+if(!ok)continue;var mx=Math.max.apply(null,s),mn=Math.min.apply(null,s),sc=mx*1000+(mx-mn);if(sc<bs){bs=sc;best=k}}
+var x2=best;ps.forEach(function(p,i){cols[x2%n].appendChild(p);x2=Math.floor(x2/n)})}catch(e){}}
+window.addEventListener("load",function(){(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(go)})})()</script>`;
 
   let host = "";
   try { if (o.site) host = new URL(o.site).hostname.replace(/^www\./, ""); } catch { /* نشانی نامعتبر */ }
@@ -238,5 +249,6 @@ ${katex}
 ${ig.takeaway ? `<div class="take"><span class="lb">جمع‌بندی</span><p>${tx(ig.takeaway)}</p></div>` : ""}
 ${host ? `<div class="ft">${esc(host)}</div>` : ""}
 ${katexRun}
+${balance}
 </body></html>`;
 }

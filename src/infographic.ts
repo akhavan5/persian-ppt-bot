@@ -134,7 +134,7 @@ export function normalizeInfographic(data: any, topic: string): Infographic {
       const h = (Array.isArray(data?.highlights) ? data.highlights : [])
         .map((s: any) => ({ value: str(s?.value).slice(0, 24), label: str(s?.label).slice(0, 70) }))
         .filter((s: IgStat) => s.value && s.label).slice(0, 4);
-      return h.length >= 2 ? h : [];
+      return h.length >= 3 ? h : []; // با کمتر از ۳ عدد، کارت‌های بزرگ بی‌جا فضا می‌گیرند
     })(),
     sections,
     takeaway: str(data?.takeaway).slice(0, 300),
