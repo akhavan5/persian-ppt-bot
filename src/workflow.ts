@@ -137,11 +137,12 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       if (poster) {
         let posterOk = false;
         try {
-          const pnotes = found.notes || (event.payload.source ? event.payload.source.slice(0, 8000) : "");
+          const psource = event.payload.source || "";
+          const pnotes = psource ? "" : found.notes;
           const ig = await step.do("poster-content", { retries: { limit: 1, delay: "10 seconds" }, timeout: "3 minutes" }, () =>
             guard(async () => {
               await status("🖼 طراحی پوستر (اینفوگرافیک)…");
-              return makeInfographic(this.env, topic, { layout: poster.layout, tone: settings.tone, model: settings.model, research: pnotes });
+              return makeInfographic(this.env, psource ? deck.title : topic, { layout: poster.layout, tone: settings.tone, model: settings.model, research: pnotes, source: psource || undefined });
             }));
           await step.do("poster-render", { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, async () => {
             await status("🎨 ساخت تصویر پوستر…");
