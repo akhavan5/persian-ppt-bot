@@ -18,6 +18,7 @@ import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, posterE
 import { ensureUid, resolveUid } from "./link";
 import { parseRequest } from "./parse";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
+import { fetchLinkSource, findLinkInText, linkCapNote, linkEnabled, linkLimitHit } from "./link-source";
 
 const HELP =
   "سلام! 👋\n" +
@@ -26,6 +27,7 @@ const HELP =
   "مثال:\n<code>هوش مصنوعی در آموزش، ۱۰ اسلاید</code>\n\n" +
   "🖼 در مرحله‌های آخر می‌توانی یک <b>پوستر (اینفوگرافیک)</b> و یک <b>جزوه‌ی Word</b> هم همراه ارائه بگیری؛ هر کدام ۱ اعتبار جدا هزینه دارد.\n\n" +
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
+  "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود (تعداد اسلاید را کنار لینک بنویس، مثلاً: <code>https://example.com/article ۸ اسلاید</code>).\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت (عادی، دانشجویی، کسب‌وکار، معلم، دفاع پایان‌نامه)، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد)\n" +
   "🌐 /site ← ورود خودکار به سایت pptsaz.ir (پلن‌ها و پرداخت آنلاین)\n" +
@@ -99,7 +101,7 @@ type Step = "model" | "slides" | "imgs" | "poster" | "handout";
 /** پوستر (اینفوگرافیک) همراه ارائه: none = نه، wide = افقی، tall = عمودی */
 type PosterChoice = "none" | "wide" | "tall";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
-interface Pending { /** جزوه‌ی Word همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string }
+interface Pending { /** جزوه‌ی Word همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string; /** منبع از روی لینک وب است (file = نام سایت) */ link?: boolean }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
@@ -158,7 +160,8 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   else if (steps.indexOf("slides") >= 0 && steps.indexOf("slides") < idx) done.push(`📄 اسلاید: <b>${toFa(String(p.slides))}</b>`);
   const text = [
     `📝 <b>موضوع:</b> ${esc(topicShown)}`,
-    ...(p.source ? [`📎 <b>فایل:</b> ${esc((p.file ?? "فایل").slice(0, 80))} <i>(ارائه از روی محتوای فایل ساخته می‌شود)</i>`] : []),
+    ...(p.source ? [p.link ? `🔗 <b>لینک:</b> ${esc((p.file ?? "صفحه‌ی وب").slice(0, 80))} <i>(ارائه از روی محتوای صفحه ساخته می‌شود)</i>`
+      : `📎 <b>فایل:</b> ${esc((p.file ?? "فایل").slice(0, 80))} <i>(ارائه از روی محتوای فایل ساخته می‌شود)</i>`] : []),
     ...(done.length ? ["", ...done] : []),
     "",
     `<i>مرحله‌ی ${toFa(String(idx + 1))} از ${toFa(String(steps.length))}</i>`,
@@ -504,6 +507,12 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (!text) return await sendMessage(env, chatId, `لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست؛ یا یک فایل (${SUPPORTED_NOTE}) تا ارائه از روی محتوایش ساخته شود.`);
 
+  // لینک صفحه‌ی وب (فقط وقتی Tavily فعال است): متن صفحه خوانده و منبع ارائه می‌شود
+  if (linkEnabled(env)) {
+    const found = findLinkInText(text);
+    if (found) return await startFromLink(env, chatId, uid, userId, found.url, found.rest, text);
+  }
+
   // به‌جای ساخت فوری، کارت انتخاب (مدل / اسلاید / تصویر) نشان داده می‌شود؛ اعتبار فقط با «🚀 ساخت ارائه» کم می‌شود
   const { topic, slides, mode } = extractSlideCount(text);
   if (topic.length < 3) return await sendMessage(env, chatId, "موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.");
@@ -511,6 +520,25 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const gate = await wizardGate(env, chatId, uid, userId);
   if (!gate) return;
   return await showWizard(env, chatId, uid, gate, { topic, slides, mode, orig: text });
+}
+
+/** ساخت از روی لینک: اول پیش‌شرط‌ها (اعتبار/ارائه‌ی در حال ساخت) و سقف روزانه، بعد خواندن صفحه با Tavily و نمایش کارت انتخاب.
+ *  rest: باقی پیام بدون لینک (موضوع و تعداد اسلاید)؛ اگر خالی بود، عنوان صفحه موضوع می‌شود. */
+async function startFromLink(env: Env, chatId: number, uid: Uid, userId: number, url: string, rest: string, orig: string): Promise<null> {
+  const { topic: capTopic, slides, mode } = extractSlideCount(rest);
+  if (capTopic.length > 600) { await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر)."); return null; }
+  const gate = await wizardGate(env, chatId, uid, userId);
+  if (!gate) return null;
+  if (await linkLimitHit(env, uid)) {
+    await sendMessage(env, chatId, `⏳ سقف امروزت برای خواندن لینک تمام شد؛ فردا دوباره امتحان کن. ${esc(linkCapNote(env))}`);
+    return null;
+  }
+  const wait = await sendMessage(env, chatId, "🔗 در حال خواندن لینک…");
+  const r = await fetchLinkSource(env, url);
+  if (!r.ok) { await editMessage(env, chatId, wait.message_id, `⚠️ ${esc(r.error)}`); return null; }
+  const topic = capTopic.length >= 3 ? capTopic : r.title.length >= 3 ? r.title.slice(0, 200) : "ارائه از روی لینک ارسالی";
+  await showWizard(env, chatId, uid, gate, { topic, slides, mode, source: r.text, file: r.host, link: true, cardId: wait.message_id, orig });
+  return null;
 }
 
 /** بعد از خواندن فایل: پیام خطا یا کارت انتخاب ارائه. هم از مسیر درون‌خطی و هم از OcrWorkflow صدا زده می‌شود */
@@ -540,7 +568,7 @@ async function wizardGate(env: Env, chatId: number, uid: Uid, userId: number): P
 }
 
 /** نمایش کارت انتخاب (مدل / اسلاید / تصویر). cardId: پیامی که باید به کارت تبدیل شود (مثلاً «در حال خواندن فایل…»)؛ خالی = پیام تازه */
-async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; caps: Caps }, o: { topic: string; slides?: number; mode?: Mode; source?: string; file?: string; cardId?: number; orig?: string }) {
+async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; caps: Caps }, o: { topic: string; slides?: number; mode?: Mode; source?: string; file?: string; link?: boolean; cardId?: number; orig?: string }) {
   const { s, caps } = g;
   const models = modelList(env);
   const pend: Pending = {
@@ -556,7 +584,7 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     ...(o.mode ? { mode: o.mode } : {}),
     note: o.slides !== undefined && o.slides > caps.maxSlides ? slidesLimitMsg(caps.maxSlides)
       : o.mode && o.slides !== undefined && o.slides < MODES[o.mode].minSlides ? `حالت ${MODES[o.mode].name} حداقل ${toFa(String(MODES[o.mode].minSlides))} اسلاید می‌سازد؛ تعداد اسلاید به همین مقدار می‌رسد.` : undefined,
-    ...(o.source ? { source: o.source, file: o.file } : {}),
+    ...(o.source ? { source: o.source, file: o.file, ...(o.link ? { link: true } : {}) } : {}),
   };
   pend.step = stepsOf(env, pend)[0];
   const { text: cardText, ...cardExtra } = pendingView(env, pend, s, caps);

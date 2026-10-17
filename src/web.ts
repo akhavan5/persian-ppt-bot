@@ -21,6 +21,7 @@ import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { TG_MAX_FILE, extractFileBytes } from "./tg-file";
 import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
+import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
 
 const SEC_HEADERS = {
@@ -79,6 +80,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       freeMaxImages: FREE_MAX_IMAGES,
       // پوستر (اینفوگرافیک) اختیاری همراه ارائه با ۱ اعتبار جدا؛ فقط وقتی Browser Rendering وصل است
       poster: posterEnabled(env),
+      // ساخت ارائه از روی لینک (Tavily Extract)؛ بدون TAVILY_API_KEY دکمه‌اش در سایت نمایش داده نمی‌شود
+      link: linkEnabled(env),
       // مدل‌های ارائه‌دهنده‌ی دوم (extra) فقط برای دارندگان پلن‌اند: free=false
       models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: !m.extra })),
       plans: PLANS,
@@ -116,6 +119,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
   if (path === "/api/generate" && method === "POST") return generate(req, env, user);
   if (path === "/api/extract" && method === "POST") return extract(req, env, user);
+  if (path === "/api/link" && method === "POST") return linkSource(req, env, user);
   if (path.startsWith("/api/extract/") && method === "GET") return ocrStatus(env, user, path.slice("/api/extract/".length));
   if (path === "/api/pay/start" && method === "POST") return startPayment(env, url, user, await readBody(req));
 
@@ -337,6 +341,20 @@ async function extract(req: Request, env: Env, user: WebUser): Promise<Response>
   }
   const r = await extractFileBytes(env, bytes, name, mime, user.id);
   return r.ok ? json({ text: r.text }) : err(r.error, 422);
+}
+
+// ---------- خواندن متن یک لینک (Tavily Extract) ----------
+// متن صفحه فقط به مرورگر برمی‌گردد و مثل متن فایل آپلودی در درخواست ساخت (source) فرستاده می‌شود؛ جایی ذخیره نمی‌شود.
+async function linkSource(req: Request, env: Env, user: WebUser): Promise<Response> {
+  if (!linkEnabled(env)) return err("خواندن از روی لینک فعال نیست.", 404);
+  if (!isAllowed(env, user.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
+  if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
+  const b = await readBody(req, 4_000);
+  const u = parseLinkUrl(typeof b?.url === "string" ? b.url : "");
+  if (!u) return err("آدرس لینک معتبر نیست؛ آدرس کامل صفحه را با http یا https وارد کن.", 400);
+  if (await linkLimitHit(env, user.id)) return err(`سقف امروزت برای خواندن لینک تمام شد؛ فردا دوباره امتحان کن. ${linkCapNote(env)}`, 429);
+  const r = await fetchLinkSource(env, u.href, true);
+  return r.ok ? json({ text: r.text, title: r.title, host: r.host, truncated: r.truncated }) : err(r.error, 422);
 }
 
 // وضعیت خواندن فایل؛ شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow و پیشوندش شناسه‌ی کاربر است تا مالکیت بررسی شود

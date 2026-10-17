@@ -75,6 +75,11 @@ export interface Env {
   /** جستجوی آنلاین پشت‌صحنه (رایگان: ویکی‌پدیا + DuckDuckGo): WEB_SEARCH=off خاموش می‌کند؛ TAVILY_API_KEY اختیاری (سطح رایگان tavily.com) */
   WEB_SEARCH?: string;
   TAVILY_API_KEY?: string;
+  /** ساخت ارائه از روی لینک (Tavily Extract): با داشتن TAVILY_API_KEY فعال است؛ LINK_SOURCE=off خاموش می‌کند.
+   *  LINK_DAILY_LIMIT: سقف لینک در روز برای هر کاربر (پیش‌فرض ۱۰)؛ LINK_GLOBAL_DAILY: سقف کل سایت در روز (اختیاری، خالی = بدون سقف) */
+  LINK_SOURCE?: string;
+  LINK_DAILY_LIMIT?: string;
+  LINK_GLOBAL_DAILY?: string;
   /** تبدیل تصویر/PDF اسکن‌شده به متن (OCR) با ocr.space؛ کلید رایگان از ocr.space/ocrapi/freekey. بدون آن از کلید دموی عمومی (با سقف بسیار کم) استفاده می‌شود */
   OCR_SPACE_API_KEY?: string;
   /** اختیاری: مدل‌های vision کلودفلر برای OCR (با کاما، به ترتیب اولویت). پیش‌فرض: gemma-4-26b-a4b-it ← qwen3.8-27b ← mistral-small-3.1 */

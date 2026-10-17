@@ -141,6 +141,9 @@ textarea{min-height:110px;resize:vertical}
 .ex button:hover{color:var(--primary);border-color:var(--primary)}
 .up{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .up.drag{outline:2px dashed var(--primary);outline-offset:6px;border-radius:12px}
+.linkRow{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.linkRow input{flex:1 1 260px;min-width:0;width:auto;direction:ltr;text-align:left;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;outline:none;transition:.15s}
+.linkRow input:focus{border-color:var(--primary);box-shadow:0 0 0 4px rgba(37,99,235,.14)}
 .upchip{display:inline-flex;align-items:center;gap:8px;background:var(--soft);border:1px solid #cfdcf7;border-radius:999px;padding:5px 8px 5px 14px;font-size:.88rem;font-weight:600;max-width:100%}
 .upchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
 .upchip button{border:0;background:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;line-height:1;color:var(--muted)}
@@ -297,8 +300,14 @@ address{font-style:normal}
     <div class="up" id="upBox">
       <input type="file" id="file" hidden accept=".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg">
       <button class="btn ghost sm" type="button" id="pick">📎 آپلود فایل (اختیاری)</button>
+      <button class="btn ghost sm" type="button" id="linkBtn" hidden>🔗 افزودن لینک</button>
       <span class="upchip" id="upChip" hidden><span id="upName"></span><button type="button" id="upDel" aria-label="حذف فایل" title="حذف فایل">✕</button></span>
       <span class="muted" id="upHint">Word، PDF، PowerPoint، Excel، متن یا تصویر — ارائه از روی محتوای فایل ساخته می‌شود (فایل را اینجا هم می‌توانی رها کنی)</span>
+    </div>
+    <div class="linkRow" id="linkRow" hidden>
+      <input type="text" id="linkUrl" inputmode="url" maxlength="2000" autocomplete="off" spellcheck="false" placeholder="https://example.com/article" aria-label="آدرس لینک">
+      <button class="btn sm" type="button" id="linkGo">دریافت محتوای لینک</button>
+      <button class="btn ghost sm" type="button" id="linkCancel">انصراف</button>
     </div>
     <div id="upMsg" class="msg err" role="alert" hidden></div>
     <div id="modelsBox" hidden>
@@ -640,7 +649,7 @@ async function boot() {
     const r = await api("/api/me");
     me = r.user ? r : null;
   } catch (e) { toast("ارتباط با سرور برقرار نشد؛ صفحه را دوباره باز کن."); return; }
-  renderCommon(); initPoster();
+  renderCommon(); initPoster(); initLink();
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
   if (me) { if ($("#authDlg").open) $("#authDlg").close(); renderApp(); } else renderAuthBtn();
   handlePayReturn();
@@ -1179,10 +1188,10 @@ async function extractFile(file, my) {
   throw new Error("این نوع فایل پشتیبانی نمی‌شود. فایل Word، PDF، PowerPoint، Excel، متن یا تصویر بده (فایل‌های قدیمی doc/ppt را ابتدا به docx/pptx تبدیل کن).");
 }
 const HINT = $("#upHint").textContent;
-function clearFile() { upSeq++; srcText = srcName = ""; extracting = false; $("#file").value = ""; show($("#upChip"), false); $("#upHint").textContent = HINT; show($("#pick"), true); upMsg(""); }
+function clearFile() { upSeq++; srcText = srcName = ""; extracting = false; $("#file").value = ""; show($("#upChip"), false); $("#upHint").textContent = HINT; show($("#pick"), true); $("#pick").disabled = false; $("#linkGo").disabled = false; $("#linkUrl").value = ""; show($("#linkRow"), false); initLink(); upMsg(""); }
 async function onFile(file) {
   if (!file) return;
-  upMsg(""); const my = ++upSeq;
+  upMsg(""); show($("#linkRow"), false); const my = ++upSeq;
   if (file.size > MAX_FILE) { upMsg("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد."); return; }
   extracting = true; $("#pick").disabled = true; $("#upHint").textContent = "⏳ در حال خواندن فایل…";
   try {
@@ -1190,7 +1199,7 @@ async function onFile(file) {
     if (my !== upSeq) return;
     if (raw.length < 30) throw new Error("متنی در فایل پیدا نشد (اگر اسکن یا تصویر است، واضح‌تر و کم‌حجم‌تر امتحان کن).");
     srcText = raw.slice(0, MAX_SRC); srcName = file.name;
-    $("#upName").textContent = `${file.name} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false);
+    $("#upName").textContent = `${file.name} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false); show($("#linkBtn"), false);
     $("#upHint").textContent = raw.length > MAX_SRC ? `فایل بلند است؛ فقط ${fa(MAX_SRC)} نویسه‌ی اول استفاده می‌شود.` : "ارائه از روی محتوای این فایل ساخته می‌شود.";
     const t = $("#topic"); if (!t.value.trim()) { t.value = file.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").slice(0, 120); store.set("topic", t.value); }
   } catch (e) {
@@ -1203,6 +1212,34 @@ $("#upDel").onclick = clearFile;
 for (const ev of ["dragenter", "dragover"]) $("#upBox").addEventListener(ev, (e) => { e.preventDefault(); $("#upBox").classList.add("drag"); });
 for (const ev of ["dragleave", "drop"]) $("#upBox").addEventListener(ev, (e) => { e.preventDefault(); $("#upBox").classList.remove("drag"); });
 $("#upBox").addEventListener("drop", (e) => { if (!extracting && !srcText) onFile(e.dataTransfer.files[0]); });
+
+// ---------- ساخت از روی لینک ----------
+// آدرس صفحه به سرور می‌رود (Tavily Extract)؛ فقط متن صفحه برمی‌گردد و مثل متن فایل آپلودی «منبع» ارائه می‌شود. فقط وقتی سرور فعالش کرده نمایش داده می‌شود.
+function initLink() { show($("#linkBtn"), !!(cfg && cfg.link) && $("#upChip").hidden); }
+$("#linkBtn").onclick = () => { if (extracting || srcText) return; upMsg(""); show($("#linkRow"), true); $("#linkUrl").focus(); };
+$("#linkCancel").onclick = () => { show($("#linkRow"), false); $("#linkUrl").value = ""; upMsg(""); };
+$("#linkUrl").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); onLink(); } });
+$("#linkGo").onclick = onLink;
+async function onLink() {
+  if (extracting || srcText) return;
+  const url = $("#linkUrl").value.trim();
+  if (!url) { upMsg("آدرس لینک را وارد کن."); return; }
+  if (!me) { openAuth("register", "برای خواندن لینک وارد شو یا ثبت‌نام کن."); return; }
+  upMsg(""); const my = ++upSeq;
+  extracting = true; $("#linkGo").disabled = $("#pick").disabled = true; $("#upHint").textContent = "⏳ در حال خواندن لینک…";
+  try {
+    const d = await api("/api/link", { method: "POST", body: { url } });
+    if (my !== upSeq) return;
+    const raw = tidy(String(d.text || ""));
+    if (raw.length < 30) throw new Error("متنی در این لینک پیدا نشد.");
+    srcText = raw.slice(0, MAX_SRC); srcName = d.host || url;
+    $("#upName").textContent = `🔗 ${d.host || url} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false); show($("#linkBtn"), false); show($("#linkRow"), false);
+    $("#upHint").textContent = d.truncated || raw.length > MAX_SRC ? `صفحه بلند است؛ فقط ${fa(MAX_SRC)} نویسه‌ی اول استفاده می‌شود.` : "ارائه از روی محتوای این لینک ساخته می‌شود.";
+    const t = $("#topic"); if (!t.value.trim() && d.title) { t.value = String(d.title).slice(0, 120); store.set("topic", t.value); }
+  } catch (e) {
+    if (my === upSeq) { upMsg(e.message || "خواندن لینک ناموفق بود."); $("#upHint").textContent = HINT; if (e.status === 401) { me = null; boot(); } }
+  } finally { if (my === upSeq) { extracting = false; $("#linkGo").disabled = $("#pick").disabled = false; } }
+}
 
 // ---------- ساخت ارائه ----------
 function jobView(state) { show($("#job"), !!state); show($("#jobRun"), state === "run"); show($("#jobDone"), state === "done"); show($("#jobErr"), state === "err"); }
