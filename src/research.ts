@@ -12,7 +12,7 @@
  * متغیرهای اختیاری: WEB_SEARCH=off (خاموش کردن کامل)، TAVILY_API_KEY
  */
 import type { Env } from "./env";
-import { askJson } from "./llm";
+import { askQuick } from "./llm";
 
 interface Hit { src: string; title: string; text: string; /** موتور جستجو: wiki-fa | wiki-en | ddg | tavily */ via: string }
 
@@ -79,6 +79,8 @@ const TRAIL_FILLER = /(?:[\s،,.:;!؟?\-–—]+(?:و|را|رو|از|در|به|�
 /** عبارت تمیز برای موتورهای جستجو: بدون تعداد اسلاید و بدون جمله‌ی درخواست ساخت. اگر چیزی نماند، متن اصلی. */
 export function searchQuery(topic: string): string {
   const orig = String(topic ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "");
+  const quoted = orig.match(/[«“"]([^»”"]{4,150})[»”"]/)?.[1]; // موضوع داخل «» مطمئن‌ترین سرنخ است
+  if (quoted) return quoted.replace(/\s+/g, " ").trim();
   let q = orig.replace(LANG_SPEC, "$1").replace(SLIDE_COUNT, " ");
   if (PPT_WORDS.test(q)) q = q.replace(PAGE_COUNT, " ");
   q = q.replace(REQ_NOISE, " ");
@@ -90,26 +92,20 @@ export function searchQuery(topic: string): string {
   return q.length >= 2 ? q : orig.trim();
 }
 
-/** استخراج عبارت جستجو با LLM؛ هر خطا/خروجی نامعتبر ⇒ برگشت به searchQuery (regex) */
+/** استخراج عبارت جستجو با «مدل انتخابی کاربر»؛ هر خطا/تایم‌اوت/خروجی نامعتبر ⇒ برگشت به searchQuery */
+const QUERY_SYSTEM =
+  "You extract a web-search query from a user's request to build a presentation. " +
+  "Output ONLY the core scientific/educational topic as a short search phrase (max 12 words), in the same language as the topic. " +
+  "Remove: build commands, slide counts, design/colors/fonts, images, notes, output format, slide lists, and presenter/lecture instructions. " +
+  "Keep grade or lesson names only if the topic itself depends on them. No quotes, no explanation, a single line.";
 export async function extractQuery(env: Env, topic: string, modelId?: string): Promise<string> {
   const fallback = searchQuery(topic);
   try {
-    const prompt =
-`از درخواست کاربر برای ساخت ارائه، فقط «موضوع علمی» را برای جستجوی گوگل بیرون بکش.
-قوانین:
-- دستور ساخت، تعداد اسلاید، طراحی، رنگ، فونت، تصویر، یادداشت، خروجی و فهرست اسلایدها را حذف کن.
-- نام پایه/درس را فقط وقتی نگه دار که خودِ موضوع به آن وابسته است (مثلاً «درس ۳ مطالعات هشتم»).
-- زبان خروجی همان زبان موضوع باشد؛ حداکثر ۱۲ کلمه؛ بدون نقل‌قول و توضیح.
-فقط JSON بده: {"query":"..."}
-
-درخواست کاربر:
-${String(topic ?? "").slice(0, 1500)}`;
-    const j = (await Promise.race([
-      askJson(env, prompt, 120, modelId),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000)),
-    ])) as any;
-    const q = String(j?.query ?? "").replace(/\s+/g, " ").trim();
-    if (q.length < 2 || q.length > 150) return fallback;
+    const raw = await askQuick(env, QUERY_SYSTEM, String(topic ?? "").slice(0, 1500), { modelId, maxTokens: 80, timeoutMs: 8000 });
+    const q = raw.replace(/<think>[\s\S]*?<\/think>/gi, " ").replace(/^[\s\S]*<\/think>/i, " ")
+      .split("\n").map((l) => l.trim()).find(Boolean)?.replace(/^(?:query|عبارت(?:\s*جستجو)?|موضوع)\s*[:：]\s*/i, "")
+      .replace(/[«»"“”`*]/g, " ").replace(/\s+/g, " ").trim() ?? "";
+    if (q.length < 2 || q.length > 150) { console.log("research-query-llm-invalid", JSON.stringify(raw.slice(0, 120))); return fallback; }
     console.log("research-query-llm", q);
     return q;
   } catch (e) {

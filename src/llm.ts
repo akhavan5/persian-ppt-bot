@@ -190,6 +190,54 @@ async function ask(env: Env, prompt: string, maxTokens = 6000, modelId?: string)
   throw last instanceof Error ? last : new Error("invalid JSON");
 }
 
+/** فراخوانی سبک و سریع با «مدل انتخابی کاربر» (متن ساده) برای کارهای کوچک مثل استخراج عبارت جستجو.
+ *  فرق با ask: بدون SYSTEM ساخت ارائه، بدون response_format/JSON، یک تلاش، و لغو واقعی درخواست در تایم‌اوت (نه فقط منتظر نماندن).
+ *  هر خطا/تایم‌اوت ⇒ استثنا (فراخواننده خودش fallback دارد). */
+export async function askQuick(env: Env, system: string, prompt: string, o: { modelId?: string; maxTokens?: number; timeoutMs?: number } = {}): Promise<string> {
+  const signal = AbortSignal.timeout(o.timeoutMs ?? 8000); // یک سقف برای کل کار (شامل تلاش مجدد ۴۰۰)
+  const maxTokens = o.maxTokens ?? 80;
+  if (!useOpenAI(env)) {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY || "", "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5", max_tokens: maxTokens, system, messages: [{ role: "user", content: prompt }] }),
+      signal,
+    });
+    if (!r.ok) await failFrom(r, "Anthropic");
+    const j = (await r.json()) as any;
+    return (j?.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+  }
+  const picked = resolveModel(env, o.modelId);
+  const thinker = THINKERS.test(picked.model) || ALWAYS_THINK.test(picked.model) || CLAUDE.test(picked.model);
+  const body: Record<string, unknown> = {
+    model: picked.model,
+    max_tokens: Math.min(maxTokens * (thinker ? 4 : 1), 800), // مدل‌های استدلالی بخشی از توکن را صرف فکر می‌کنند
+    temperature: 0,
+    messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
+  };
+  if (THINKERS.test(picked.model)) body.chat_template_kwargs = { enable_thinking: false };
+  if (/gpt-oss/i.test(picked.model)) body.reasoning_effort = "low";
+  if (CLAUDE.test(picked.model)) body.thinking = { type: "disabled" };
+  const extraBase = (env.EXTRA_LLM_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  const extraKey = (env.EXTRA_LLM_API_KEY ?? "").trim();
+  const call = async () => {
+    if (picked.extra) {
+      return fetch(`${extraBase}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${extraKey}` }, body: JSON.stringify(body), signal });
+    }
+    return fetchWithAccounts(env, (a) => fetch(`${a.base}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${a.token}` }, body: JSON.stringify(body), signal }));
+  };
+  let r = await call();
+  if (r.status === 400) { // برخی سرویس‌ها فیلدهای اضافی را نمی‌پذیرند
+    delete body.chat_template_kwargs; delete body.reasoning_effort; delete body.thinking;
+    r = await call();
+  }
+  if (!r.ok) await failFrom(r, "LLM");
+  const j = (await r.json()) as any;
+  const c = j?.choices?.[0]?.message?.content;
+  // فقط content؛ محتوای reasoning عمداً نادیده گرفته می‌شود (برای عبارت جستجو بی‌ارزش است)
+  return typeof c === "string" ? c : Array.isArray(c) ? c.map((x: any) => x?.text ?? "").join("") : "";
+}
+
 /** برای اینفوگرافیک (infographic.ts): همان ask با یک بار تلاش مجدد برای JSON نامعتبر */
 export { ask as askJson };
 
