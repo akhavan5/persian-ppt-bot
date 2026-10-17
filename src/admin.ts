@@ -315,7 +315,7 @@ async function decksScreen(env: Env): Promise<Screen> {
     `    👤 ${typeof x.userId === "number" ? userLink(x.userId, x.n, x.u) : `<b>${esc(x.n || String(x.userId))}</b>`}` +
     ` · ${kinds.get(String(x.userId))} · <code>${x.userId}</code> · 🕒 ${fmtTime(x.t)}` +
     (x.o ? `\n    ✍️ <i>${esc(x.o.slice(0, 200))}</i>` : ""));
-  // فایل‌ها فقط ۲۴ ساعت (و ۳ فایل آخر هر کاربر) نگه داشته می‌شوند؛ برای قدیمی‌تر دکمه‌ی دریافت نمی‌گذاریم
+  // فایل‌ها فقط ۲۴ ساعت (و حداکثر ۹ فایل آخر هر کاربر؛ پلاس ۱۸ و پرو ۳۰) نگه داشته می‌شوند؛ برای قدیمی‌تر دکمه‌ی دریافت نمی‌گذاریم
   const fresh = Date.now() - 24 * 3600 * 1000;
   const kb: Btn[][] = list
     .map((x, i) => ({ x, i }))
@@ -683,7 +683,7 @@ export async function handleAdminFileCallback(env: Env, cq: any) {
   const [, uid, fid] = String(cq.data ?? "").split(":");
   const userId: Uid = WEB_ID.test(uid ?? "") ? uid : Number(uid);
   const f = (typeof userId === "string" || Number.isSafeInteger(userId)) && fid ? await loadFile(env, userId, fid) : null;
-  if (!f) return await sendMessage(env, chatId, "⌛️ این فایل دیگر در دسترس نیست (فایل‌ها ۲۴ ساعت و حداکثر ۳ فایل آخر هر کاربر نگه داشته می‌شوند).");
+  if (!f) return await sendMessage(env, chatId, "⌛️ این فایل دیگر در دسترس نیست (فایل‌ها ۲۴ ساعت و حداکثر ۹ فایل آخر هر کاربر (پلاس ۱۸، پرو ۳۰) نگه داشته می‌شوند).");
   await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`);
   // اگر برای همین ارائه پوستر یا جزوه هم ساخته شده (و هنوز نگه داشته می‌شود)، همراهش فرستاده می‌شود
   if (/-(poster|handout)$/.test(fid)) return;

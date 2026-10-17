@@ -1,13 +1,23 @@
 /** نگه‌داری فایل‌های ساخته‌شده برای ۲۴ ساعت (بایت‌ها در KV واقعی با انقضای خودکار، فهرست در D1؛ بدون نیاز به R2). */
 import JSZip from "jszip";
 import type { Env } from "./env";
-import type { Uid } from "./settings";
+import { getSub, type Uid } from "./settings";
 import type { Deck } from "./types";
 
 export interface FileEntry { id: string; name: string; title: string; slides: number; t: number }
 
 const TTL = 24 * 60 * 60; // ثانیه
-const KEEP = 9; // آخرین چند فایل هر کاربر (ارائه و پوستر همراهش هر کدام یک فایل‌اند)
+// سقف تعداد فایل‌های نگه‌داشته‌شده برای هر کاربر (ارائه، پوستر و جزوه هر کدام یک فایل‌اند) بر اساس پلن.
+// سقف به پلن وابسته است نه به اعتبار باقی‌مانده: با تمام‌شدن اعتبار نباید فایل‌های تازه پاک شوند.
+const KEEP_FREE = 9;
+const KEEP_BY_PLAN: Record<string, number> = { plus: 18, pro: 30 };
+
+async function keepFor(env: Env, userId: Uid): Promise<number> {
+  try {
+    const sub = await getSub(env, userId); // فقط پایان زمان پلن را در نظر می‌گیرد، نه اعتبار باقی‌مانده
+    return sub ? (KEEP_BY_PLAN[sub.plan] ?? KEEP_FREE) : KEEP_FREE;
+  } catch { return KEEP_FREE; }
+}
 const MAX_BYTES = 24 * 1024 * 1024; // سقف مقدار در KV ۲۵ مگابایت است
 
 const fileKey = (userId: Uid, id: string) => `file:${userId}:${id}`;
@@ -26,6 +36,7 @@ export async function saveFile(env: Env, userId: Uid, id: string, bytes: Uint8Ar
   await env.FILES.put(fileKey(userId, id), bytes, { expirationTtl: TTL, metadata: { name, title: title.slice(0, 120), slides, t: Date.now() } });
   const rest = (await listFiles(env, userId)).filter((f) => f.id !== id);
   const all = [{ id, name, title, slides, t: Date.now() }, ...rest];
+  const KEEP = await keepFor(env, userId);
   for (const old of all.slice(KEEP)) await env.FILES.delete(fileKey(userId, old.id)).catch(() => {});
   await env.KV.put(listKey(userId), JSON.stringify(all.slice(0, KEEP)), { expirationTtl: TTL });
   return true;
