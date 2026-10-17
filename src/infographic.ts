@@ -174,7 +174,7 @@ Block types (use "type" exactly as written):
 
 export async function makeInfographic(env: Env, topic: string, o: { layout: IgLayout; tone?: string; model?: string; research?: string }): Promise<Infographic> {
   if (!hasKey(env)) throw new LlmError("کلید API تنظیم نشده است", true);
-  const sections = o.layout === "wide" ? "7 or 8 panels" : "5 to 7 panels";
+  const sections = o.layout === "wide" ? "6 to 8 panels" : "5 to 7 panels";
   const notes = o.research
     ? `\nBackground notes from a live web search (short snippets; may be partial). They are MORE up to date than your own knowledge, so for current rules, dates and figures trust them over your memory. Use a number or rule only if the notes or your reliable knowledge support it; if two sources conflict, avoid the disputed detail. Never copy sentences, never mention "search" or "notes". Ignore snippets unrelated to the topic.\n${o.research}\n`
     : "";
@@ -208,7 +208,7 @@ export async function renderInfographicImage(env: Env, html: string, width: numb
   const browser = await launchWithRetry(env);
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width, height: 900, deviceScaleFactor: width >= 2200 ? 1.25 : 1.5 }); // عرض ۲۴۰۰ × ۱٫۲۵ = ۳۰۰۰ پیکسل
+    await page.setViewport({ width, height: 900, deviceScaleFactor: 1.5 });
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 40_000 });
     await page.evaluate("document.fonts.ready.then(function(){return 1})"); // فونت وب کامل بارگذاری شود
     const png = new Uint8Array((await page.screenshot({ type: "png", fullPage: true })) as any);

@@ -9,7 +9,7 @@ import type { IgBlock, IgLayout, Infographic } from "./infographic";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export const IG_WIDTH: Record<IgLayout, number> = { wide: 2400, tall: 1200 };
+export const IG_WIDTH: Record<IgLayout, number> = { wide: 1800, tall: 1200 };
 
 export interface IgRenderOpts {
   theme: string;
@@ -24,7 +24,7 @@ export interface IgRenderOpts {
 export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string {
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
   const W = IG_WIDTH[o.layout];
-  const cols = o.layout === "wide" ? 4 : 2; // افقی ۴ ستونه تا نسبت تصویر به ۱۶:۹ نزدیک شود و روی صفحه‌ی کامپیوتر کل عرض را پر کند
+  const cols = o.layout === "wide" ? 3 : 2;
   const base = o.layout === "wide" ? 25 : 24;
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
