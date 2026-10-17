@@ -497,6 +497,18 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const caption = String(msg.caption ?? "").replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").trim();
     const { topic: capTopic } = extractSlideCount(caption);
     if (capTopic.length > 600) return await sendMessage(env, chatId, "موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).");
+    // آلبوم (چند عکس/فایل با یک media_group_id): تلگرام هر عکس را پیام جدا می‌فرستد. اولی «رهبر» می‌شود و بقیه فقط ثبت می‌شوند؛
+    // OcrWorkflow چند ثانیه صبر می‌کند، همه را به‌ترتیب می‌خواند و یک کارت می‌سازد (به‌جای یک کارت و OCR جدا برای هر عکس)
+    const gid = msg.media_group_id ? String(msg.media_group_id) : "";
+    let group: string | undefined;
+    if (gid && env.OCR_WORKFLOW) {
+      const gk = `mg:${chatId}:${gid}`;
+      if (!(await env.KV.get(`${gk}:done`))) { // بعد از شروع خواندن آلبوم، عکس دیررسیده مثل فایل تکی رفتار می‌کند
+        await env.KV.put(`${gk}:i:${String(msg.message_id).padStart(12, "0")}`, JSON.stringify({ ref, caption }), { expirationTtl: 600 });
+        if (await hitLimit(env, `${gk}:lead`, 1, 600)) return; // رهبر دیگری هست
+        group = gk;
+      }
+    }
     const gate = await wizardGate(env, chatId, uid, userId);
     if (!gate) return;
     const wait = await sendMessage(env, chatId, "⏳ در حال خواندن فایل…");
@@ -504,7 +516,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const heavy = ref.isPhoto || ref.mime === "application/pdf" || ref.mime.startsWith("image/") || /\.(pdf|png|jpe?g)$/i.test(ref.name);
     if (heavy && env.OCR_WORKFLOW) {
       try {
-        await env.OCR_WORKFLOW.create({ id: `ocr-${chatId}-${Date.now()}`, params: { chatId, userId, uid, ref, caption, waitId: wait.message_id } });
+        await env.OCR_WORKFLOW.create({ id: `ocr-${chatId}-${Date.now()}`, params: { chatId, userId, uid, ref, caption, waitId: wait.message_id, ...(group ? { group } : {}) } });
         return;
       } catch (e) {
         console.error("ocr workflow create", e instanceof Error ? e.message : e); // ناموفق ⇒ مسیر درون‌خطی
