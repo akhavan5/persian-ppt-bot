@@ -89,6 +89,18 @@ function splitPages(md: string): { page: number; text: string }[] {
   return marks.map((m, i) => ({ page: Number(m[1]), text: tidy(body.slice(m.index! + m[0].length, marks[i + 1]?.index ?? body.length)) }));
 }
 
+/** واترمارک اسکنرها (CamScanner، Adobe Scan، …) لایه‌ی متنِ واقعی نیست؛ اگر نماند، اسکن به‌اشتباه «PDF متنی» حساب می‌شود و OCR نمی‌شود */
+const SCANNER_MARK = /cam\s*scanner|adobe\s*scan|scanned\s*(?:with|by)|microsoft\s*lens|office\s*lens|tap\s*scanner|clear\s*scan|genius\s*scan|اسکن\s*شده\s*با/i;
+/** از هر صفحه، خط‌های واترمارک اسکنر و خط‌های کوتاهِ تکراری در بیشتر صفحه‌ها (سرصفحه/پاصفحه/واترمارک) حذف می‌شود */
+function stripWatermarks(pages: { page: number; text: string }[]): { page: number; text: string }[] {
+  const norm = (l: string) => l.replace(/\s+/g, " ").trim().toLowerCase();
+  const seen = new Map<string, number>(); // خط ← تعداد صفحه‌هایی که دارندش
+  for (const p of pages) for (const l of new Set(p.text.split("\n").map(norm))) if (l && l.length <= 60) seen.set(l, (seen.get(l) ?? 0) + 1);
+  const need = Math.max(3, Math.ceil(pages.length * 0.6));
+  const repeated = new Set(pages.length >= 3 ? [...seen].filter(([, n]) => n >= need).map(([l]) => l) : []);
+  return pages.map((p) => ({ page: p.page, text: p.text.split("\n").filter((l) => !SCANNER_MARK.test(l) && !repeated.has(norm(l))).join("\n").trim() }));
+}
+
 async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: string | number): Promise<Extracted> {
   let text = "";
   try {
@@ -101,7 +113,7 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: strin
     console.error("toMarkdown failed", e instanceof Error ? e.message : e);
   }
   text = tidy(text);
-  const pages = splitPages(text);
+  const pages = stripWatermarks(splitPages(text));
   // طول متن واقعی (بدون عنوان/Metadata/سرتیتر صفحه)؛ وگرنه اسکن به‌اشتباه «متنی» تشخیص داده می‌شود.
   const realLen = pages.reduce((n, p) => n + p.text.replace(/\s+/g, "").length, 0);
   const plain = pages.map((p) => p.text).filter(Boolean).join("\n\n");
