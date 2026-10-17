@@ -209,6 +209,57 @@ const ARTICLES_FOR: Record<string, string[]> = {
   "ready-made-powerpoint": ["free-powerpoint-templates-persian", "presentation-topic-ideas", "class-presentation-tips", "persian-powerpoint-design", "make-powerpoint-from-scratch"],
 };
 
+// ۲۵ مهر ۱۴۰۵: صفحه‌های قابلیت‌ها (لینک، اینفوگرافیک، جزوه، Excel) و مقاله‌های جدید؛ به‌جای دست‌زدن به فهرست‌های بالا، اینجا به آن‌ها اضافه می‌شوند
+const MORE_ARTICLES: Record<string, string[]> = {
+  "link-to-pptx": ["webpage-to-presentation-guide", "pdf-link-to-powerpoint-tools-compared", "best-way-persian-powerpoint", "ai-powerpoint-prompt-persian"],
+  "infographic-maker": ["persian-infographic-guide", "handout-vs-slides-vs-infographic", "persian-powerpoint-design", "best-persian-font-powerpoint"],
+  "handout-maker": ["handout-vs-slides-vs-infographic", "class-presentation-tips", "persian-infographic-guide", "how-to-defend-your-presentation"],
+  "excel-to-pptx": ["excel-data-presentation-guide", "ai-powerpoint-charts", "how-many-slides", "entrepreneurship-presentation-sample"],
+  student: ["self-introduction-presentation-sample", "global-warming-presentation-sample"],
+  "school-presentation": ["global-warming-presentation-sample", "self-introduction-presentation-sample"],
+  teacher: ["handout-vs-slides-vs-infographic", "persian-infographic-guide"],
+  business: ["excel-data-presentation-guide", "handout-vs-slides-vs-infographic"],
+  "management-presentation": ["excel-data-presentation-guide"],
+  "medical-presentation": ["persian-infographic-guide"],
+  "thesis-defense": ["handout-vs-slides-vs-infographic"],
+  "text-to-pptx": ["webpage-to-presentation-guide", "excel-data-presentation-guide"],
+  "word-to-pptx": ["handout-vs-slides-vs-infographic"],
+  "pdf-to-pptx": ["pdf-link-to-powerpoint-tools-compared", "webpage-to-presentation-guide"],
+  "article-presentation": ["webpage-to-presentation-guide", "pdf-link-to-powerpoint-tools-compared"],
+  compare: ["pdf-link-to-powerpoint-tools-compared"],
+  "iranian-powerpoint-maker": ["pdf-link-to-powerpoint-tools-compared"],
+  "ppt-with-images": ["persian-infographic-guide"],
+  "speaker-notes": ["handout-vs-slides-vs-infographic"],
+  "slide-maker": ["handout-vs-slides-vs-infographic"],
+  "persian-powerpoint-templates": ["persian-infographic-guide"],
+  "telegram-bot": ["webpage-to-presentation-guide"],
+  "ai-powerpoint-maker": ["webpage-to-presentation-guide"],
+};
+for (const [page, slugs] of Object.entries(MORE_ARTICLES)) ARTICLES_FOR[page] = [...new Set([...(ARTICLES_FOR[page] ?? []), ...slugs])];
+
+// صفحه‌های جدید در بخش «راهنماهای مرتبط» صفحه‌های قدیمی (لینک‌دهی داخلی دوطرفه)
+const MORE_RELATED: Record<string, string[]> = {
+  free: ["link-to-pptx", "infographic-maker", "handout-maker", "excel-to-pptx"],
+  "ppt-saz": ["link-to-pptx", "infographic-maker", "handout-maker", "excel-to-pptx"],
+  student: ["handout-maker"],
+  teacher: ["handout-maker", "infographic-maker"],
+  business: ["excel-to-pptx", "infographic-maker"],
+  "management-presentation": ["excel-to-pptx"],
+  "school-presentation": ["infographic-maker"],
+  "medical-presentation": ["infographic-maker"],
+  "text-to-pptx": ["link-to-pptx", "excel-to-pptx"],
+  "word-to-pptx": ["handout-maker", "link-to-pptx"],
+  "pdf-to-pptx": ["link-to-pptx", "excel-to-pptx"],
+  "article-presentation": ["link-to-pptx"],
+  "ppt-with-images": ["infographic-maker"],
+  "speaker-notes": ["handout-maker"],
+  "slide-maker": ["infographic-maker", "handout-maker", "link-to-pptx"],
+  "telegram-bot": ["link-to-pptx", "infographic-maker", "handout-maker"],
+  "ai-powerpoint-maker": ["link-to-pptx", "infographic-maker"],
+  "online-powerpoint-maker": ["link-to-pptx"],
+  "persian-powerpoint-templates": ["infographic-maker"],
+};
+
 /** مقاله → صفحه‌های فرودی که به آن لینک می‌دهند؛ برای لینک برگشتی از مقاله به صفحه‌های ابزار (لینک‌دهی داخلی دوطرفه). */
 export const LANDINGS_FOR_POST: Map<string, string[]> = (() => {
   const m = new Map<string, string[]>();
@@ -220,7 +271,7 @@ export function renderLanding(p: Page, SITE: string): string {
   const url = `${SITE}/${p.slug}`;
   const h1Text = p.h1.join("");
   const articles = (ARTICLES_FOR[p.slug] ?? []).map((s) => POST_BY_SLUG.get(s)).filter((x) => !!x);
-  const related = p.related.map((slug) => PAGE_BY_SLUG.get(slug)).filter((x): x is Page => !!x);
+  const related = [...new Set([...p.related, ...(MORE_RELATED[p.slug] ?? [])])].filter((slug) => slug !== p.slug).map((slug) => PAGE_BY_SLUG.get(slug)).filter((x): x is Page => !!x);
 
   const howTo = howToNode(url, p.sections);
   const ld = {

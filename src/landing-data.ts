@@ -31,6 +31,7 @@ export type Page = {
 
 import { EXTRA_PAGES } from "./landing-data-extra";
 import { AUDIENCE_PAGES } from "./landing-data-audiences";
+import { FEATURE_PAGES } from "./landing-data-features";
 
 const UPDATED = "2026-10-05";
 const UPDATED_NEW = "2026-10-08"; // صفحه‌هایی که در ۱۷ مهر ۱۴۰۵ محتوایشان گسترش یافت
@@ -738,6 +739,7 @@ const BASE_PAGES: Page[] = [
 ];
 
 // صفحه‌های «تبدیل متن/Word/PDF به پاورپوینت» در landing-data-extra.ts و صفحه‌های مخاطب‌های تخصصی (پزشکی، مهندسی، حقوق، ...) در landing-data-audiences.ts هستند
-export const PAGES: Page[] = [...BASE_PAGES, ...EXTRA_PAGES, ...AUDIENCE_PAGES];
+// صفحه‌های قابلیت‌ها (ساخت از لینک، اینفوگرافیک، جزوه‌ی Word، ساخت از Excel) در landing-data-features.ts هستند
+export const PAGES: Page[] = [...BASE_PAGES, ...EXTRA_PAGES, ...AUDIENCE_PAGES, ...FEATURE_PAGES];
 
 export const PAGE_BY_SLUG = new Map(PAGES.map((p) => [p.slug, p]));

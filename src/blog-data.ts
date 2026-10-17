@@ -4,6 +4,7 @@
 import type { Section } from "./landing-data";
 import { EXTRA_POSTS } from "./blog-data-extra";
 import { GUIDE_POSTS } from "./blog-data-guides";
+import { FEATURE_POSTS } from "./blog-data-features";
 
 export type BlogSection = Section & { chips?: string[] };
 
@@ -23,6 +24,7 @@ export type Post = {
   related: string[]; // slug مقاله‌های مرتبط
   landing: string; // slug صفحه‌ی ابزار مرتبط (landing-data)
   cta: string;
+  kw?: string[]; // کلیدواژه‌های اختیاری مقاله برای داده‌ی ساختاریافته (keywords)؛ اگر نباشد فقط دسته و کلیدواژه‌های عمومی می‌آید
 };
 
 const BASE_POSTS: Post[] = [
@@ -1361,7 +1363,8 @@ const BASE_POSTS: Post[] = [
 ];
 
 // مقاله‌های راهنمای جامع، پرامپت، نمودار، RTL، فونت و رفع مشکل در blog-data-extra.ts؛
-// نمونه‌ی اسلاید به اسلاید، دفاع از ارائه، پرسش‌های داوران و مقایسه‌ی صادقانه با رقبا در blog-data-guides.ts هستند
-export const POSTS: Post[] = [...BASE_POSTS, ...EXTRA_POSTS, ...GUIDE_POSTS];
+// نمونه‌ی اسلاید به اسلاید، دفاع از ارائه، پرسش‌های داوران و مقایسه‌ی صادقانه با رقبا در blog-data-guides.ts هستند؛
+// اینفوگرافیک و جزوه، تبدیل لینک و Excel، مقایسه‌ی تبدیل PDF و لینک و دو نمونه‌ی جدید در blog-data-features.ts
+export const POSTS: Post[] = [...BASE_POSTS, ...EXTRA_POSTS, ...GUIDE_POSTS, ...FEATURE_POSTS];
 
 export const POST_BY_SLUG = new Map(POSTS.map((p) => [p.slug, p]));

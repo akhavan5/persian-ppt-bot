@@ -41,6 +41,10 @@
 - [پاورپوینت برای روحانیون و مبلغان](https://pptsaz.ir/clergy-presentation): سخنرانی، درس اخلاق و جلسه‌ی قرآن؛ بررسی آیات و روایات
 - [پاورپوینت دانش‌آموزان کنکوری](https://pptsaz.ir/konkur-presentation): جمع‌بندی فصل و برنامه‌ی مطالعه
 - [پاورپوینت آماده یا ساخت اختصاصی](https://pptsaz.ir/ready-made-powerpoint): فرق فایل آماده‌ی دانلودی با پیش‌نویس اختصاصی، چک‌لیست استفاده؛ pptساز فایل آماده‌ی دانلودی ندارد
+- [ساخت پاورپوینت از لینک](https://pptsaz.ir/link-to-pptx): تبدیل مقاله و صفحه‌ی وب به PPTX فارسی، سقف روزانه و نکته‌ی منبع‌دهی
+- [اینفوگرافیک ساز فارسی](https://pptsaz.ir/infographic-maker): پوستر آموزشی افقی و عمودی همراه ارائه، ۱ اعتبار جدا
+- [جزوه ساز با هوش مصنوعی](https://pptsaz.ir/handout-maker): جزوه‌ی Word حدود سه‌صفحه‌ای همراه ارائه، ۱ اعتبار جدا
+- [ساخت پاورپوینت از Excel](https://pptsaz.ir/excel-to-pptx): تبدیل فایل Excel و CSV به اسلاید، جدول و نمودار قابل‌ویرایش
 
 ## وبلاگ
 - [وبلاگ](https://pptsaz.ir/blog): راهنماهای ساخت و ارائه‌ی پاورپوینت فارسی
@@ -74,8 +78,17 @@
 - [درست کردن پاورپوینت از صفر](https://pptsaz.ir/blog/make-powerpoint-from-scratch): آموزش هشت‌قدمی برای مبتدی‌ها؛ از فهرست اسلایدها تا خروجی
 - [ساخت پاورپوینت با Gemini و Copilot](https://pptsaz.ir/blog/gemini-copilot-powerpoint-persian): شرط دسترسی، زبان خروجی و آزمون ده‌دقیقه‌ای فارسی
 - [پاورپوینت با هوش مصنوعی بدون کارت بین‌المللی و فیلترشکن](https://pptsaz.ir/blog/powerpoint-ai-without-credit-card-persian): چک‌لیست دسترسی، پرداخت و حریم خصوصی
+- [اینفوگرافیک فارسی](https://pptsaz.ir/blog/persian-infographic-guide): ساختار پوستر آموزشی، رنگ، فونت و مشکل حروف
+- [تبدیل مقاله‌ی وب به پاورپوینت](https://pptsaz.ir/blog/webpage-to-presentation-guide): پنج قدم و رعایت منبع‌دهی
+- [جزوه، پاورپوینت یا اینفوگرافیک؟](https://pptsaz.ir/blog/handout-vs-slides-vs-infographic): انتخاب خروجی مناسب برای کلاس، دفاع و جلسه
+- [ارائه‌ی داده‌های Excel در پاورپوینت](https://pptsaz.ir/blog/excel-data-presentation-guide): انتخاب نمودار و خطاهای رایج
+- [تبدیل PDF و لینک به پاورپوینت](https://pptsaz.ir/blog/pdf-link-to-powerpoint-tools-compared): مقایسه‌ی سه روش و آزمون ده‌دقیقه‌ای
+- [نمونه پاورپوینت معرفی خود](https://pptsaz.ir/blog/self-introduction-presentation-sample): نمونه‌ی هفت‌اسلایدی با زمان‌بندی
+- [نمونه پاورپوینت گرمایش جهانی](https://pptsaz.ir/blog/global-warming-presentation-sample): نمونه‌ی نه‌اسلایدی با منبع و نکته‌ی بررسی
+- [فید RSS وبلاگ](https://pptsaz.ir/feed.xml): تازه‌ترین مقاله‌ها
 
 ## نکات
 - زبان: فارسی؛ خروجی: PPTX سازگار با PowerPoint، LibreOffice و Google Slides
 - حالت دانشجویی: فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع
 - ربات تلگرام همراه با همان سیستم ساخت ارائه کار می‌کند
+- همراه ارائه می‌توان پوستر (اینفوگرافیک) و جزوه‌ی Word گرفت (هرکدام ۱ اعتبار جدا)؛ ورودی می‌تواند موضوع، متن، لینک صفحه‌ی وب یا فایل Word، PDF، PowerPoint، Excel و تصویر باشد

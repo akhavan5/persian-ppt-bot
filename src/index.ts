@@ -5,7 +5,7 @@ import { adminIds } from "./settings";
 import { withStore } from "./store";
 import { handleWeb } from "./web";
 import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from "./landing";
-import { blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
+import { blogFeed, blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
 
 export { DeckWorkflow } from "./workflow";
 export { BroadcastWorkflow } from "./broadcast";
@@ -29,7 +29,7 @@ function noindex(res: Response): Response {
 }
 
 // تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
-const SITEMAP_LASTMOD = "2026-10-14";
+const SITEMAP_LASTMOD = "2026-10-17";
 
 export default {
   // پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی D1 (cron در wrangler.jsonc)
@@ -101,6 +101,10 @@ export default {
     }
     if (url.pathname === "/sitemap.xml") {
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n${landingSitemapEntries(SITE)}${blogSitemapEntries(SITE)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+    }
+    // فید RSS وبلاگ
+    if (url.pathname === "/feed.xml" && (req.method === "GET" || req.method === "HEAD")) {
+      return new Response(req.method === "HEAD" ? null : blogFeed(SITE), { headers: { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     // صفحه‌های سئو (دانشجویی، دفاع پایان‌نامه، معلمان، ...): HTML از landing.ts ساخته می‌شود
     const landing = findLanding(url.pathname);

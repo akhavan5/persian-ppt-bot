@@ -4,7 +4,7 @@ import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
 import { BRAND, CSS, LANDINGS_FOR_POST, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
-const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، نوشتن موضوع برای هوش مصنوعی و مقایسه‌ی صادقانه‌ی ابزارها.";
+const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، اینفوگرافیک و جزوه، تبدیل لینک و Excel به پاورپوینت، نوشتن موضوع برای هوش مصنوعی و مقایسه‌ی صادقانه‌ی ابزارها.";
 
 const EXTRA_CSS = `
 .meta{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;color:var(--muted);font-size:.86rem;margin:0 0 18px}
@@ -40,6 +40,59 @@ export function blogSitemapEntries(site: string): string {
   return url(`${site}/blog`, newest, "0.7") + POSTS.map((p) => url(`${site}/blog/${p.slug}`, p.updated, "0.6")).join("");
 }
 
+
+// ۲۵ مهر ۱۴۰۵: لینک‌دهی دوطرفه‌ی مقاله‌های قدیمی به مقاله‌های جدید (بدون دست‌زدن به داده‌ی مقاله‌های قدیمی)
+const MORE_POST_RELATED: Record<string, string[]> = {
+  "persian-powerpoint-design": ["persian-infographic-guide"],
+  "best-persian-font-powerpoint": ["persian-infographic-guide"],
+  "persian-rtl-slides": ["persian-infographic-guide"],
+  "free-powerpoint-templates-persian": ["persian-infographic-guide"],
+  "best-way-persian-powerpoint": ["webpage-to-presentation-guide", "excel-data-presentation-guide"],
+  "make-powerpoint-from-scratch": ["webpage-to-presentation-guide"],
+  "ai-powerpoint-prompt-persian": ["webpage-to-presentation-guide"],
+  "ai-powerpoint-mobile-telegram": ["webpage-to-presentation-guide"],
+  "ai-powerpoint-charts": ["excel-data-presentation-guide"],
+  "entrepreneurship-presentation-sample": ["excel-data-presentation-guide"],
+  "how-many-slides": ["handout-vs-slides-vs-infographic"],
+  "class-presentation-tips": ["handout-vs-slides-vs-infographic", "self-introduction-presentation-sample"],
+  "how-to-defend-your-presentation": ["handout-vs-slides-vs-infographic"],
+  "thesis-defense-slides-guide": ["handout-vs-slides-vs-infographic"],
+  "pptsaz-honest-comparison": ["pdf-link-to-powerpoint-tools-compared"],
+  "best-ai-powerpoint-makers-persian": ["pdf-link-to-powerpoint-tools-compared"],
+  "foreign-ai-presentation-tools-persian-test": ["pdf-link-to-powerpoint-tools-compared"],
+  "presentation-topic-ideas": ["self-introduction-presentation-sample", "global-warming-presentation-sample"],
+  "ai-presentation-sample-slides": ["global-warming-presentation-sample"],
+  "time-management-presentation-sample": ["self-introduction-presentation-sample"],
+};
+
+const xml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** فید RSS وبلاگ (/feed.xml)؛ ۳۰ مقاله‌ی تازه‌تر. برای خواننده‌های فید و کشف سریع‌تر مقاله‌ها. */
+export function blogFeed(site: string): string {
+  const items = [...POSTS].sort((a, b) => b.date.localeCompare(a.date) || b.updated.localeCompare(a.updated)).slice(0, 30);
+  const rfc = (iso: string) => new Date(iso + "T08:00:00Z").toUTCString();
+  const newest = items[0]?.updated ?? items[0]?.date ?? "2026-10-17";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+  <title>${xml(BLOG_TITLE)}</title>
+  <link>${site}/blog</link>
+  <description>${xml(BLOG_DESC)}</description>
+  <language>fa-IR</language>
+  <lastBuildDate>${rfc(newest)}</lastBuildDate>
+  <atom:link href="${site}/feed.xml" rel="self" type="application/rss+xml"/>
+${items.map((p) => `  <item>
+    <title>${xml(p.h1)}</title>
+    <link>${site}/blog/${p.slug}</link>
+    <guid isPermaLink="true">${site}/blog/${p.slug}</guid>
+    <pubDate>${rfc(p.date)}</pubDate>
+    <category>${xml(p.category)}</category>
+    <description>${xml(p.desc)}</description>
+  </item>`).join("\n")}
+</channel>
+</rss>
+`;
+}
 
 function words(p: Post): number {
   const t = [p.h1, ...p.tldr, ...p.intro, ...p.sections.flatMap((s) => [s.h2, ...(s.paras ?? []), ...(s.list ?? []), ...(s.after ?? []), ...(s.steps ?? []).flatMap((x) => [x.t, x.d]), ...(s.table?.rows.flat() ?? []), ...(s.chips ?? [])]), ...p.faq.flatMap((f) => [f.q, f.a])].map(plain).join(" ");
@@ -82,6 +135,7 @@ ${o.article ? `<meta property="article:published_time" content="${o.article.publ
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
+<link rel="alternate" type="application/rss+xml" title="وبلاگ پاورپوینت‌ساز فارسی" href="/feed.xml">
 <link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <script type="application/ld+json">${jsonLd(o.ld)}</script>
@@ -127,7 +181,7 @@ export function renderBlogIndex(site: string): string {
       { "@type": "ItemList", itemListElement: POSTS.map((p, i) => ({ "@type": "ListItem", position: i + 1, url: `${site}/blog/${p.slug}`, name: p.h1 })) },
     ],
   };
-  const ORDER = ["نمونه اسلاید به اسلاید", "دفاع پایان‌نامه", "هوش مصنوعی", "مقایسه ابزارها", "راهنمای جامع", "اصول ارائه", "ارائه و سخنرانی", "ایده و موضوع", "طراحی", "طراحی ارائه", "رفع مشکل"];
+  const ORDER = ["نمونه اسلاید به اسلاید", "دفاع پایان‌نامه", "هوش مصنوعی", "مقایسه ابزارها", "راهنمای جامع", "اینفوگرافیک و جزوه", "اصول ارائه", "ارائه و سخنرانی", "ایده و موضوع", "طراحی", "طراحی ارائه", "رفع مشکل"];
   const cats = [...new Set(POSTS.map((p) => p.category))].sort((a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
   const card = (p: Post) => `    <a class="post" href="/blog/${p.slug}"><span class="tag">${esc(p.category)}</span><b>${esc(p.h1)}</b><p>${esc(p.desc)}</p><small>${faDate(p.date)} · ${fa(readMin(p))} دقیقه مطالعه</small></a>`;
   const groups = cats.map((c, i) => `  <h2 class="cat" id="c${i + 1}">${esc(c)}</h2>\n  <div class="posts">\n${POSTS.filter((p) => p.category === c).sort((a, b) => b.date.localeCompare(a.date)).map(card).join("\n")}\n  </div>`).join("\n");
@@ -157,14 +211,14 @@ export function renderPost(p: Post, site: string): string {
   const url = `${site}/blog/${p.slug}`;
   // صفحه‌ی اصلی مقاله + صفحه‌هایی که خودشان این مقاله را پیشنهاد می‌دهند (حداکثر ۴ لینک)
   const tools = [...new Set([p.landing, ...(LANDINGS_FOR_POST.get(p.slug) ?? [])])].map((x) => PAGE_BY_SLUG.get(x)).filter((x): x is Page => !!x).slice(0, 4);
-  const related = p.related.map((s) => POST_BY_SLUG.get(s)).filter((x): x is Post => !!x);
+  const related = [...new Set([...p.related, ...(MORE_POST_RELATED[p.slug] ?? [])])].filter((x) => x !== p.slug).map((s) => POST_BY_SLUG.get(s)).filter((x): x is Post => !!x);
   const ld = {
     "@context": "https://schema.org",
     "@graph": [
       ...siteNodes(site),
       {
         "@type": "BlogPosting", "@id": `${url}#article`, mainEntityOfPage: { "@id": `${url}#webpage` }, headline: p.h1, description: p.desc, inLanguage: "fa-IR",
-        datePublished: p.date, dateModified: p.updated, wordCount: words(p), articleSection: p.category, timeRequired: `PT${readMin(p)}M`, keywords: [p.category, "پاورپوینت", "ارائه فارسی"].join("، "), isAccessibleForFree: true,
+        datePublished: p.date, dateModified: p.updated, wordCount: words(p), articleSection: p.category, timeRequired: `PT${readMin(p)}M`, keywords: [...(p.kw ?? []), p.category, "پاورپوینت", "ارائه فارسی"].join("، "), isAccessibleForFree: true,
         author: { "@id": `${site}/#org` }, publisher: { "@id": `${site}/#org` }, image: { "@type": "ImageObject", url: `${site}/og-image.png`, width: 1200, height: 630 },
       },
       { "@type": "WebPage", "@id": `${url}#webpage`, url, name: p.title, description: p.desc, inLanguage: "fa-IR", isPartOf: { "@id": `${site}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` }, primaryImageOfPage: { "@type": "ImageObject", url: `${site}/og-image.png`, width: 1200, height: 630 } },
