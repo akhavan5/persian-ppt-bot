@@ -194,7 +194,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     await answer();
     const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
     await editMessage(env, chatId, mid,
-      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout !== false ? " + جزوه" : ""})…\nمعمولاً ${wantPoster || p.handout !== false ? "۲ تا ۴" : "۱ تا ۲"} دقیقه طول می‌کشد.${creditLine}`,
+      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout !== false ? " + جزوه" : ""})…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`,
       { reply_markup: { inline_keyboard: [] } });
     const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig },
       wantPoster && posterEnabled(env) ? { layout: p.poster as "wide" | "tall" } : undefined);
