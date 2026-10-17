@@ -125,7 +125,9 @@ textarea{min-height:110px;resize:vertical}
 .posterBox select{flex:1 1 220px;min-width:0}
 .posterBox .free{display:inline-block;margin-inline-start:6px;font-size:.74rem;background:#e7f7ee;color:#18794e;border-radius:99px;padding:1px 9px;font-weight:700}
 .posterImg{display:block;max-width:100%;max-height:520px;margin:0 auto 12px;border-radius:12px;border:1px solid var(--line);background:#f4f5f8}
-.gen{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-top:12px;align-items:end}
+.gen{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;align-items:end}
+.goRow{margin-top:14px;display:flex;justify-content:flex-start}
+.goRow .btn{min-width:180px}
 @media(max-width:560px){.gen{grid-template-columns:1fr}}
 .maker{max-width:780px;margin:0 auto 18px;text-align:right;border-color:#cfdcf7}
 .ex{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
@@ -299,7 +301,6 @@ address{font-style:normal}
     <div class="gen">
       <div><label for="slides" style="margin-top:0">تعداد اسلاید</label><select id="slides"></select></div>
       <div><label for="imgCount" style="margin-top:0">تعداد تصویر</label><select id="imgCount"></select></div>
-      <button class="btn" id="go" type="button">✨ بساز</button>
     </div>
     <div class="posterBox" id="posterBox" hidden>
       <label class="pOn" style="margin-top:0"><input type="checkbox" id="pOn"> 🖼 پوستر (اینفوگرافیک) هم ساخته شود <span class="free">+۱ اعتبار</span></label>
@@ -309,12 +310,11 @@ address{font-style:normal}
           <option value="tall">پوستر عمودی (دوستونه، مناسب پیام‌رسان)</option>
         </select>
       </div>
-      <div class="muted" style="margin-top:6px;font-size:.82rem" id="pHint">یک تصویر تک‌صفحه‌ای با تصویر تزئینی از خلاصه‌ی موضوع. هزینه‌ی پوستر ۱ اعتبار (جدا از ارائه) است، اگر ساخته نشود برمی‌گردد و ساخت حدود یک دقیقه بیشتر طول می‌کشد.</div>
     </div>
     <div class="posterBox" id="handoutBox">
       <label class="pOn" style="margin-top:0"><input type="checkbox" id="hOn"> 📝 جزوه‌ی Word هم ساخته شود <span class="free">+۱ اعتبار</span></label>
-      <div class="muted" style="margin-top:6px;font-size:.82rem">جزوه‌ی مطالعه‌ی حدود ۲ صفحه‌ای (فایل DOCX قابل‌ویرایش) همراه یک تصویر. اگر ساخته نشود، اعتبارش برمی‌گردد.</div>
     </div>
+    <div class="goRow"><button class="btn" id="go" type="button">✨ بساز</button></div>
     <div id="genMsg" class="msg err" role="alert" hidden></div>
   </section>
 
@@ -1212,7 +1212,7 @@ function savePoster() {
   try { sessionStorage.setItem("poster", $("#pOn").checked ? $("#pChoice").value : ""); } catch {}
 }
 $("#pOn").addEventListener("change", savePoster);
-$("#hOn").checked = (() => { try { return sessionStorage.getItem("handout") === "1"; } catch { return false; } })();
+$("#hOn").checked = (() => { try { return sessionStorage.getItem("handout") !== "0"; } catch { return true; } })(); // پیش‌فرض: با جزوه
 $("#hOn").addEventListener("change", () => { try { sessionStorage.setItem("handout", $("#hOn").checked ? "1" : "0"); } catch {} });
 $("#pChoice").addEventListener("change", savePoster);
 
@@ -1234,7 +1234,7 @@ $("#go").onclick = async () => {
     refreshMe(); track(r.jobId);
   } catch (e) {
     msg.textContent = e.message; show(msg, true);
-    if (e.status === 401) { me = null; boot(); } else if (e.data && e.data.noCredit) openBuy("اعتبارت تمام شد؛ برای ادامه یکی از پلن‌ها را بگیر.");
+    if (e.status === 401) { me = null; boot(); } else if (e.data && e.data.noCredit) openBuy(e.data.extras ? e.message : "اعتبارت تمام شد؛ برای ادامه یکی از پلن‌ها را بگیر.");
     else if (e.data && e.data.needPlan) { refreshMe(); openBuy(e.message); }
     $("#go").disabled = false;
   }

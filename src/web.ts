@@ -286,7 +286,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   });
   if (!begin.ok) {
     const d = begin.denied;
-    return json({ error: d.error, ...(d.needPlan ? { needPlan: true } : {}), ...(d.noCredit ? { noCredit: true } : {}) }, d.status);
+    return json({ error: d.error, ...(d.needPlan ? { needPlan: true } : {}), ...(d.noCredit ? { noCredit: true } : {}), ...(d.extras ? { extras: true } : {}) }, d.status);
   }
 
   // شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow؛ پیشوندش شناسه‌ی کاربر است تا مالکیت بدون خواندن KV بررسی شود

@@ -66,7 +66,7 @@ export function cleanSource(raw: unknown): string {
     .trim().slice(0, MAX_SOURCE_CHARS);
 }
 
-export interface Denied { error: string; status: number; needPlan?: boolean; noCredit?: boolean; busy?: boolean }
+export interface Denied { error: string; status: number; needPlan?: boolean; noCredit?: boolean; /** کمبود اعتبار برای همراهان (پوستر/جزوه): متن خطا برای نمایش در پنجره‌ی پلن آماده است */ extras?: boolean; busy?: boolean }
 type Quota = Awaited<ReturnType<typeof spendCredit>>;
 export type Begin =
   | { ok: true; topic: string; source: string; settings: Settings; imageCount: number; quota: Quota; /** کسر جداگانه‌ی اعتبار پوستر (فقط وقتی پوستر خواسته شده) */ posterQuota: Quota | null; /** کسر جداگانه‌ی اعتبار جزوه (Word) */ handoutQuota: Quota | null; undo: () => Promise<void> }
@@ -122,7 +122,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
         await refundExtras();
         await releaseLock(env, uid).catch((e) => console.error("unlock", e));
         const names = wanted.map((w) => (w === "poster" ? "پوستر" : "جزوه")).join(" و ");
-        return deny(`ارائه‌ی همراه با ${names} ${toFa(String(1 + wanted.length))} اعتبار می‌خواهد (۱ اعتبار ارائه + ۱ اعتبار برای هر همراه) و اعتبارت کافی نیست. ${wanted.length > 1 ? "یکی از همراه‌ها را حذف کن" : "همراه را خاموش کن"} یا اعتبار بگیر.`, 402, { noCredit: true });
+        return deny(`ارائه‌ی همراه با ${names} ${toFa(String(1 + wanted.length))} اعتبار می‌خواهد (۱ اعتبار ارائه + ۱ اعتبار برای هر همراه) و اعتبارت کافی نیست. ${wanted.length > 1 ? "یکی از همراه‌ها را حذف کن" : "همراه را خاموش کن"} یا اعتبار بگیر.`, 402, { noCredit: true, extras: true });
       }
       extras[k] = q;
     }

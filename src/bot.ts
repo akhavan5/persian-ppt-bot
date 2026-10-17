@@ -131,17 +131,17 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
     ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (MODES[p.mode ?? s.mode].minSlides ? `\n<i>${MODES[p.mode ?? s.mode].emoji} حالت ${MODES[p.mode ?? s.mode].name} حداقل ${toFa(String(MODES[p.mode ?? s.mode].minSlides))} اسلاید می‌سازد.</i>` : "");
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
   } else if (p.step === "poster") {
-    ask = "🖼 <b>پوستر (اینفوگرافیک)</b> هم همراه ارائه ساخته شود؟\n<i>یک تصویر تک‌صفحه‌ای با تصویر تزئینی از خلاصه‌ی موضوع، مناسب اشتراک‌گذاری. هزینه‌ی پوستر ۱ اعتبار (جدا از ارائه) است و اگر ساخته نشود برمی‌گردد. چیدمان پیش‌فرض افقی است؛ عمودی برای پیام‌رسان مناسب‌تر است.</i>";
+    ask = "🖼 <b>پوستر (اینفوگرافیک)</b> هم ساخته شود؟\n<i>هزینه‌ی پوستر ۱ اعتبار (جدا از ارائه) است.</i>";
     opts = [
       [{ text: mark(p.poster === "wide", "🖥 پوستر افقی (پیش‌فرض) — ۱ اعتبار"), callback_data: "p:poster:wide" }],
       [{ text: mark(p.poster === "tall", "📱 پوستر عمودی — ۱ اعتبار"), callback_data: "p:poster:tall" }],
       [{ text: mark((p.poster ?? "none") === "none", "بدون پوستر"), callback_data: "p:poster:none" }],
     ];
   } else if (p.step === "handout") {
-    ask = "📝 <b>جزوه‌ی Word</b> (حدود ۲ صفحه، همراه یک تصویر) هم همراه ارائه ساخته شود؟\n<i>خلاصه‌ی توضیحی و مناسب مطالعه از همان موضوع. هزینه‌ی جزوه ۱ اعتبار (جدا از ارائه) است و اگر ساخته نشود برمی‌گردد. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
+    ask = "📝 <b>جزوه‌ی Word</b> هم ساخته شود؟\n<i>هزینه‌ی جزوه ۱ اعتبار (جدا از ارائه) است. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
     opts = [
-      [{ text: mark(p.handout === true, "📝 با جزوه — ۱ اعتبار"), callback_data: "p:handout:1" }],
-      [{ text: mark(p.handout !== true, "بدون جزوه"), callback_data: "p:handout:0" }],
+      [{ text: mark(p.handout !== false, "📝 با جزوه — ۱ اعتبار"), callback_data: "p:handout:1" }],
+      [{ text: mark(p.handout === false, "بدون جزوه"), callback_data: "p:handout:0" }],
     ];
   } else {
     ask = "🖼 <b>تعداد تصویر</b> را انتخاب کن:" + (steps[steps.length - 1] === "imgs" ? "\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>" : "");
@@ -171,13 +171,13 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 /** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
 async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
   const wantPoster = p.poster === "wide" || p.poster === "tall";
-  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout === true, slides: p.slides, imageCount: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
+  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout !== false, slides: p.slides, imageCount: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
   if (!begin.ok) {
     const d = begin.denied;
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
     if (d.noCredit) {
       await answer();
-      return await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}`, await buyKbFor(env, uid, tgId));
+      return await sendMessage(env, chatId, `⏳ ${d.extras ? esc(d.error) : "اعتبار شما تمام شده است."}\n\n${BUY_SITE_NOTE}`, await buyKbFor(env, uid, tgId));
     }
     if (d.needPlan) {
       await answer();
@@ -191,7 +191,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     await answer();
     const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
     await editMessage(env, chatId, mid,
-      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout ? " + جزوه" : ""})…\nمعمولاً ${wantPoster || p.handout ? "۲ تا ۴" : "۱ تا ۲"} دقیقه طول می‌کشد.${creditLine}`,
+      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout !== false ? " + جزوه" : ""})…\nمعمولاً ${wantPoster || p.handout !== false ? "۲ تا ۴" : "۱ تا ۲"} دقیقه طول می‌کشد.${creditLine}`,
       { reply_markup: { inline_keyboard: [] } });
     const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig },
       wantPoster && posterEnabled(env) ? { layout: p.poster as "wide" | "tall" } : undefined);
@@ -550,7 +550,7 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     imgs: imgCountOf(s, caps),
     model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,
     poster: "wide", // پیش‌فرض: با پوستر افقی
-    handout: false, // جزوه‌ی Word: پیش‌فرض خاموش (۱ اعتبار)
+    handout: true, // جزوه‌ی Word: پیش‌فرض روشن
     step: "model",
     fixed: o.slides !== undefined, // تعداد اسلاید در متن موضوع آمده؛ دوباره پرسیده نمی‌شود
     ...(o.mode ? { mode: o.mode } : {}),
