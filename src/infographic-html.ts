@@ -25,7 +25,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
   const W = IG_WIDTH[o.layout];
   const cols = o.layout === "wide" ? 3 : 2;
-  const base = o.layout === "wide" ? 25 : 24;
+  const base = o.layout === "wide" ? 29 : 27;
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
   const dark = t.bg.toUpperCase() < "808080"; // پس‌زمینه‌ی تیره (مثل تم نیمه‌شب)
