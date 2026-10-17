@@ -38,7 +38,25 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
       case "definition": return `<div class="bk def">${label(b.label, "تعریف")}<p>${tx(b.text)}</p></div>`;
       case "keyfact": return `<div class="bk key">${label(b.label, "نکته‌ی کلیدی")}<p>${tx(b.text)}</p></div>`;
       case "example": return `<div class="bk ex">${label(b.label, "مثال")}<p>${tx(b.text)}</p></div>`;
-      case "formula": return `<div class="bk fm">${b.label ? label(b.label, "") : ""}<p dir="ltr">${tx(b.text)}</p></div>`;
+      case "warning": return `<div class="bk wn">${label(b.label, "هشدار")}<p>${tx(b.text)}</p></div>`;
+      case "tip": return `<div class="bk tp">${label(b.label, "نکته‌ی طلایی")}<p>${tx(b.text)}</p></div>`;
+      case "formula": return `<div class="bk fm">${b.label ? label(b.label, "") : ""}<p dir="ltr"${b.tex ? ` data-tex="${esc(b.tex)}"` : ""}>${esc(b.text)}</p></div>`;
+      case "flow": {
+        const horiz = b.items.length <= 3;
+        const node = (s: { label: string; text: string }) => `<div class="nd">${s.label ? `<b>${tx(s.label)}</b>` : ""}${s.text ? `<span>${tx(s.text)}</span>` : ""}</div>`;
+        return `<div class="bk fl ${horiz ? "h" : "v"}">${b.label ? label(b.label, "") : ""}<div class="fx">${b.items.map(node).join('<i class="ar"></i>')}</div></div>`;
+      }
+      case "timeline": return `<div class="bk tl">${b.label ? label(b.label, "") : ""}<ol>${b.items.map((i) =>
+        `<li>${i.label ? `<b>${tx(i.label)}</b>` : ""}${i.text ? `<span>${tx(i.text)}</span>` : ""}</li>`).join("")}</ol></div>`;
+      case "donut": {
+        const sum = b.items.reduce((a, i) => a + i.value, 0) || 1;
+        let acc = 0;
+        const stops = b.items.map((i, k) => { const from = acc; acc += (i.value / sum) * 100; return `var(--d${k}) ${from.toFixed(2)}% ${acc.toFixed(2)}%`; }).join(",");
+        return `<div class="bk dn">${b.label ? label(b.label, "") : ""}<div class="dr"><div class="ring" style="background:conic-gradient(${stops})"></div><ul>${b.items.map((i, k) =>
+          `<li><s style="background:var(--d${k})"></s><span>${tx(i.label)}</span><em dir="ltr">${tx(String(i.value))}${tx(b.unit)}</em></li>`).join("")}</ul></div></div>`;
+      }
+      case "cards": return `<div class="bk cd">${b.items.map((i) => `<div class="c"><b>${tx(i.title)}</b><span>${tx(i.text)}</span></div>`).join("")}</div>`;
+      case "glossary": return `<div class="bk gl">${b.items.map((i) => `<div class="g"><b>${tx(i.term)}</b><span>${tx(i.text)}</span></div>`).join("")}</div>`;
       case "bullets": return `<div class="bk">${b.label ? label(b.label, "") : ""}<ul>${b.items.map((i) => `<li>${tx(i)}</li>`).join("")}</ul></div>`;
       case "stats": return `<div class="bk st">${b.items.map((s) => `<div class="s"><b>${tx(s.value)}</b><span>${tx(s.label)}</span></div>`).join("")}</div>`;
       case "table": return `<div class="bk tb"><table><thead><tr>${b.headers.map((h) => `<th>${tx(h)}</th>`).join("")}</tr></thead><tbody>${
@@ -62,8 +80,18 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const lh = base * 1.55;
   const estimate = (b: IgBlock): number => {
     switch (b.type) {
-      case "definition": case "keyfact": case "example": return base * 2.4 + lines(b.text) * lh;
-      case "formula": return base * 2.2 + lines(b.text, cpl - 6) * lh;
+      case "definition": case "keyfact": case "example": case "warning": case "tip": return base * 2.4 + lines(b.text) * lh;
+      case "formula": return base * 2.2 + lines(b.text, cpl - 6) * lh + (b.tex ? base * 1.2 : 0);
+      case "flow": {
+        const n = b.items.length, mx = Math.max(...b.items.map((i) => i.text.length));
+        return (b.label ? base * 1.4 : 0) + (n <= 3
+          ? base * 2.6 + lines(String(" ").repeat(mx), Math.max(8, Math.floor(cpl / n) - 4)) * base * 1.25
+          : n * (base * 1.9 + lines(String(" ").repeat(mx), cpl - 6) * base * 1.25) + (n - 1) * base * 0.9);
+      }
+      case "timeline": return (b.label ? base * 1.4 : 0) + b.items.reduce((a, i) => a + base * 1.5 + lines(i.text, cpl - 8) * base * 1.25 + base * 0.3, 0);
+      case "donut": return (b.label ? base * 1.4 : 0) + Math.max(base * 7.2, b.items.length * base * 1.6) + base * 0.4;
+      case "cards": return Math.ceil(b.items.length / 2) * (base * 2.3 + lines(String(" ").repeat(Math.max(...b.items.map((i) => i.text.length))), Math.max(10, Math.floor(cpl / 2) - 3)) * base * 1.25 + base * 0.5);
+      case "glossary": return b.items.reduce((a, i) => a + lines(i.term + " " + i.text, cpl) * base * 1.3 + base * 0.6, 0);
       case "bullets": return (b.label ? base * 1.4 : 0) + b.items.reduce((a, i) => a + lines(i, cpl - 3) * lh + base * 0.4, 0);
       case "stats": return base * 4.6;
       case "table": return base * 2 + b.rows.reduce((a, r) => a + Math.max(...r.map((c) => lines(c, Math.floor(cpl / b.headers.length) - 1))) * base * 1.25 + base * 0.8, 0);
@@ -81,12 +109,26 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   });
   const panels = colHtml.filter(Boolean).map((h) => `<div class="col">${h}</div>`).join("");
 
+  const hls = ig.highlights?.length
+    ? `<div class="hls">${ig.highlights.map((h) => `<div class="h"><b>${tx(h.value)}</b><span>${tx(h.label)}</span></div>`).join("")}</div>`
+    : "";
+  // KaTeX فقط وقتی فرمول LaTeX دارد از CDN بارگذاری می‌شود؛ اگر بارگذاری نشد، همان متن ساده‌ی فرمول می‌ماند
+  const hasTex = ig.sections.some((sec) => sec.blocks.some((bl) => bl.type === "formula" && bl.tex));
+  const katex = hasTex
+    ? `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>`
+    : "";
+  const katexRun = hasTex
+    ? `<script>try{document.querySelectorAll("[data-tex]").forEach(function(e){try{window.katex.render(e.getAttribute("data-tex"),e,{throwOnError:true,displayMode:true})}catch(x){}})}catch(x){}</script>`
+    : "";
+
   let host = "";
   try { if (o.site) host = new URL(o.site).hostname.replace(/^www\./, ""); } catch { /* نشانی نامعتبر */ }
 
   const css = `
 :root{--bg:#${t.bg};--sf:#${t.surface};--pr:#${t.primary};--dk:#${t.dark};--ac:#${t.accent};--tx:#${t.text};--mt:#${t.muted};--on:#${t.onPrimary};
---hl:#${dark ? t.accent : t.primary};--line:color-mix(in srgb,var(--pr) 28%,var(--bg));--tint:color-mix(in srgb,var(--ac) ${dark ? 18 : 14}%,var(--bg));--soft:color-mix(in srgb,var(--pr) ${dark ? 16 : 7}%,var(--bg))}
+--hl:#${dark ? t.accent : t.primary};--d0:var(--pr);--d1:var(--ac);--d2:color-mix(in srgb,var(--pr) 50%,var(--ac));--d3:color-mix(in srgb,var(--pr) 45%,var(--bg));--d4:color-mix(in srgb,var(--ac) 45%,var(--bg));
+--rd:#d64545;--gn:#2f9e6b;--line:color-mix(in srgb,var(--pr) 28%,var(--bg));--tint:color-mix(in srgb,var(--ac) ${dark ? 18 : 14}%,var(--bg));--soft:color-mix(in srgb,var(--pr) ${dark ? 16 : 7}%,var(--bg))}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn','Tahoma',sans-serif;font-size:${base}px;line-height:1.55;direction:rtl}
@@ -94,7 +136,7 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 .top .tt{flex:1;min-width:0}
 .top h1{margin:0;font-size:${base * 2.1}px;line-height:1.35;font-weight:800}
 .top p{margin:${base * 0.4}px 0 0;font-size:${base * 0.95}px;opacity:.82}
-.top img{width:${o.layout === "wide" ? 330 : 240}px;height:${o.layout === "wide" ? 190 : 150}px;object-fit:cover;border-radius:${base * 0.7}px;border:3px solid var(--ac);flex:none}
+.top img{width:${o.layout === "wide" ? 380 : 260}px;height:${o.layout === "wide" ? 220 : 160}px;object-fit:cover;border-radius:${base * 0.7}px;border:3px solid var(--ac);flex:none}
 .wrap{padding:${base * 1.2}px ${base * 1.4}px ${base * 0.6}px}
 .cols{display:flex;gap:${base * 1.1}px;align-items:flex-start}
 .col{flex:1;min-width:0}
@@ -140,6 +182,45 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 .br .tr{flex:1;height:${base * 0.6}px;background:var(--sf);border-radius:99px;overflow:hidden;border:1px solid var(--line)}
 .br .f{height:100%;background:var(--ac);border-radius:99px}
 .br em{flex:0 0 auto;font-style:normal;font-weight:700;min-width:${base * 2.2}px;text-align:left;color:var(--hl)}
+.wn{background:color-mix(in srgb,var(--rd) 13%,var(--bg));padding:${base * 0.6}px ${base * 0.75}px;border-right:${base * 0.2}px solid var(--rd)}
+.wn .lb{background:var(--rd);color:#fff}
+.tp{background:color-mix(in srgb,var(--gn) 13%,var(--bg));padding:${base * 0.6}px ${base * 0.75}px;border-right:${base * 0.2}px solid var(--gn)}
+.tp .lb{background:var(--gn);color:#fff}
+.fm .katex{font-size:1.12em;color:var(--on)}
+.fm .katex-display{margin:${base * 0.2}px 0}
+.fl .fx{display:flex;gap:${base * 0.35}px;align-items:stretch}
+.fl.v .fx{flex-direction:column;align-items:stretch}
+.fl .nd{flex:1;min-width:0;background:var(--sf);border:1.5px solid var(--line);border-radius:${base * 0.45}px;padding:${base * 0.4}px ${base * 0.5}px;text-align:center}
+.fl .nd b{display:block;font-size:${base * 0.9}px;line-height:1.4;color:var(--hl)}
+.fl .nd span{display:block;font-size:${base * 0.78}px;color:var(--mt);line-height:1.45}
+.fl .ar{flex:none;width:0;height:0;align-self:center}
+.fl.h .ar{border-top:${base * 0.4}px solid transparent;border-bottom:${base * 0.4}px solid transparent;border-right:${base * 0.6}px solid var(--ac)}
+.fl.v .ar{border-right:${base * 0.45}px solid transparent;border-left:${base * 0.45}px solid transparent;border-top:${base * 0.6}px solid var(--ac);margin:${base * 0.05}px 0}
+.tl ol{list-style:none;margin:0;padding:0 ${base * 0.9}px 0 0;border-right:${base * 0.12}px solid var(--line)}
+.tl li{position:relative;margin:0 0 ${base * 0.5}px;padding-right:${base * 0.7}px}
+.tl li::before{content:"";position:absolute;right:${-base * 0.5}px;top:${base * 0.45}px;width:${base * 0.55}px;height:${base * 0.55}px;border-radius:50%;background:var(--ac);border:${base * 0.1}px solid var(--bg)}
+.tl b{display:inline-block;font-size:${base * 0.85}px;color:var(--hl);margin-inline-end:${base * 0.4}px}
+.tl span{font-size:${base * 0.84}px}
+.dn .dr{display:flex;align-items:center;gap:${base * 0.8}px}
+.dn .ring{flex:none;width:${base * 6.2}px;height:${base * 6.2}px;border-radius:50%;position:relative}
+.dn .ring::after{content:"";position:absolute;inset:28%;border-radius:50%;background:var(--bg)}
+.dn ul{list-style:none;margin:0;padding:0;flex:1;min-width:0}
+.dn li{display:flex;align-items:center;gap:${base * 0.4}px;margin:${base * 0.2}px 0;font-size:${base * 0.82}px}
+.dn li s{flex:none;width:${base * 0.7}px;height:${base * 0.7}px;border-radius:${base * 0.15}px}
+.dn li span{flex:1;min-width:0}
+.dn li em{flex:none;font-style:normal;font-weight:700;color:var(--hl)}
+.cd{display:flex;flex-wrap:wrap;gap:${base * 0.5}px}
+.cd .c{flex:1 1 calc(50% - ${base * 0.25}px);min-width:0;background:var(--sf);border:1.5px solid var(--line);border-top:${base * 0.2}px solid var(--ac);border-radius:${base * 0.45}px;padding:${base * 0.4}px ${base * 0.55}px}
+.cd b{display:block;font-size:${base * 0.9}px;line-height:1.4;color:var(--hl)}
+.cd span{display:block;font-size:${base * 0.8}px;color:var(--mt);line-height:1.5}
+.gl .g{padding:${base * 0.3}px 0;border-bottom:1px dashed var(--line);font-size:${base * 0.84}px}
+.gl .g:last-child{border-bottom:0}
+.gl b{color:var(--hl);margin-inline-end:${base * 0.4}px}
+.gl b::after{content:":"}
+.hls{display:flex;gap:${base * 0.7}px;margin:0 0 ${base * 1.1}px}
+.hls .h{flex:1;background:var(--bg);border:2px solid var(--line);border-bottom:${base * 0.2}px solid var(--ac);border-radius:${base * 0.6}px;padding:${base * 0.5}px ${base * 0.6}px;text-align:center}
+.hls b{display:block;font-size:${base * 2}px;line-height:1.2;color:var(--hl);font-weight:800}
+.hls span{display:block;font-size:${base * 0.82}px;color:var(--mt);margin-top:${base * 0.1}px}
 .take{margin:0 ${base * 1.4}px ${base * 0.9}px;background:var(--dk);color:var(--on);border-radius:${base * 0.7}px;padding:${base * 0.8}px ${base * 1.1}px;display:flex;align-items:center;gap:${base * 0.8}px;border-right:${base * 0.3}px solid var(--ac)}
 .take .lb{margin:0;background:var(--ac);color:var(--dk);font-size:${base * 0.8}px;flex:none}
 .take p{margin:0;font-size:${base * 1.02}px;font-weight:700}
@@ -149,11 +230,13 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 <html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=${W}">
 <title>${esc(ig.title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap">
+${katex}
 <style>${css}</style></head>
 <body>
 <div class="top"><div class="tt"><h1>${tx(ig.title)}</h1>${ig.subtitle ? `<p>${tx(ig.subtitle)}</p>` : ""}</div>${o.image ? `<img src="${o.image}" alt="">` : ""}</div>
-<div class="wrap"><div class="cols">${panels}</div></div>
+<div class="wrap">${hls}<div class="cols">${panels}</div></div>
 ${ig.takeaway ? `<div class="take"><span class="lb">جمع‌بندی</span><p>${tx(ig.takeaway)}</p></div>` : ""}
 ${host ? `<div class="ft">${esc(host)}</div>` : ""}
+${katexRun}
 </body></html>`;
 }
