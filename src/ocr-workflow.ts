@@ -40,7 +40,7 @@ export class OcrWorkflow extends WorkflowEntrypoint<Env, OcrParams> {
       }
       return out.length ? out : [{ ref: o.first, caption: o.caption }];
     });
-    if (items.length > 1) await step.do("notify", { retries: { limit: 0 }, timeout: "30 seconds" }, () => editMessage(this.env, chatId, waitId, `⏳ در حال خواندن ${items.length} فایل…`).then(() => true).catch(() => false));
+    if (items.length > 1) await step.do("notify", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, () => editMessage(this.env, chatId, waitId, `⏳ در حال خواندن ${items.length} فایل…`).then(() => true).catch(() => false));
 
     const parts: string[] = [];
     let skipped = 0, lastErr = "";
