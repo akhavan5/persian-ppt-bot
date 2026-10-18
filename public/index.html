@@ -73,10 +73,10 @@ header .chip:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 header #userName{background:var(--soft);border-color:#c9d6f0}
 header #userName::before{content:"";display:inline-block;width:20px;height:20px;border-radius:50%;margin-inline-end:7px;vertical-align:-5px;background:var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Ccircle cx='12' cy='8.5' r='4'/%3E%3Cpath d='M4 21c.7-4.4 4-6.5 8-6.5s7.3 2.1 8 6.5z'/%3E%3C/svg%3E") center/13px no-repeat}
 header.top .wrap{max-width:1240px} /* هدر عریض‌تر از محتوای صفحه تا برند، ۸ لینک و دکمه‌های کاربر جا شوند */
-@media(max-width:1300px){nav.links{display:none}}
-/* منوی موبایل/تبلت (زیر ۱۳۰۰px) */
+@media(max-width:1180px){nav.links{display:none}}
+/* منوی موبایل/تبلت (زیر ۱۱۸۰px) */
 .menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line);background:#fff;border-radius:11px;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--text);flex-shrink:0}
-@media(max-width:1300px){
+@media(max-width:1180px){
   .menu-btn{display:inline-flex}
   nav.links.open{display:flex;flex-direction:column;flex-wrap:nowrap;height:auto;overflow:visible;gap:0;position:absolute;top:100%;inset-inline:0;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 14px 28px rgba(15,23,42,.12);padding:6px 18px 12px}
   nav.links.open a{padding:12px 4px;font-size:1rem;border-bottom:1px solid var(--line)}
@@ -296,7 +296,7 @@ address{font-style:normal}
   <div class="wrap in">
     <button class="menu-btn" id="menuBtn" type="button" aria-label="منو" aria-expanded="false" aria-controls="mainNav">☰</button>
     <a class="brand" href="/" aria-label="پاورپوینت‌ساز فارسی"><i>📊</i><span>پاورپوینت‌ساز فارسی</span></a>
-    <nav class="links" id="mainNav" aria-label="منوی اصلی"><a href="#features">ویژگی‌ها</a><a href="#how">نحوه‌ی کار</a><a href="#usecases">مخاطبان</a><a href="#pricing">تعرفه</a><a href="#faq">پرسش‌ها</a><a href="/blog">وبلاگ</a><a href="#about">درباره‌ی ما</a><a href="#contact">تماس با ما</a></nav>
+    <nav class="links" id="mainNav" aria-label="منوی اصلی"><a href="#features">ویژگی‌ها</a><a href="#how">نحوه‌ی کار</a><a href="#pricing">تعرفه</a><a href="#faq">پرسش‌ها</a><a href="/blog">وبلاگ</a><a href="#contact">تماس با ما</a></nav>
     <div class="row" id="guestBar" hidden>
       <button class="btn sm" id="openLogin" type="button">ورود / ثبت‌نام</button>
     </div>
