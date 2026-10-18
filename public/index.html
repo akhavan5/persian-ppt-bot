@@ -64,6 +64,13 @@ nav.links a:hover{color:var(--primary)}
 header .row{flex-wrap:nowrap;flex-shrink:0}
 header .chip{white-space:nowrap}
 header #userName{max-width:140px;overflow:hidden;text-overflow:ellipsis;display:inline-block}
+/* دکمه‌های نوار بالا (اعتبار/پروفایل): حالت هاور و فشردن، و آیکن آدمک برای پروفایل تا کلیک‌پذیری‌شان معلوم باشد */
+header .chip{transition:border-color .15s,box-shadow .15s,transform .1s;-webkit-tap-highlight-color:transparent}
+header .chip:hover{border-color:var(--primary);box-shadow:0 2px 10px rgba(37,99,235,.15)}
+header .chip:active{transform:scale(.97)}
+header .chip:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+header #userName{background:var(--soft);border-color:#c9d6f0}
+header #userName::before{content:"";display:inline-block;width:20px;height:20px;border-radius:50%;margin-inline-end:7px;vertical-align:-5px;background:var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Ccircle cx='12' cy='8.5' r='4'/%3E%3Cpath d='M4 21c.7-4.4 4-6.5 8-6.5s7.3 2.1 8 6.5z'/%3E%3C/svg%3E") center/13px no-repeat}
 @media(max-width:1180px){nav.links{display:none}}
 /* منوی موبایل/تبلت (زیر ۱۱۸۰px) */
 .menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line);background:#fff;border-radius:11px;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--text);flex-shrink:0}
