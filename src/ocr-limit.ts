@@ -1,5 +1,5 @@
 /**
- * سقف روزانه‌ی خواندن فایل برای هر کاربر = اعتبار ساخت ارائه‌اش + ۲ (روز به وقت UTC).
+ * سقف روزانه‌ی خواندن فایل برای هر کاربر = اعتبار ساخت ارائه‌اش + ۱۰ (روز به وقت UTC).
  * - «ocr»: هر فایلی که واقعاً OCR می‌شود (اسکن، عکس؛ PDFِ دارای متن OCR نمی‌شود)؛ در تلگرام و وب یکسان (tg-file.ts)
  * - «upload»: هر آپلود PDF/تصویر در وب، حتی PDF متنی که OCR نمی‌خواهد (چون بایت‌ها موقتاً در KV نوشته می‌شوند)
  * هیچ کاربری نامحدود نیست: مدیر (که getCredit او را «نامحدود» می‌داند) مثل پلن «پرو» حساب می‌شود.
@@ -9,9 +9,9 @@ import { getCredit, today, type Uid } from "./settings";
 import { hitLimit } from "./auth";
 import { PLANS } from "./payment";
 
-export const OCR_EXTRA = 2;
+export const OCR_EXTRA = 10;
 const PRO_CREDITS = PLANS.find((p) => p.id === "pro")?.credits ?? 20;
-export const OCR_CAP_NOTE = "سقف روزانه‌ی خواندن فایل = اعتبار ساخت ارائه‌ات + ۲ است و با شارژ اعتبار بیشتر می‌شود.";
+export const OCR_CAP_NOTE = "سقف روزانه‌ی خواندن فایل = اعتبار ساخت ارائه‌ات + ۱۰ است و با شارژ اعتبار بیشتر می‌شود.";
 
 /** سقف امروز این کاربر (اعتبار باقی‌مانده‌ی ساخت ارائه + ۲؛ برای «نامحدود» ها: اعتبار پلن پرو + ۲) */
 export async function ocrCap(env: Env, userId: Uid): Promise<number> {
