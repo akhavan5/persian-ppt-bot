@@ -58,7 +58,7 @@ header .in{display:flex;align-items:center;justify-content:space-between;gap:12p
 .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.08rem;color:var(--text);text-decoration:none}
 .brand i{font-style:normal;display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;font-size:20px;box-shadow:0 6px 16px rgba(37,99,235,.3)}
 /* لینک‌هایی که جا نمی‌شوند به خط دوم می‌روند و پنهان می‌شوند (نه این‌که زیر دکمه‌ها بریده شوند) */
-nav.links{display:flex;gap:14px;flex-wrap:wrap;row-gap:30px;align-content:flex-start;height:1.8em;overflow:hidden;min-width:0}
+nav.links{display:flex;gap:14px;flex-wrap:wrap;row-gap:30px;align-content:flex-start;height:1.8em;overflow:hidden;min-width:0;flex:1 1 auto;margin-inline-start:22px}
 nav.links a{color:var(--muted);text-decoration:none;font-size:.92rem;font-weight:600;white-space:nowrap}
 nav.links a:hover{color:var(--primary)}
 .brand{white-space:nowrap;flex-shrink:0}
@@ -72,11 +72,12 @@ header .chip:active{transform:scale(.97)}
 header .chip:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 header #userName{background:var(--soft);border-color:#c9d6f0}
 header #userName::before{content:"";display:inline-block;width:20px;height:20px;border-radius:50%;margin-inline-end:7px;vertical-align:-5px;background:var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Ccircle cx='12' cy='8.5' r='4'/%3E%3Cpath d='M4 21c.7-4.4 4-6.5 8-6.5s7.3 2.1 8 6.5z'/%3E%3C/svg%3E") center/13px no-repeat}
-header.top .wrap{max-width:1240px} /* هدر عریض‌تر از محتوای صفحه تا برند، ۸ لینک و دکمه‌های کاربر جا شوند */
-@media(max-width:1180px){nav.links{display:none}}
-/* منوی موبایل/تبلت (زیر ۱۱۸۰px) */
+header.top .wrap{max-width:1100px}
+header .in>#userbar,header .in>#guestBar{margin-inline-start:auto}
+@media(max-width:1020px){nav.links{display:none}}
+/* منوی موبایل/تبلت (زیر ۱۰۲۰px) */
 .menu-btn{display:none;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line);background:#fff;border-radius:11px;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--text);flex-shrink:0}
-@media(max-width:1180px){
+@media(max-width:1020px){
   .menu-btn{display:inline-flex}
   nav.links.open{display:flex;flex-direction:column;flex-wrap:nowrap;height:auto;overflow:visible;gap:0;position:absolute;top:100%;inset-inline:0;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 14px 28px rgba(15,23,42,.12);padding:6px 18px 12px}
   nav.links.open a{padding:12px 4px;font-size:1rem;border-bottom:1px solid var(--line)}
