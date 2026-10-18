@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { Mode, Settings } from "./types";
-import { FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
+import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, getActiveSub, getCredit, getSettings, isAdmin, isAllowed, isBanned,
@@ -85,7 +85,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
     title = "🗣 لحن متن";
     opts = Object.entries(TONES).map(([k, v]) => ({ text: mark(s.tone === k, v), callback_data: `v:tone:${k}` }));
   } else if (kind === "font") {
-    title = `🔤 فونت\n<i>Vazirmatn (<a href="${FONT_URL}">دانلود</a>) و فونت‌های B Nazanin و B Titr باید روی دستگاه نمایش‌دهنده نصب باشند؛ Tahoma و Arial همه‌جا کار می‌کنند.</i>`;
+    title = `🔤 فونت\n<i>Vazirmatn (<a href="${FONT_URL}">دانلود</a>) و فونت‌های B Nazanin و B Titr (<a href="${B_FONTS_URL}">دانلود</a>) باید روی دستگاه نمایش‌دهنده نصب باشند؛ Tahoma و Arial همه‌جا کار می‌کنند.</i>`;
     opts = FONTS.map((f) => ({ text: mark(s.font === f, f), callback_data: `v:font:${f}` }));
   } else if (kind === "imgs") {
     const cur = imgCountOf(s, caps);

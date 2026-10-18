@@ -376,7 +376,7 @@ address{font-style:normal}
       </div>
       <p class="muted" id="doneHandoutFail" hidden>⚠️ ساخت جزوه ناموفق بود؛ ارائه‌ات آماده است و اعتبار جزوه برگردانده شد.</p>
       <p class="muted" id="donePosterFail" hidden>⚠️ ساخت پوستر ناموفق بود؛ ارائه‌ات آماده است و اعتبار پوستر برگردانده شد.</p>
-      <p class="muted fontNote" id="doneFont" hidden>🔤 برای نمایش درست فایل PPTX روی دستگاهت، فونت <b>Vazirmatn</b> را نصب کن: <a href="/fonts/Vazirmatn.zip" download>دانلود مستقیم فونت</a>. پیش‌نمایش و PDF بدون نصب فونت درست دیده می‌شوند.</p>
+      <p class="muted fontNote" id="doneFont" hidden>🔤 برای نمایش درست فایل PPTX روی دستگاهت، فونت <b id="doneFontName">Vazirmatn</b> را نصب کن: <a id="doneFontLink" href="/fonts/Vazirmatn.zip" download>دانلود مستقیم فونت</a>. پیش‌نمایش و PDF بدون نصب فونت درست دیده می‌شوند.</p>
     </div>
     <div id="jobErr" hidden><div class="msg err" id="jobErrText"></div></div>
   </section>
@@ -390,7 +390,7 @@ address{font-style:normal}
         <label>تم رنگی</label><div class="themes" id="themes"></div>
         <div class="grid2">
           <div><label for="tone">لحن</label><select id="tone"></select></div>
-          <div><label for="font">فونت</label><select id="font"></select><div class="muted" id="fontHint" style="margin-top:6px;font-size:.82rem" hidden>Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد: <a href="/fonts/Vazirmatn.zip" download>دانلود مستقیم</a>. Tahoma و Arial همه‌جا کار می‌کنند.</div></div>
+          <div><label for="font">فونت</label><select id="font"></select><div class="muted" id="fontHint" style="margin-top:6px;font-size:.82rem" hidden><span id="fontHintName">Vazirmatn</span> باید روی دستگاه نمایش‌دهنده نصب باشد: <a id="fontHintLink" href="/fonts/Vazirmatn.zip" download>دانلود مستقیم</a>. Tahoma و Arial همه‌جا کار می‌کنند.</div></div>
         </div>
         <div style="margin-top:8px">
           <label for="mode" style="margin-top:0">حالت ساخت</label>
@@ -905,9 +905,16 @@ const MODE_HINTS = {
   thesis: "مسئله، اهداف، پیشینه، روش، یافته‌ها، نتیجه‌گیری، پیشنهادها و منابع (حداقل ۱۰ اسلاید)",
   teacher: "اهداف درس، پرسش آغازین، محتوا، فعالیت کلاسی، جمع‌بندی و پرسش‌های مرور (حداقل ۸ اسلاید)",
 };
+// فونت‌های قابل‌دانلود از خود سایت: Vazirmatn و فونت‌های سری B (یک zip برای B Nazanin و B Titr)
+const FONT_DL = { Vazirmatn: ["Vazirmatn", "/fonts/Vazirmatn.zip"], "B Nazanin": ["B Nazanin و B Titr", "/fonts/BFonts.zip"], "B Titr": ["B Nazanin و B Titr", "/fonts/BFonts.zip"] };
+function fontDlSync(font, boxSel, nameSel, linkSel) {
+  const d = FONT_DL[font];
+  $(boxSel).hidden = !d;
+  if (d) { $(nameSel).textContent = d[0]; $(linkSel).href = d[1]; }
+}
 function syncSettings() {
   const s = me.settings;
-  $("#tone").value = s.tone; $("#font").value = s.font; $("#fontHint").hidden = s.font !== "Vazirmatn";
+  $("#tone").value = s.tone; $("#font").value = s.font; fontDlSync(s.font, "#fontHint", "#fontHintName", "#fontHintLink");
   $("#mode").value = s.mode;
   $("#modeHint").textContent = MODE_HINTS[s.mode] || "";
   for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
@@ -1368,7 +1375,7 @@ async function track(jobId) {
       $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = s.slides ? ` — ${fa(s.slides)} اسلاید` : "";
       $("#doneDl").onclick = (ev) => download(jobId, ev.currentTarget);
       $("#doneView").href = $("#donePdf").href = previewUrl(jobId);
-      $("#doneFont").hidden = !(me && me.settings && me.settings.font === "Vazirmatn");
+      fontDlSync(me && me.settings && me.settings.font, "#doneFont", "#doneFontName", "#doneFontLink");
       // پوستر همراه: پیش‌نمایش + دانلود (فایل تازه ممکن است چند ثانیه برای KV دیده نشود؛ در خطا چند بار دوباره امتحان می‌شود)
       const img = $("#doneImg"), pDl = $("#donePosterDl");
       img.hidden = pDl.hidden = true; img.removeAttribute("src");

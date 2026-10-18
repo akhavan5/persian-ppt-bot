@@ -47,9 +47,19 @@ export const iconOf = (name: string) => ICONS[String(name || "").trim().toLowerC
 /** دانلود مستقیم (Regular + Bold) از خود سایت؛ فایل‌ها در public/fonts */
 export const FONT_URL = "https://pptsaz.ir/fonts/Vazirmatn.zip";
 export const FONT_URL_ALT = "https://pptsaz.ir/fonts/Vazirmatn-Regular.ttf";
-/** یادداشت نصب فونت برای کپشن تلگرام (HTML)؛ فقط وقتی فونت انتخابی Vazirmatn است */
+/** فونت‌های سری B (نازنین و تیتر) هم از خود سایت قابل دانلودند (یک فایل zip شامل B Nazanin Regular/Bold و B Titr Bold) */
+export const B_FONTS_URL = "https://pptsaz.ir/fonts/BFonts.zip";
+/** @font-face فونت B انتخابی برای پیش‌نمایش و PDF؛ آدرس مطلق چون PDF در مرورگرِ بدون مبدأ ساخته می‌شود. B Titr فقط Bold دارد و برای هر دو وزن همان استفاده می‌شود. نویسه‌های لاتین در این فونت‌ها نیست و از Vazirmatn می‌آید (در پشته‌ی فونت). */
+export const bFontFaceCss = (font: string): string => {
+  const f = (family: string, weight: number, file: string) =>
+    `@font-face{font-family:"${family}";font-weight:${weight};font-display:swap;src:url(https://pptsaz.ir/fonts/${file}) format("truetype")}`;
+  if (font === "B Nazanin") return f("B Nazanin", 400, "BNazanin.ttf") + f("B Nazanin", 700, "BNazanin-Bold.ttf");
+  if (font === "B Titr") return f("B Titr", 400, "BTitr-Bold.ttf") + f("B Titr", 700, "BTitr-Bold.ttf");
+  return "";
+};
+/** یادداشت نصب فونت برای کپشن تلگرام (HTML)؛ برای Vazirmatn و فونت‌های B */
 export const fontCaption = (font: string) => font === "Vazirmatn"
   ? `\n\n🔤 برای نمایش درست، فونت <a href="${FONT_URL}">Vazirmatn</a> را روی دستگاهت نصب کن؛ یا در /settings فونت Tahoma را انتخاب کن.`
   : isBFont(font)
-    ? `\n\n🔤 فونت ${font} باید روی دستگاه نمایش‌دهنده نصب باشد؛ اگر نصب نیست، در /settings فونت Tahoma را انتخاب کن.`
+    ? `\n\n🔤 برای نمایش درست، فونت ${font} را روی دستگاهت نصب کن: <a href="${B_FONTS_URL}">دانلود فونت‌های B Nazanin و B Titr</a>؛ یا در /settings فونت Tahoma را انتخاب کن.`
     : "";

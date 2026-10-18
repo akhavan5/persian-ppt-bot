@@ -6,7 +6,7 @@
  * اندازه‌ها با واحد cqw (درصد عرض اسلاید) هستند: ۱ اینچ = ۷٫۵cqw و ۱pt = ۰٫۱۰۴cqw؛ پس همه‌چیز با عرض صفحه مقیاس می‌گیرد.
  */
 import type { Chart, Deck, Slide } from "./types";
-import { FONT_URL, FONT_URL_ALT, THEMES, iconOf, isBFont, type Theme } from "./themes";
+import { B_FONTS_URL, FONT_URL, FONT_URL_ALT, THEMES, bFontFaceCss, iconOf, isBFont, type Theme } from "./themes";
 import { toFa } from "./util";
 import { fitSize } from "./pptx";
 import { BISMILLAH_IMG } from "./bismillah-img";
@@ -262,7 +262,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   const cssVars = `--font:"${fontName}","Vazirmatn",Tahoma,Arial,sans-serif`;
   const vazir = fontName === "Vazirmatn";
   const note = isBFont(fontName)
-    ? `فونت انتخابی (${esc(fontName)}) باید روی دستگاهت نصب باشد؛ فایل PPTX با همان فونت باز می‌شود، ولی این پیش‌نمایش و PDF اگر فونت روی دستگاه نصب نباشد با Vazirmatn نمایش داده می‌شود.`
+    ? `این پیش‌نمایش و PDF با فونت ${esc(fontName)} ساخته می‌شود. برای نمایش درست فایل PPTX روی دستگاهت، فونت را نصب کن؛ دانلود مستقیم: <a href="${B_FONTS_URL}" download rel="noopener">فونت‌های B Nazanin و B Titr (zip)</a>`
     : vazir
     ? `این پیش‌نمایش و PDF با فونت Vazirmatn ساخته می‌شود. برای نمایش درست فایل PPTX روی دستگاهت، فونت را نصب کن؛ دانلود مستقیم: <a href="${FONT_URL}" download rel="noopener">Vazirmatn.zip</a> · <a href="${FONT_URL_ALT}" download rel="noopener">فایل TTF</a>`
     : `فونت انتخابی (${esc(fontName)}) روی بیشتر دستگاه‌ها نصب است؛ اگر در پیش‌نمایش متفاوت دیدی، فایل PPTX هم همین‌طور باز می‌شود.`;
@@ -275,6 +275,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
 <title>پیش‌نمایش — ${esc(deck.title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap">
 <style>
+${bFontFaceCss(fontName)}
 *{box-sizing:border-box}
 :root{${cssVars}}
 body{margin:0;background:#eef1f6;font-family:var(--font);color:#1b2733}

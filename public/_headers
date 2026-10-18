@@ -16,6 +16,10 @@
   Content-Type: application/zip
   Content-Disposition: attachment; filename="Vazirmatn.zip"
 
+/fonts/BFonts.zip
+  Content-Type: application/zip
+  Content-Disposition: attachment; filename="BFonts.zip"
+
 /favicon.svg
   Cache-Control: public, max-age=604800
 
