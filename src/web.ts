@@ -306,7 +306,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
 
 // ---------- خواندن PDF / تصویر (همان مسیر ربات تلگرام) ----------
 // بدنه = بایت‌های خام فایل (نه JSON). PDF و عکس دقیقاً مثل تلگرام پردازش می‌شود (extractFileBytes در tg-file.ts):
-// PDFِ دارای متنِ قابل‌قبول (حتی اگر تصویر هم داخلش باشد) ← فقط toMarkdown و بدون OCR؛ فقط اسکنِ بدون متن ← OCR با مدل vision (تا ۱۲ صفحه، ۴ مگابایت برای هر تصویر).
+// PDFِ دارای متنِ قابل‌قبول (حتی اگر تصویر هم داخلش باشد) ← فقط toMarkdown و بدون OCR؛ فقط اسکنِ بدون متن ← OCR با مدل vision (تا ۲۰ صفحه، ۴ مگابایت برای هر تصویر).
 // کار در Workflow اجرا و با GET /api/extract/<jobId> پیگیری می‌شود (مثل OcrWorkflow تلگرام)؛ بقیه‌ی فرمت‌ها در مرورگر خوانده می‌شوند.
 const ocrMagic = (bytes: ArrayBuffer, mime: string): boolean => {
   const u = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 1024));

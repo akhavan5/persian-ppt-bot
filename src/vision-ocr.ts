@@ -17,7 +17,7 @@ export type OcrResult = { ok: true; text: string } | { ok: false; error: string 
 
 const DEFAULT_MODELS = "@cf/google/gemma-4-26b-a4b-it,@cf/qwen/qwen3.8-27b,@cf/mistralai/mistral-small-3.1-24b-instruct";
 /** سقف صفحه برای هر PDF و سقف حجم هر تصویر (JPEG بزرگ‌تر رد می‌شود) */
-export const VISION_MAX_PAGES = 12;
+export const VISION_MAX_PAGES = 20;
 export const VISION_MAX_IMAGE_BYTES = 4_000_000;
 const CONCURRENCY = 3;
 
