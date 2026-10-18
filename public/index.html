@@ -161,6 +161,10 @@ textarea{min-height:110px;resize:vertical}
 .theme{display:flex;align-items:center;gap:8px;border:2px solid var(--line);background:#fff;border-radius:12px;padding:6px 12px;cursor:pointer;font-size:.88rem}
 .theme[aria-pressed=true]{border-color:var(--primary);background:var(--soft)}
 .theme b{width:22px;height:22px;border-radius:50%;display:block}
+.tcard{display:flex;flex-direction:column;gap:6px;border:2px solid var(--line);background:#fff;border-radius:12px;padding:6px;cursor:pointer;font-size:.82rem;width:136px;text-align:center;font-family:inherit;color:inherit}
+.tcard[aria-pressed=true]{border-color:var(--primary);background:var(--soft)}
+.tcard svg{display:block;width:100%;height:auto;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.1)}
+@media(max-width:560px){.tcard{width:calc(50% - 4px)}}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:560px){.grid2{grid-template-columns:1fr}}
 .sw{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);margin:0}
@@ -900,14 +904,41 @@ function syncSettings() {
   $("#questions").checked = !!s.questions || s.mode === "teacher";
   $("#questions").disabled = s.mode === "teacher";
   renderModels();
+  const curTheme = cfg.themes.find((t) => t.key === s.theme) || cfg.themes[0];
   $("#tpls").replaceChildren(...(cfg.templates || []).map((t) =>
-    h("button", { type: "button", class: "theme", "aria-pressed": String((s.template || "classic") === t.key), onclick: () => saveSetting({ template: t.key }) },
-      h("span", {}, t.emoji), t.name)));
+    h("button", { type: "button", class: "tcard", "aria-pressed": String((s.template || "classic") === t.key), onclick: () => saveSetting({ template: t.key }) },
+      thumbSvg(curTheme, t.key), h("span", {}, t.emoji + " " + t.name))));
   const curTpl = (cfg.templates || []).find((t) => t.key === (s.template || "classic"));
   $("#tplHint").textContent = curTpl ? curTpl.hint + (curTpl.key === "academic" && s.theme !== "violet" ? " — برای بهترین ظاهر، تم «بنفش و نارنجی» را هم انتخاب کنید." : "") : "";
   $("#themes").replaceChildren(...cfg.themes.map((t) =>
-    h("button", { type: "button", class: "theme", "aria-pressed": String(s.theme === t.key), onclick: () => saveSetting({ theme: t.key }) },
-      h("b", { style: `background:linear-gradient(135deg,#${t.primary},#${t.accent})` }), t.name)));
+    h("button", { type: "button", class: "tcard", "aria-pressed": String(s.theme === t.key), onclick: () => saveSetting({ theme: t.key }) },
+      thumbSvg(t, s.template || "classic"), h("span", {}, t.name))));
+}
+// پیش‌نمایش کوچک (SVG) یک اسلاید با رنگ‌های تم و چیدمان قالب؛ فقط از ثابت‌های سرور ساخته می‌شود (نه ورودی کاربر)
+function thumbSvg(t, tpl) {
+  const c = (x) => "#" + x, light = t.bg.toUpperCase() === "FFFFFF";
+  const ln = (x, y, w, o = 0.5) => `<rect x="${x}" y="${y}" width="${w}" height="4.5" rx="2.2" fill="${c(t.text)}" opacity="${o}"/>`;
+  let g;
+  if (tpl === "academic") {
+    const bg = light ? "#EBEBF0" : c(t.bg), card = light ? "#FFFFFF" : c(t.surface), head = light ? c(t.dark) : c(t.onPrimary);
+    g = `<rect width="160" height="90" fill="${bg}"/>
+<rect x="7" y="7" width="132" height="76" rx="9" fill="${card}" stroke="${c(t.primary)}" stroke-width="1.4"/>
+<rect x="52" y="15" width="80" height="13" rx="6.5" fill="none" stroke="${c(t.primary)}" stroke-width="1.4"/>
+<rect x="62" y="19.5" width="60" height="4" rx="2" fill="${head}" opacity=".85"/>
+${ln(46, 38, 86)}${ln(58, 47, 74)}${ln(52, 56, 80)}
+<rect x="96" y="67" width="36" height="9" rx="4.5" fill="${c(t.primary)}"/><rect x="54" y="67" width="36" height="9" rx="4.5" fill="${c(t.accent)}"/>
+<circle cx="22" cy="40" r="9" fill="${c(t.primary)}"/><rect x="14" y="56" width="16" height="3" rx="1.5" fill="${c(t.accent)}"/>
+${[14, 30, 46, 62, 78].map((y, i) => `<circle cx="150" cy="${y}" r="${i === 1 ? 3.4 : 2.2}" fill="${i === 1 ? c(t.primary) : "none"}" stroke="${c(t.primary)}" stroke-width="1"/>`).join("")}`;
+  } else {
+    g = `<rect width="160" height="90" fill="${c(t.bg)}"/>
+<rect width="160" height="24" fill="${c(t.primary)}"/><rect x="62" y="9.5" width="88" height="5" rx="2.5" fill="${c(t.onPrimary)}"/>
+<rect x="0" y="24" width="160" height="3" fill="${c(t.accent)}"/>
+${ln(64, 40, 86)}${ln(78, 50, 72)}${ln(68, 60, 82)}
+<rect x="10" y="36" width="44" height="40" rx="5" fill="${c(t.surface)}"/><circle cx="32" cy="56" r="10" fill="${c(t.accent)}"/>`;
+  }
+  const w = document.createElement("span");
+  w.innerHTML = `<svg viewBox="0 0 160 90" aria-hidden="true" focusable="false">${g}</svg>`;
+  return w.firstChild;
 }
 async function saveSetting(patch) {
   try { me.settings = (await api("/api/settings", { method: "PUT", body: patch })).settings; syncSettings(); toast("ذخیره شد ✓"); }

@@ -21,6 +21,8 @@ import { parseRequest } from "./parse";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
 import { fetchLinkSource, findLinkInText, linkCapNote, linkEnabled, linkLimitHit } from "./link-source";
 
+/** مربع رنگی کنار نام تم در دکمه‌های تلگرام (دکمه‌ی اینلاین تصویر نمی‌گیرد) */
+const THEME_DOT: Record<string, string> = { ocean: "🟦", forest: "🟩", sunset: "🟧", royal: "🟪", violet: "🟣", midnight: "⬛" };
 const HELP =
   "سلام! 👋\n" +
   "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
@@ -78,7 +80,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
     opts = Object.entries(TEMPLATES).map(([k, v]) => ({ text: mark((isTemplate(s.template) ? s.template : DEFAULT_TEMPLATE) === k, `${v.emoji} ${v.name}`), callback_data: `v:tpl:${k}` }));
   } else if (kind === "theme") {
     title = "🎨 تم رنگی";
-    opts = Object.entries(THEMES).map(([k, v]) => ({ text: mark(s.theme === k, v.name), callback_data: `v:theme:${k}` }));
+    opts = Object.entries(THEMES).map(([k, v]) => ({ text: mark(s.theme === k, `${THEME_DOT[k] ?? "🎨"} ${v.name}`), callback_data: `v:theme:${k}` }));
   } else if (kind === "tone") {
     title = "🗣 لحن متن";
     opts = Object.entries(TONES).map(([k, v]) => ({ text: mark(s.tone === k, v), callback_data: `v:tone:${k}` }));

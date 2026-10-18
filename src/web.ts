@@ -74,7 +74,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       otp: otpEnabled(env),
       payEnabled: payEnabled(env),
       templates: Object.entries(TEMPLATES).map(([key, v]) => ({ key, name: v.name, emoji: v.emoji, hint: v.hint })),
-      themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent })),
+      themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent, bg: t.bg, surface: t.surface, dark: t.dark, text: t.text, muted: t.muted, onPrimary: t.onPrimary })),
       tones: TONES,
       fonts: FONTS,
       slideChoices: WEB_SLIDE_CHOICES,
