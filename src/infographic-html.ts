@@ -9,7 +9,7 @@ import type { IgBlock, IgLayout, Infographic } from "./infographic";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export const IG_WIDTH: Record<IgLayout, number> = { wide: 2100, tall: 1200 };
+export const IG_WIDTH: Record<IgLayout, number> = { wide: 2600, tall: 1200 };
 
 export interface IgRenderOpts {
   theme: string;
@@ -24,8 +24,8 @@ export interface IgRenderOpts {
 export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string {
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
   const W = IG_WIDTH[o.layout];
-  const cols = o.layout === "wide" ? 3 : 2;
-  const base = o.layout === "wide" ? 29 : 24;
+  const cols = o.layout === "wide" ? 4 : 2;
+  const base = o.layout === "wide" ? 34 : 24; // ۴ ستون در ۲۶۰۰px؛ فونت پایه بزرگ‌تر از قبل (۲۹) تا متن نسبت به پوستر ریز نشود
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
   const dark = t.bg.toUpperCase() < "808080"; // پس‌زمینه‌ی تیره (مثل تم نیمه‌شب)
