@@ -4,17 +4,22 @@ import type { Env } from "./env";
 import { esc, sendMessage } from "./telegram";
 import { toFa } from "./util";
 import { withStore } from "./store";
-import { isAdmin } from "./settings";
+import { DAILY_FREE_MSG, claimDailyFree, isAdmin } from "./settings";
 
 /** مخاطبان: همه / دارندگان پلن فعال / بدون پلن فعال / بدون اعتبار (نه پلن و نه اعتبار هدیه‌ی باقی‌مانده) */
 export type Audience = "all" | "plan" | "free" | "nocredit";
 export const AUDIENCES: Record<Audience, string> = { all: "همه", plan: "👑 دارندگان پلن", free: "بدون پلن", nocredit: "بدون اعتبار" };
 export const isAudience = (x: unknown): x is Audience => typeof x === "string" && x in AUDIENCES;
 
-export interface BroadcastParams { adminChatId: number; text: string; audience?: Audience }
+/** daily: اعتبار رایگان روزانه (از cron) — به هر کاربر تلگرامِ بدون اعتبار ۱ اعتبار اضافه می‌کند و فقط به همان‌ها DAILY_FREE_MSG می‌فرستد؛ text/adminChatId نادیده گرفته می‌شود */
+export interface BroadcastParams { adminChatId: number; text: string; audience?: Audience; daily?: boolean }
 
 const BATCH = 20;
 const MAX_USERS = 20_000;
+// حالت daily: هر کاربر ≈ ۴ فراخوانی (D1 ×۲، ثبت اعتبار، ارسال)؛ دسته‌ی ۱۰تایی زیر سقف ۵۰ زیردرخواستِ هر گام می‌ماند و ۱۰هزار کاربر ≈ ۱۰۰۰ گام (سقف ۱۰۲۴).
+// کاربران بیشتر از این سقف، اعتبار را همان لحظه‌ی اولین پیام/ساخت می‌گیرند (spendCredit و /credit).
+const DAILY_BATCH = 10;
+const DAILY_MAX_USERS = 10_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function listUserIds(env: Env): Promise<number[]> {
@@ -95,7 +100,8 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
   constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
 
   async run(event: WorkflowEvent<BroadcastParams>, step: WorkflowStep) {
-    const { adminChatId, text, audience } = event.payload;
+    const { adminChatId, text, audience, daily } = event.payload;
+    if (daily) return await this.runDaily(step);
     const ids = await step.do("collect", () => listAudience(this.env, isAudience(audience) ? audience : "all"));
 
     let ok = 0, failed = 0, skipped = 0;
@@ -117,5 +123,27 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
         `📣 <b>ارسال همگانی تمام شد</b> (${AUDIENCES[isAudience(audience) ? audience : "all"]})\n✅ موفق: ${toFa(String(ok))}\n❌ ناموفق: ${toFa(String(failed))} (معمولاً کاربرانی که ربات را بلاک کرده‌اند)` +
         (skipped ? `\n⛔️ مسدودشده (ارسال نشد): ${toFa(String(skipped))}` : ""));
     }).catch(() => {});
+  }
+
+  /** اعتبار رایگان روزانه برای کاربران تلگرامِ بدون اعتبار + پیام ربات (فقط به کسانی که امروز اعتبار گرفتند) */
+  private async runDaily(step: WorkflowStep) {
+    const ids = (await step.do("collect", () => listAudience(this.env, "nocredit"))).slice(0, DAILY_MAX_USERS);
+    for (let i = 0; i < ids.length; i += DAILY_BATCH) {
+      await step.do(`daily-${i / DAILY_BATCH}`, { retries: { limit: 0, delay: "1 second" }, timeout: "3 minutes" }, async () => {
+        for (const id of ids.slice(i, i + DAILY_BATCH)) {
+          try {
+            // یک پرس‌وجو: شناسه‌ی پروفایل وب این تلگرام + مسدود بودن
+            const r = await this.env.DB.prepare(
+              "SELECT (SELECT v FROM kv WHERE k = ?1) AS w, EXISTS(SELECT 1 FROM kv WHERE k = ?2) AS banned")
+              .bind(`tg2w:${id}`, `ban:${id}`).first<{ w: string | null; banned: number }>();
+            if (r?.banned) continue;
+            const uid = r?.w && /^w_[0-9a-f]{16}$/.test(r.w) ? r.w : id; // پروفایل وب (یا شناسه‌ی عددی برای کاربران قدیمی)
+            if (!(await claimDailyFree(this.env, uid))) continue; // امروز قبلاً گرفته
+            await sendOne(this.env, id, DAILY_FREE_MSG);
+          } catch (e) { console.error("daily free", id, String(e).slice(0, 160)); }
+        }
+        await sleep(1000);
+      });
+    }
   }
 }

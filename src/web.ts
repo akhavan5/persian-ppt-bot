@@ -4,7 +4,7 @@ import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { TEMPLATES, isTemplate } from "./template";
 import {
-  FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
+  DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
   EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
 } from "./settings";
 import { modelList } from "./llm";
@@ -80,6 +80,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       slideChoices: WEB_SLIDE_CHOICES,
       freeMaxSlides: FREE_MAX_SLIDES,
       freeMaxImages: FREE_MAX_IMAGES,
+      // اعتبار رایگان روزانه برای حساب‌های با اعتبار صفر (۰ = خاموش)
+      dailyFree: DAILY_FREE_CREDITS,
       // پوستر (اینفوگرافیک) اختیاری همراه ارائه با ۱ اعتبار جدا؛ فقط وقتی Browser Rendering وصل است
       poster: posterEnabled(env),
       // ساخت ارائه از روی لینک (Tavily Extract)؛ بدون TAVILY_API_KEY دکمه‌اش در سایت نمایش داده نمی‌شود
@@ -207,6 +209,7 @@ async function tgLinkVerify(req: Request, env: Env, user: WebUser): Promise<Resp
 
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
+  const dailyFree = await grantDailyFree(env, user.id).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز؛ dailyFree=true یعنی همین حالا اضافه شد
   const [c, settings, running, sub, maxSlides, maxImages, telegram] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id), getLinkedTg(env, user.id)]);
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
@@ -215,6 +218,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
   return json({
     user: publicUser(user),
     telegram, // آیدی عددی تلگرامِ وصل‌شده (یا null)
+    dailyFree,
     credit: c.unlimited
       ? { unlimited: true }
       : { unlimited: false, total: c.total, bonus: c.bonus, plan: c.plan },

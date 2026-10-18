@@ -91,9 +91,13 @@ export const setBanned = (env: Env, userId: Uid, on: boolean) =>
   on ? env.KV.put(`ban:${userId}`, "1") : env.KV.delete(`ban:${userId}`);
 
 // ---------- اعتبار: اعتبار هدیه/اضافه (ثبت‌نام، دعوت، شارژ دستی) + اعتبار پلن ماهانه ----------
-// سهمیه‌ی روزانه‌ی رایگان حذف شده است؛ هر حساب جدید فقط یک‌بار SIGNUP_CREDITS اعتبار هدیه می‌گیرد.
+// هر حساب جدید یک‌بار SIGNUP_CREDITS اعتبار هدیه می‌گیرد؛ علاوه بر آن «اعتبار رایگان روزانه» (DAILY_FREE_CREDITS) هر روز به حسابی که اعتبارش صفر است اضافه می‌شود.
 /** اعتبار هدیه‌ی ثبت‌نام (برای هر حساب جدید وب یا ربات، فقط یک‌بار) */
 export const SIGNUP_CREDITS = 3;
+/** اعتبار رایگان روزانه: هر روز (UTC) به حسابی که اعتبار کل‌اش (پلن + هدیه) صفر است ۱ اعتبار اضافه می‌شود؛ ۰ = خاموش */
+export const DAILY_FREE_CREDITS = 1;
+/** پیام تلگرام هنگام افزودن اعتبار رایگان روزانه */
+export const DAILY_FREE_MSG = "🎁 اعتبار رایگان امروزت اضافه شد! ۱ ارائه‌ی رایگان داری؛ همین حالا موضوع ارائه‌ات را بفرست.\nاگر اعتبارت صفر شود، هر روز ۱ اعتبار رایگان می‌گیری. موجودی: /credit";
 
 export const today = () => new Date().toISOString().slice(0, 10);
 const bonusKey = (userId: Uid) => `bonus:${userId}`;
@@ -187,8 +191,10 @@ const rawDb = async (env: Env): Promise<D1Database> => { await env.KV.ready(); r
  *  هر مرحله اتمی است: اگر هم‌زمان کسی آخرین اعتبار را برداشته باشد، همین مرحله شکست می‌خورد و نوبت منبع بعدی می‌شود. */
 export async function spendCredit(env: Env, userId: Uid): Promise<{ ok: boolean; source: CreditSource; day: string; left: number; unlimited: boolean }> {
   const day = today();
-  const c = await getCredit(env, userId);
+  let c = await getCredit(env, userId);
   if (c.unlimited) return { ok: true, source: "none", day, left: Infinity, unlimited: true };
+  // اعتبار صفر ⇒ اعتبار رایگان امروز (اگر هنوز نگرفته)
+  if (c.total === 0 && (await grantDailyFree(env, userId, c).catch((e) => { console.error("dailyFree", e); return false; }))) c = await getCredit(env, userId);
   const db = await rawDb(env);
   const now = nowSec();
   const ok = (source: CreditSource) => ({ ok: true, source, day, left: Math.max(0, c.total - 1), unlimited: false });
@@ -225,6 +231,33 @@ export async function refundCredit(env: Env, userId: Uid, source: CreditSource, 
       "INSERT INTO kv (k, v, exp) VALUES (?1, '1', NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT), exp = NULL")
       .bind(bonusKey(userId)).run();
   }
+}
+
+// ---------- اعتبار رایگان روزانه ----------
+const dailyKey = (userId: Uid) => `df:${userId}`;
+
+/** «گرفتنِ» سهم امروز: اتمی و فقط یک‌بار در روز برای هر حساب (ردیف df: = روزِ آخرین دریافت). بررسی صفر بودن اعتبار با فراخواننده است. */
+export async function claimDailyFree(env: Env, userId: Uid): Promise<boolean> {
+  if (DAILY_FREE_CREDITS <= 0) return false;
+  const db = await rawDb(env);
+  const r = await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, ?3) ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp WHERE v != excluded.v")
+    .bind(dailyKey(userId), today(), nowSec() + 3 * 86_400).run();
+  if (!changed(r)) return false; // امروز قبلاً گرفته
+  await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + ?2 AS TEXT), exp = NULL")
+    .bind(bonusKey(userId), String(DAILY_FREE_CREDITS)).run();
+  return true;
+}
+
+/** اگر اعتبار کل کاربر صفر است (بدون پلن یا پلنِ تمام‌شده، و بدون اعتبار هدیه) و امروز سهمش را نگرفته، ۱ اعتبار رایگان به او می‌دهد.
+ *  مدیر (نامحدود) و مسدودشده چیزی نمی‌گیرند. true = همین حالا اضافه شد. known: اگر وضعیت اعتبار از قبل خوانده شده، دوباره خوانده نمی‌شود. */
+export async function grantDailyFree(env: Env, userId: Uid, known?: CreditInfo): Promise<boolean> {
+  if (DAILY_FREE_CREDITS <= 0 || isAdmin(env, userId)) return false;
+  const c = known ?? await getCredit(env, userId);
+  if (c.unlimited || c.total > 0) return false;
+  if (await isBanned(env, userId)) return false;
+  return claimDailyFree(env, userId);
 }
 
 // ---------- قفل: هر کاربر در هر لحظه یک ارائه ----------

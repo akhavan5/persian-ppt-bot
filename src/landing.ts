@@ -354,7 +354,7 @@ export function renderLanding(p: Page, SITE: string): string {
     <h1>${esc(p.h1[0])}<em>${esc(p.h1[1])}</em>${esc(p.h1[2])}</h1>
     <p class="lead">${esc(p.lead)}</p>
     <div class="cta-row"><a class="btn" href="/#topic">${esc(p.cta)}</a><a class="btn ghost" href="/#pricing">مشاهده‌ی تعرفه</a></div>
-    <div class="trust"><span>🆓 ۳ ارائه‌ی رایگانِ ثبت‌نام</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
+    <div class="trust"><span>🆓 ۳ ارائه‌ی رایگانِ ثبت‌نام + روزی ۱ اعتبار رایگان</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
     <p class="upd">آخرین به‌روزرسانی: <time datetime="${p.updated}">${faDate(p.updated)}</time></p>
   </div>
   <article>

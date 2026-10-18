@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { handleUpdate } from "./bot";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
-import { adminIds } from "./settings";
+import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
 import { withStore } from "./store";
 import { handleWeb } from "./web";
 import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from "./landing";
@@ -29,12 +29,17 @@ function noindex(res: Response): Response {
 }
 
 // تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
-const SITEMAP_LASTMOD = "2026-10-17";
+const SITEMAP_LASTMOD = "2026-10-18";
 
 export default {
   // پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی D1 (cron در wrangler.jsonc)
   async scheduled(c: ScheduledController, rawEnv: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(withStore(rawEnv).KV.purge().catch((e) => console.error("purge", e)));
+    // اعتبار رایگان روزانه + پیام ربات برای کاربران تلگرامِ بدون اعتبار (شناسه‌ی روزانه: اگر cron دوباره اجرا شود کار تکراری ساخته نمی‌شود)
+    if (DAILY_FREE_CREDITS > 0) {
+      ctx.waitUntil(rawEnv.BROADCAST_WORKFLOW.create({ id: `df-${today()}`, params: { adminChatId: 0, text: "", daily: true } })
+        .catch((e) => console.error("daily free workflow", String(e).slice(0, 200))));
+    }
   },
 
   async fetch(req: Request, rawEnv: Env, ctx: ExecutionContext): Promise<Response> {

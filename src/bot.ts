@@ -3,7 +3,7 @@ import type { Mode, Settings } from "./types";
 import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
-  EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, getActiveSub, getCredit, getSettings, isAdmin, isAllowed, isBanned,
+  EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
   maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
@@ -33,7 +33,7 @@ const HELP =
   "🖼 چند عکس (مثلاً صفحه‌های یک جزوه) را <b>یک‌جا و به‌صورت آلبوم</b> انتخاب و بفرست (حداکثر ۱۰ عدد)؛ همه با هم خوانده می‌شوند و فقط <b>یک ارائه</b> ساخته می‌شود. عکس‌هایی که جدا از هم بفرستی هر کدام ارائه‌ی جداگانه حساب می‌شوند.\n\n" +
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت (عادی، دانشجویی، کسب‌وکار، معلم، دفاع پایان‌نامه)، منابع و تعداد اسلاید\n" +
-  "💳 /credit ← اعتبار، پلن و سقف‌های حساب (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد)\n" +
+  "💳 /credit ← اعتبار، پلن و سقف‌های حساب (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز که اعتبارت صفر باشد ۱ اعتبار رایگان)\n" +
   "🌐 /site ← ورود خودکار به سایت pptsaz.ir (پلن‌ها و پرداخت آنلاین)\n" +
   "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
   "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX، PDF، پوستر و جزوه) تا ۲۴ ساعت\n\n" +
@@ -472,10 +472,11 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   }
 
   if (cmd === "/credit" || cmd === "/balance") {
+    const granted = await grantDailyFree(env, uid).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز
     const [c, sub, caps] = await Promise.all([getCredit(env, uid), getActiveSub(env, uid), getCaps(env, uid)]);
     const planName = sub ? (PLANS.find((p) => p.id === sub.plan)?.name ?? sub.plan) : "";
     const head = c.unlimited ? "💳 اعتبار شما <b>نامحدود</b> است.\n"
-      : `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
+      : (granted ? "🎁 اعتبار رایگان امروزت اضافه شد.\n" : "") + `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
         (sub ? `• اعتبار پلن: ${toFa(String(sub.credits))}\n` : "") +
         (c.bonus > 0 ? `• اعتبار هدیه و شارژ: ${toFa(String(c.bonus))}\n` : "");
     const out = head +
@@ -582,6 +583,7 @@ async function wizardGate(env: Env, chatId: number, uid: Uid, userId: number): P
     await sendMessage(env, chatId, "⏳ ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، موضوع بعدی را بفرست.");
     return null;
   }
+  if (await grantDailyFree(env, uid).catch(() => false)) await sendMessage(env, chatId, DAILY_FREE_MSG).catch(() => {}); // اعتبار صفر ⇒ سهم رایگان امروز
   const [s, caps, credit] = await Promise.all([getSettings(env, uid), getCaps(env, uid), getCredit(env, uid)]);
   if (!credit.unlimited && credit.total <= 0) {
     await sendMessage(env, chatId, `⏳ اعتبار شما تمام شده است.\n\n${BUY_SITE_NOTE}`, await buyKbFor(env, uid, userId));
