@@ -1096,7 +1096,7 @@ function tgDone(p, planId, bot) {
 // ---------- آپلود فایل ----------
 // متن، Word، PowerPoint و Excel در خود مرورگر خوانده می‌شوند (فایل به سرور نمی‌رود)؛ PDF (متنی، اسکن و ترکیبی) و تصویر دقیقاً مثل ربات تلگرام
 // در سرور خوانده می‌شوند (toMarkdown + OCR با مدل vision، تا ۱۲ صفحه) و فقط متن استخراج‌شده نگه داشته می‌شود؛ بایت‌های فایل بعد از پایان کار پاک می‌شوند.
-const MAX_FILE = 15 * 1024 * 1024, MAX_SRC = 120000, IMG_MAX = 4000000, OCR_WAIT = 6 * 60 * 1000; // سقف تصویر ۴ مگابایت مثل تلگرام
+const MAX_FILE = 20 * 1024 * 1024, MAX_SRC = 120000, IMG_MAX = 4000000, OCR_WAIT = 6 * 60 * 1000; // سقف تصویر ۴ مگابایت مثل تلگرام
 const CDN = "https://cdnjs.cloudflare.com/ajax/libs/";
 const JSZIP = CDN + "jszip/3.10.1/jszip.min.js";
 let srcText = "", srcName = "", extracting = false, upSeq = 0;
@@ -1210,7 +1210,7 @@ function clearFile() { upSeq++; srcText = srcName = ""; extracting = false; $("#
 async function onFile(file) {
   if (!file) return;
   upMsg(""); show($("#linkRow"), false); const my = ++upSeq;
-  if (file.size > MAX_FILE) { upMsg("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد."); return; }
+  if (file.size > MAX_FILE) { upMsg("حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد."); return; }
   extracting = true; $("#pick").disabled = true; $("#upHint").textContent = "⏳ در حال خواندن فایل…";
   try {
     const raw = tidy(await extractFile(file, my));

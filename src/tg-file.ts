@@ -5,7 +5,7 @@
  * - PDF: Workers AI toMarkdown (رایگان برای PDF)؛ اگر متنِ قابل‌قبولی داشت، مثل بقیه‌ی فایل‌های متنی همان متن برگردانده می‌شود و اصلاً OCR نمی‌شود
  *   (حتی اگر تصویر هم داخلش باشد). فقط PDFِ بدون لایه‌ی متن (اسکن) ← OCR با مدل vision کلودفلر (vision-ocr.ts)
  * - تصویر (عکس یا فایل png/jpg): OCR با مدل vision کلودفلر
- * سقف دانلود ربات‌های تلگرام ۲۰ مگابایت است؛ سقف این‌جا ۱۵ مگابایت (مثل وب).
+ * سقف دانلود ربات‌های تلگرام (Bot API رسمی) ۲۰ مگابایت است؛ سقف این‌جا و در وب هم ۲۰ مگابایت است.
  */
 import JSZip from "jszip";
 import type { Env } from "./env";
@@ -13,7 +13,7 @@ import { ocrSmart, VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { tg } from "./telegram";
 
-export const TG_MAX_FILE = 15 * 1024 * 1024;
+export const TG_MAX_FILE = 20 * 1024 * 1024;
 const TEXT_EXT = new Set(["txt", "md", "csv", "json", "html", "htm"]);
 const IMG_EXT = new Set(["png", "jpg", "jpeg"]);
 export const SUPPORTED_NOTE = "Word (docx)، PDF، PowerPoint (pptx)، Excel (xlsx)، متن (txt/md/csv/html) یا تصویر (png/jpg)";
@@ -167,13 +167,13 @@ const unsupportedFile = (): Extracted =>
 export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: string | number): Promise<Extracted> {
   const ext = extOf(ref.name, ref.mime);
   if (!isSupportedExt(ext)) return unsupportedFile();
-  if ((ref.size ?? 0) > TG_MAX_FILE) return fail("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد.");
+  if ((ref.size ?? 0) > TG_MAX_FILE) return fail("حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد.");
 
   let bytes: ArrayBuffer;
   try {
     const info = await tg<{ file_path?: string; file_size?: number }>(env, "getFile", { file_id: ref.fileId });
     if (!info.file_path) return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
-    if ((info.file_size ?? 0) > TG_MAX_FILE) return fail("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد.");
+    if ((info.file_size ?? 0) > TG_MAX_FILE) return fail("حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد.");
     const base = env.TELEGRAM_API_BASE || "https://api.telegram.org";
     const r = await fetch(`${base}/file/bot${env.TELEGRAM_BOT_TOKEN}/${info.file_path}`, { signal: AbortSignal.timeout(60_000) });
     if (!r.ok) return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
@@ -192,7 +192,7 @@ export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: stri
 export async function extractFileBytes(env: Env, bytes: ArrayBuffer, name: string, mime: string, userId: string | number): Promise<Extracted> {
   const ext = extOf(name, mime);
   if (!isSupportedExt(ext)) return unsupportedFile();
-  if (bytes.byteLength > TG_MAX_FILE) return fail("حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد.");
+  if (bytes.byteLength > TG_MAX_FILE) return fail("حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد.");
 
   try {
     let text: string;

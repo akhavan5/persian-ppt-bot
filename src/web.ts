@@ -321,8 +321,8 @@ async function extract(req: Request, env: Env, user: WebUser): Promise<Response>
   const mime = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (!OCR_TYPES.has(mime)) return err("فقط تصویر PNG/JPG یا فایل PDF پشتیبانی می‌شود.", 415);
   const isPdf = mime === "application/pdf";
-  const max = isPdf ? TG_MAX_FILE : VISION_MAX_IMAGE_BYTES; // سقف‌ها دقیقاً مثل تلگرام: PDF ۱۵ مگابایت، تصویر ۴ مگابایت
-  const tooBig = () => err(isPdf ? "حجم فایل حداکثر ۱۵ مگابایت می‌تواند باشد." : "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد.", 413);
+  const max = isPdf ? TG_MAX_FILE : VISION_MAX_IMAGE_BYTES; // سقف‌ها دقیقاً مثل تلگرام: PDF ۲۰ مگابایت، تصویر ۴ مگابایت
+  const tooBig = () => err(isPdf ? "حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد." : "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد.", 413);
   if (Number(req.headers.get("content-length") ?? 0) > max) return tooBig();
   // سقف روزانه‌ی آپلود (حتی PDF متنی) = اعتبار ساخت ارائه + ۲؛ سقف جداگانه‌ی «تبدیل اسکن/تصویر» هم داخل خود مسیر مشترک اعمال می‌شود (ocr-limit.ts)
   if (await ocrLimitHit(env, user.id, "upload")) return err(`سقف امروزت برای آپلود PDF/تصویر تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`, 429);
