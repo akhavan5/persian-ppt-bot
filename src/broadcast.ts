@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import { esc, sendMessage } from "./telegram";
 import { toFa } from "./util";
 import { withStore } from "./store";
-import { DAILY_FREE_MSG, claimDailyFree, isAdmin } from "./settings";
+import { DAILY_FREE_MSG, claimDailyFreeMany, isAdmin } from "./settings";
 
 /** مخاطبان: همه / دارندگان پلن فعال / بدون پلن فعال / بدون اعتبار (نه پلن و نه اعتبار هدیه‌ی باقی‌مانده) */
 export type Audience = "all" | "plan" | "free" | "nocredit";
@@ -16,9 +16,9 @@ export interface BroadcastParams { adminChatId: number; text: string; audience?:
 
 const BATCH = 20;
 const MAX_USERS = 20_000;
-// حالت daily: هر کاربر ≈ ۴ فراخوانی (D1 ×۲، ثبت اعتبار، ارسال)؛ دسته‌ی ۱۰تایی زیر سقف ۵۰ زیردرخواستِ هر گام می‌ماند و ۱۰هزار کاربر ≈ ۱۰۰۰ گام (سقف ۱۰۲۴).
-// کاربران بیشتر از این سقف، اعتبار را همان لحظه‌ی اولین پیام/ساخت می‌گیرند (spendCredit و /credit).
-const DAILY_BATCH = 10;
+// حالت daily: هر دسته ۲۰ کاربر = ۱ پرس‌وجو + ۲ batch ثبت اعتبار + حداکثر ۲۰ ارسال تلگرام ≈ ۲۳ زیردرخواست (حتی با تلاش مجدد زیر سقف ۵۰ پلن رایگان).
+// ۱۰هزار کاربر = ۵۰۰ گام (سقف ۱۰۲۴).
+const DAILY_BATCH = 20;
 const DAILY_MAX_USERS = 10_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -108,8 +108,13 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
     for (let i = 0; i < ids.length; i += BATCH) {
       const r = await step.do(`send-${i / BATCH}`, { retries: { limit: 0, delay: "1 second" }, timeout: "3 minutes" }, async () => {
         const out = { ok: 0, failed: 0, skipped: 0 };
-        for (const id of ids.slice(i, i + BATCH)) {
-          if ((await this.env.KV.get(`ban:${id}`)) !== null) { out.skipped++; continue; } // مسدودها پیام نمی‌گیرند
+        const chunk = ids.slice(i, i + BATCH);
+        await this.env.KV.ready();
+        const keys = chunk.map((id) => `ban:${id}`); // یک پرس‌وجو برای کل دسته (به‌جای یکی برای هر کاربر) تا از سقف ۵۰ زیردرخواست رد نشود
+        const rows = await this.env.DB.prepare(`SELECT k FROM kv WHERE (exp IS NULL OR exp > ${Math.floor(Date.now() / 1000)}) AND k IN (${keys.map((_, n) => `?${n + 1}`).join(",")})`).bind(...keys).all<{ k: string }>();
+        const banned = new Set(((rows.results ?? []) as { k: string }[]).map((r) => r.k));
+        for (const id of chunk) {
+          if (banned.has(`ban:${id}`)) { out.skipped++; continue; } // مسدودها پیام نمی‌گیرند
           if (await sendOne(this.env, id, text)) out.ok++; else out.failed++;
         }
         await sleep(1000);
@@ -130,18 +135,24 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
     const ids = (await step.do("collect", () => listAudience(this.env, "nocredit"))).slice(0, DAILY_MAX_USERS);
     for (let i = 0; i < ids.length; i += DAILY_BATCH) {
       await step.do(`daily-${i / DAILY_BATCH}`, { retries: { limit: 0, delay: "1 second" }, timeout: "3 minutes" }, async () => {
-        for (const id of ids.slice(i, i + DAILY_BATCH)) {
-          try {
-            // یک پرس‌وجو: شناسه‌ی پروفایل وب این تلگرام + مسدود بودن
-            const r = await this.env.DB.prepare(
-              "SELECT (SELECT v FROM kv WHERE k = ?1) AS w, EXISTS(SELECT 1 FROM kv WHERE k = ?2) AS banned")
-              .bind(`tg2w:${id}`, `ban:${id}`).first<{ w: string | null; banned: number }>();
-            if (r?.banned) continue;
-            const uid = r?.w && /^w_[0-9a-f]{16}$/.test(r.w) ? r.w : id; // پروفایل وب (یا شناسه‌ی عددی برای کاربران قدیمی)
-            if (!(await claimDailyFree(this.env, uid))) continue; // امروز قبلاً گرفته
-            await sendOne(this.env, id, DAILY_FREE_MSG);
-          } catch (e) { console.error("daily free", id, String(e).slice(0, 160)); }
-        }
+        const chunk = ids.slice(i, i + DAILY_BATCH);
+        try {
+          await this.env.KV.ready();
+          // ۱ زیردرخواست: پروفایل وب و مسدودی کل دسته (۴۰ پارامتر؛ سقف D1 برای هر پرس‌وجو ۱۰۰ است)
+          const keys = chunk.flatMap((id) => [`tg2w:${id}`, `ban:${id}`]);
+          const rows = await this.env.DB.prepare(`SELECT k, v FROM kv WHERE (exp IS NULL OR exp > ${Math.floor(Date.now() / 1000)}) AND k IN (${keys.map((_, n) => `?${n + 1}`).join(",")})`)
+            .bind(...keys).all<{ k: string; v: string }>();
+          const map = new Map(((rows.results ?? []) as { k: string; v: string }[]).map((r) => [r.k, r.v]));
+          const byUid = new Map<string, number>(); // پروفایل وب (یا شناسه‌ی عددی کاربران قدیمی) → شناسه‌ی تلگرام
+          for (const id of chunk) {
+            if (map.has(`ban:${id}`)) continue;
+            const w = map.get(`tg2w:${id}`);
+            byUid.set(w && /^w_[0-9a-f]{16}$/.test(w) ? w : String(id), id);
+          }
+          // ۲ زیردرخواست: ثبت اعتبار کل دسته؛ سپس حداکثر ۲۰ ارسال تلگرام (جمعاً زیر سقف ۵۰)
+          const won = await claimDailyFreeMany(this.env, [...byUid.keys()]);
+          for (const u of won) await sendOne(this.env, byUid.get(String(u))!, DAILY_FREE_MSG);
+        } catch (e) { console.error("daily free batch", i, String(e).slice(0, 160)); }
         await sleep(1000);
       });
     }

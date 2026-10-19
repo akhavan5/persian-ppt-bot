@@ -250,6 +250,24 @@ export async function claimDailyFree(env: Env, userId: Uid): Promise<boolean> {
   return true;
 }
 
+/** نسخه‌ی گروهی claimDailyFree: برای کل دسته فقط ۲ زیردرخواست D1 (به‌جای ۲ تا برای هر کاربر).
+ *  خروجی: همان uidهایی که همین حالا سهم امروزشان ثبت شد (هر کدام در روز فقط یک‌بار). */
+export async function claimDailyFreeMany(env: Env, userIds: Uid[]): Promise<Uid[]> {
+  if (DAILY_FREE_CREDITS <= 0 || !userIds.length) return [];
+  const db = await rawDb(env);
+  const day = today(), exp = nowSec() + 3 * 86_400;
+  const claims = await db.batch(userIds.map((u) => db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, ?3) ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp WHERE v != excluded.v")
+    .bind(dailyKey(u), day, exp)));
+  const won = userIds.filter((_, i) => changed(claims[i]));
+  if (won.length) {
+    await db.batch(won.map((u) => db.prepare(
+      "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + ?2 AS TEXT), exp = NULL")
+      .bind(bonusKey(u), String(DAILY_FREE_CREDITS))));
+  }
+  return won;
+}
+
 /** اگر اعتبار کل کاربر صفر است (بدون پلن یا پلنِ تمام‌شده، و بدون اعتبار هدیه) و امروز سهمش را نگرفته، ۱ اعتبار رایگان به او می‌دهد.
  *  مدیر (نامحدود) و مسدودشده چیزی نمی‌گیرند. true = همین حالا اضافه شد. known: اگر وضعیت اعتبار از قبل خوانده شده، دوباره خوانده نمی‌شود. */
 export async function grantDailyFree(env: Env, userId: Uid, known?: CreditInfo): Promise<boolean> {
