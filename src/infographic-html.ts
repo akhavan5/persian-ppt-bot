@@ -149,8 +149,10 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 .top p{margin:${base * 0.4}px 0 0;font-size:${base * 0.95}px;opacity:.82}
 .top img{width:${Math.round(base * (o.layout === "wide" ? 15.2 : 10.8))}px;height:${Math.round(base * (o.layout === "wide" ? 8.8 : 6.7))}px;object-fit:cover;border-radius:${base * 0.7}px;border:3px solid var(--ac);flex:none}
 .wrap{padding:${base * 1.2}px ${base * 1.4}px ${base * 0.6}px}
-.cols{display:flex;gap:${base * 1.1}px;align-items:flex-start}
-.col{flex:1;min-width:0}
+.cols{display:flex;gap:${base * 1.1}px;align-items:stretch}
+.col{flex:1;min-width:0;display:flex;flex-direction:column}
+.col>.pn:last-child{flex:1;margin-bottom:0;display:flex;flex-direction:column}
+.col>.pn:last-child>.bd{flex:1}
 .pn{margin:0 0 ${base * 1.1}px;border:2px solid var(--line);border-radius:${base * 0.7}px;background:var(--bg);overflow:hidden}
 .pn>header{background:var(--pr);color:var(--on);display:flex;align-items:center;gap:${base * 0.6}px;padding:${base * 0.55}px ${base * 0.8}px}
 .pn .no{flex:none;width:${base * 1.7}px;height:${base * 1.7}px;border-radius:50%;background:var(--ac);color:var(--dk);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${base * 0.95}px}
