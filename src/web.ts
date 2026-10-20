@@ -19,7 +19,7 @@ import {
 import { beginDeck, imagesLimitMsg, launchDeck, posterEnabled, runningJob, slidesLimitMsg } from "./deck-service";
 import { OCR_TYPES } from "./extract";
 import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
-import { TG_MAX_FILE, extractFileBytes } from "./tg-file";
+import { WEB_MAX_FILE, extractFileBytes } from "./tg-file";
 import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
@@ -325,8 +325,8 @@ async function extract(req: Request, env: Env, user: WebUser): Promise<Response>
   const mime = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (!OCR_TYPES.has(mime)) return err("فقط تصویر PNG/JPG یا فایل PDF پشتیبانی می‌شود.", 415);
   const isPdf = mime === "application/pdf";
-  const max = isPdf ? TG_MAX_FILE : VISION_MAX_IMAGE_BYTES; // سقف‌ها دقیقاً مثل تلگرام: PDF ۲۰ مگابایت، تصویر ۴ مگابایت
-  const tooBig = () => err(isPdf ? "حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد." : "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد.", 413);
+  const max = isPdf ? WEB_MAX_FILE : VISION_MAX_IMAGE_BYTES; // PDF ۲۴ مگابایت (وب)، تصویر ۴ مگابایت
+  const tooBig = () => err(isPdf ? "حجم فایل حداکثر ۲۴ مگابایت می‌تواند باشد." : "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد.", 413);
   if (Number(req.headers.get("content-length") ?? 0) > max) return tooBig();
   // سقف روزانه‌ی آپلود (حتی PDF متنی) = اعتبار ساخت ارائه + ۲؛ سقف جداگانه‌ی «تبدیل اسکن/تصویر» هم داخل خود مسیر مشترک اعمال می‌شود (ocr-limit.ts)
   if (await ocrLimitHit(env, user.id, "upload")) return err(`سقف امروزت برای آپلود PDF/تصویر تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`, 429);

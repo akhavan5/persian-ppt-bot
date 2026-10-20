@@ -5,7 +5,7 @@
  * - PDF: Workers AI toMarkdown (رایگان برای PDF)؛ اگر متنِ قابل‌قبولی داشت، مثل بقیه‌ی فایل‌های متنی همان متن برگردانده می‌شود و اصلاً OCR نمی‌شود
  *   (حتی اگر تصویر هم داخلش باشد). فقط PDFِ بدون لایه‌ی متن (اسکن) ← OCR با مدل vision کلودفلر (vision-ocr.ts)
  * - تصویر (عکس یا فایل png/jpg): OCR با مدل vision کلودفلر
- * سقف دانلود ربات‌های تلگرام (Bot API رسمی) ۲۰ مگابایت است؛ سقف این‌جا و در وب هم ۲۰ مگابایت است.
+ * سقف دانلود ربات‌های تلگرام (Bot API رسمی) ۲۰ مگابایت است؛ در وب سقف PDF ۲۴ مگابایت است (WEB_MAX_FILE).
  */
 import JSZip from "jszip";
 import type { Env } from "./env";
@@ -13,7 +13,8 @@ import { ocrSmart, VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { tg } from "./telegram";
 
-export const TG_MAX_FILE = 20 * 1024 * 1024;
+export const TG_MAX_FILE = 20 * 1024 * 1024; // سقف دانلود Bot API رسمی تلگرام
+export const WEB_MAX_FILE = 24 * 1024 * 1024; // سقف آپلود وب؛ زیر سقف ۲۵ MiB مقدار KV (فایل برای Workflow در KV می‌ماند)
 const TEXT_EXT = new Set(["txt", "md", "csv", "json", "html", "htm"]);
 const IMG_EXT = new Set(["png", "jpg", "jpeg"]);
 export const SUPPORTED_NOTE = "Word (docx)، PDF، PowerPoint (pptx)، Excel (xlsx)، متن (txt/md/csv/html) یا تصویر (png/jpg)";
@@ -192,7 +193,7 @@ export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: stri
 export async function extractFileBytes(env: Env, bytes: ArrayBuffer, name: string, mime: string, userId: string | number): Promise<Extracted> {
   const ext = extOf(name, mime);
   if (!isSupportedExt(ext)) return unsupportedFile();
-  if (bytes.byteLength > TG_MAX_FILE) return fail("حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد.");
+  if (bytes.byteLength > WEB_MAX_FILE) return fail("حجم فایل حداکثر ۲۴ مگابایت می‌تواند باشد.");
 
   try {
     let text: string;
