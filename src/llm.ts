@@ -499,7 +499,7 @@ Return JSON: {"title": "...", "slides": [{
   "steps": [{"label": "...", "text": "..."}],
   "quote": {"text": "...", "author": "optional"},
   "items": [{"icon": "...", "heading": "...", "text": "..."}],
-  "image_query": "English description of ONE concrete visual scene for this slide (objects, setting; no abstract words), max 12 words. It must directly depict the subject of THIS presentation topic (e.g. solar panels and wind turbines for renewable energy); never generic landmarks, mosques, buildings or cultural stereotypes unless the topic itself is about them",
+  "image_query": "ONLY on slides whose layout is image_text — omit this field on every other layout. English description of ONE concrete visual scene for this slide (objects, setting; no abstract words), max 12 words. It must directly depict the subject of THIS presentation topic (e.g. solar panels and wind turbines for renewable energy); never generic landmarks, mosques, buildings or cultural stereotypes unless the topic itself is about them",
   "notes": "speaker notes in Persian"}]}
 
 Quality rules:
@@ -510,7 +510,7 @@ Quality rules:
 
 Layout rules:
 ${edges}
-- "bullets": ${st.bullets}. "image_text": 3-4 bullets + image_query. ${imgQuota > 0 ? `Use it EXACTLY ${imgQuota} time${imgQuota > 1 ? "s" : ""} here, on the most concrete, visual topics (never on the title/closing slide), each with a different image_query depicting a different scene${imgQuota > 1 ? "; do not put two image slides next to each other" : ""}.` : 'Do NOT use "image_text" in this part.'}
+- "bullets": ${st.bullets}. "image_text": 3-4 bullets + image_query (the ONLY layout that has an image; "layout" must literally be "image_text"). ${imgQuota > 0 ? `Use it EXACTLY ${imgQuota} time${imgQuota > 1 ? "s" : ""} here, on the most concrete, visual topics (never on the title/closing slide), each with a different image_query depicting a different scene${imgQuota > 1 ? "; do not put two image slides next to each other" : ""}.` : 'Do NOT use "image_text" in this part.'}
 - "two_column": exactly 2 columns (comparison, pros/cons), 2-4 bullets each.
 - "stats": 2-4 items ONLY if the exact numbers come from the background notes/document or are famous and certain; otherwise use another layout. Never use "stats" for estimates you are unsure of.
 - "table": 2-4 columns, 3-6 rows, very short cells (max 6 words). Use for comparisons, classifications or timelines. ${tableOk ? "Use at most once here." : 'Do NOT use "table" in this part.'}
@@ -555,6 +555,25 @@ ${edges}
     const c = deck.slides[i];
     if (c.layout === "bullets" && c.image_query && !outline[i]?.kind) { c.layout = "image_text"; c.bullets = c.bullets.slice(0, 4); have++; }
   }
+  // مدل‌هایی مثل Gemma هرگز layout "image_text" را انتخاب نمی‌کنند و image_query را روی چیدمان‌های دیگر
+  // (two_column، icons، table، ...) می‌گذارند ⇒ پیش از این هیچ تصویری ساخته نمی‌شد. اینجا آن اسلایدها را بدون از دست رفتن متن به image_text تبدیل می‌کنیم.
+  const isImg = (k: number) => deck.slides[k]?.layout === "image_text";
+  const flat = (sl: Slide): string[] => {
+    if (sl.bullets.length) return sl.bullets;
+    if (sl.columns.length) return sl.columns.flatMap((c) => c.bullets.map((b) => (c.heading ? `${c.heading}: ${b}` : b)));
+    const xs = sl.items?.length ? sl.items.map((x) => [x.heading, x.text].filter(Boolean).join(": ")) : (sl.steps ?? []).map((x) => [x.label, x.text].filter(Boolean).join(": "));
+    return xs;
+  };
+  const CONVERTIBLE = new Set<string>(["two_column", "three_column", "icons", "process", "timeline"]);
+  for (let i = 1; i < deck.slides.length - 1 && have < wantImages; i++) {
+    const c = deck.slides[i];
+    if (outline[i]?.kind || !c.image_query || !CONVERTIBLE.has(c.layout) || isImg(i - 1) || isImg(i + 1)) continue;
+    const b = flat(c).slice(0, 4);
+    if (b.length < 2) continue;
+    c.layout = "image_text"; c.bullets = b; c.columns = []; c.items = []; c.steps = []; have++;
+  }
+  // image_query روی چیدمان‌هایی که تصویر نمی‌گیرند بی‌اثر است؛ پاکش می‌کنیم
+  for (const sl of deck.slides) if (sl.layout !== "image_text") sl.image_query = undefined;
   return deck;
 }
 
