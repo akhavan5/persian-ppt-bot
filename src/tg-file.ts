@@ -164,17 +164,25 @@ const isSupportedExt = (ext: string) => TEXT_EXT.has(ext) || IMG_EXT.has(ext) ||
 const unsupportedFile = (): Extracted =>
   fail(`این نوع فایل پشتیبانی نمی‌شود. ${SUPPORTED_NOTE} بفرست (فایل‌های قدیمی doc/ppt/xls را ابتدا به docx/pptx/xlsx تبدیل کن).`);
 
+/** فایل ۲۰ تا ۲۴ مگابایتی را تلگرام به ربات نمی‌دهد ولی وب می‌پذیرد ⇒ کاربر به نسخه‌ی وب هدایت می‌شود (آدرس مثل siteUrl در deck-service.ts) */
+const tooBigForTelegram = (env: Env, size: number): Extracted => {
+  const site = (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
+  return size <= WEB_MAX_FILE
+    ? fail(`حجم این فایل بیشتر از ۲۰ مگابایت است و تلگرام اجازه‌ی دریافتش را به ربات نمی‌دهد.\nفایل را در نسخه‌ی وب آپلود کن (تا ۲۴ مگابایت):\n${site}`)
+    : fail(`حجم فایل حداکثر ۲۰ مگابایت در تلگرام (و ۲۴ مگابایت در نسخه‌ی وب ${site}) می‌تواند باشد.`);
+};
+
 /** دانلود از تلگرام و استخراج متن؛ خطاها پیام فارسی آماده برای کاربر هستند */
 export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: string | number): Promise<Extracted> {
   const ext = extOf(ref.name, ref.mime);
   if (!isSupportedExt(ext)) return unsupportedFile();
-  if ((ref.size ?? 0) > TG_MAX_FILE) return fail("حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد.");
+  if ((ref.size ?? 0) > TG_MAX_FILE) return tooBigForTelegram(env, ref.size ?? 0);
 
   let bytes: ArrayBuffer;
   try {
     const info = await tg<{ file_path?: string; file_size?: number }>(env, "getFile", { file_id: ref.fileId });
     if (!info.file_path) return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
-    if ((info.file_size ?? 0) > TG_MAX_FILE) return fail("حجم فایل حداکثر ۲۰ مگابایت می‌تواند باشد.");
+    if ((info.file_size ?? 0) > TG_MAX_FILE) return tooBigForTelegram(env, info.file_size ?? 0);
     const base = env.TELEGRAM_API_BASE || "https://api.telegram.org";
     const r = await fetch(`${base}/file/bot${env.TELEGRAM_BOT_TOKEN}/${info.file_path}`, { signal: AbortSignal.timeout(60_000) });
     if (!r.ok) return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
