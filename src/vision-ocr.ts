@@ -12,6 +12,7 @@ import type { Env } from "./env";
 import { PoolExhausted, fetchWithAccounts } from "./accounts";
 import { ocrSpace, OCR_MAX_BYTES } from "./extract";
 import { extractPdfImages, type PdfImage } from "./pdf-images";
+import { renderPdfPages } from "./pdf-render";
 
 export type OcrResult = { ok: true; text: string } | { ok: false; error: string };
 
@@ -112,12 +113,17 @@ export async function ocrSmart(env: Env, bytes: ArrayBuffer, mime: string): Prom
   let imgs: { bytes: Uint8Array; mime: string }[];
   if (mime === "application/pdf") {
     const found = await extractPdfImages(u8, undefined, { limit: VISION_MAX_PAGES, maxBytes: VISION_MAX_IMAGE_BYTES }).catch((e) => { console.error("pdf images", e instanceof Error ? e.message : e); return { images: [] as PdfImage[], pages: 0 }; });
-    if (!found.images.length) {
-      if (u8.byteLength <= OCR_MAX_BYTES) return ocrSpace(env, bytes, mime);
-      return { ok: false, error: "این PDF اسکن است ولی تصاویر صفحه‌هایش در قالب قابل‌خواندن نیست؛ صفحه‌ها را به‌صورت عکس (JPG) بفرست." };
-    }
     const usable = found.images.filter((j) => j.bytes.byteLength <= VISION_MAX_IMAGE_BYTES);
-    if (!usable.length) return { ok: false, error: "تصویر صفحه‌های این PDF بیش از حد بزرگ است؛ با کیفیت کمتر دوباره اسکن کن یا صفحه‌ها را به‌صورت عکس بفرست." };
+    if (!usable.length) {
+      // استخراج مستقیم چیزی نداد (JBIG2/CCITT/JPX/CMYK/... یا تصویر خیلی بزرگ) ⇒ صفحه‌ها با مرورگر (pdf.js) رندر می‌شوند
+      const rendered = await renderPdfPages(env, u8, VISION_MAX_PAGES, VISION_MAX_IMAGE_BYTES);
+      if (rendered) return readMany(env, rendered);
+      if (!found.images.length) {
+        if (u8.byteLength <= OCR_MAX_BYTES) return ocrSpace(env, bytes, mime);
+        return { ok: false, error: "این PDF اسکن است ولی تصاویر صفحه‌هایش در قالب قابل‌خواندن نیست؛ صفحه‌ها را به‌صورت عکس (JPG) بفرست." };
+      }
+      return { ok: false, error: "تصویر صفحه‌های این PDF بیش از حد بزرگ است؛ با کیفیت کمتر دوباره اسکن کن یا صفحه‌ها را به‌صورت عکس بفرست." };
+    }
     imgs = usable.slice(0, VISION_MAX_PAGES);
   } else {
     if (u8.byteLength > VISION_MAX_IMAGE_BYTES) return { ok: false, error: "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت است." };
