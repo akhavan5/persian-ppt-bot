@@ -4,6 +4,10 @@ name: Build Android APK (Bazaar)
 on:
   workflow_dispatch:
 
+env:
+  # نسخه‌ی Bubblewrap ثابت است تا نسخه‌ی تازه‌منتشرشده ناخواسته روی ساخت اثر نگذارد (۱.۲۷ حدود دو هفته پیش آمد و targetSdk را به ۳۶ برد)
+  BUBBLEWRAP_VERSION: "1.24.1"
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -19,8 +23,8 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Bubblewrap
-        run: npm i -g @bubblewrap/cli
+      - name: Install Bubblewrap (pinned)
+        run: npm i -g @bubblewrap/cli@${BUBBLEWRAP_VERSION}
 
       - name: Point Bubblewrap at JDK and Android SDK
         run: |
@@ -36,7 +40,15 @@ jobs:
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Restore signing key
-        run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > twa/pptsaz-release.keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          [ -n "$KS_B64" ] || { echo "::error::ANDROID_KEYSTORE_B64 خالی است"; exit 1; }
+          [ -n "$KS_PASS" ] || { echo "::error::ANDROID_KEYSTORE_PASSWORD خالی است"; exit 1; }
+          echo "$KS_B64" | base64 -d > twa/pptsaz-release.keystore
+          # اگر کلید خراب یا رمز/alias اشتباه باشد همین‌جا ساخت متوقف می‌شود
+          keytool -list -v -keystore twa/pptsaz-release.keystore -alias pptsaz -storepass "$KS_PASS" | grep -E "SHA256|Alias name|Valid"
 
       - name: Generate project and build
         working-directory: twa
@@ -44,8 +56,19 @@ jobs:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          yes | bubblewrap update --skipVersionUpgrade || true
+          set -o pipefail
+          yes | bubblewrap update --skipVersionUpgrade
           yes | bubblewrap build --skipPwaValidation
+
+      - name: Verify APK (launcher, SDK, signature)
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          BT="$(ls "$SDK/build-tools" | sort -V | tail -1)"
+          APK=twa/app-release-signed.apk
+          test -s "$APK" || { echo "::error::APK ساخته نشد"; exit 1; }
+          "$SDK/build-tools/$BT/aapt2" dump badging "$APK" | grep -E "^package|sdkVersion|targetSdkVersion|launchable-activity" | tee badging.txt
+          grep -q "launchable-activity" badging.txt || { echo "::error::اکتیویتی اجرای اپ در APK نیست"; exit 1; }
+          "$SDK/build-tools/$BT/apksigner" verify --print-certs "$APK" | grep -E "SHA-256|Verifies"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -53,3 +76,39 @@ jobs:
           path: |
             twa/app-release-signed.apk
             twa/app-release-bundle.aab
+
+  # تست اجرا روی امولاتور؛ مانع خروجی گرفتن نمی‌شود ولی اگر اپ کرش کند لاگ آن را نگه می‌دارد
+  smoke-test:
+    needs: build
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: pptsaz-android
+          path: twa
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Launch on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          script: bash scripts/android-smoke.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pptsaz-android-logcat
+          path: |
+            android-logcat.txt
+            android-crash.txt
+          if-no-files-found: ignore
