@@ -96,6 +96,12 @@ export default {
       return noindex(Response.json({ ok: true, webhook: info.url, pending: info.pending_update_count }));
     }
 
+    // اپ اندروید (TWA برای کافه بازار): تأیید پیوند دامنه و اپ با اثر انگشت SHA-256 کلید امضا (از متغیرهای ANDROID_* خوانده می‌شود)
+    if (url.pathname === "/.well-known/assetlinks.json") {
+      const prints = (env.ANDROID_CERT_SHA256 || "").split(/[,;\s]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+      const body = [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: env.ANDROID_PACKAGE || "ir.pptsaz.app", sha256_cert_fingerprints: prints } }];
+      return new Response(JSON.stringify(body, null, 2), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" } });
+    }
     // تأیید مالکیت در وب‌مستر یاندکس (مستقیم از Worker تا ریدایرکت .html کلودفلر مانعش نشود)
     if (url.pathname === "/yandex_85baee77d3c502ea.html") {
       return new Response(`<html>\n    <head>\n        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">\n    </head>\n    <body>Verification: 85baee77d3c502ea</body>\n</html>\n`, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "public, max-age=3600" } });

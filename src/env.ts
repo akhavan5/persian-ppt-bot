@@ -86,4 +86,7 @@ export interface Env {
   OCR_VISION_MODELS?: string;
   /** آدرس اصلی سایت برای canonical/sitemap/OG (پیش‌فرض https://pptsaz.ir) */
   SITE_URL?: string;
+  /** اختیاری: اپ اندروید (کافه بازار). ANDROID_PACKAGE: شناسه‌ی بسته (پیش‌فرض ir.pptsaz.app)؛ ANDROID_CERT_SHA256: اثر انگشت SHA-256 کلید امضای APK (چند مقدار با کاما)؛ برای /.well-known/assetlinks.json */
+  ANDROID_PACKAGE?: string;
+  ANDROID_CERT_SHA256?: string;
 }

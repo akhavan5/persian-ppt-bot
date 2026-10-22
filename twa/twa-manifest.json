@@ -1,0 +1,39 @@
+{
+  "packageId": "ir.pptsaz.app",
+  "host": "pptsaz.ir",
+  "name": "پاورپوینت‌ساز فارسی",
+  "launcherName": "پاورپوینت‌ساز",
+  "display": "standalone",
+  "themeColor": "#2563eb",
+  "themeColorDark": "#2563eb",
+  "navigationColor": "#2563eb",
+  "navigationColorDark": "#2563eb",
+  "navigationDividerColor": "#2563eb",
+  "navigationDividerColorDark": "#2563eb",
+  "backgroundColor": "#f8faff",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://pptsaz.ir/icon-512.png",
+  "maskableIconUrl": "https://pptsaz.ir/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./pptsaz-release.keystore",
+    "alias": "pptsaz"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://pptsaz.ir/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": false,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://pptsaz.ir/",
+  "minSdkVersion": 21,
+  "orientation": "default"
+}
