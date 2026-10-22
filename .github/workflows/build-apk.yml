@@ -56,9 +56,11 @@ jobs:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          set -o pipefail
+          # «yes» بعد از پایان Bubblewrap پیام Broken pipe می‌دهد؛ پس فقط کد خروج خود bubblewrap بررسی می‌شود نه کل pipe
           yes | bubblewrap update --skipVersionUpgrade
+          [ "${PIPESTATUS[1]}" -eq 0 ] || { echo "::error::bubblewrap update ناموفق بود"; exit 1; }
           yes | bubblewrap build --skipPwaValidation
+          [ "${PIPESTATUS[1]}" -eq 0 ] || { echo "::error::bubblewrap build ناموفق بود"; exit 1; }
 
       - name: Verify APK (launcher, SDK, signature)
         run: |
