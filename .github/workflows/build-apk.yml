@@ -6,8 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    environment: ANDROID_KEYSTORE_B64
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
