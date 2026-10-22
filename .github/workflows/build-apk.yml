@@ -24,10 +24,16 @@ jobs:
 
       - name: Point Bubblewrap at JDK and Android SDK
         run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "SDK=$SDK"
+          ls -la "$SDK"
+          # Bubblewrap پوشه‌ی قدیمی tools را بررسی می‌کند؛ روی ماشین گیت‌هاب نیست، پس به cmdline-tools وصلش می‌کنیم
+          sudo mkdir -p "$SDK/tools"
+          sudo ln -sfn "$SDK/cmdline-tools/latest/bin" "$SDK/tools/bin"
           mkdir -p ~/.bubblewrap
-          echo "{\"jdkPath\":\"$JAVA_HOME\",\"androidSdkPath\":\"$ANDROID_HOME\"}" > ~/.bubblewrap/config.json
+          echo "{\"jdkPath\":\"$JAVA_HOME\",\"androidSdkPath\":\"$SDK\"}" > ~/.bubblewrap/config.json
           cat ~/.bubblewrap/config.json
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Restore signing key
         run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > twa/pptsaz-release.keystore
