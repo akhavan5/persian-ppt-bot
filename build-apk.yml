@@ -1,0 +1,49 @@
+name: Build Android APK (Bazaar)
+
+# فقط دستی اجرا می‌شود (Actions > Build Android APK > Run workflow)؛ با هر push اجرا نمی‌شود
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Bubblewrap
+        run: npm i -g @bubblewrap/cli
+
+      - name: Point Bubblewrap at JDK and Android SDK
+        run: |
+          mkdir -p ~/.bubblewrap
+          echo "{\"jdkPath\":\"$JAVA_HOME\",\"androidSdkPath\":\"$ANDROID_HOME\"}" > ~/.bubblewrap/config.json
+          cat ~/.bubblewrap/config.json
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Restore signing key
+        run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > twa/pptsaz-release.keystore
+
+      - name: Generate project and build
+        working-directory: twa
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          yes | bubblewrap update --skipVersionUpgrade || true
+          yes | bubblewrap build --skipPwaValidation
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pptsaz-android
+          path: |
+            twa/app-release-signed.apk
+            twa/app-release-bundle.aab
