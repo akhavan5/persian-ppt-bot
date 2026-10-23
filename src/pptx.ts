@@ -1,7 +1,7 @@
 /** ساخت فایل PPTX فارسی (راست‌به‌چپ) با PptxGenJS؛ بازنویسی pptx_builder.py. */
 import PptxGenJS from "pptxgenjs";
 import type { Deck, Slide } from "./types";
-import { THEMES, iconOf, type Theme } from "./themes";
+import { THEMES, iconOf, isBFont, type Theme } from "./themes";
 import { toFa } from "./util";
 import { BISMILLAH_IMG } from "./bismillah-img";
 import { BISMILLAH, RAIL, academicPalette, badgeColor, isTemplate, pillRow, railDots } from "./template";
@@ -44,6 +44,10 @@ function toBase64(bytes: Uint8Array): string {
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(bin);
 }
+
+/** نویسه‌هایی که در فونت‌های B Nazanin / B Titr نیستند (حروف لاتین و چند علامت مثل ; & # @ _ ' " ? < > $ ~ ^ | → ←) و در PowerPoint «مربع» دیده می‌شوند؛ این تکه‌ها با فونت جایگزین نوشته می‌شوند */
+const B_MISSING = /([0-9]*[A-Za-z](?:[A-Za-z0-9 .,:\-+\/()%&#@_'’"]*[A-Za-z0-9)%"'])?|[;&#@_'"?<>$~^|\\…–—→←`]+)/;
+const B_FALLBACK = "Times New Roman";
 
 interface TextOpts {
   bold?: boolean;
@@ -95,6 +99,17 @@ class Builder {
 
   // ---------- ابزارهای پایه ----------
   private txt(s: string) { return this.digits ? toFa(String(s)) : String(s); }
+  /** متن سلول جدول؛ در فونت B تکه‌های لاتین/علامت‌های ناموجود با Times New Roman (وگرنه مربع می‌شوند) */
+  private cellRuns(text: string, size: number, color: string, bold: boolean): any {
+    const t = this.txt(text);
+    if (!isBFont(this.font) || !B_MISSING.test(t)) return t;
+    return t.split(B_MISSING).filter((x) => x !== "").map((x) => {
+      const fb = x.replace(B_MISSING, "") === "";
+      return { text: x, options: { fontFace: fb ? B_FALLBACK : this.font, fontSize: size, color, bold, lang: fb ? "en-US" : "fa-IR" } };
+    });
+  }
+  /** نمودار نمی‌تواند چند فونت داشته باشد؛ برای فونت B از Tahoma (دارای حروف فارسی و لاتین) استفاده می‌شود */
+  private get cfont() { return isBFont(this.font) ? "Tahoma" : this.font; }
 
   private slide(bg: string) {
     const s = this.p.addSlide();
@@ -132,23 +147,33 @@ class Builder {
 
   private text(s: PptxGenJS.Slide, x: number, y: number, w: number, h: number, paras: string[],
     size: number, color: string, o: TextOpts = {}) {
-    const runs = paras.map((para) => ({
-      text: this.txt(para),
-      options: {
+    const face = o.font ?? this.font, size2 = o.font ? size : Math.round(size * this.fs * 2) / 2;
+    const runs = paras.flatMap((para) => {
+      const para0 = {
         breakLine: true,
         rtlMode: true, // جهت پاراگراف راست‌به‌چپ
         lang: "fa-IR",
         align: o.align ?? "right",
-        fontFace: o.font ?? this.font,
-        fontSize: o.font ? size : Math.round(size * this.fs * 2) / 2,
+        fontFace: face,
+        fontSize: size2,
         bold: !!o.bold,
         color,
         lineSpacingMultiple: 1.15,
         paraSpaceAfter: o.space ?? 8,
         ...(o.bullet === "number" ? { bullet: { type: "number", indent: 28 } }
           : o.bullet ? { bullet: { characterCode: "2022", indent: 25 } } : {}),
-      },
-    }));
+      };
+      const txt = this.txt(para);
+      // فونت B: تکه‌های لاتین/علامت‌های ناموجود جدا و با Times New Roman نوشته می‌شوند (فقط اولین تکه‌ی هر پاراگراف گزینه‌های پاراگراف را می‌گیرد)
+      const segs = !o.font && isBFont(this.font) ? txt.split(B_MISSING).filter((x) => x !== "") : [txt];
+      if (segs.length <= 1 && !(segs[0] && B_MISSING.test(segs[0]) && !o.font && isBFont(this.font))) return [{ text: txt, options: para0 }];
+      return segs.map((t, k) => {
+        const fb = isBFont(this.font) && B_MISSING.test(t) && t.replace(B_MISSING, "") === "";
+        const last = k === segs.length - 1;
+        const run = { fontFace: fb ? B_FALLBACK : face, fontSize: size2, bold: !!o.bold, color, lang: fb ? "en-US" : "fa-IR", breakLine: last };
+        return { text: t, options: k === 0 ? { ...para0, ...run } : run };
+      });
+    });
     s.addText(runs as any, { x, y, w, h, margin: 0, valign: o.valign ?? "top", fit: "none", wrap: true });
   }
 
@@ -392,7 +417,7 @@ class Builder {
     const rowH = Math.min(0.8, 4.7 / (t.rows.length + 1));
     const rev = <T,>(a: T[]) => [...a].reverse(); // ستون اول سمت راست
     const cell = (text: string, color: string, fill: string, bold = false) => ({
-      text: this.txt(text),
+      text: this.cellRuns(text, size, color, bold),
       options: { fontFace: this.font, fontSize: size, color, bold, align: "right" as const, valign: "middle" as const,
         rtlMode: true, lang: "fa-IR", fill: { color: fill },
         border: [{ type: "none" }, { type: "none" }, { type: "solid", pt: 0.75, color: this.t.muted }, { type: "none" }] as any },
@@ -416,17 +441,17 @@ class Builder {
     const ring = c.type === "pie" || c.type === "doughnut"; // سهم اجزا از یک کل
     const stacked = c.type === "stacked";
     const type = c.type === "line" ? this.p.ChartType.line : c.type === "pie" ? this.p.ChartType.pie : c.type === "doughnut" ? this.p.ChartType.doughnut : this.p.ChartType.bar;
-    const font = { fontFace: this.font, color: this.t.text } as const;
+    const font = { fontFace: this.cfont, color: this.t.text } as const;
     const cwid = hasText ? 7.0 : W - 2 * M;
     if (this.ac) this.card(s, M, 1.8, cwid, 4.55);
     s.addChart(type, data as any, {
       x: this.ac ? M + 0.15 : M, y: this.ac ? 1.9 : 1.8, w: this.ac ? cwid - 0.3 : cwid, h: this.ac ? 4.35 : 4.55,
       chartColors: ring ? palette.slice(0, labels.length) : palette.slice(0, data.length),
-      showLegend: ring || data.length > 1, legendPos: "b", legendFontFace: this.font, legendFontSize: 14, legendColor: this.t.text,
-      catAxisLabelFontFace: this.font, catAxisLabelFontSize: 14, catAxisLabelColor: this.t.text,
-      valAxisLabelFontFace: this.font, valAxisLabelFontSize: 13, valAxisLabelColor: this.t.muted,
+      showLegend: ring || data.length > 1, legendPos: "b", legendFontFace: this.cfont, legendFontSize: 14, legendColor: this.t.text,
+      catAxisLabelFontFace: this.cfont, catAxisLabelFontSize: 14, catAxisLabelColor: this.t.text,
+      valAxisLabelFontFace: this.cfont, valAxisLabelFontSize: 13, valAxisLabelColor: this.t.muted,
       valGridLine: { color: this.t.muted, size: 0.5, style: "dash" } as any, catGridLine: { style: "none" } as any,
-      showValue: !ring, showPercent: ring, dataLabelFontFace: this.font, dataLabelFontSize: 13, dataLabelColor: ring || stacked ? "FFFFFF" : font.color,
+      showValue: !ring, showPercent: ring, dataLabelFontFace: this.cfont, dataLabelFontSize: 13, dataLabelColor: ring || stacked ? "FFFFFF" : font.color,
       ...(c.type === "line" ? { lineSize: 3, lineDataSymbolSize: 9 } : {}),
       ...(c.type === "bar" || stacked ? { barGapWidthPct: 60 } : {}),
       ...(stacked ? { barGrouping: "stacked" } : {}),
