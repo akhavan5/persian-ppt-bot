@@ -49,6 +49,35 @@ function toBase64(bytes: Uint8Array): string {
 const B_MISSING = /([0-9]*[A-Za-z](?:[A-Za-z0-9 .,:\-+\/()%&#@_'’"]*[A-Za-z0-9)%"'])?|[;&#@_'"?<>$~^|\\…–—→←`]+)/;
 const B_FALLBACK = "Times New Roman";
 
+/**
+ * تقسیم متن به تکه‌های «فارسی» و «لاتین» برای فونت B.
+ * پرانتزِ بدون جفت (مثل « ) » آخرِ «(Food)») از تکه‌ی لاتین بیرون و به تکه‌ی فارسی می‌رود؛
+ * وگرنه پرانتز میان دو run با زبان/فونت متفاوت می‌افتد و در PowerPoint وارونه/دوبل دیده می‌شود: ((Food)
+ */
+function splitB(t: string): { text: string; fb: boolean }[] {
+  const out: { text: string; fb: boolean }[] = [];
+  const push = (text: string, fb: boolean) => {
+    if (!text) return;
+    const l = out[out.length - 1];
+    if (l && l.fb === fb) l.text += text; else out.push({ text, fb });
+  };
+  t.split(B_MISSING).forEach((p, i) => {
+    if (i % 2 === 0) { push(p, false); return; } // تکه‌ی فارسی
+    const open: number[] = [], bad = new Set<number>();
+    for (let k = 0; k < p.length; k++) {
+      if (p[k] === "(") open.push(k);
+      else if (p[k] === ")") { if (open.length) open.pop(); else bad.add(k); }
+    }
+    open.forEach((k) => bad.add(k));
+    let buf = "";
+    for (let k = 0; k < p.length; k++) {
+      if (bad.has(k)) { push(buf, true); buf = ""; push(p[k], false); } else buf += p[k];
+    }
+    push(buf, true);
+  });
+  return out;
+}
+
 interface TextOpts {
   bold?: boolean;
   align?: "right" | "center" | "left";
@@ -103,10 +132,12 @@ class Builder {
   private cellRuns(text: string, size: number, color: string, bold: boolean): any {
     const t = this.txt(text);
     if (!isBFont(this.font) || !B_MISSING.test(t)) return t;
-    return t.split(B_MISSING).filter((x) => x !== "").map((x) => {
-      const fb = x.replace(B_MISSING, "") === "";
-      return { text: x, options: { fontFace: fb ? B_FALLBACK : this.font, fontSize: size, color, bold, lang: fb ? "en-US" : "fa-IR" } };
-    });
+    const segs = splitB(t);
+    if (segs.every((g) => !g.fb)) return t;
+    return segs.map((g) => ({
+      text: g.text,
+      options: { fontFace: g.fb ? B_FALLBACK : this.font, fontSize: size, color, bold, lang: g.fb ? "en-US" : "fa-IR" },
+    }));
   }
   /** نمودار نمی‌تواند چند فونت داشته باشد؛ برای فونت B از Tahoma (دارای حروف فارسی و لاتین) استفاده می‌شود */
   private get cfont() { return isBFont(this.font) ? "Tahoma" : this.font; }
@@ -165,13 +196,13 @@ class Builder {
       };
       const txt = this.txt(para);
       // فونت B: تکه‌های لاتین/علامت‌های ناموجود جدا و با Times New Roman نوشته می‌شوند (فقط اولین تکه‌ی هر پاراگراف گزینه‌های پاراگراف را می‌گیرد)
-      const segs = !o.font && isBFont(this.font) ? txt.split(B_MISSING).filter((x) => x !== "") : [txt];
-      if (segs.length <= 1 && !(segs[0] && B_MISSING.test(segs[0]) && !o.font && isBFont(this.font))) return [{ text: txt, options: para0 }];
-      return segs.map((t, k) => {
-        const fb = isBFont(this.font) && B_MISSING.test(t) && t.replace(B_MISSING, "") === "";
+      const useB = !o.font && isBFont(this.font);
+      const segs = useB ? splitB(txt) : [];
+      if (!useB || segs.every((g) => !g.fb)) return [{ text: txt, options: para0 }];
+      return segs.map((g, k) => {
         const last = k === segs.length - 1;
-        const run = { fontFace: fb ? B_FALLBACK : face, fontSize: size2, bold: !!o.bold, color, lang: fb ? "en-US" : "fa-IR", breakLine: last };
-        return { text: t, options: k === 0 ? { ...para0, ...run } : run };
+        const run = { fontFace: g.fb ? B_FALLBACK : face, fontSize: size2, bold: !!o.bold, color, lang: g.fb ? "en-US" : "fa-IR", breakLine: last };
+        return { text: g.text, options: k === 0 ? { ...para0, ...run } : run };
       });
     });
     s.addText(runs as any, { x, y, w, h, margin: 0, valign: o.valign ?? "top", fit: "none", wrap: true });
