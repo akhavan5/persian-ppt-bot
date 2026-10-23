@@ -16,8 +16,8 @@ android {
         applicationId = "ir.pptsaz.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 7      // نسخه‌ی TWA قبلی ۲ بود؛ باید بزرگ‌تر باشد تا روی آن نصب شود
-        versionName = "2.3.0"
+        versionCode = 8      // نسخه‌ی TWA قبلی ۲ بود؛ باید بزرگ‌تر باشد تا روی آن نصب شود
+        versionName = "2.4.0"
     }
 
     signingConfigs {

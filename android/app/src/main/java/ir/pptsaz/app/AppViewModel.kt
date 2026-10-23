@@ -91,6 +91,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     _state.update { it.copy(config = cfg, me = null, screen = Screen.Login, error = null) }
                 } else {
                     _state.update { it.copy(config = cfg, me = me, screen = Screen.Main, error = null) }
+                    if (me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.")
                     loadFiles()
                     if (me.activeJob != null && _state.value.job == null) watch(me.activeJob)
                 }
@@ -153,7 +154,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ ساخت ارائه
 
-    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?) {
+    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, imageCount: Int) {
         if (topic.trim().length < 3) {
             toast("موضوع ارائه را بنویسید")
             return
@@ -161,13 +162,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster)
+                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, imageCount)
                 _state.update { it.copy(busy = false) }
                 if (id.isEmpty()) toast("شروع ساخت انجام نشد") else watch(id)
             } catch (e: ApiException) {
                 _state.update { it.copy(busy = false) }
                 toast(e.message ?: "")
-                if (e.needPlan || e.noCredit) _state.update { it.copy(tab = 2) }
+                if (e.needPlan || e.noCredit) _state.update { it.copy(tab = 3) }
             }
         }
     }
@@ -340,25 +341,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ تنظیمات و خرید
 
-    fun setSetting(key: String, value: String) {
-        val me = _state.value.me ?: return
+    private fun applySetting(s: Settings, key: String, value: Any): Settings = when (key) {
+        "theme" -> s.copy(theme = value as String)
+        "template" -> s.copy(template = value as String)
+        "tone" -> s.copy(tone = value as String)
+        "font" -> s.copy(font = value as String)
+        "model" -> s.copy(model = value as String)
+        "mode" -> s.copy(mode = value as String)
+        "slides" -> s.copy(slides = value as Int)
+        "imageCount" -> s.copy(imageCount = value as Int)
+        "digits" -> s.copy(digits = value as Boolean)
+        "sources" -> s.copy(sources = value as Boolean)
+        "questions" -> s.copy(questions = value as Boolean)
+        else -> s
+    }
+
+    fun setSetting(key: String, value: Any) {
         viewModelScope.launch {
             try {
-                Api.putSettings(key, value)
-                val s = me.settings
-                val ns = when (key) {
-                    "theme" -> s.copy(theme = value)
-                    "template" -> s.copy(template = value)
-                    "tone" -> s.copy(tone = value)
-                    "font" -> s.copy(font = value)
-                    "model" -> s.copy(model = value)
-                    else -> s
-                }
-                _state.update { st -> st.copy(me = st.me?.copy(settings = ns)) }
+                Api.putSetting(key, value)
+                _state.update { st -> st.copy(me = st.me?.let { m -> m.copy(settings = applySetting(m.settings, key, value)) }) }
             } catch (e: ApiException) {
                 toast(e.message ?: "")
             }
         }
+    }
+
+    fun telegramSend(tgId: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val sent = Api.telegramSend(normDigits(tgId))
+                if (sent) toast("کد در تلگرام ارسال شد") else {
+                    reloadMe()
+                    toast("تلگرام قبلاً وصل شده است ✓")
+                }
+                onDone(sent)
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+                onDone(false)
+            }
+        }
+    }
+
+    fun telegramVerify(code: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                Api.telegramVerify(normDigits(code))
+                reloadMe()
+                toast("تلگرام به حساب وصل شد ✓")
+                onDone(true)
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+                onDone(false)
+            }
+        }
+    }
+
+    fun openUrl(url: String) {
+        _events.trySend(Event.OpenUrl(url))
     }
 
     fun buy(planId: String) {

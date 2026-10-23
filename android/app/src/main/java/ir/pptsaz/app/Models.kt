@@ -3,9 +3,9 @@ package ir.pptsaz.app
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class Opt(val key: String, val name: String, val color: String? = null)
+data class Opt(val key: String, val name: String, val color: String? = null, val hint: String = "")
 
-data class PlanInfo(val id: String, val name: String, val price: Int, val credits: Int, val days: Int, val maxSlides: Int)
+data class PlanInfo(val id: String, val name: String, val price: Int, val credits: Int, val days: Int, val maxSlides: Int, val maxImages: Int, val url: String)
 
 data class ModelOpt(val id: String, val name: String, val brand: String, val free: Boolean)
 
@@ -20,9 +20,13 @@ data class Config(
     val link: Boolean,
     val poster: Boolean,
     val models: List<ModelOpt>,
+    val dailyFree: Int,
 )
 
-data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "")
+data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "",
+    val mode: String = "normal", val digits: Boolean = false, val sources: Boolean = false, val questions: Boolean = false,
+    val imageCount: Int = 0,
+)
 
 data class Me(
     val name: String,
@@ -31,7 +35,13 @@ data class Me(
     val unlimited: Boolean,
     val credits: Int,
     val maxSlides: Int,
+    val maxImages: Int,
     val planId: String?,
+    val planExp: Long,
+    val planCredits: Int,
+    val bonus: Int,
+    val dailyFree: Boolean,
+    val telegram: String,
     val settings: Settings,
     val activeJob: String?,
     val plans: List<PlanInfo>,
@@ -55,7 +65,7 @@ fun parseConfig(j: JSONObject): Config {
     val fonts = j.optJSONArray("fonts")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
     val slides = j.optJSONArray("slideChoices")?.let { a -> (0 until a.length()).map { a.optInt(it) } } ?: listOf(5, 8, 10)
     return Config(
-        templates = j.optJSONArray("templates").objects().map { Opt(it.str("key"), (it.str("emoji") + " " + it.str("name")).trim()) },
+        templates = j.optJSONArray("templates").objects().map { Opt(it.str("key"), (it.str("emoji") + " " + it.str("name")).trim(), null, it.str("hint")) },
         themes = j.optJSONArray("themes").objects().map { Opt(it.str("key"), it.str("name"), it.str("primary").ifEmpty { null }) },
         tones = toneList,
         fonts = fonts,
@@ -65,6 +75,7 @@ fun parseConfig(j: JSONObject): Config {
         link = j.optBoolean("link"),
         models = j.optJSONArray("models").objects().map { ModelOpt(it.str("id"), it.str("name"), it.str("brand"), it.optBoolean("free", true)) },
         poster = j.optBoolean("poster"),
+        dailyFree = j.optInt("dailyFree"),
     )
 }
 
@@ -79,11 +90,23 @@ fun parseMe(j: JSONObject): Me? {
         unlimited = cr?.optBoolean("unlimited") ?: false,
         credits = cr?.optInt("total") ?: 0,
         maxSlides = j.optInt("maxSlides", 8),
+        maxImages = j.optInt("maxImages", 1),
+        planExp = j.optJSONObject("plan")?.optLong("exp") ?: 0L,
+        planCredits = cr?.optInt("plan") ?: 0,
+        bonus = cr?.optInt("bonus") ?: 0,
+        dailyFree = j.optBoolean("dailyFree"),
+        telegram = j.str("telegram"),
         planId = j.optJSONObject("plan")?.str("id")?.ifEmpty { null },
-        settings = Settings(st.str("theme"), st.str("template"), st.str("tone"), st.str("font"), st.optInt("slides", 8), st.str("model")),
+        settings = Settings(
+            theme = st.str("theme"), template = st.str("template"), tone = st.str("tone"), font = st.str("font"),
+            slides = st.optInt("slides", 8), model = st.str("model"),
+            mode = st.str("mode").ifEmpty { "normal" },
+            digits = st.optBoolean("digits"), sources = st.optBoolean("sources"), questions = st.optBoolean("questions"),
+            imageCount = st.optInt("imageCount", if (st.optBoolean("images")) 1 else 0),
+        ),
         activeJob = j.str("activeJob").ifEmpty { null },
         plans = j.optJSONArray("plans").objects().map {
-            PlanInfo(it.str("id"), it.str("name"), it.optInt("price"), it.optInt("credits"), it.optInt("days"), it.optInt("maxSlides"))
+            PlanInfo(it.str("id"), it.str("name"), it.optInt("price"), it.optInt("credits"), it.optInt("days"), it.optInt("maxSlides"), it.optInt("maxImages"), it.str("url"))
         },
         support = j.str("support"),
     )

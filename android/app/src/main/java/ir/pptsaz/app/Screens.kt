@@ -15,7 +15,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import android.content.Context
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.webkit.WebView
+import androidx.compose.ui.platform.LocalContext
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -192,7 +196,7 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
         },
         bottomBar = {
             NavigationBar {
-                listOf("ساخت" to "✨", "فایل‌ها" to "📁", "حساب" to "👤").forEachIndexed { i, (label, icon) ->
+                listOf("ساخت" to "✨", "فایل‌ها" to "📁", "تنظیمات" to "⚙️", "حساب" to "👤").forEachIndexed { i, (label, icon) ->
                     NavigationBarItem(
                         selected = st.tab == i,
                         onClick = { vm.setTab(i) },
@@ -207,6 +211,7 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
             when (st.tab) {
                 0 -> CreateTab(st, me, vm)
                 1 -> FilesTab(st, vm)
+                2 -> SettingsTab(st, me, vm)
                 else -> AccountTab(st, me, vm)
             }
         }
@@ -227,7 +232,6 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel) {
     var source by rememberSaveable { mutableStateOf("") }
     var handout by rememberSaveable { mutableStateOf(false) }
     var poster by rememberSaveable { mutableStateOf("") }
-    var slides by rememberSaveable { mutableStateOf(me.settings.slides.coerceAtMost(me.maxSlides)) }
     var link by rememberSaveable { mutableStateOf("") }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.importFile(uri)
@@ -261,12 +265,27 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel) {
             items(cfg.slideChoices) { n ->
                 val locked = n > me.maxSlides
                 FilterChip(
-                    selected = slides == n,
+                    selected = me.settings.slides == n,
                     onClick = {
                         if (locked) vm.toast("برای بیش از " + me.maxSlides.fa() + " اسلاید به اشتراک نیاز دارید")
-                        else slides = n
+                        else vm.setSetting("slides", n)
                     },
                     label = { Text((if (locked) "🔒 " else "") + n.fa()) },
+                )
+            }
+        }
+
+        Text("تعداد تصویر", fontWeight = FontWeight.Bold)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items((0..6).toList()) { n ->
+                val locked = n > me.maxImages
+                FilterChip(
+                    selected = me.settings.imageCount == n,
+                    onClick = {
+                        if (locked) vm.toast("ساخت " + n.fa() + " تصویر در هر ارائه فقط با پلن‌های پولی ممکن است")
+                        else vm.setSetting("imageCount", n)
+                    },
+                    label = { Text((if (locked) "🔒 " else "") + (if (n == 0) "بدون تصویر" else n.fa())) },
                 )
             }
         }
@@ -326,7 +345,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel) {
         }
 
         Button(
-            onClick = { vm.generate(topic, slides, handout, source, poster.ifEmpty { null }) },
+            onClick = { vm.generate(topic, me.settings.slides, handout, source, poster.ifEmpty { null }, me.settings.imageCount) },
             enabled = !running && !st.busy,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("ساخت ارائه") }
@@ -392,7 +411,7 @@ private fun fmtDate(t: Long): String = try {
 fun FilesTab(st: UiState, vm: AppViewModel) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("فایل‌های شما", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("فایل‌های ۲۴ ساعت اخیر", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             TextButton(onClick = { vm.loadFiles() }, enabled = !st.filesLoading) { Text("به‌روزرسانی") }
         }
         if (st.filesLoading && st.files.isEmpty()) {
@@ -429,11 +448,83 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
     }
 }
 
+// ------------------------------------------------------------------ تنظیمات
+
+private val MODES = listOf(
+    Triple("normal", "عادی", "ساختار آزاد، متناسب با موضوع"),
+    Triple("student", "دانشجویی", "فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع (حداقل ۸ اسلاید)"),
+    Triple("business", "کسب‌وکار", "خلاصه‌ی مدیریتی، مسئله و راه‌حل، جدول و نمودار، برنامه‌ی اجرا و گام‌های بعدی (حداقل ۸ اسلاید)"),
+    Triple("teacher", "معلم", "اهداف درس، پرسش آغازین، محتوا، فعالیت کلاسی، جمع‌بندی و پرسش‌های مرور (حداقل ۸ اسلاید)"),
+    Triple("thesis", "دفاع پایان‌نامه", "مسئله، اهداف، پیشینه، روش، یافته‌ها، نتیجه‌گیری، پیشنهادها و منابع (حداقل ۱۰ اسلاید)"),
+)
+
+@Composable
+fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
+    val cfg = st.config ?: return
+    val s = me.settings
+    val canExtra = me.unlimited || me.planId != null
+    val gray = Color(0xFF64748B)
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("تنظیمات ظاهر و محتوا", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        Text("قالب", fontWeight = FontWeight.Bold)
+        ChipRow(cfg.templates, s.template) { vm.setSetting("template", it) }
+        cfg.templates.firstOrNull { it.key == s.template }?.hint?.takeIf { it.isNotEmpty() }?.let { Text(it, color = gray) }
+
+        Text("تم رنگی", fontWeight = FontWeight.Bold)
+        ChipRow(cfg.themes, s.theme) { vm.setSetting("theme", it) }
+
+        Text("لحن", fontWeight = FontWeight.Bold)
+        ChipRow(cfg.tones, s.tone) { vm.setSetting("tone", it) }
+
+        Text("فونت", fontWeight = FontWeight.Bold)
+        ChipRow(cfg.fonts.map { Opt(it, it) }, s.font) { vm.setSetting("font", it) }
+        Text("فونت Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد؛ Tahoma و Arial همه‌جا کار می‌کنند.", color = gray)
+
+        Text("حالت ساخت", fontWeight = FontWeight.Bold)
+        ChipRow(MODES.map { Opt(it.first, it.second) }, s.mode) { vm.setSetting("mode", it) }
+        MODES.firstOrNull { it.first == s.mode }?.let { Text(it.third, color = gray) }
+
+        SwitchRow("ارقام فارسی", s.digits) { vm.setSetting("digits", it) }
+        SwitchRow("اسلاید منابع", s.sources) { vm.setSetting("sources", it) }
+        SwitchRow("اسلاید پرسش‌های پایانی", s.questions) { vm.setSetting("questions", it) }
+
+        if (cfg.models.isNotEmpty()) {
+            Text("مدل هوش مصنوعی", fontWeight = FontWeight.Bold)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(cfg.models) { m ->
+                    FilterChip(
+                        selected = s.model == m.id,
+                        onClick = { vm.setSetting("model", m.id) },
+                        label = { Text((if (!m.free && !canExtra) "🔒 " else "") + m.name) },
+                    )
+                }
+            }
+            if (!canExtra && cfg.models.any { !it.free }) {
+                Text("مدل‌های قفل‌دار فقط با اشتراک فعال قابل استفاده‌اند.", color = gray)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
 // ------------------------------------------------------------------ حساب
 
 @Composable
 fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
     val cfg = st.config
+    val gray = Color(0xFF64748B)
     var nameDialog by rememberSaveable { mutableStateOf(false) }
     if (nameDialog) NameDialog(me.name, vm) { nameDialog = false }
     Column(
@@ -443,20 +534,30 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(me.name.ifBlank { "کاربر" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                if (me.email.isNotEmpty()) Text(me.email, color = Color(0xFF64748B))
-                if (me.mobile.isNotEmpty()) Text(me.mobile, color = Color(0xFF64748B))
-                Row {
-                    TextButton(onClick = { nameDialog = true }) { Text("ویرایش نام") }
+                if (me.email.isNotEmpty()) Text(me.email, color = gray)
+                if (me.mobile.isNotEmpty()) Text(me.mobile, color = gray)
+                TextButton(onClick = { nameDialog = true }) { Text("ویرایش نام") }
+                if (me.unlimited) {
+                    Text("اعتبار: نامحدود")
+                } else {
+                    Text("اعتبار باقی‌مانده: " + me.credits.fa())
+                    if (me.planCredits > 0 || me.bonus > 0) {
+                        Text("پلن: " + me.planCredits.fa() + " • هدیه: " + me.bonus.fa(), color = gray)
+                    }
                 }
-                Text(if (me.unlimited) "اعتبار: نامحدود" else "اعتبار باقی‌مانده: " + me.credits.fa())
-                me.planId?.let { id ->
-                    val name = me.plans.firstOrNull { it.id == id }?.name ?: id
-                    Text("اشتراک فعال: $name")
+                val planName = me.planId?.let { id -> me.plans.firstOrNull { it.id == id }?.name ?: id }
+                if (planName != null) {
+                    val until = if (me.planExp > 0) " تا " + fmtDate(me.planExp) else ""
+                    Text("👑 پلن $planName$until")
+                } else {
+                    Text("پلن رایگان")
                 }
             }
         }
+        if (cfg != null && cfg.dailyFree > 0 && !me.unlimited) {
+            Text("🎁 هر روز " + cfg.dailyFree.fa() + " اعتبار رایگان هدیه می‌گیری.", color = gray)
+        }
 
-        // خرید اشتراک
         if (me.plans.isNotEmpty()) {
             Text("اشتراک‌ها", fontWeight = FontWeight.Bold)
             me.plans.forEach { p ->
@@ -464,52 +565,98 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(p.name, fontWeight = FontWeight.Bold)
-                            Text(p.price.fa() + " هزار تومان • " + p.credits.fa() + " اعتبار • تا " + p.maxSlides.fa() + " اسلاید", color = Color(0xFF64748B))
+                            Text(
+                                p.price.fa() + " هزار تومان • " + p.credits.fa() + " اعتبار • تا " + p.maxSlides.fa() +
+                                    " اسلاید • تا " + p.maxImages.fa() + " تصویر • " + p.days.fa() + " روز",
+                                color = gray,
+                            )
                         }
-                        if (cfg?.payEnabled == true) {
-                            Button(onClick = { vm.buy(p.id) }) { Text("خرید") }
-                        }
+                        Button(onClick = {
+                            when {
+                                cfg?.payEnabled == true -> vm.buy(p.id)
+                                p.url.isNotEmpty() -> vm.openUrl(p.url)
+                                else -> vm.openSite()
+                            }
+                        }) { Text("خرید") }
                     }
                 }
             }
-            if (cfg?.payEnabled != true) {
-                TextButton(onClick = { vm.openSite() }) { Text("خرید از سایت pptsaz.ir") }
-            } else {
-                Text("پرداخت در مرورگر انجام می‌شود و بعد از آن به اپ برمی‌گردید.", color = Color(0xFF64748B))
-            }
+            Text(
+                if (cfg?.payEnabled == true) "پرداخت در مرورگر انجام می‌شود و بعد از آن به اپ برمی‌گردید."
+                else "پرداخت از طریق ربات تلگرام انجام می‌شود.",
+                color = gray,
+            )
         }
 
-        // تنظیمات پیش‌فرض ساخت
-        if (cfg != null) {
-            Text("قالب", fontWeight = FontWeight.Bold)
-            ChipRow(cfg.templates, me.settings.template) { vm.setSetting("template", it) }
-            Text("رنگ‌بندی", fontWeight = FontWeight.Bold)
-            ChipRow(cfg.themes, me.settings.theme) { vm.setSetting("theme", it) }
-            Text("لحن", fontWeight = FontWeight.Bold)
-            ChipRow(cfg.tones, me.settings.tone) { vm.setSetting("tone", it) }
-            Text("فونت", fontWeight = FontWeight.Bold)
-            ChipRow(cfg.fonts.map { Opt(it, it) }, me.settings.font) { vm.setSetting("font", it) }
-            if (cfg.models.isNotEmpty()) {
-                val canExtra = me.unlimited || me.planId != null
-                Text("مدل هوش مصنوعی", fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(cfg.models) { m ->
-                        FilterChip(
-                            selected = me.settings.model == m.id,
-                            onClick = { vm.setSetting("model", m.id) },
-                            label = { Text((if (!m.free && !canExtra) "🔒 " else "") + m.name) },
-                        )
-                    }
-                }
-                if (!canExtra && cfg.models.any { !it.free }) {
-                    Text("مدل‌های قفل‌دار فقط با اشتراک فعال قابل استفاده‌اند.", color = Color(0xFF64748B))
-                }
-            }
-        }
+        TelegramCard(me, vm)
 
-        if (me.support.isNotEmpty()) Text("پشتیبانی: " + me.support, color = Color(0xFF64748B))
+        if (me.support.isNotEmpty()) Text("پشتیبانی: " + me.support, color = gray)
         OutlinedButton(onClick = { vm.logout() }, modifier = Modifier.fillMaxWidth()) { Text("خروج از حساب") }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun TelegramCard(me: Me, vm: AppViewModel) {
+    var tg by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
+    var sent by rememberSaveable { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("اتصال تلگرام", fontWeight = FontWeight.Bold)
+            if (me.telegram.isNotEmpty()) {
+                Text("✅ وصل است (" + me.telegram + ")")
+            } else {
+                Text(
+                    "برای استفاده‌ی مشترک از اعتبار در ربات، آیدی عددی تلگرام خود را وارد کنید. در ربات @pptsaz_bot دستور /id را بزنید و عدد را کپی کنید.",
+                    color = Color(0xFF64748B),
+                )
+                OutlinedTextField(
+                    value = tg,
+                    onValueChange = { tg = it.filter { c -> c.isDigit() }.take(16) },
+                    singleLine = true,
+                    enabled = !sent,
+                    label = { Text("آیدی عددی تلگرام") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (!sent) {
+                    Button(
+                        enabled = !busy && tg.length >= 5,
+                        onClick = {
+                            busy = true
+                            vm.telegramSend(tg) { codeSent ->
+                                busy = false
+                                if (codeSent) sent = true
+                            }
+                        },
+                    ) { Text("ارسال کد") }
+                } else {
+                    OutlinedTextField(
+                        value = code,
+                        onValueChange = { code = it.filter { c -> c.isDigit() }.take(8) },
+                        singleLine = true,
+                        label = { Text("کد ۶ رقمی تلگرام") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Button(
+                        enabled = !busy && code.length >= 4,
+                        onClick = {
+                            busy = true
+                            vm.telegramVerify(code) { ok ->
+                                busy = false
+                                if (ok) {
+                                    sent = false
+                                    code = ""
+                                }
+                            }
+                        },
+                    ) { Text("اتصال") }
+                }
+            }
+        }
     }
 }
 
@@ -602,10 +749,18 @@ fun PreviewDialog(id: String, vm: AppViewModel) {
         Api.syncCookiesToWebView()
         Api.previewUrl(id)
     }
+    val ctx = LocalContext.current
+    var web by remember { mutableStateOf<WebView?>(null) }
     Dialog(onDismissRequest = { vm.closeViewer() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(Modifier.fillMaxSize().background(Color.White)) {
             Row(Modifier.fillMaxWidth().background(Brand).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("پیش‌نمایش اسلایدها", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                TextButton(onClick = {
+                    web?.let { w ->
+                        val pm = ctx.getSystemService(Context.PRINT_SERVICE) as PrintManager
+                        pm.print("presentation", w.createPrintDocumentAdapter("presentation"), PrintAttributes.Builder().build())
+                    }
+                }) { Text("ذخیره PDF", color = Color.White) }
                 TextButton(onClick = { vm.closeViewer() }) { Text("بستن", color = Color.White) }
             }
             AndroidView(
@@ -615,7 +770,7 @@ fun PreviewDialog(id: String, vm: AppViewModel) {
                         settings.domStorageEnabled = true
                         webViewClient = WebViewClient()
                         loadUrl(url)
-                    }
+                    }.also { web = it }
                 },
                 onRelease = { it.destroy() },
                 modifier = Modifier.fillMaxSize(),

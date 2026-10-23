@@ -130,8 +130,8 @@ object Api {
 
     suspend fun files(): List<FileItem> = parseFiles(call("GET", "/api/files"))
 
-    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?): String {
-        val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout)
+    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, imageCount: Int): String {
+        val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout).put("imageCount", imageCount)
         if (poster != null) b.put("poster", poster)
         if (source.isNotEmpty()) b.put("source", source)
         return call("POST", "/api/generate", b).optString("jobId")
@@ -139,8 +139,18 @@ object Api {
 
     suspend fun job(id: String): JSONObject = call("GET", "/api/jobs/" + Uri.encode(id))
 
-    suspend fun putSettings(key: String, value: String) {
+    suspend fun putSetting(key: String, value: Any) {
         call("PUT", "/api/settings", JSONObject().put(key, value))
+    }
+
+    /** true یعنی کد در تلگرام ارسال شد؛ false یعنی تلگرام از قبل وصل بوده است. */
+    suspend fun telegramSend(tgId: String): Boolean {
+        val j = call("POST", "/api/profile/telegram/send", JSONObject().put("tgId", tgId))
+        return !j.optBoolean("already")
+    }
+
+    suspend fun telegramVerify(code: String) {
+        call("POST", "/api/profile/telegram/verify", JSONObject().put("code", code))
     }
 
     /** متن PDF یا عکس را استخراج می‌کند (سرور کار را در پس‌زمینه انجام می‌دهد و ما وضعیت را پیگیری می‌کنیم). */
