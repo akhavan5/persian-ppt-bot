@@ -442,7 +442,8 @@ async function preview(env: Env, user: WebUser, id: string): Promise<Response> {
 }
 
 async function previewImage(env: Env, user: WebUser, id: string, slide: number): Promise<Response> {
-  const img = await loadPreviewImage(env, user.id, id, slide).catch(() => null);
+  const pv = await loadPreview(env, user.id, id).catch(() => null); // قالب لازم است: در آکادمیک اسلاید «بسم‌الله» شماره‌ی اسلایدهای PPTX را یکی جلو می‌برد
+  const img = await loadPreviewImage(env, user.id, id, slide, pv?.template).catch(() => null);
   if (!img) return err("پیدا نشد", 404);
   return new Response(img.data, { headers: { "content-type": img.type, ...SEC_HEADERS, "cache-control": "private, max-age=3600" } });
 }

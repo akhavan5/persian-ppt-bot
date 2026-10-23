@@ -11,7 +11,7 @@ import puppeteer from "@cloudflare/puppeteer";
 import JSZip from "jszip";
 import type { Env } from "./env";
 import type { Uid } from "./settings";
-import { loadFileDirect, loadPreview } from "./files";
+import { loadFileDirect, loadPreview, pptxImageName } from "./files";
 import { pdfPageHeight, renderPreview } from "./preview";
 
 const TTL = 24 * 60 * 60;
@@ -58,7 +58,7 @@ export async function buildDeckPdf(env: Env, userId: Uid, id: string): Promise<P
     if (f) {
       const zip = await JSZip.loadAsync(f.data);
       for (const i of p.images) {
-        const name = Object.keys(zip.files).find((n) => n.startsWith(`ppt/media/image-${i + 1}-`));
+        const name = pptxImageName(zip, p.template, i);
         if (!name) continue;
         const bytes = await zip.files[name].async("uint8array");
         pdfImgs[i] = `data:${/\.png$/i.test(name) ? "image/png" : "image/jpeg"};base64,${toBase64(bytes)}`;

@@ -75,11 +75,17 @@ export async function loadPreview(env: Env, userId: Uid, id: string): Promise<Pr
 }
 
 /** تصویر اسلاید شماره‌ی slide (از صفر) را از داخل فایل PPTX برمی‌گرداند؛ PptxGenJS تصویر هر اسلاید را ppt/media/image-<شماره‌ی اسلاید از ۱>-<n>.<پسوند> ذخیره می‌کند. */
-export async function loadPreviewImage(env: Env, userId: Uid, id: string, slide: number): Promise<{ data: Uint8Array; type: string } | null> {
+export const pptxImageName = (zip: JSZip, template: string | undefined, slide: number): string | undefined => {
+  // در قالب آکادمیک اسلاید «بسم‌الله» پیش از همه در PPTX هست و شماره‌ی اسلایدها را یکی جلو می‌برد؛ در پیش‌نمایش/PDF جدا رسم می‌شود
+  const no = slide + 1 + (template === "academic" ? 1 : 0);
+  return Object.keys(zip.files).find((n) => n.startsWith(`ppt/media/image-${no}-`));
+};
+
+export async function loadPreviewImage(env: Env, userId: Uid, id: string, slide: number, template?: string): Promise<{ data: Uint8Array; type: string } | null> {
   const f = await loadFileDirect(env, userId, id);
   if (!f) return null;
   const zip = await JSZip.loadAsync(f.data);
-  const name = Object.keys(zip.files).find((n) => n.startsWith(`ppt/media/image-${slide + 1}-`));
+  const name = pptxImageName(zip, template, slide);
   if (!name) return null;
   return { data: await zip.files[name].async("uint8array"), type: /\.png$/i.test(name) ? "image/png" : "image/jpeg" };
 }
