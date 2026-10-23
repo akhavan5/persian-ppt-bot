@@ -4,7 +4,9 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +24,14 @@ data class JobState(
     val failed: Boolean = false,
     val title: String = "",
     val handoutId: String? = null,
+    val posterId: String? = null,
+    val posterFailed: Boolean = false,
 )
+
+sealed interface Viewer {
+    data class Poster(val id: String) : Viewer
+    data class Preview(val id: String) : Viewer
+}
 
 data class UiState(
     val screen: Screen = Screen.Loading,
@@ -35,6 +44,9 @@ data class UiState(
     val otpSent: Boolean = false,
     val error: String? = null,
     val job: JobState? = null,
+    val extractBusy: String? = null,
+    val extractedText: String? = null,
+    val viewer: Viewer? = null,
 )
 
 sealed interface Event {
@@ -42,6 +54,8 @@ sealed interface Event {
     data class OpenUrl(val url: String) : Event
     data class OpenFile(val uri: Uri, val mime: String, val name: String) : Event
 }
+
+private const val MAX_SOURCE_CHARS = 100_000
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(UiState())
@@ -139,7 +153,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ ساخت ارائه
 
-    fun generate(topic: String, slides: Int, handout: Boolean, source: String) {
+    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?) {
         if (topic.trim().length < 3) {
             toast("موضوع ارائه را بنویسید")
             return
@@ -147,7 +161,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                val id = Api.generate(topic.trim(), slides, handout, source.trim())
+                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster)
                 _state.update { it.copy(busy = false) }
                 if (id.isEmpty()) toast("شروع ساخت انجام نشد") else watch(id)
             } catch (e: ApiException) {
@@ -170,8 +184,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     when (j.optString("state")) {
                         "done" -> {
                             val h = if (j.optString("handout") == "ok") j.optString("handoutId").ifEmpty { null } else null
+                            val posterOk = j.optString("poster") == "ok"
                             _state.update {
-                                it.copy(job = JobState(id, "آماده شد", done = true, title = j.optString("title"), handoutId = h))
+                                it.copy(
+                                    job = JobState(
+                                        id, "آماده شد", done = true, title = j.optString("title"), handoutId = h,
+                                        posterId = if (posterOk) j.optString("posterId").ifEmpty { null } else null,
+                                        posterFailed = j.optString("poster") == "failed",
+                                    )
+                                )
                             }
                             loadFiles()
                             onResume()
@@ -233,6 +254,90 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ------------------------------------------------------------ منبع: فایل و لینک
+
+    fun consumeExtracted() {
+        _state.update { it.copy(extractedText = null) }
+    }
+
+    fun importFile(uri: Uri) {
+        val ctx = getApplication<Application>()
+        viewModelScope.launch {
+            _state.update { it.copy(extractBusy = "در حال خواندن فایل…") }
+            try {
+                val mime = ctx.contentResolver.getType(uri) ?: ""
+                if (mime != "application/pdf" && mime != "image/png" && mime != "image/jpeg") {
+                    throw ApiException("فقط PDF یا عکس PNG/JPG پشتیبانی می‌شود.")
+                }
+                var bytes = withContext(Dispatchers.IO) {
+                    ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } ?: throw ApiException("فایل خوانده نشد.")
+                var m = mime
+                if (mime.startsWith("image/") && bytes.size > 3_800_000) {
+                    bytes = withContext(Dispatchers.Default) { Images.shrink(bytes) }
+                    m = "image/jpeg"
+                } else if (mime == "application/pdf" && bytes.size > 24 * 1024 * 1024) {
+                    throw ApiException("حجم PDF بیشتر از ۲۴ مگابایت است.")
+                }
+                _state.update { it.copy(extractBusy = "در حال استخراج متن (ممکن است چند دقیقه طول بکشد)…") }
+                val text = Api.extractText(bytes, m)
+                _state.update { it.copy(extractBusy = null, extractedText = text) }
+                toast("متن فایل به منبع اضافه شد")
+            } catch (e: ApiException) {
+                _state.update { it.copy(extractBusy = null) }
+                toast(e.message ?: "")
+            } catch (e: Exception) {
+                _state.update { it.copy(extractBusy = null) }
+                toast("خواندن فایل انجام نشد")
+            }
+        }
+    }
+
+    fun importLink(url: String) {
+        if (url.isBlank()) return
+        viewModelScope.launch {
+            _state.update { it.copy(extractBusy = "در حال خواندن صفحه‌ی وب…") }
+            try {
+                val text = Api.linkSource(url.trim())
+                _state.update { it.copy(extractBusy = null, extractedText = text) }
+                toast("متن صفحه به منبع اضافه شد")
+            } catch (e: ApiException) {
+                _state.update { it.copy(extractBusy = null) }
+                toast(e.message ?: "")
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ نمایش پوستر / پیش‌نمایش
+
+    fun openViewer(v: Viewer) {
+        _state.update { it.copy(viewer = v) }
+    }
+
+    fun closeViewer() {
+        _state.update { it.copy(viewer = null) }
+    }
+
+    // ------------------------------------------------------------ پروفایل
+
+    private suspend fun reloadMe() {
+        Api.me()?.let { me -> _state.update { it.copy(me = me) } }
+    }
+
+    fun updateName(name: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                Api.updateName(name.trim())
+                reloadMe()
+                toast("نام ذخیره شد")
+                onDone(true)
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+                onDone(false)
+            }
+        }
+    }
+
     // ------------------------------------------------------------ تنظیمات و خرید
 
     fun setSetting(key: String, value: String) {
@@ -246,6 +351,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     "template" -> s.copy(template = value)
                     "tone" -> s.copy(tone = value)
                     "font" -> s.copy(font = value)
+                    "model" -> s.copy(model = value)
                     else -> s
                 }
                 _state.update { st -> st.copy(me = st.me?.copy(settings = ns)) }

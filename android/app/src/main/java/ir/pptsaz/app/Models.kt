@@ -7,6 +7,8 @@ data class Opt(val key: String, val name: String, val color: String? = null)
 
 data class PlanInfo(val id: String, val name: String, val price: Int, val credits: Int, val days: Int, val maxSlides: Int)
 
+data class ModelOpt(val id: String, val name: String, val brand: String, val free: Boolean)
+
 data class Config(
     val templates: List<Opt>,
     val themes: List<Opt>,
@@ -15,13 +17,17 @@ data class Config(
     val slideChoices: List<Int>,
     val payEnabled: Boolean,
     val otp: Boolean,
+    val link: Boolean,
+    val poster: Boolean,
+    val models: List<ModelOpt>,
 )
 
-data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int)
+data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "")
 
 data class Me(
     val name: String,
     val mobile: String,
+    val email: String,
     val unlimited: Boolean,
     val credits: Int,
     val maxSlides: Int,
@@ -56,6 +62,9 @@ fun parseConfig(j: JSONObject): Config {
         slideChoices = slides,
         payEnabled = j.optBoolean("payEnabled"),
         otp = j.optBoolean("otp"),
+        link = j.optBoolean("link"),
+        models = j.optJSONArray("models").objects().map { ModelOpt(it.str("id"), it.str("name"), it.str("brand"), it.optBoolean("free", true)) },
+        poster = j.optBoolean("poster"),
     )
 }
 
@@ -66,11 +75,12 @@ fun parseMe(j: JSONObject): Me? {
     return Me(
         name = u.str("name"),
         mobile = u.str("mobile"),
+        email = u.str("email"),
         unlimited = cr?.optBoolean("unlimited") ?: false,
         credits = cr?.optInt("total") ?: 0,
         maxSlides = j.optInt("maxSlides", 8),
         planId = j.optJSONObject("plan")?.str("id")?.ifEmpty { null },
-        settings = Settings(st.str("theme"), st.str("template"), st.str("tone"), st.str("font"), st.optInt("slides", 8)),
+        settings = Settings(st.str("theme"), st.str("template"), st.str("tone"), st.str("font"), st.optInt("slides", 8), st.str("model")),
         activeJob = j.str("activeJob").ifEmpty { null },
         plans = j.optJSONArray("plans").objects().map {
             PlanInfo(it.str("id"), it.str("name"), it.optInt("price"), it.optInt("credits"), it.optInt("days"), it.optInt("maxSlides"))

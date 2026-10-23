@@ -16,8 +16,8 @@ android {
         applicationId = "ir.pptsaz.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 3      // نسخه‌ی TWA قبلی ۲ بود؛ باید بزرگ‌تر باشد تا روی آن نصب شود
-        versionName = "2.0.0"
+        versionCode = 7      // نسخه‌ی TWA قبلی ۲ بود؛ باید بزرگ‌تر باشد تا روی آن نصب شود
+        versionName = "2.3.0"
     }
 
     signingConfigs {
@@ -58,6 +58,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.browser:browser:1.8.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }

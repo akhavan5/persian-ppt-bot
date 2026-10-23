@@ -2,7 +2,21 @@
 
 package ir.pptsaz.app
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +54,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -95,6 +110,7 @@ fun Root(st: UiState, vm: AppViewModel) {
 fun LoginScreen(st: UiState, vm: AppViewModel) {
     var mobile by rememberSaveable { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
+    val otpOn = st.config?.otp != false
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -105,46 +121,46 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
         Text("با شماره‌ی موبایل وارد شوید", color = Color(0xFF64748B))
         Spacer(Modifier.height(24.dp))
 
-        if (st.config?.otp == false) {
-            Text("ورود با پیامک فعلاً در دسترس نیست. لطفاً از سایت pptsaz.ir استفاده کنید.", color = MaterialTheme.colorScheme.error)
-            return@Column
-        }
-
-        OutlinedTextField(
-            value = mobile,
-            onValueChange = { mobile = it.filter { c -> c.isDigit() }.take(11) },
-            label = { Text("شماره‌ی موبایل") },
-            placeholder = { Text("09123456789") },
-            singleLine = true,
-            enabled = !st.otpSent && !st.busy,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(12.dp))
-
-        if (st.otpSent) {
+        if (otpOn) {
             OutlinedTextField(
-                value = code,
-                onValueChange = { code = it.filter { c -> c.isDigit() }.take(8) },
-                label = { Text("کد تأیید") },
+                value = mobile,
+                onValueChange = { mobile = it.filter { c -> c.isDigit() }.take(11) },
+                label = { Text("شماره‌ی موبایل") },
+                placeholder = { Text("09123456789") },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                enabled = !st.otpSent && !st.busy,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = { vm.verifyOtp(mobile, code) },
-                enabled = !st.busy && code.length >= 4,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("ورود") }
-            TextButton(onClick = { vm.editMobile() }) { Text("ویرایش شماره") }
+
+            if (st.otpSent) {
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it.filter { c -> c.isDigit() }.take(8) },
+                    label = { Text("کد تأیید") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = { vm.verifyOtp(mobile, code) },
+                    enabled = !st.busy && code.length >= 4,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("ورود") }
+                TextButton(onClick = { vm.editMobile() }) { Text("ویرایش شماره") }
+            } else {
+                Button(
+                    onClick = { vm.sendOtp(mobile) },
+                    enabled = !st.busy && mobile.length >= 10,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("ارسال کد تأیید") }
+            }
         } else {
-            Button(
-                onClick = { vm.sendOtp(mobile) },
-                enabled = !st.busy && mobile.length >= 10,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("ارسال کد تأیید") }
+            Text("ورود با پیامک فعلاً در دسترس نیست. لطفاً از سایت pptsaz.ir استفاده کنید.", color = MaterialTheme.colorScheme.error)
         }
+
         if (st.busy) {
             Spacer(Modifier.height(16.dp))
             CircularProgressIndicator()
@@ -195,6 +211,11 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
             }
         }
     }
+    when (val v = st.viewer) {
+        is Viewer.Poster -> PosterDialog(v.id, vm)
+        is Viewer.Preview -> PreviewDialog(v.id, vm)
+        null -> {}
+    }
 }
 
 // ------------------------------------------------------------------ ساخت
@@ -205,7 +226,19 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel) {
     var topic by rememberSaveable { mutableStateOf("") }
     var source by rememberSaveable { mutableStateOf("") }
     var handout by rememberSaveable { mutableStateOf(false) }
+    var poster by rememberSaveable { mutableStateOf("") }
     var slides by rememberSaveable { mutableStateOf(me.settings.slides.coerceAtMost(me.maxSlides)) }
+    var link by rememberSaveable { mutableStateOf("") }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importFile(uri)
+    }
+    LaunchedEffect(st.extractedText) {
+        val t = st.extractedText
+        if (t != null) {
+            source = if (source.isBlank()) t else source.trimEnd() + "\n\n" + t
+            vm.consumeExtracted()
+        }
+    }
     val job = st.job
     val running = job != null && !job.done && !job.failed
 
@@ -243,6 +276,15 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel) {
             Switch(checked = handout, onCheckedChange = { handout = it })
         }
 
+        if (cfg.poster) {
+            Text("پوستر (تصویر خلاصه‌ی ارائه)", fontWeight = FontWeight.Bold)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(listOf("" to "بدون پوستر", "wide" to "افقی", "tall" to "عمودی")) { (key, label) ->
+                    FilterChip(selected = poster == key, onClick = { poster = key }, label = { Text(label) })
+                }
+            }
+        }
+
         OutlinedTextField(
             value = source,
             onValueChange = { source = it },
@@ -253,8 +295,38 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel) {
             modifier = Modifier.fillMaxWidth(),
         )
 
+        OutlinedButton(
+            onClick = { picker.launch(arrayOf("application/pdf", "image/png", "image/jpeg")) },
+            enabled = !running && st.extractBusy == null,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("📎 افزودن منبع از PDF یا عکس") }
+
+        if (cfg.link) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = link,
+                    onValueChange = { link = it },
+                    label = { Text("آدرس یک صفحه‌ی وب") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = { vm.importLink(link); link = "" },
+                    enabled = link.isNotBlank() && st.extractBusy == null && !running,
+                ) { Text("افزودن") }
+            }
+        }
+
+        if (st.extractBusy != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                Text(st.extractBusy, color = Color(0xFF64748B))
+            }
+        }
+
         Button(
-            onClick = { vm.generate(topic, slides, handout, source) },
+            onClick = { vm.generate(topic, slides, handout, source, poster.ifEmpty { null }) },
             enabled = !running && !st.busy,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("ساخت ارائه") }
@@ -279,6 +351,15 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel) {
                                 OutlinedButton(onClick = { vm.download(hid) }, modifier = Modifier.fillMaxWidth()) {
                                     Text("دانلود جزوه (Word)")
                                 }
+                            }
+                            job.posterId?.let { pid ->
+                                OutlinedButton(onClick = { vm.openViewer(Viewer.Poster(pid)) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("نمایش پوستر")
+                                }
+                            }
+                            if (job.posterFailed) Text("ساخت پوستر ناموفق بود؛ ارائه‌ی شما سالم است.", color = Color(0xFF64748B))
+                            OutlinedButton(onClick = { vm.openViewer(Viewer.Preview(job.id)) }, modifier = Modifier.fillMaxWidth()) {
+                                Text("پیش‌نمایش اسلایدها")
                             }
                             TextButton(onClick = { vm.dismissJob() }) { Text("بستن") }
                         }
@@ -332,7 +413,14 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                                 }
                                 Text(listOf(kind, fmtDate(f.t)).filter { it.isNotEmpty() }.joinToString(" • "), color = Color(0xFF64748B))
                             }
-                            Button(onClick = { vm.download(f.id) }) { Text("دانلود") }
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (f.poster) {
+                                    OutlinedButton(onClick = { vm.openViewer(Viewer.Poster(f.id)) }) { Text("نمایش") }
+                                } else if (!f.handout) {
+                                    OutlinedButton(onClick = { vm.openViewer(Viewer.Preview(f.id)) }) { Text("پیش‌نمایش") }
+                                }
+                                Button(onClick = { vm.download(f.id) }) { Text("دانلود") }
+                            }
                         }
                     }
                 }
@@ -346,6 +434,8 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
 @Composable
 fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
     val cfg = st.config
+    var nameDialog by rememberSaveable { mutableStateOf(false) }
+    if (nameDialog) NameDialog(me.name, vm) { nameDialog = false }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -353,7 +443,11 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(me.name.ifBlank { "کاربر" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (me.email.isNotEmpty()) Text(me.email, color = Color(0xFF64748B))
                 if (me.mobile.isNotEmpty()) Text(me.mobile, color = Color(0xFF64748B))
+                Row {
+                    TextButton(onClick = { nameDialog = true }) { Text("ویرایش نام") }
+                }
                 Text(if (me.unlimited) "اعتبار: نامحدود" else "اعتبار باقی‌مانده: " + me.credits.fa())
                 me.planId?.let { id ->
                     val name = me.plans.firstOrNull { it.id == id }?.name ?: id
@@ -395,6 +489,22 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
             ChipRow(cfg.tones, me.settings.tone) { vm.setSetting("tone", it) }
             Text("فونت", fontWeight = FontWeight.Bold)
             ChipRow(cfg.fonts.map { Opt(it, it) }, me.settings.font) { vm.setSetting("font", it) }
+            if (cfg.models.isNotEmpty()) {
+                val canExtra = me.unlimited || me.planId != null
+                Text("مدل هوش مصنوعی", fontWeight = FontWeight.Bold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(cfg.models) { m ->
+                        FilterChip(
+                            selected = me.settings.model == m.id,
+                            onClick = { vm.setSetting("model", m.id) },
+                            label = { Text((if (!m.free && !canExtra) "🔒 " else "") + m.name) },
+                        )
+                    }
+                }
+                if (!canExtra && cfg.models.any { !it.free }) {
+                    Text("مدل‌های قفل‌دار فقط با اشتراک فعال قابل استفاده‌اند.", color = Color(0xFF64748B))
+                }
+            }
         }
 
         if (me.support.isNotEmpty()) Text("پشتیبانی: " + me.support, color = Color(0xFF64748B))
@@ -423,4 +533,93 @@ private fun ChipRow(options: List<Opt>, selected: String, onSelect: (String) -> 
 private fun ColorDot(hex: String) {
     val c = try { Color(android.graphics.Color.parseColor("#$hex")) } catch (e: Exception) { Brand }
     Box(Modifier.size(12.dp).clip(CircleShape).background(c))
+}
+
+// ------------------------------------------------------------------ دیالوگ‌ها
+
+@Composable
+fun NameDialog(current: String, vm: AppViewModel, onClose: () -> Unit) {
+    var name by remember { mutableStateOf(current) }
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("ویرایش نام") },
+        text = {
+            OutlinedTextField(value = name, onValueChange = { name = it.take(64) }, singleLine = true, label = { Text("نام") })
+        },
+        confirmButton = {
+            Button(
+                enabled = !busy && name.trim().length >= 2,
+                onClick = {
+                    busy = true
+                    vm.updateName(name) { ok ->
+                        busy = false
+                        if (ok) onClose()
+                    }
+                },
+            ) { Text("ذخیره") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("انصراف") } },
+    )
+}
+
+@Composable
+fun PosterDialog(id: String, vm: AppViewModel) {
+    val loaded by produceState(initialValue = Pair<androidx.compose.ui.graphics.ImageBitmap?, Boolean>(null, false), id) {
+        value = try {
+            Pair(Api.fetchImage(id).asImageBitmap(), true)
+        } catch (e: Exception) {
+            Pair(null, true)
+        }
+    }
+    val img = loaded.first
+    Dialog(onDismissRequest = { vm.closeViewer() }) {
+        Card {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                when {
+                    !loaded.second -> CircularProgressIndicator()
+                    img == null -> Text("نمایش پوستر ممکن نشد. می‌توانید آن را دانلود کنید.")
+                    else -> Image(
+                        bitmap = img,
+                        contentDescription = "پوستر",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.download(id) }) { Text("دانلود") }
+                    TextButton(onClick = { vm.closeViewer() }) { Text("بستن") }
+                }
+            }
+        }
+    }
+}
+
+/** پیش‌نمایش اسلایدها را خود سرور به‌صورت صفحه‌ی HTML می‌سازد؛ فقط همین صفحه داخل یک WebView کوچک نمایش داده می‌شود. */
+@Composable
+fun PreviewDialog(id: String, vm: AppViewModel) {
+    val url = remember(id) {
+        Api.syncCookiesToWebView()
+        Api.previewUrl(id)
+    }
+    Dialog(onDismissRequest = { vm.closeViewer() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(Modifier.fillMaxSize().background(Color.White)) {
+            Row(Modifier.fillMaxWidth().background(Brand).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("پیش‌نمایش اسلایدها", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                TextButton(onClick = { vm.closeViewer() }) { Text("بستن", color = Color.White) }
+            }
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        webViewClient = WebViewClient()
+                        loadUrl(url)
+                    }
+                },
+                onRelease = { it.destroy() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
 }

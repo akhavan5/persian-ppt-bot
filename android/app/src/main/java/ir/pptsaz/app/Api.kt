@@ -1,16 +1,21 @@
 package ir.pptsaz.app
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.webkit.CookieManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
@@ -79,10 +84,14 @@ object Api {
         .header("Accept", "application/json")
         .header("Origin", BASE) // سرور برای درخواست‌های غیر GET همین هدر را چک می‌کند (ضد CSRF)
 
-    private suspend fun call(method: String, path: String, body: JSONObject? = null): JSONObject =
+    private suspend fun call(method: String, path: String, body: JSONObject? = null): JSONObject {
+        val rb = if (method == "GET") null
+        else (body ?: JSONObject()).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+        return send(method, path, rb)
+    }
+
+    private suspend fun send(method: String, path: String, rb: RequestBody?): JSONObject =
         withContext(Dispatchers.IO) {
-            val rb = if (method == "GET") null
-            else (body ?: JSONObject()).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val req = builder(path).method(method, rb).build()
             try {
                 client.newCall(req).execute().use { r ->
@@ -121,8 +130,9 @@ object Api {
 
     suspend fun files(): List<FileItem> = parseFiles(call("GET", "/api/files"))
 
-    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String): String {
+    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?): String {
         val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout)
+        if (poster != null) b.put("poster", poster)
         if (source.isNotEmpty()) b.put("source", source)
         return call("POST", "/api/generate", b).optString("jobId")
     }
@@ -131,6 +141,69 @@ object Api {
 
     suspend fun putSettings(key: String, value: String) {
         call("PUT", "/api/settings", JSONObject().put(key, value))
+    }
+
+    /** متن PDF یا عکس را استخراج می‌کند (سرور کار را در پس‌زمینه انجام می‌دهد و ما وضعیت را پیگیری می‌کنیم). */
+    suspend fun extractText(bytes: ByteArray, mime: String): String {
+        val j = send("POST", "/api/extract", bytes.toRequestBody(mime.toMediaType()))
+        val direct = j.optString("text")
+        if (direct.isNotEmpty()) return direct
+        val id = j.optString("jobId")
+        if (id.isEmpty()) throw ApiException("استخراج متن انجام نشد.")
+        repeat(100) {
+            delay(3000)
+            val s = call("GET", "/api/extract/" + Uri.encode(id))
+            when (s.optString("state")) {
+                "done" -> return s.optString("text")
+                "error" -> throw ApiException(s.optString("message").ifEmpty { "استخراج متن انجام نشد." })
+            }
+        }
+        throw ApiException("استخراج متن بیش از حد طول کشید. دوباره تلاش کنید.")
+    }
+
+    /** متن صفحه‌ی وب را برای استفاده به‌عنوان منبع می‌گیرد. */
+    suspend fun linkSource(url: String): String =
+        call("POST", "/api/link", JSONObject().put("url", url)).optString("text")
+
+    // ------------------------------------------------------------ پروفایل
+
+    suspend fun updateName(name: String) {
+        call("PUT", "/api/profile", JSONObject().put("name", name))
+    }
+
+    // ------------------------------------------------------------ پیش‌نمایش و پوستر
+
+    fun previewUrl(id: String): String = "$BASE/api/files/" + Uri.encode(id) + "/preview"
+
+    /** پیش‌نمایش را سرور به‌صورت صفحه‌ی HTML می‌سازد؛ برای نمایش، نشست اپ را به WebView می‌دهیم. */
+    fun syncCookiesToWebView() {
+        val cm = CookieManager.getInstance()
+        cm.setAcceptCookie(true)
+        jar.loadForRequest(BASE.toHttpUrl()).forEach { cm.setCookie(BASE, it.toString()) }
+        cm.flush()
+    }
+
+    /** تصویر پوستر را می‌گیرد (برای نمایش در اپ، با کاهش اندازه‌ی مناسب). */
+    suspend fun fetchImage(id: String): Bitmap = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(BASE + "/api/files/" + Uri.encode(id) + "?inline=1")
+            .header("User-Agent", UA).header("Origin", BASE).build()
+        var bytes: ByteArray? = null
+        for (attempt in 0 until 4) {
+            try {
+                client.newCall(req).execute().use { r -> if (r.isSuccessful) bytes = r.body?.bytes() }
+            } catch (e: IOException) {
+                throw ApiException(NO_NET)
+            }
+            if (bytes != null) break
+            delay(2000)
+        }
+        val data = bytes ?: throw ApiException("تصویر دریافت نشد.")
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2048) sample *= 2
+        BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: throw ApiException("تصویر قابل نمایش نیست.")
     }
 
     /** آدرس صفحه‌ی پرداخت را برمی‌گرداند تا در مرورگر باز شود. */

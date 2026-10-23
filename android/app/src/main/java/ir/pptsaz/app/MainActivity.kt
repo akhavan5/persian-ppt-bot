@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,7 +32,7 @@ class MainActivity : ComponentActivity() {
                             when (e) {
                                 is Event.Toast -> Toast.makeText(ctx, e.msg, Toast.LENGTH_LONG).show()
                                 is Event.OpenUrl -> try {
-                                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    CustomTabsIntent.Builder().build().launchUrl(ctx, Uri.parse(e.url))
                                 } catch (ex: ActivityNotFoundException) {
                                     Toast.makeText(ctx, "مرورگری برای باز کردن لینک پیدا نشد", Toast.LENGTH_LONG).show()
                                 }
