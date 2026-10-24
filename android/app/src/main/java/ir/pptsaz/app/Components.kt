@@ -204,7 +204,7 @@ fun ScreenHeader(title: String, subtitle: String? = null, trailing: (@Composable
 }
 
 @Composable
-fun ToggleRow(title: String, subtitle: String? = null, icon: ImageVector? = null, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun ToggleRow(title: String, subtitle: String? = null, icon: ImageVector? = null, checked: Boolean, badge: String? = null, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(role = Role.Switch) { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -220,6 +220,7 @@ fun ToggleRow(title: String, subtitle: String? = null, icon: ImageVector? = null
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        if (badge != null) Pill(badge, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }

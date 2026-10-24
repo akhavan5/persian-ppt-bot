@@ -352,6 +352,9 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
 
 // ================================================================== ساخت
 
+/** هزینه‌ی اضافه‌ی جزوه یا پوستر؛ نویسه‌ی LRM باعث می‌شود علامت + در متن راست‌به‌چپ درست کنار عدد بنشیند. */
+private const val EXTRA_CREDIT = "\u200E+۱ اعتبار"
+
 private val SUGGESTIONS = listOf(
     "تأثیر هوش مصنوعی بر آموزش",
     "اصول مدیریت زمان",
@@ -547,12 +550,15 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                 SurfaceCard {
                     ToggleRow(
                         title = "جزوه‌ی Word", subtitle = "همراه ارائه ساخته می‌شود", icon = AppIcons.Doc,
-                        checked = form.handout, onChange = { form.handout = it },
+                        checked = form.handout, badge = EXTRA_CREDIT, onChange = { form.handout = it },
                     )
                     if (cfg.poster) {
                         HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("پوستر (تصویر خلاصه‌ی ارائه)", style = MaterialTheme.typography.titleSmall)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("پوستر (تصویر خلاصه‌ی ارائه)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                                Pill(EXTRA_CREDIT, cs.secondaryContainer, cs.onSecondaryContainer)
+                            }
                             Segmented(
                                 options = listOf("", "wide", "tall"), selected = form.poster,
                                 label = { when (it) { "wide" -> "افقی"; "tall" -> "عمودی"; else -> "بدون پوستر" } },
