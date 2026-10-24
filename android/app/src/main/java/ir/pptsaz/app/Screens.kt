@@ -3,6 +3,8 @@
 package ir.pptsaz.app
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.webkit.WebView
@@ -97,6 +99,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -272,7 +275,7 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
 
 /** وضعیت فرم «ساخت»؛ بالاتر از تب‌ها نگه داشته می‌شود تا با عوض‌کردن تب پاک نشود. */
 @Stable
-class CreateForm(topic: String = "", source: String = "", handout: Boolean = false, poster: String = "") {
+class CreateForm(topic: String = "", source: String = "", handout: Boolean = true, poster: String = "wide") {
     var topic by mutableStateOf(topic)
     var source by mutableStateOf(source)
     var handout by mutableStateOf(handout)
@@ -421,55 +424,6 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                     }
                 }
 
-                // تنظیمات سریع
-                SurfaceCard {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("تعداد اسلاید", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                            Text(s.slides.fa(), style = MaterialTheme.typography.titleSmall, color = cs.primary)
-                        }
-                        Segmented(
-                            options = cfg.slideChoices, selected = s.slides, label = { it.fa() },
-                            locked = { it > me.maxSlides },
-                            onSelect = { n ->
-                                if (n > me.maxSlides) vm.toast("برای بیش از " + me.maxSlides.fa() + " اسلاید به اشتراک نیاز دارید")
-                                else vm.setSetting("slides", n)
-                            },
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("تعداد تصویر", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                            Text(if (s.imageCount == 0) "بدون تصویر" else s.imageCount.fa(), style = MaterialTheme.typography.titleSmall, color = cs.primary)
-                        }
-                        Segmented(
-                            options = (0..6).toList(), selected = s.imageCount, label = { it.fa() },
-                            locked = { it > me.maxImages },
-                            onSelect = { n ->
-                                if (n > me.maxImages) vm.toast("ساخت " + n.fa() + " تصویر در هر ارائه فقط با پلن‌های پولی ممکن است")
-                                else vm.setSetting("imageCount", n)
-                            },
-                        )
-                    }
-                }
-
-                // خلاصه‌ی ظاهر
-                val tplName = cfg.templates.firstOrNull { it.key == s.template }?.name.orEmpty()
-                val theme = cfg.themes.firstOrNull { it.key == s.theme }
-                SurfaceCard(onClick = { vm.setTab(2) }) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.size(36.dp).clip(CircleShape).background(hexColor(theme?.color)))
-                        Column(Modifier.weight(1f)) {
-                            Text("ظاهر ارائه", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                listOf(tplName, theme?.name.orEmpty(), s.font).filter { it.isNotBlank() }.joinToString(" • "),
-                                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Text("تغییر", style = MaterialTheme.typography.labelLarge, color = cs.primary)
-                        AppIcon(AppIcons.ChevronLeft, tint = cs.onSurfaceVariant, size = 20.dp)
-                    }
-                }
-
                 // منبع
                 SurfaceCard(modifier = Modifier.animateContentSize()) {
                     Row(
@@ -523,6 +477,72 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                     }
                 }
 
+                // تنظیمات سریع
+                SurfaceCard {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (cfg.models.isNotEmpty()) {
+                            val canExtra = me.unlimited || me.planId != null
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("مدل هوش مصنوعی", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                                val cur = cfg.models.firstOrNull { it.id == s.model }
+                                if (cur != null && cur.brand.isNotBlank()) Text(cur.brand, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                            }
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                cfg.models.forEach { m ->
+                                    SelectChip(m.name, s.model == m.id, { vm.setSetting("model", m.id) }, locked = !m.free && !canExtra)
+                                }
+                            }
+                            if (!canExtra && cfg.models.any { !it.free }) {
+                                Text("مدل‌های قفل‌دار فقط با اشتراک فعال قابل استفاده‌اند.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                            }
+                            HorizontalDivider(color = cs.outlineVariant)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("تعداد اسلاید", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            Text(s.slides.fa(), style = MaterialTheme.typography.titleSmall, color = cs.primary)
+                        }
+                        Segmented(
+                            options = cfg.slideChoices, selected = s.slides, label = { it.fa() },
+                            locked = { it > me.maxSlides },
+                            onSelect = { n ->
+                                if (n > me.maxSlides) vm.toast("برای بیش از " + me.maxSlides.fa() + " اسلاید به اشتراک نیاز دارید")
+                                else vm.setSetting("slides", n)
+                            },
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("تعداد تصویر", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            Text(if (s.imageCount == 0) "بدون تصویر" else s.imageCount.fa(), style = MaterialTheme.typography.titleSmall, color = cs.primary)
+                        }
+                        Segmented(
+                            options = (0..6).toList(), selected = s.imageCount, label = { it.fa() },
+                            locked = { it > me.maxImages },
+                            onSelect = { n ->
+                                if (n > me.maxImages) vm.toast("ساخت " + n.fa() + " تصویر در هر ارائه فقط با پلن‌های پولی ممکن است")
+                                else vm.setSetting("imageCount", n)
+                            },
+                        )
+                    }
+                }
+
+                // خلاصه‌ی ظاهر
+                val tplName = cfg.templates.firstOrNull { it.key == s.template }?.name.orEmpty()
+                val theme = cfg.themes.firstOrNull { it.key == s.theme }
+                SurfaceCard(onClick = { vm.setTab(2) }) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.size(36.dp).clip(CircleShape).background(hexColor(theme?.color)))
+                        Column(Modifier.weight(1f)) {
+                            Text("ظاهر ارائه", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                listOf(tplName, theme?.name.orEmpty(), s.font).filter { it.isNotBlank() }.joinToString(" • "),
+                                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text("تغییر", style = MaterialTheme.typography.labelLarge, color = cs.primary)
+                        AppIcon(AppIcons.ChevronLeft, tint = cs.onSurfaceVariant, size = 20.dp)
+                    }
+                }
+
                 // خروجی‌های اضافه
                 SurfaceCard {
                     ToggleRow(
@@ -552,7 +572,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
         ) {
             GradientButton(
                 text = if (running) "در حال ساخت…" else "ساخت ارائه",
-                onClick = { vm.generate(form.topic, s.slides, form.handout, form.source, form.poster.ifEmpty { null }, s.imageCount) },
+                onClick = { vm.generate(form.topic, s.slides, form.handout, form.source, (if (cfg.poster) form.poster.ifEmpty { null } else null), s.imageCount) },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !running && !st.busy,
                 icon = AppIcons.Sparkles,
@@ -710,7 +730,6 @@ fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
     val cfg = st.config ?: return
     val s = me.settings
     val cs = MaterialTheme.colorScheme
-    val canExtra = me.unlimited || me.planId != null
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenHeader("تنظیمات", "ظاهر و محتوای ارائه‌هایتان")
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -750,24 +769,6 @@ fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
                 ToggleRow("اسلاید پرسش‌های پایانی", "پرسش و پاسخ برای جمع‌بندی", null, s.questions) { vm.setSetting("questions", it) }
             }
 
-            if (cfg.models.isNotEmpty()) {
-                SectionTitle("مدل هوش مصنوعی", Modifier.padding(top = 8.dp))
-                cfg.models.forEach { m ->
-                    val lock = !m.free && !canExtra
-                    OptionCard(
-                        title = m.name,
-                        desc = listOf(m.brand, if (m.free) "رایگان" else "ویژه‌ی مشترکان").filter { it.isNotBlank() }.joinToString(" • "),
-                        selected = s.model == m.id,
-                        onClick = { vm.setSetting("model", m.id) },
-                        trailing = if (lock) {
-                            { AppIcon(AppIcons.Lock, tint = cs.onSurfaceVariant, size = 18.dp) }
-                        } else null,
-                    )
-                }
-                if (!canExtra && cfg.models.any { !it.free }) {
-                    Text("مدل‌های قفل‌دار فقط با اشتراک فعال قابل استفاده‌اند.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                }
-            }
         }
     }
 }
@@ -901,16 +902,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 )
             }
 
-            TelegramCard(me, vm)
-
-            if (me.support.isNotEmpty()) {
-                SurfaceCard {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("پشتیبانی", style = MaterialTheme.typography.titleSmall)
-                        Text(me.support, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    }
-                }
-            }
+            ContactCard(vm)
 
             SoftButton("خروج از حساب", { vm.logout() }, Modifier.fillMaxWidth(), icon = AppIcons.Logout)
             Text(
@@ -934,67 +926,37 @@ private fun StatBox(label: String, value: String, modifier: Modifier = Modifier)
 }
 
 @Composable
-private fun TelegramCard(me: Me, vm: AppViewModel) {
+private fun ContactCard(vm: AppViewModel) {
+    val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
-    val ex = LocalExtra.current
-    var tg by rememberSaveable { mutableStateOf("") }
-    var code by rememberSaveable { mutableStateOf("") }
-    var sent by rememberSaveable { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
-    SurfaceCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                IconTile(AppIcons.Send, Brush.linearGradient(listOf(Color(0xFF29B6F6), Color(0xFF0288D1))), 40.dp)
-                Column(Modifier.weight(1f)) {
-                    Text("اتصال تلگرام", style = MaterialTheme.typography.titleSmall)
-                    if (me.telegram.isNotEmpty()) Text("وصل است (" + me.telegram + ")", style = MaterialTheme.typography.bodySmall, color = ex.success)
-                    else Text("استفاده‌ی مشترک از اعتبار در ربات", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                }
-                if (me.telegram.isNotEmpty()) AppIcon(AppIcons.Check, tint = ex.success)
-            }
-            if (me.telegram.isEmpty()) {
-                Text(
-                    "آیدی عددی تلگرام خود را وارد کنید. در ربات @pptsaz_bot دستور /id را بزنید و عدد را کپی کنید.",
-                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = tg, onValueChange = { tg = it.filter { c -> c.isDigit() }.take(16) },
-                    singleLine = true, enabled = !sent, shape = RoundedCornerShape(16.dp),
-                    placeholder = { Text("آیدی عددی تلگرام") },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Ltr),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (!sent) {
-                    SoftButton("ارسال کد", {
-                        busy = true
-                        vm.telegramSend(tg) { codeSent ->
-                            busy = false
-                            if (codeSent) sent = true
-                        }
-                    }, Modifier.fillMaxWidth(), enabled = !busy && tg.length >= 5)
-                } else {
-                    OutlinedTextField(
-                        value = code, onValueChange = { code = it.filter { c -> c.isDigit() }.take(8) },
-                        singleLine = true, shape = RoundedCornerShape(16.dp),
-                        placeholder = { Text("کد ۶ رقمی تلگرام") },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Ltr),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    SoftButton("اتصال", {
-                        busy = true
-                        vm.telegramVerify(code) { ok ->
-                            busy = false
-                            if (ok) {
-                                sent = false
-                                code = ""
-                            }
-                        }
-                    }, Modifier.fillMaxWidth(), enabled = !busy && code.length >= 4)
-                }
-            }
+    val mail = {
+        try {
+            ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:info@pptsaz.ir")))
+        } catch (e: Exception) {
+            vm.toast("برنامه‌ی ایمیل پیدا نشد")
         }
+    }
+    SectionTitle("تماس با ما", Modifier.padding(top = 4.dp))
+    SurfaceCard {
+        ContactRow(AppIcons.Globe, Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF06B6D4))), "وب‌سایت", "pptsaz.ir") { vm.openSite() }
+        HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+        ContactRow(AppIcons.Send, Brush.linearGradient(listOf(Color(0xFF29B6F6), Color(0xFF0288D1))), "ربات تلگرام", "@pptsaz_bot") { vm.openUrl("https://t.me/pptsaz_bot") }
+        HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+        ContactRow(AppIcons.Mail, Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFF97316))), "پشتیبانی (ایمیل)", "info@pptsaz.ir") { mail() }
+    }
+}
+
+@Composable
+private fun ContactRow(icon: ImageVector, brush: Brush, title: String, value: String, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        IconTile(icon, brush, 40.dp)
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Ltr), color = cs.primary, maxLines = 1)
+        AppIcon(AppIcons.ChevronLeft, tint = cs.onSurfaceVariant, size = 20.dp)
     }
 }
 
