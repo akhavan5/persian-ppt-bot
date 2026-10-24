@@ -629,7 +629,7 @@ private fun JobCard(job: JobState, vm: AppViewModel) {
                 Text("در حال ساخت ارائه…", style = MaterialTheme.typography.titleMedium, color = Color.White)
                 LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape), color = Color.White, trackColor = Color.White.copy(alpha = 0.3f))
                 Text(job.message, color = Color.White.copy(alpha = 0.95f), style = MaterialTheme.typography.bodyMedium)
-                Text("می‌توانید از اپ خارج شوید؛ ساخت ادامه پیدا می‌کند.", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                Text("لطفاً تا آماده شدن ارائه، اپ را باز نگه دارید.", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
