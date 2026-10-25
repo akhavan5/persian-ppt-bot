@@ -7,3 +7,8 @@
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 -dontwarn javax.annotation.**
+
+# پولکی (پرداخت کافه‌بازار)
+-keep class ir.cafebazaar.poolakey.** { *; }
+-keep class com.farsitel.bazaar.** { *; }
+-dontwarn ir.cafebazaar.poolakey.**

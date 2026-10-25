@@ -24,10 +24,13 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
+    private lateinit var billing: BazaarBilling
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        billing = BazaarBilling(this) { ok -> vm.setBazaarReady(ok) }
+        billing.connect()
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 AppTheme {
@@ -45,6 +48,13 @@ class MainActivity : ComponentActivity() {
                         vm.events.collect { e ->
                             when (e) {
                                 is Event.Toast -> say(e.msg)
+                                is Event.BazaarBuy -> billing.purchase(
+                                    sku = e.sku,
+                                    onPurchase = { sku, token ->
+                                        vm.bazaarClaim(sku, token) { ok -> if (ok) billing.consume(token) }
+                                    },
+                                    onError = { if (it.isNotEmpty()) say(it) },
+                                )
                                 is Event.OpenUrl -> try {
                                     CustomTabsIntent.Builder().build().launchUrl(ctx, Uri.parse(e.url))
                                 } catch (ex: ActivityNotFoundException) {
@@ -65,10 +75,25 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    // خریدهای پرداخت‌شده ولی تایید/مصرف‌نشده (مثلاً قطع شدن اینترنت وسط کار) را دوباره به سرور می‌فرستد
+                    LaunchedEffect(st.bazaarReady, st.screen, st.config?.bazaar) {
+                        if (st.bazaarReady && st.screen == Screen.Main && st.config?.bazaar == true) {
+                            billing.unconsumed { list ->
+                                list.filter { it.first.startsWith("plan_") }.forEach { (sku, token) ->
+                                    vm.bazaarClaim(sku, token, silent = true) { ok -> if (ok) billing.consume(token) }
+                                }
+                            }
+                        }
+                    }
                     Root(st, vm, snack)
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        billing.disconnect()
+        super.onDestroy()
     }
 
     override fun onResume() {

@@ -888,7 +888,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                                 if (active) "تمدید اشتراک" else "خرید اشتراک",
                                 {
                                     when {
-                                        cfg?.payEnabled == true -> vm.buy(p.id)
+                                        cfg?.payEnabled == true || (cfg?.bazaar == true && st.bazaarReady) -> vm.buy(p.id)
                                         p.url.isNotEmpty() -> vm.openUrl(p.url)
                                         else -> vm.openSite()
                                     }
@@ -899,8 +899,11 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                     }
                 }
                 Text(
-                    if (cfg?.payEnabled == true) "پرداخت در مرورگر انجام می‌شود و بعد از آن به اپ برمی‌گردید."
-                    else "پرداخت از طریق ربات تلگرام انجام می‌شود.",
+                    when {
+                        cfg?.bazaar == true && st.bazaarReady -> "پرداخت امن از طریق کافه‌بازار انجام می‌شود."
+                        cfg?.payEnabled == true -> "پرداخت در مرورگر انجام می‌شود و بعد از آن به اپ برمی‌گردید."
+                        else -> "پرداخت از طریق ربات تلگرام انجام می‌شود."
+                    },
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }

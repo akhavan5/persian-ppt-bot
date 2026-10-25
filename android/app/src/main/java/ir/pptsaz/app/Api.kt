@@ -223,6 +223,11 @@ object Api {
         return if (url.startsWith("/")) BASE + url else url
     }
 
+    /** تایید خرید کافه‌بازار روی سرور؛ بعد از موفقیت پلن فعال می‌شود (تکراری‌بودن مشکلی ندارد). */
+    suspend fun bazaarVerify(productId: String, purchaseToken: String) {
+        call("POST", "/api/pay/bazaar", JSONObject().put("productId", productId).put("purchaseToken", purchaseToken))
+    }
+
     private class Raw(val code: Int, val bytes: ByteArray, val disposition: String?, val type: String?)
 
     /** فایل را می‌گیرد و در پوشه‌ی Downloads ذخیره می‌کند. بلافاصله بعد از اتمام کار ممکن است فایل چند ثانیه 404 بدهد؛ پس چند بار تلاش می‌کنیم. */

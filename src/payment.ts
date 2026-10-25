@@ -282,3 +282,102 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   if (won) { console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode); await noteSale(env, rec, plan); }
   return go(okQ);
 }
+
+
+// ---------- کافه‌بازار (اپ اندروید) ----------
+/**
+ * خرید درون‌برنامه‌ای بازار: هر پلن یک محصول «مصرفی» با شناسه‌ی plan_<id> است (plan_plus، plan_pro).
+ * اپ پس از خرید، توکن را به POST /api/pay/bazaar می‌فرستد؛ سرور با API توسعه‌دهندگان بازار (OAuth با refresh_token) آن را تایید و پلن را فعال می‌کند،
+ * سپس اپ خرید را «مصرف» می‌کند تا ماه بعد دوباره قابل خرید باشد. هر توکن فقط یک بار پلن را فعال می‌کند (کلید bzp:<sha256 توکن>، دائمی).
+ */
+const BZ_API = "https://pardakht.cafebazaar.ir/devapi/v2";
+const bzCfg = (env: Env) => ({
+  clientId: (env.BAZAAR_CLIENT_ID ?? "").trim(),
+  clientSecret: (env.BAZAAR_CLIENT_SECRET ?? "").trim(),
+  refreshToken: (env.BAZAAR_REFRESH_TOKEN ?? "").trim(),
+  pkg: (env.ANDROID_PACKAGE ?? "ir.pptsaz.app").trim(),
+});
+export const bazaarEnabled = (env: Env) => { const c = bzCfg(env); return Boolean(c.clientId && c.clientSecret && c.refreshToken); };
+const bzSku = (p: Plan) => `plan_${p.id}`;
+const BZ_TOKEN_KEY = "bz:token";
+
+/** توکن دسترسی بازار (۱ ساعت اعتبار) با refresh_token؛ در KV کش می‌شود */
+async function bzToken(env: Env, force = false): Promise<string | null> {
+  if (!force) {
+    const c = (await env.KV.get(BZ_TOKEN_KEY, "json").catch(() => null)) as { t: string } | null;
+    if (c?.t) return c.t;
+  }
+  const c = bzCfg(env);
+  const r = await fetch(`${BZ_API}/auth/token/`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "refresh_token", client_id: c.clientId, client_secret: c.clientSecret, refresh_token: c.refreshToken }).toString(),
+    signal: AbortSignal.timeout(15_000),
+  }).catch((e) => { console.error("bazaar auth", e); return null; });
+  const d = (await r?.json().catch(() => null)) as any;
+  const token = r?.ok ? (d?.access_token as string | undefined) : undefined;
+  if (!token) { console.error("bazaar auth failed", r?.status, JSON.stringify(d).slice(0, 300)); return null; }
+  const ttl = Math.max(60, Math.min(Number(d?.expires_in) || 3600, 3600) - 300);
+  await env.KV.put(BZ_TOKEN_KEY, JSON.stringify({ t: token }), { expirationTtl: ttl }).catch(() => {});
+  return token;
+}
+
+/** تایید خرید در بازار: ok=true و data (purchaseState: ۰ = خریداری‌شده، ۱ = برگشت‌خورده)؛ invalid = توکن/محصول وجود ندارد؛ error = مشکل ارتباط/تنظیمات */
+async function bzValidate(env: Env, sku: string, purchaseToken: string, retry = true): Promise<{ ok: boolean; invalid?: boolean; data?: any }> {
+  const at = await bzToken(env, !retry);
+  if (!at) return { ok: false };
+  const u = `${BZ_API}/api/validate/${encodeURIComponent(bzCfg(env).pkg)}/inapp/${encodeURIComponent(sku)}/purchases/${encodeURIComponent(purchaseToken)}/?access_token=${encodeURIComponent(at)}`;
+  const r = await fetch(u, { signal: AbortSignal.timeout(20_000) }).catch((e) => { console.error("bazaar validate", e); return null; });
+  if (!r) return { ok: false };
+  if (r.status === 401 && retry) return bzValidate(env, sku, purchaseToken, false);
+  const d = (await r.json().catch(() => null)) as any;
+  if (r.status === 404 || r.status === 400) return { ok: false, invalid: true };
+  if (!r.ok) { console.error("bazaar validate failed", r.status, JSON.stringify(d).slice(0, 300)); return { ok: false }; }
+  return { ok: true, data: d };
+}
+
+const sha256hex = async (s: string) =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/** POST /api/pay/bazaar  { productId, purchaseToken } → { ok, plan, already? }  (کاربر باید وارد شده باشد؛ تکراری‌بودن برای همان کاربر مشکلی ندارد) */
+export async function bazaarVerify(env: Env, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
+  if (!bazaarEnabled(env)) return json({ error: "پرداخت از طریق کافه‌بازار هنوز فعال نشده است." }, 503);
+  const productId = String(b?.productId ?? "");
+  const purchaseToken = String(b?.purchaseToken ?? "");
+  const plan = PLANS.find((p) => bzSku(p) === productId); // پلن فقط از شناسه‌ی محصول بازار مشخص می‌شود، نه از ادعای کلاینت
+  if (!plan) return json({ error: "محصول نامعتبر است." }, 400);
+  if (purchaseToken.length < 8 || purchaseToken.length > 300 || !/^[\w\-.~=:]+$/.test(purchaseToken)) return json({ error: "اطلاعات خرید نامعتبر است." }, 400);
+  if (await hitLimit(env, `bzrl:${user.id}`, 30, 3600)) return json({ error: "درخواست‌های زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
+
+  const key = `bzp:${await sha256hex(purchaseToken)}`;
+  const seen = async (): Promise<Response | null> => {
+    const r = (await env.KV.get(key, "json")) as { uid?: string } | null;
+    if (!r) return null;
+    return r.uid === user.id ? json({ ok: true, plan: plan.id, already: true }) : json({ error: "این خرید قبلاً برای حساب دیگری ثبت شده است." }, 409);
+  };
+  const dup = await seen();
+  if (dup) return dup;
+
+  const v = await bzValidate(env, productId, purchaseToken);
+  if (v.invalid) return json({ error: "خرید در کافه‌بازار پیدا نشد." }, 400);
+  if (!v.ok) return json({ error: "تایید خرید با بازار ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن (اپ را باز کنید؛ خرید شما از بین نمی‌رود)." }, 502);
+  if (Number(v.data?.purchaseState) !== 0) return json({ error: "این خرید لغو یا برگشت خورده است." }, 400);
+
+  // ادعای اتمی (مثل callback دیجی‌پی): ثبت توکن و فعال‌سازی پلن در «یک تراکنش» D1؛ فقط یک درخواست برنده می‌شود
+  const by = crypto.randomUUID();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const claim = env.DB.prepare("INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO NOTHING")
+    .bind(key, JSON.stringify({ uid: user.id, plan: plan.id, sku: productId, order: String(v.data?.orderId ?? ""), t: Date.now(), by }));
+  const sub = nextSub(await getActiveSub(env, user.id), plan);
+  const subExp = nowSec + Math.max(60, Math.ceil((sub.exp - Date.now()) / 1000) + 86_400); // مثل putSub
+  const write = env.DB.prepare(
+    "INSERT INTO kv (k, v, exp) SELECT ?1, ?2, ?3 WHERE EXISTS (SELECT 1 FROM kv WHERE k=?4 AND json_extract(v,'$.by')=?5) " +
+    "ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp")
+    .bind(`sub:${user.id}`, JSON.stringify(sub), subExp, key, by);
+  const won = (await env.DB.batch([claim, write]))[0].meta.changes === 1;
+  if (!won) return (await seen()) ?? json({ error: "ثبت خرید انجام نشد؛ دوباره امتحان کن." }, 409);
+
+  console.log("bazaar payment ok", user.id, plan.id);
+  await noteSale(env, { uid: user.id, plan: plan.id, count: plan.credits, amount: plan.price * 10_000, order: key, state: "paid", t: Date.now() }, plan);
+  return json({ ok: true, plan: plan.id });
+}

@@ -21,6 +21,7 @@ data class Config(
     val poster: Boolean,
     val models: List<ModelOpt>,
     val dailyFree: Int,
+    val bazaar: Boolean = false,
 )
 
 data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "",
@@ -76,6 +77,7 @@ fun parseConfig(j: JSONObject): Config {
         models = j.optJSONArray("models").objects().map { ModelOpt(it.str("id"), it.str("name"), it.str("brand"), it.optBoolean("free", true)) },
         poster = j.optBoolean("poster"),
         dailyFree = j.optInt("dailyFree"),
+        bazaar = j.optBoolean("bazaar"),
     )
 }
 

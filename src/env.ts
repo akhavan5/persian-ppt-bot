@@ -70,6 +70,11 @@ export interface Env {
   DIGIPAY_CLIENT_SECRET?: string;
   DIGIPAY_USERNAME?: string;
   DIGIPAY_PASSWORD?: string;
+  /** پرداخت درون‌برنامه‌ای کافه‌بازار (اپ اندروید): از پنل پیشخان ← تنظیمات ← API توسعه‌دهندگان (Client ID / Client Secret) و refresh_token همان کلاینت؛
+   *  شناسه‌ی محصول‌های مصرفی در بازار: plan_plus و plan_pro. بدون هر سه مقدار، خرید از طریق بازار در اپ غیرفعال است */
+  BAZAAR_CLIENT_ID?: string;
+  BAZAAR_CLIENT_SECRET?: string;
+  BAZAAR_REFRESH_TOKEN?: string;
   /** ورود با پیامک یک‌بارمصرف (OTP) از وب‌سرویس s.api.ir؛ بدون SMS_API_TOKEN ورود با شماره‌ی موبایل غیرفعال است */
   SMS_API_TOKEN?: string;
   /** اختیاری: آدرس وب‌سرویس (پیش‌فرض https://s.api.ir/api/sw1/SmsOTP) */

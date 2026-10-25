@@ -47,12 +47,14 @@ data class UiState(
     val extractBusy: String? = null,
     val extractedText: String? = null,
     val viewer: Viewer? = null,
+    val bazaarReady: Boolean = false,
 )
 
 sealed interface Event {
     data class Toast(val msg: String) : Event
     data class OpenUrl(val url: String) : Event
     data class OpenFile(val uri: Uri, val mime: String, val name: String) : Event
+    data class BazaarBuy(val sku: String) : Event
 }
 
 private const val MAX_SOURCE_CHARS = 100_000
@@ -401,7 +403,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _events.trySend(Event.OpenUrl(url))
     }
 
+    fun setBazaarReady(ok: Boolean) {
+        _state.update { it.copy(bazaarReady = ok) }
+    }
+
+    /** خرید از طریق کافه‌بازار وقتی کلاینت بازار نصب/متصل است و سرور هم آن را فعال کرده؛ وگرنه درگاه وب. */
+    private fun viaBazaar(): Boolean {
+        val s = _state.value
+        return s.bazaarReady && s.config?.bazaar == true
+    }
+
+    /** خرید را روی سرور تایید می‌کند؛ اگر موفق بود onDone(true) تا خرید «مصرف» شود. silent برای بازیابی خریدهای قبلی. */
+    fun bazaarClaim(productId: String, token: String, silent: Boolean = false, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            if (!silent) toast("در حال تایید خرید…")
+            try {
+                Api.bazaarVerify(productId, token)
+                reloadMe()
+                toast(if (silent) "خرید قبلی شما تایید و اشتراک فعال شد ✓" else "اشتراک فعال شد ✓")
+                onDone(true)
+            } catch (e: ApiException) {
+                if (!silent) toast(e.message ?: "")
+                onDone(false)
+            }
+        }
+    }
+
     fun buy(planId: String) {
+        if (viaBazaar()) {
+            _events.trySend(Event.BazaarBuy("plan_$planId"))
+            return
+        }
         viewModelScope.launch {
             try {
                 _events.trySend(Event.OpenUrl(Api.startPayment(planId)))

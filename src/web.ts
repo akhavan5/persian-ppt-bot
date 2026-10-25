@@ -8,7 +8,7 @@ import {
   EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
 } from "./settings";
 import { modelList } from "./llm";
-import { PLANS, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
+import { PLANS, bazaarEnabled, bazaarVerify, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { renderPreview } from "./preview";
 import {
@@ -74,6 +74,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       google: googleEnabled(env),
       otp: otpEnabled(env),
       payEnabled: payEnabled(env),
+      // خرید درون‌برنامه‌ای کافه‌بازار (فقط اپ اندروید)
+      bazaar: bazaarEnabled(env),
       templates: Object.entries(TEMPLATES).map(([key, v]) => ({ key, name: v.name, emoji: v.emoji, hint: v.hint })),
       themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent, bg: t.bg, surface: t.surface, dark: t.dark, text: t.text, muted: t.muted, onPrimary: t.onPrimary })),
       tones: TONES,
@@ -127,6 +129,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/link" && method === "POST") return linkSource(req, env, user);
   if (path.startsWith("/api/extract/") && method === "GET") return ocrStatus(env, user, path.slice("/api/extract/".length));
   if (path === "/api/pay/start" && method === "POST") return startPayment(env, url, user, await readBody(req));
+  if (path === "/api/pay/bazaar" && method === "POST") return bazaarVerify(env, user, await readBody(req));
 
   if (path.startsWith("/api/jobs/") && method === "GET") return jobStatus(env, user, path.slice("/api/jobs/".length));
 
