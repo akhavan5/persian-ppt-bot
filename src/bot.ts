@@ -417,7 +417,8 @@ async function handleFeedback(env: Env, msg: any, userId: number, chatId: number
   const from = msg.from;
   const who = `<a href="tg://user?id=${userId}">${esc(displayName(from) || String(userId))}</a>${from.username ? ` (@${esc(from.username)})` : ""}`;
   const out = `💬 <b>نظر کاربر</b>\n👤 ${who}\n🆔 <code>${userId}</code>\n📄 ارائه: ${esc(title)}\n\n${esc(text.slice(0, 2000))}`;
-  for (const id of adminIds(env)) await sendMessage(env, Number(id), out).catch(() => {});
+  const adminKb = kb([[{ text: "👤 کارت کاربر", callback_data: `ad:nu:${userId}` }, { text: "🗂 فایل‌ها", callback_data: `ad:nd:${userId}` }]]);
+  for (const id of adminIds(env)) await sendMessage(env, Number(id), out, adminKb).catch(() => {});
   await sendMessage(env, chatId, "🙏 ممنون از نظرت! پیامت به دست ما رسید.");
   return true;
 }

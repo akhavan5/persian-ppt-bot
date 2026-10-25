@@ -610,6 +610,9 @@ export async function handlePanelCallback(env: Env, cq: any) {
     switch (a) {
       case "u": return await show(await userCard(env, id));
       case "ud": return await show(await userFilesScreen(env, id));
+      // از پیام «نظر کاربر»: کارت/فایل‌های کاربر به‌صورت پیام جدید می‌آید تا متن نظر سر جایش بماند
+      case "nu": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userCard(env, id)));
+      case "nd": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userFilesScreen(env, id)));
       case "cr": return await prompt({ k: "cr", id }, `✏️ <b>اعتبار دلخواه</b> برای <code>${id}</code>\nیک عدد بفرست؛ مثلاً <code>25</code> یا <code>-3</code>.`, `ad:u:${id}`);
       case "m": return await prompt({ k: "msg", id }, `✉️ <b>پیام به کاربر</b> <code>${id}</code>\nمتن پیام را بفرست.`, `ad:u:${id}`);
       case "g": {
