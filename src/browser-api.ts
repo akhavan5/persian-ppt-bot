@@ -27,12 +27,13 @@ export const useBindingForRender = (env: Env) => !!env.BROWSER && !(String(env.B
 
 const BASES = ["browser-run", "browser-rendering"]; // نام جدید و قدیم مسیر API؛ اگر اولی ۴۰۴ داد دومی
 
-/** درخواست به همه‌ی حساب‌ها به ترتیب تصادفی؛ ۴۲۹/۵xx/خطای شبکه ⇒ حساب بعدی. بایت‌های پاسخ را برمی‌گرداند. */
-async function callAny(env: Env, endpoint: "pdf" | "screenshot", body: Record<string, unknown>): Promise<Uint8Array> {
-  const accts = browserAccounts(env);
-  if (!accts.length) throw new Error("BROWSER_ACCOUNTS تعریف نشده است");
+/** فاصله‌ی دور تلاش مجدد وقتی همه‌ی حساب‌ها هم‌زمان ۴۲۹/۵xx/خطای شبکه بدهند (مثل تلاش مجدد قدیمیِ binding): ۴ دور در مجموع */
+const ROUND_WAITS = [3000, 7000, 12000];
+
+/** یک دور: همه‌ی حساب‌ها به ترتیب تصادفی؛ ۴۲۹/۵xx/خطای شبکه ⇒ حساب بعدی. null = همه رد شدند (retryable می‌گوید ارزش تلاش مجدد دارد) */
+async function oneRound(accts: BrowserAccount[], endpoint: string, body: Record<string, unknown>): Promise<{ data?: Uint8Array; last: string; retryable: boolean }> {
   const start = Math.floor(Math.random() * accts.length);
-  let last = "";
+  let last = "", retryable = false;
   for (let k = 0; k < accts.length; k++) {
     const a = accts[(start + k) % accts.length];
     for (const base of BASES) {
@@ -44,20 +45,37 @@ async function callAny(env: Env, endpoint: "pdf" | "screenshot", body: Record<st
           signal: AbortSignal.timeout(100_000),
         });
         const ct = r.headers.get("content-type") ?? "";
-        if (r.ok && !ct.includes("application/json")) return new Uint8Array(await r.arrayBuffer());
+        if (r.ok && !ct.includes("application/json")) return { data: new Uint8Array(await r.arrayBuffer()), last: "", retryable: false };
         const txt = (await r.text().catch(() => "")).slice(0, 300);
         last = `${a.id.slice(0, 6)}… ${r.status} ${txt}`;
         console.error("browser api", endpoint, last);
         if (r.status === 404 && base === BASES[0]) continue; // مسیر قدیمی را امتحان کن
-        if (r.status === 400) throw new Error(`browser api 400: ${txt}`); // ورودی نامعتبر؛ حساب دیگر فرقی نمی‌کند
+        if (r.status === 400) throw new Error(`browser api 400: ${txt}`); // ورودی نامعتبر؛ حساب دیگر و تلاش مجدد فرقی نمی‌کند
+        if (r.status === 429 || r.status >= 500) retryable = true;
         break; // ۴۲۹/۵xx/۴۰۱/۴۰۳ ⇒ حساب بعدی
       } catch (e) {
         if (e instanceof Error && e.message.startsWith("browser api 400")) throw e;
         last = `${a.id.slice(0, 6)}… ${String(e instanceof Error ? e.message : e).slice(0, 200)}`;
         console.error("browser api", endpoint, last);
+        retryable = true; // خطای شبکه/تایم‌اوت
         break;
       }
     }
+  }
+  return { last, retryable };
+}
+
+/** حساب‌ها را دور می‌زند؛ اگر همه‌ی حساب‌ها به‌خاطر محدودیت/خطای موقت رد شدند، با فاصله‌ی ۳، ۷ و ۱۲ ثانیه دوباره تلاش می‌کند. */
+async function callAny(env: Env, endpoint: "pdf" | "screenshot", body: Record<string, unknown>): Promise<Uint8Array> {
+  const accts = browserAccounts(env);
+  if (!accts.length) throw new Error("BROWSER_ACCOUNTS تعریف نشده است");
+  let last = "";
+  for (let round = 0; ; round++) {
+    const r = await oneRound(accts, endpoint, body);
+    if (r.data) return r.data;
+    last = r.last;
+    if (!r.retryable || round >= ROUND_WAITS.length) break;
+    await new Promise((res) => setTimeout(res, ROUND_WAITS[round]));
   }
   throw new Error(`همه‌ی حساب‌های مرورگر ناموفق بودند: ${last}`);
 }
