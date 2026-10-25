@@ -133,8 +133,11 @@ if(!ok)continue;var mx=Math.max.apply(null,s),mn=Math.min.apply(null,s),sc=mx*10
 var x2=best;ps.forEach(function(p,i){cols[x2%n].appendChild(p);x2=Math.floor(x2/n)})}catch(e){}}
 window.addEventListener("load",function(){(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(go)})})()</script>`;
 
-  let host = "";
-  try { if (o.site) host = new URL(o.site).hostname.replace(/^www\./, ""); } catch { /* نشانی نامعتبر */ }
+  let host = "", origin = "https://pptsaz.ir";
+  try { if (o.site) { const u = new URL(o.site); host = u.hostname.replace(/^www\./, ""); origin = u.origin; } } catch { /* نشانی نامعتبر */ }
+  // فونت وزیرمتن از خود سایت (CORS باز است)؛ به Google Fonts در مرورگر راه دور (REST) تکیه نمی‌کنیم
+  const fontFace = `@font-face{font-family:'Vazirmatn';font-weight:100 600;font-style:normal;font-display:block;src:url('${origin}/fonts/Vazirmatn-Regular.woff2') format('woff2'),url('${origin}/fonts/Vazirmatn-Regular.ttf') format('truetype')}` +
+    `@font-face{font-family:'Vazirmatn';font-weight:700 900;font-style:normal;font-display:block;src:url('${origin}/fonts/Vazirmatn-Bold.woff2') format('woff2'),url('${origin}/fonts/Vazirmatn-Bold.ttf') format('truetype')}`;
 
   const css = `
 :root{--bg:#${t.bg};--sf:#${t.surface};--pr:#${t.primary};--dk:#${t.dark};--ac:#${t.accent};--tx:#${t.text};--mt:#${t.muted};--on:#${t.onPrimary};
@@ -244,7 +247,7 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 <title>${esc(ig.title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap">
 ${katex}
-<style>${css}</style></head>
+<style>${fontFace}${css}</style></head>
 <body>
 <div class="top"><div class="tt"><h1>${tx(ig.title)}</h1>${ig.subtitle ? `<p>${tx(ig.subtitle)}</p>` : ""}</div>${o.image ? `<img src="${o.image}" alt="">` : ""}</div>
 <div class="wrap">${hls}<div class="cols">${panels}</div></div>
