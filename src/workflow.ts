@@ -117,7 +117,10 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             await sendDocument(this.env, chatId, bytes, filename,
               `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}`,
               // دکمه‌ی دریافت نسخه‌ی PDF (فقط اگر پیش‌نمایش ذخیره شده و مرورگر کلودفلر وصل است)
-              this.env.BROWSER ? { reply_markup: { inline_keyboard: [[{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${event.instanceId}` }]] } } : {});
+              { reply_markup: { inline_keyboard: [
+                ...(this.env.BROWSER ? [[{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${event.instanceId}` }]] : []),
+                [{ text: "💬 ارسال نظر", callback_data: "fb:s" }], // نظر کاربر فقط برای مدیر فرستاده می‌شود (ذخیره نمی‌شود)
+              ] } });
             // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
             await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
               .catch((err) => console.error("saveFile", err));
