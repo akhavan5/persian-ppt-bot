@@ -153,7 +153,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   } else {
     ask = "🖼 <b>اسلایدها حاوی تصویر باشند؟</b>" + (steps[steps.length - 1] === "imgs" ? "\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>" : "");
     opts = [[
-      { text: mark(p.imgs, "✅ بله (پیش‌فرض)"), callback_data: "p:imgs:1" },
+      { text: mark(p.imgs, "✅ بله"), callback_data: "p:imgs:1" },
       { text: mark(!p.imgs, "❌ خیر"), callback_data: "p:imgs:0" },
     ]];
   }
