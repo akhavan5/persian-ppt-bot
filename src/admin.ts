@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import {
   PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
-  setBanned, setBonus, type Uid,
+  setBanned, setBonus, REF_MAX, type Uid,
 } from "./settings";
 import { getUserById, googleEnabled, otpEnabled } from "./auth";
 import { resolveUid } from "./link";
@@ -123,6 +123,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       [cb("🔎 جستجوی کاربر", "ad:se"), cb("🗂 ارائه‌های اخیر", "ad:dk")],
       [cb("📣 پیام همگانی", "ad:bc"), cb("👑 پلن‌های فعال", "ad:sb:0")],
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
+      [cb("🎁 گزارش دعوت", "ad:iv:t:0")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
     ],
   };
@@ -295,6 +296,66 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
   kb.push(row3);
   kb.push([cb("🔄 تازه‌سازی", `ad:u:${key}`), ...backHome]);
   return { text, kb };
+}
+
+// ---------- گزارش دعوت دوستان ----------
+// هر دعوت موفق یک ردیف ref:<دعوت‌شده> = <دعوت‌کننده> است و شمارنده‌ی هر دعوت‌کننده در refc:<دعوت‌کننده> (settings.ts ← rewardReferral).
+// زمانِ خودِ دعوت ذخیره نشده؛ به‌جایش «اولین پیام» دعوت‌شده (seen:) می‌آید که همان لحظه‌ی ورود با لینک است.
+const REF_FROM = "FROM kv r LEFT JOIN kv s ON s.k = 'seen:' || substr(r.k, 5) WHERE r.k >= ?1 AND r.k < ?2 AND (r.exp IS NULL OR r.exp > ?3)";
+
+async function referralScreen(env: Env, tab: "t" | "r", page: number): Promise<Screen> {
+  const now = nowSec();
+  const iso = (ms: number) => new Date(Date.now() - ms).toISOString();
+  const [total, inviters, capped, last24, last7] = await Promise.all([
+    count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3)", "ref:", "ref:" + MAXC, now),
+    count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND CAST(v AS INTEGER) > 0", "refc:", "refc:" + MAXC, now),
+    count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND CAST(v AS INTEGER) >= ?4", "refc:", "refc:" + MAXC, now, REF_MAX),
+    count(env, `SELECT COUNT(*) c ${REF_FROM} AND json_extract(s.v,'$.t') >= ?4`, "ref:", "ref:" + MAXC, now, iso(86_400_000)),
+    count(env, `SELECT COUNT(*) c ${REF_FROM} AND json_extract(s.v,'$.t') >= ?4`, "ref:", "ref:" + MAXC, now, iso(7 * 86_400_000)),
+  ]);
+  const avg = inviters ? Math.round((total / inviters) * 10) / 10 : 0;
+  const summary =
+    "🎁 <b>گزارش دعوت دوستان</b>\n\n" +
+    `✅ دعوت موفق: <b>${fa(total)}</b> (هر دعوت = ۱ ارائه‌ی رایگان برای دعوت‌کننده)\n` +
+    `🙋 دعوت‌کننده: <b>${fa(inviters)}</b> نفر · میانگین ${fa(avg)} دعوت برای هر نفر\n` +
+    `🚧 رسیده به سقف (${fa(REF_MAX)} دعوت): ${fa(capped)} نفر\n` +
+    `🕒 ۲۴ ساعت اخیر: ${fa(last24)} · ۷ روز اخیر: ${fa(last7)}\n\n`;
+  const tabs: Btn[] = [cb(tab === "t" ? "• برترین‌ها" : "برترین‌ها", "ad:iv:t:0"), cb(tab === "r" ? "• آخرین دعوت‌ها" : "آخرین دعوت‌ها", "ad:iv:r:0")];
+  const d = await db(env);
+
+  if (tab === "t") {
+    const rs = (await d.prepare("SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND CAST(v AS INTEGER) > 0 ORDER BY CAST(v AS INTEGER) DESC, k LIMIT ?4 OFFSET ?5")
+      .bind("refc:", "refc:" + MAXC, now, PAGE, page * PAGE).all<{ k: string; v: string }>()).results ?? [];
+    const items = await Promise.all(rs.map(async (r) => {
+      const id = Number(r.k.slice(5)); const n = Number(r.v) || 0;
+      if (!Number.isSafeInteger(id)) return null;
+      const seen = await getUserSeen(env, id).catch(() => null);
+      return { id, label: seen?.n || (seen?.u ? "@" + seen.u : String(id)), line: `${userLink(id, seen?.n, seen?.u)} — <b>${fa(n)}</b> دعوت${n >= REF_MAX ? " 🚧" : ""}\n    🆔 <code>${id}</code>` };
+    }));
+    const list = items.filter((x): x is NonNullable<typeof x> => x !== null);
+    return {
+      text: summary + "🏆 <b>برترین دعوت‌کننده‌ها</b>\n\n" + (list.length ? list.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.line}`).join("\n") : "هنوز دعوتی ثبت نشده است.") + "\n\n<i>برای مدیریت، روی نام بزن.</i>",
+      kb: [tabs, ...list.map((x, i) => [cb(`${fa(page * PAGE + i + 1)}. ${x.label.slice(0, 40)}`, `ad:u:${x.id}`)]), pager("ad:iv:t", page, (page + 1) * PAGE < inviters), [cb("🔄 تازه‌سازی", `ad:iv:${tab}:${page}`), ...backHome]].filter((r) => r.length),
+    };
+  }
+
+  const rs = (await d.prepare(
+    `SELECT r.k k, r.v v, json_extract(s.v,'$.t') t, json_extract(s.v,'$.n') n, json_extract(s.v,'$.u') u ${REF_FROM} ORDER BY json_extract(s.v,'$.t') DESC, r.k LIMIT ?4 OFFSET ?5`)
+    .bind("ref:", "ref:" + MAXC, now, PAGE, page * PAGE).all<{ k: string; v: string; t: string | null; n: string | null; u: string | null }>()).results ?? [];
+  const items = await Promise.all(rs.map(async (r) => {
+    const guest = Number(r.k.slice(4)), host = Number(r.v);
+    if (!Number.isSafeInteger(guest) || !Number.isSafeInteger(host)) return null;
+    const hs = await getUserSeen(env, host).catch(() => null);
+    return {
+      guest, host, gl: r.n || (r.u ? "@" + r.u : String(guest)), hl: hs?.n || (hs?.u ? "@" + hs.u : String(host)),
+      line: `${userLink(guest, r.n, r.u)} ⬅️ دعوت از ${userLink(host, hs?.n, hs?.u)}\n    🕒 ${r.t ? fmtTime(r.t) : "—"} · 🆔 <code>${guest}</code>`,
+    };
+  }));
+  const list = items.filter((x): x is NonNullable<typeof x> => x !== null);
+  return {
+    text: summary + "🕒 <b>آخرین دعوت‌شده‌ها</b> (به وقت ایران)\n\n" + (list.length ? list.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.line}`).join("\n") : "هنوز دعوتی ثبت نشده است.") + "\n\n<i>دکمه‌ها: 👤 دعوت‌شده · 🎁 دعوت‌کننده</i>",
+    kb: [tabs, ...list.map((x) => [cb(`👤 ${x.gl.slice(0, 18)}`, `ad:u:${x.guest}`), cb(`🎁 ${x.hl.slice(0, 18)}`, `ad:u:${x.host}`)]), pager("ad:iv:r", page, (page + 1) * PAGE < total), [cb("🔄 تازه‌سازی", `ad:iv:${tab}:${page}`), ...backHome]].filter((r) => r.length),
+  };
 }
 
 async function decksScreen(env: Env): Promise<Screen> {
@@ -589,6 +650,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "sb": return await show(await subsScreen(env, Math.max(0, Math.min(2000, Number(b) || 0))));
       case "bn": return await show(await bannedScreen(env));
       case "dk": return await show(await decksScreen(env));
+      case "iv": return await show(await referralScreen(env, b === "r" ? "r" : "t", Math.max(0, Math.min(2000, Number(c) || 0))));
       case "sy": return await show(await systemScreen(env));
       case "lg": return await show(await logScreen(env));
       case "pg": {
