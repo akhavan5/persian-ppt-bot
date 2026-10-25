@@ -60,24 +60,10 @@ export const supportLink = (userId: Uid) =>
   `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
   encodeURIComponent(`سلام، می‌خواهم اعتبار ربات ساخت پاورپوینت را شارژ کنم.\nشناسه‌ی من: ${userId}`);
 
-export const BUY_NOTE = "💰 برای خرید شارژ، یکی از بسته‌های زیر را انتخاب کن:";
-export const buyLink = (userId: Uid, count: number, price: number) =>
-  `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
-  encodeURIComponent(`سلام، می‌خواهم بسته‌ی ${count} پاورپوینتی (${price} هزار تومان) ربات ساخت پاورپوینت را بخرم.\nشناسه‌ی من: ${userId}`);
 /** لینک تلگرام برای خرید پلن ماهانه (وقتی درگاه پرداخت فعال نیست) */
 export const planLink = (userId: Uid, name: string, price: number) =>
   `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
   encodeURIComponent(`سلام، می‌خواهم پلن ${name} (${price} هزار تومان در ماه) پاورپوینت‌ساز را بخرم.\nشناسه‌ی من: ${userId}`);
-/** دو دکمه‌ی شیشه‌ای خرید؛ پیام آماده شامل بسته‌ی انتخابی و شناسه‌ی کاربر است */
-export const buyKb = (userId: Uid) => ({
-  reply_markup: {
-    inline_keyboard: [
-      [{ text: "🛒 ۱۰ پاورپوینت — ۵۰ هزار تومان", url: buyLink(userId, 10, 50) }],
-      [{ text: "🛒 ۲۰ پاورپوینت — ۸۰ هزار تومان", url: buyLink(userId, 20, 80) }],
-    ],
-  },
-});
-
 // ---------- مجوز، مدیر و مسدودسازی ----------
 const idList = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 export const adminIds = (env: Env) => idList(env.ADMIN_IDS);
