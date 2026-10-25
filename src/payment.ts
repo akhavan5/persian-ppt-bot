@@ -346,7 +346,7 @@ export async function bazaarVerify(env: Env, user: WebUser, b: Record<string, un
   const purchaseToken = String(b?.purchaseToken ?? "");
   const plan = PLANS.find((p) => bzSku(p) === productId); // پلن فقط از شناسه‌ی محصول بازار مشخص می‌شود، نه از ادعای کلاینت
   if (!plan) return json({ error: "محصول نامعتبر است." }, 400);
-  if (purchaseToken.length < 8 || purchaseToken.length > 300 || !/^[\w\-.~=:]+$/.test(purchaseToken)) return json({ error: "اطلاعات خرید نامعتبر است." }, 400);
+  if (purchaseToken.length < 8 || purchaseToken.length > 500 || /[\s\u0000-\u001f]/.test(purchaseToken)) return json({ error: "اطلاعات خرید نامعتبر است." }, 400);
   if (await hitLimit(env, `bzrl:${user.id}`, 30, 3600)) return json({ error: "درخواست‌های زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
 
   const key = `bzp:${await sha256hex(purchaseToken)}`;
