@@ -20,7 +20,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: "8.13"
 
       - name: Accept SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
@@ -49,6 +49,8 @@ jobs:
           mkdir -p dist
           cp "$APK" dist/pptsaz.apk
           cp android/app/build/outputs/bundle/release/app-release.aab dist/pptsaz.aab
+          # نقشه‌ی R8 برای خواندن گزارش کرش‌ها؛ برای هر نسخه نگه دارید
+          cp android/app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -61,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [30, 34]
+        api: [30, 34, 36]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
