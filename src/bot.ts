@@ -3,7 +3,7 @@ import type { Mode, Settings } from "./types";
 import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
-  EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
+  EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
   maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
@@ -333,6 +333,19 @@ async function handleCallback(env: Env, cq: any) {
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
   if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
   if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
+  if (act === "fb") { // دکمه‌ی «ارسال نظر» زیر ارائه: پیام متنی بعدی کاربر برای مدیر فرستاده می‌شود
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+    const title = String(cq.message?.caption ?? "").split("\n")[0].replace(/^✅\s*/, "").slice(0, 120);
+    await env.KV.put(fbKey(userId), title || "-", { expirationTtl: 600 });
+    // دکمه‌ی نظر فقط یک بار: بعد از زدن حذف می‌شود (دکمه‌ی PDF، اگر هست، می‌ماند)
+    const rows = ((cq.message?.reply_markup?.inline_keyboard ?? []) as { callback_data?: string }[][]).filter((r) => !r.some((x) => x.callback_data?.startsWith("fb:")));
+    await tg(env, "editMessageReplyMarkup", { chat_id: chatId, message_id: mid, reply_markup: { inline_keyboard: rows } }).catch(() => {});
+    return await sendMessage(env, chatId,
+      "💬 خیلی خوشحال می‌شیم نظرت را بشنویم! 😊\n\n" +
+      "ارائه چطور شد؟ از چه چیزش راضی بودی و چه چیزی می‌تونست بهتر باشه؟ اگر مشکلی دیدی، ایده‌ای برای بهتر شدن ربات داری یا هر حرف دیگه‌ای هست، راحت و خودمونی همین‌جا در <b>یک پیام</b> بنویس و بفرست.\n\n" +
+      "نظرت مستقیم به دست خود ما می‌رسه و تک‌تکشون را می‌خونیم؛ همین نظرها کمک می‌کنه ربات هر روز بهتر بشه. 🙏\n\n" +
+      "<i>اگر پشیمون شدی، کافیه یک دستور (مثل /start) بفرستی تا لغو بشه.</i>");
+  }
   if (act === "f") {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
     const f = await loadFile(env, uid, a);
@@ -393,6 +406,22 @@ const fmtDate = (ms: number) => {
   catch { return new Date(ms).toISOString().slice(0, 10); }
 };
 
+// ---------- نظر کاربر (دکمه‌ی «ارسال نظر» بعد از ساخت ارائه) ----------
+const fbKey = (tgId: number) => `fb:${tgId}`;
+/** پیام بعدیِ کاربری که دکمه‌ی نظر را زده؛ فقط برای مدیرها فرستاده می‌شود و ذخیره نمی‌شود. true = پیام مصرف شد */
+async function handleFeedback(env: Env, msg: any, userId: number, chatId: number, text: string, isCmd: boolean): Promise<boolean> {
+  const title = await env.KV.get(fbKey(userId));
+  if (title === null) return false;
+  await env.KV.delete(fbKey(userId)).catch(() => {});
+  if (isCmd || !text) return false; // دستور یا پیام غیرمتنی: حالت نظر لغو می‌شود و پیام عادی پردازش می‌شود
+  const from = msg.from;
+  const who = `<a href="tg://user?id=${userId}">${esc(displayName(from) || String(userId))}</a>${from.username ? ` (@${esc(from.username)})` : ""}`;
+  const out = `💬 <b>نظر کاربر</b>\n👤 ${who}\n🆔 <code>${userId}</code>\n📄 ارائه: ${esc(title)}\n\n${esc(text.slice(0, 2000))}`;
+  for (const id of adminIds(env)) await sendMessage(env, Number(id), out).catch(() => {});
+  await sendMessage(env, chatId, "🙏 ممنون از نظرت! پیامت به دست ما رسید.");
+  return true;
+}
+
 // ---------- ورودی اصلی ----------
 export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (update.callback_query) return handleCallback(env, update.callback_query);
@@ -427,6 +456,8 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args, text, userId);
   // ورودی در انتظار پنل مدیر (جستجو، مقدار اعتبار، متن پیام…): پیام متنی بعدی مدیر همان است
   if (admin && !cmd && text && !msg.document && !msg.photo && (await handleAdminInput(env, chatId, userId, text).catch((e) => { console.error("admin input", e); return false; }))) return;
+
+  if (!msg.document && !msg.photo && (await handleFeedback(env, msg, userId, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
 
   if (cmd === "/site") {
     return await sendMessage(env, chatId, "🌐 با دکمه‌ی زیر بدون ثبت‌نام و رمز، با همین حساب تلگرامت وارد سایت می‌شوی (پلن‌ها، پرداخت آنلاین، پروفایل).",
