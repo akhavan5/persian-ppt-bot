@@ -40,7 +40,8 @@ async function readBody(req: Request, maxBytes = 20_000): Promise<Record<string,
   return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : null;
 }
 
-const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
+// x-trusted-ip فقط در index.ts و فقط برای درخواست معتبرِ پروکسی ساخته می‌شود (هدر جعلی کاربر همان‌جا پاک می‌شود)
+const clientIp = (req: Request) => req.headers.get("x-trusted-ip") ?? req.headers.get("cf-connecting-ip") ?? "unknown";
 
 export async function handleWeb(req: Request, env: Env, url: URL): Promise<Response> {
   try {

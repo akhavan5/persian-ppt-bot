@@ -28,6 +28,28 @@ function noindex(res: Response): Response {
   return r;
 }
 
+// درخواست‌هایی که از nginx سرور ایرانی می‌رسند: nginx با Host=workers.dev به Worker وصل می‌شود، پس url.origin اشتباه می‌شد
+// (بررسی CSRF، بازگشت از درگاه و ورود گوگل می‌شکست) و IP همه‌ی کاربران IP سرور بود (سقف‌ها مشترک می‌شد).
+// فقط اگر هدر X-Proxy-Secret با PROXY_SECRET برابر باشد، دامنه‌ی سایت و IP کاربر از هدرهای nginx گرفته می‌شود.
+function fromProxy(req: Request, env: Env): Request {
+  const secret = env.PROXY_SECRET;
+  const got = req.headers.get("x-proxy-secret") ?? "";
+  const trusted = !!secret && !!got && safeEqual(got, secret);
+  if (!trusted && !req.headers.has("x-trusted-ip") && !got) return req;
+  const h = new Headers(req.headers);
+  h.delete("x-trusted-ip"); // کاربر نباید بتواند IP جعلی بفرستد
+  h.delete("x-proxy-secret");
+  if (!trusted) return new Request(req, { headers: h });
+  const ip = req.headers.get("x-client-ip") ?? "";
+  if (/^[0-9a-fA-F:.]{3,45}$/.test(ip)) h.set("x-trusted-ip", ip);
+  h.delete("x-client-ip"); h.delete("x-forwarded-host");
+  const u = new URL(req.url);
+  const site = new URL((env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "")).hostname;
+  const host = (req.headers.get("x-forwarded-host") ?? "").toLowerCase();
+  if (host === site || host === `www.${site}`) { u.protocol = "https:"; u.host = host; }
+  return new Request(u.toString(), { method: req.method, headers: h, body: req.body, redirect: "manual" });
+}
+
 // تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
 const SITEMAP_LASTMOD = "2026-10-18";
 
@@ -42,8 +64,9 @@ export default {
     }
   },
 
-  async fetch(req: Request, rawEnv: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(rawReq: Request, rawEnv: Env, ctx: ExecutionContext): Promise<Response> {
     const env = withStore(rawEnv);
+    const req = fromProxy(rawReq, rawEnv);
     const url = new URL(req.url);
     const SITE = (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
 
