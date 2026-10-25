@@ -9,7 +9,7 @@ import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
 import { getUserById } from "./auth";
 import { toFa } from "./util";
-import { adminIds, bumpStat, getCredit, getUserSeen, refundCredit, releaseLock } from "./settings";
+import { adminIds, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
 import { BUY_SITE_NOTE, buyKbFor } from "./deck-service";
 import { hasBrowser } from "./browser-api";
 import { logDeck, saveFile, savePreview } from "./files";
@@ -247,6 +247,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     await step.do("finish", async () => {
       await releaseLock(this.env, userId);
       await bumpStat(this.env, "ok").catch(() => {});
+      await noteDeckDone(this.env, userId).catch((e) => console.error("noteDeckDone", e)); // قیف کاربران پنل مدیر
     });
     // خروجی نمونه‌ی Workflow؛ وضعیت وب از همین‌جا خوانده می‌شود
     return built;

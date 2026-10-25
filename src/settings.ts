@@ -290,7 +290,20 @@ export type StatName = "started" | "ok" | "fail" | "newusers";
 export async function bumpStat(env: Env, name: StatName) {
   const k = `stat:${name}:${today()}`;
   const n = Number(await env.KV.get(k)) || 0;
-  await env.KV.put(k, String(n + 1), { expirationTtl: 60 * 60 * 24 * 60 });
+  await env.KV.put(k, String(n + 1), { expirationTtl: STAT_TTL });
+}
+
+/** آمار روزانه ۴۰۰ روز نگه داشته می‌شود (برای نمای ماهانه‌ی پنل مدیر؛ پیش‌تر ۶۰ روز بود) */
+const STAT_TTL = 60 * 60 * 24 * 400;
+
+/** ثبت یک ارائه‌ی موفق برای «قیف کاربران» پنل مدیر: act:<حساب> = {f: اولین ارائه، l: آخرین، n: تعداد} (ms).
+ *  یک نوشتن اتمی؛ بدون TTL (یک ردیف کوچک برای هر حسابی که ارائه ساخته). */
+export async function noteDeckDone(env: Env, userId: Uid): Promise<void> {
+  const db = await rawDb(env);
+  const now = Date.now();
+  await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.l', ?3, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1)")
+    .bind(`act:${userId}`, JSON.stringify({ f: now, l: now, n: 1 }), now).run();
 }
 
 export interface SeenUser { t: string; u: string | null; n?: string }

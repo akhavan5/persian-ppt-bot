@@ -4,7 +4,7 @@ import {
   PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
   setBanned, setBonus, REF_MAX, type Uid,
 } from "./settings";
-import { getUserById, googleEnabled, otpEnabled } from "./auth";
+import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
 import { resolveUid } from "./link";
 import { getDeckLog, listFiles, loadFile } from "./files";
 import { hasKey, modelList } from "./llm";
@@ -103,12 +103,13 @@ const cb = (text: string, data: string): Btn => ({ text, callback_data: data });
 
 async function homeScreen(env: Env): Promise<Screen> {
   const day = new Date().toISOString().slice(0, 10);
-  const [tgUsers, webOnly, subs, banned, st] = await Promise.all([
+  const [tgUsers, webOnly, subs, banned, st, payIssues] = await Promise.all([
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY}`, "wu:", "wu:" + MAXC),
     activeSubCount(env),
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "ban:", "ban:" + MAXC),
     statsByDay(env),
+    issueCount(env).catch(() => 0),
   ]);
   const t = st[day] ?? {};
   return {
@@ -116,14 +117,15 @@ async function homeScreen(env: Env): Promise<Screen> {
       "🛠 <b>پنل مدیریت</b>\n\n" +
       `👥 کاربران تلگرام: <b>${fa(tgUsers)}</b> · 🌐 وب: <b>${fa(webOnly)}</b>\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
-      `📅 امروز: ▶️ ${fa(t.started ?? 0)} · ✅ ${fa(t.ok ?? 0)} · ❌ ${fa(t.fail ?? 0)} · 🆕 ${fa(t.newusers ?? 0)}\n\n` +
+      `📅 امروز: ▶️ ${fa(t.started ?? 0)} · ✅ ${fa(t.ok ?? 0)} · ❌ ${fa(t.fail ?? 0)} · 🆕 ${fa(t.newusers ?? 0)}\n` +
+      (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") + "\n" +
       "<i>یک بخش را انتخاب کن. برای مدیریت یک کاربر، شناسه یا نامش را در «جستجو» بنویس.</i>",
     kb: [
       [cb("📊 آمار", "ad:st:7"), cb("👥 کاربران", "ad:us:t:0")],
       [cb("🔎 جستجوی کاربر", "ad:se"), cb("🗂 ارائه‌های اخیر", "ad:dk")],
       [cb("📣 پیام همگانی", "ad:bc"), cb("👑 پلن‌های فعال", "ad:sb:0")],
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
-      [cb("🎁 گزارش دعوت", "ad:iv:t:0")],
+      [cb(`💰 پرداخت‌ها${payIssues ? ` 🚨${fa(payIssues)}` : ""}`, "ad:pm:s:0"), cb("🔻 قیف کاربران", "ad:fn:30"), cb("🎁 دعوت‌ها", "ad:iv:t:0")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
     ],
   };
@@ -181,10 +183,10 @@ async function statsScreen(env: Env, days: number): Promise<Screen> {
       `👑 پلن‌های فعال: ${fa(subs)}\n` +
       `🎁 اعتبار هدیه/شارژِ مصرف‌نشده: ${fa(bonusSum)} (نزد ${fa(bonusUsers)} کاربر)\n\n` +
       "<b>ریز ۷ روز اخیر</b>\n" + daily.join("\n") +
-      "\n\n<i>«کاربر جدید» از زمان فعال شدن این قابلیت شمرده می‌شود؛ آمار ۶۰ روز نگه داشته می‌شود.</i>",
+      "\n\n<i>«کاربر جدید» از زمان فعال شدن این قابلیت شمرده می‌شود؛ آمار روزانه ۴۰۰ روز نگه داشته می‌شود.</i>",
     kb: [
       [cb(days === 1 ? "• امروز" : "امروز", "ad:st:1"), cb(days === 7 ? "• ۷ روز" : "۷ روز", "ad:st:7"), cb(days === 30 ? "• ۳۰ روز" : "۳۰ روز", "ad:st:30")],
-      [cb("🔄 تازه‌سازی", `ad:st:${days}`), ...backHome],
+      [cb("🔄 تازه‌سازی", `ad:st:${days}`), cb("📅 ماهانه", "ad:mo"), ...backHome],
     ],
   };
 }
@@ -355,6 +357,228 @@ async function referralScreen(env: Env, tab: "t" | "r", page: number): Promise<S
   return {
     text: summary + "🕒 <b>آخرین دعوت‌شده‌ها</b> (به وقت ایران)\n\n" + (list.length ? list.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.line}`).join("\n") : "هنوز دعوتی ثبت نشده است.") + "\n\n<i>دکمه‌ها: 👤 دعوت‌شده · 🎁 دعوت‌کننده</i>",
     kb: [tabs, ...list.map((x) => [cb(`👤 ${x.gl.slice(0, 18)}`, `ad:u:${x.guest}`), cb(`🎁 ${x.hl.slice(0, 18)}`, `ad:u:${x.host}`)]), pager("ad:iv:r", page, (page + 1) * PAGE < total), [cb("🔄 تازه‌سازی", `ad:iv:${tab}:${page}`), ...backHome]].filter((r) => r.length),
+  };
+}
+
+// ---------- گزارش پرداخت و درآمد ----------
+// رکوردهای pay:<سفارش> (payment.ts): pending ← paid | failed. پرداخت‌های تاییدشده ۸۴ روز، بقیه ۱۴ روز می‌مانند؛ برای تاریخچه‌ی بلندتر
+// فروش هر روز (به وقت ایران) در rv:<روز> = {n, a} هم جمع می‌شود. issue = کاربر از درگاه «موفق» برگشته ولی تایید نشده (پول ممکن است کسر شده باشد).
+interface PayRow { order: string; uid: string; plan: string | null; amount: number; state: string; t: number; ref: string | null; issue: string | null }
+const money = (n: number) => fa(Math.round(n).toLocaleString("en-US").replace(/,/g, "٬"));
+const pct = (a: number, b: number) => (b > 0 ? `${fa(Math.round((a / b) * 100))}٪` : "—");
+const tehranDay = (t: number) => new Date(t).toLocaleDateString("sv-SE", { timeZone: "Asia/Tehran" });
+const planLabel = (id: string | null) => (id ? (PLANS.find((p) => p.id === id)?.name ?? id) : "بسته‌ی اعتباری");
+/** مبلغ به تومان: از قیمت پلن (هزار تومان)؛ رکورد قدیمیِ بدون پلن از مبلغ ریالی */
+const tomanOf = (r: PayRow) => { const p = PLANS.find((x) => x.id === r.plan); return p ? p.price * 1000 : Math.round(r.amount / 10); };
+/** ماه شمسی یک روز (YYYY-MM-DD): کلید مرتب‌شدنی + برچسب فارسی */
+function pmonth(day: string): { key: string; label: string } {
+  const d = new Date(day + "T12:00:00Z");
+  const parts = new Intl.DateTimeFormat("fa-IR-u-nu-latn", { year: "numeric", month: "2-digit", timeZone: "UTC" }).formatToParts(d);
+  const year = parts.find((x) => x.type === "year")?.value ?? "";
+  const key = `${year}-${parts.find((x) => x.type === "month")?.value}`;
+  return { key, label: `${d.toLocaleDateString("fa-IR", { month: "long", timeZone: "UTC" })} ${fa(year)}` }; // مثلاً «آبان ۱۴۰۵»
+}
+const ISSUE_TXT = (i: string | null) =>
+  !i ? "" : i === "amount" ? "مبلغ برگشتی از درگاه با سفارش نمی‌خواند" : i === "vamount" ? "مبلغ تاییدشده با سفارش نمی‌خواند" : i === "net" ? "خطای شبکه هنگام تایید"
+  : i.startsWith("verify:") ? `تایید پرداخت رد شد (کد ${esc(i.slice(7))})` : esc(i);
+
+async function issueCount(env: Env): Promise<number> {
+  return count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND json_extract(v,'$.state')='pending' AND json_extract(v,'$.issue') IS NOT NULL", "pay:", "pay:" + MAXC, nowSec());
+}
+
+async function loadPayments(env: Env): Promise<PayRow[]> {
+  const d = await db(env);
+  const rs = (await d.prepare(
+    "SELECT k, json_extract(v,'$.uid') uid, json_extract(v,'$.plan') plan, json_extract(v,'$.amount') amount, json_extract(v,'$.state') state, json_extract(v,'$.t') t, json_extract(v,'$.ref') ref, json_extract(v,'$.issue') issue " +
+    "FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) ORDER BY json_extract(v,'$.t') DESC LIMIT 3000")
+    .bind("pay:", "pay:" + MAXC, nowSec()).all<{ k: string; uid: string; plan: string | null; amount: number; state: string; t: number; ref: string | null; issue: string | null }>()).results ?? [];
+  return rs.map((r) => ({ order: r.k.slice(4), uid: String(r.uid ?? ""), plan: r.plan ?? null, amount: Number(r.amount) || 0, state: String(r.state), t: Number(r.t) || 0, ref: r.ref ?? null, issue: r.issue ?? null }));
+}
+
+/** فروش هر روز (وقت ایران): از رکوردهای pay: و، برای روزهای قدیمی‌تر از ماندگاری آن‌ها، از شمارنده‌ی دائمی rv: */
+async function revenueByDay(env: Env, pays: PayRow[]): Promise<Map<string, { n: number; a: number }>> {
+  const m = new Map<string, { n: number; a: number }>();
+  for (const r of pays) {
+    if (r.state !== "paid") continue;
+    const day = tehranDay(r.t); const x = m.get(day) ?? { n: 0, a: 0 };
+    x.n++; x.a += tomanOf(r); m.set(day, x);
+  }
+  for (const r of await rows(env, "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2", "rv:", "rv:" + MAXC)) {
+    const day = r.k.slice(3); const v = json<{ n?: number; a?: number }>(r.v);
+    if (!v || (m.get(day)?.a ?? 0) >= (Number(v.a) || 0)) continue;
+    m.set(day, { n: Number(v.n) || 0, a: Number(v.a) || 0 });
+  }
+  return m;
+}
+
+type AttnKind = "issue" | "nosub" | "failed" | "stale";
+const ATTN_ICON: Record<AttnKind, string> = { issue: "🚨", nosub: "⚠️", failed: "❌", stale: "⏳" };
+const ATTN_TXT: Record<AttnKind, string> = {
+  issue: "از درگاه موفق برگشته ولی تایید نشد", nosub: "پرداخت تاییدشده، اما اشتراکی ثبت نیست (یا دستی لغو شده)",
+  failed: "ناموفق/لغو شده", stale: "به درگاه رفته و برنگشته (احتمالاً منصرف شده)",
+};
+/** پرداخت‌هایی که نیاز به نگاه مدیر دارند، مهم‌ترین اول */
+async function paymentAttention(env: Env, pays: PayRow[]): Promise<{ kind: AttnKind; r: PayRow }[]> {
+  const now = Date.now(), d14 = now - 14 * 86_400_000, d25 = now - 25 * 86_400_000;
+  const out: { kind: AttnKind; r: PayRow }[] = [];
+  for (const r of pays) {
+    if (r.state === "pending" && r.issue) out.push({ kind: "issue", r });
+    else if (r.state === "failed" && r.t > d14) out.push({ kind: "failed", r });
+    else if (r.state === "pending" && r.t < now - 30 * 60_000 && r.t > d14) out.push({ kind: "stale", r });
+  }
+  // پرداخت تاییدشده‌ی اخیر که ردیف اشتراکش نیست
+  const recent = pays.filter((r) => r.state === "paid" && r.plan && r.t > d25).slice(0, 30);
+  const subs = await Promise.all(recent.map((r) => env.KV.get(`sub:${r.uid}`).catch(() => "?")));
+  recent.forEach((r, i) => { if (subs[i] === null) out.push({ kind: "nosub", r }); });
+  const w: Record<AttnKind, number> = { issue: 0, nosub: 1, failed: 2, stale: 3 };
+  return out.sort((a, b) => w[a.kind] - w[b.kind] || b.r.t - a.r.t);
+}
+
+async function paymentScreen(env: Env, tab: "s" | "l" | "p", page: number): Promise<Screen> {
+  const pays = await loadPayments(env);
+  const [rev, attn] = await Promise.all([revenueByDay(env, pays), paymentAttention(env, pays)]);
+  const urgent = attn.filter((x) => x.kind === "issue" || x.kind === "nosub").length;
+  const tabs: Btn[] = [
+    cb(tab === "s" ? "• خلاصه" : "خلاصه", "ad:pm:s:0"),
+    cb(tab === "l" ? "• پرداخت‌ها" : "پرداخت‌ها", "ad:pm:l:0"),
+    cb(`${tab === "p" ? "• " : ""}⚠️ مشکل‌دار${attn.length ? ` (${fa(attn.length)})` : ""}`, "ad:pm:p:0"),
+  ];
+  const refresh = [cb("🔄 تازه‌سازی", `ad:pm:${tab}:${page}`), ...backHome];
+  const nameOf = async (uid: string): Promise<{ label: string; user: WebUser | null }> => {
+    const u = WEB_ID.test(uid) ? await getUserById(env, uid).catch(() => null) : null;
+    return { label: u?.name || u?.email || u?.mobile || uid, user: u };
+  };
+  const line = async (r: PayRow, kind?: AttnKind) => {
+    const who = await nameOf(r.uid);
+    return {
+      uid: r.uid, label: who.label,
+      text: `${kind ? ATTN_ICON[kind] + " " : "✅ "}<b>${esc(planLabel(r.plan))}</b> · ${money(tomanOf(r))} تومان · ${fmtTime(r.t)}\n` +
+        `    👤 ${esc(who.label)}${kind ? `\n    ↳ ${ATTN_TXT[kind]}${kind === "issue" ? ` — ${ISSUE_TXT(r.issue)}` : ""}` : ""}\n` +
+        `    🧾 سفارش <code>${esc(r.order)}</code>${r.ref ? ` · رهگیری <code>${esc(r.ref)}</code>` : ""}`,
+    };
+  };
+
+  if (tab === "s") {
+    const now = Date.now();
+    const sumDays = (k: number) => {
+      let n = 0, a = 0;
+      for (let i = 0; i < k; i++) { const x = rev.get(tehranDay(now - i * 86_400_000)); if (x) { n += x.n; a += x.a; } }
+      return { n, a };
+    };
+    const [t1, t7, t30] = [sumDays(1), sumDays(7), sumDays(30)];
+    const d30 = now - 30 * 86_400_000, d14 = now - 14 * 86_400_000;
+    const paid30 = pays.filter((r) => r.state === "paid" && r.t > d30);
+    const byPlan = PLANS.map((p) => `${p.name} ${fa(paid30.filter((r) => r.plan === p.id).length)}`).join(" · ");
+    const last14 = pays.filter((r) => r.t > d14);
+    const ok14 = last14.filter((r) => r.state === "paid").length;
+    const dead14 = last14.filter((r) => r.state === "failed" || (r.state === "pending" && r.t < now - 30 * 60_000)).length;
+    const months = new Map<string, { label: string; n: number; a: number }>();
+    for (const [day, v] of [...rev.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))) {
+      const m = pmonth(day); const x = months.get(m.key) ?? { label: m.label, n: 0, a: 0 };
+      x.n += v.n; x.a += v.a; months.set(m.key, x);
+    }
+    const monthLines = [...months.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6).map(([, m]) => `${m.label}: ${fa(m.n)} فروش · ${money(m.a)} تومان`);
+    return {
+      text:
+        "💰 <b>گزارش پرداخت و درآمد</b>\n\n" +
+        `🔌 درگاه دیجی‌پی: ${payEnabled(env) ? "✅ فعال" : "❌ غیرفعال (متغیرها تنظیم نشده)"}\n` +
+        (urgent ? `🚨 <b>${fa(urgent)} مورد نیازمند بررسی فوری</b> ← تب ⚠️ مشکل‌دار\n` : "✅ مورد فوری ندارد\n") +
+        `\n<b>فروش</b> (به وقت ایران)\n` +
+        `امروز: ${fa(t1.n)} فروش · ${money(t1.a)} تومان\n` +
+        `۷ روز اخیر: ${fa(t7.n)} · ${money(t7.a)} تومان\n` +
+        `۳۰ روز اخیر: ${fa(t30.n)} · ${money(t30.a)} تومان\n` +
+        `پلن‌های ۳۰ روز اخیر: ${byPlan}\n\n` +
+        `📈 تکمیل پرداخت (۱۴ روز اخیر): ${pct(ok14, ok14 + dead14)} — ${fa(ok14)} موفق از ${fa(ok14 + dead14)} ورود به درگاه\n` +
+        (monthLines.length ? `\n<b>ماهانه</b>\n${monthLines.join("\n")}\n` : "") +
+        "\n<i>جزئیات هر پرداخت ۸۴ روز نگه داشته می‌شود؛ جمع روزانه‌ی فروش از به‌روزرسانی این قابلیت به بعد دائمی است.</i>",
+      kb: [tabs, refresh],
+    };
+  }
+
+  if (tab === "l") {
+    const paid = pays.filter((r) => r.state === "paid");
+    const slice = paid.slice(page * PAGE, page * PAGE + PAGE);
+    const ls = await Promise.all(slice.map((r) => line(r)));
+    return {
+      text: `✅ <b>پرداخت‌های موفق</b> (جدیدترین اول، ۸۴ روز اخیر)\nکل: ${fa(paid.length)}\n\n` + (ls.length ? ls.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.text}`).join("\n\n") : "هنوز پرداختی ثبت نشده است."),
+      kb: [tabs, ...ls.map((x, i) => [cb(`${fa(page * PAGE + i + 1)}. ${x.label.slice(0, 40)}`, `ad:u:${x.uid}`)]), pager("ad:pm:l", page, (page + 1) * PAGE < paid.length), refresh].filter((r) => r.length),
+    };
+  }
+
+  const slice = attn.slice(page * PAGE, page * PAGE + PAGE);
+  const ls = await Promise.all(slice.map((x) => line(x.r, x.kind)));
+  return {
+    text:
+      `⚠️ <b>پرداخت‌های مشکل‌دار</b> (۱۴ روز اخیر)\nکل: ${fa(attn.length)}\n\n` +
+      (ls.length ? ls.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.text}`).join("\n\n") : "✅ مورد مشکوکی نیست.") +
+      "\n\n<i>🚨 و ⚠️ را با پنل دیجی‌پی (شماره‌ی رهگیری) مقایسه کن؛ اگر پول کسر شده، از کارت کاربر پلن را دستی فعال کن. ❌ و ⏳ معمولاً انصراف کاربر است.</i>",
+    kb: [tabs, ...ls.map((x, i) => [cb(`${fa(page * PAGE + i + 1)}. ${x.label.slice(0, 40)}`, `ad:u:${x.uid}`)]), pager("ad:pm:p", page, (page + 1) * PAGE < attn.length), refresh].filter((r) => r.length),
+  };
+}
+
+// ---------- قیف کاربران ----------
+// گروه = حساب‌های ساخته‌شده در بازه (هر کاربر ربات هم یک حساب وب wu: دارد). act:<حساب> را noteDeckDone (settings.ts) با هر ارائه‌ی موفق می‌نویسد.
+async function funnelScreen(env: Env, days: number): Promise<Screen> {
+  const d = await db(env);
+  const now = Date.now(), DAY = 86_400_000;
+  const label = days ? `${fa(days)} روز اخیر` : "از ابتدای ثبت";
+  const tabs: Btn[] = [7, 30, 90, 0].map((n) => cb(`${n === days ? "• " : ""}${n ? fa(n) + " روز" : "همه"}`, `ad:fn:${n}`));
+  const kb = (): Btn[][] => [tabs, [cb("🔄 تازه‌سازی", `ad:fn:${days}`), cb("📅 ماهانه", "ad:mo"), ...backHome]];
+  const since = Number((await d.prepare("SELECT MIN(json_extract(v,'$.f')) m FROM kv WHERE k >= ?1 AND k < ?2").bind("act:", "act:" + MAXC).first<{ m: number | null }>())?.m) || 0;
+  if (!since) return { text: "🔻 <b>قیف کاربران</b>\n\nهنوز داده‌ای ثبت نشده؛ ثبت از اولین ارائه‌ی موفق بعد از به‌روزرسانی شروع می‌شود و ارائه‌های قبلی در آن نیست.", kb: [backHome] };
+  const from = Math.max(since, days ? now - days * DAY : 0);
+  const r = await d.prepare(
+    "SELECT COUNT(*) total, SUM(a.k IS NOT NULL) made, SUM(json_extract(a.v,'$.n') >= 2) twice, " +
+    "SUM(json_extract(a.v,'$.f') - json_extract(u.v,'$.created') <= ?3) day1, " +
+    "SUM(json_extract(a.v,'$.f') <= ?4) m1, SUM(json_extract(a.v,'$.f') <= ?4 AND json_extract(a.v,'$.l') - json_extract(a.v,'$.f') >= ?3) r1, " +
+    "SUM(json_extract(a.v,'$.f') <= ?5) m7, SUM(json_extract(a.v,'$.f') <= ?5 AND json_extract(a.v,'$.l') - json_extract(a.v,'$.f') >= ?6) r7 " +
+    "FROM kv u LEFT JOIN kv a ON a.k = 'act:' || substr(u.k, 4) WHERE u.k >= ?1 AND u.k < ?2 AND json_extract(u.v,'$.created') >= ?7")
+    .bind("wu:", "wu:" + MAXC, DAY, now - DAY, now - 7 * DAY, 7 * DAY, from)
+    .first<Record<string, number | null>>();
+  const g = (k: string) => Number(r?.[k] ?? 0);
+  const total = g("total"), made = g("made");
+  // خریداران همین گروه (پرداخت‌های ۸۴ روز اخیر)
+  const payers = [...new Set((await loadPayments(env)).filter((p) => p.state === "paid" && WEB_ID.test(p.uid)).map((p) => p.uid))].slice(0, 300);
+  const created = await Promise.all(payers.map((u) => getUserById(env, u).then((x) => x?.created ?? 0).catch(() => 0)));
+  const bought = created.filter((c) => c >= from).length;
+  return {
+    text:
+      `🔻 <b>قیف کاربران — ${label}</b>\n` +
+      `<i>گروه: حساب‌های ساخته‌شده از ${fmtDay(from)} (ثبت فعالیت از ${fmtDay(since)} شروع شده)</i>\n\n` +
+      `👤 حساب جدید: <b>${fa(total)}</b>\n` +
+      `🎬 اولین ارائه را ساخته‌اند: <b>${fa(made)}</b> (${pct(made, total)})\n` +
+      `      ⚡ در ۲۴ ساعت اول: ${fa(g("day1"))} (${pct(g("day1"), total)})\n` +
+      `      🚪 هیچ ارائه‌ای نساخته‌اند: ${fa(Math.max(0, total - made))} (${pct(total - made, total)})\n` +
+      `🔁 دو ارائه یا بیشتر: <b>${fa(g("twice"))}</b> (${pct(g("twice"), total)})\n` +
+      `📆 برگشت حداقل ۱ روز بعد: <b>${fa(g("r1"))}</b> از ${fa(g("m1"))} (${pct(g("r1"), g("m1"))})\n` +
+      `📆 برگشت حداقل ۷ روز بعد: <b>${fa(g("r7"))}</b> از ${fa(g("m7"))} (${pct(g("r7"), g("m7"))})\n` +
+      `💳 خرید پلن: <b>${fa(bought)}</b> (${pct(bought, total)})\n\n` +
+      "<i>«برگشت» یعنی آخرین ارائه‌اش دست‌کم ۱ یا ۷ روز بعد از اولین ارائه بوده؛ درصدش فقط از کسانی است که اولین ارائه‌شان آن‌قدر قدیمی شده. خریدها فقط از ۸۴ روز اخیر شمرده می‌شود.</i>",
+    kb: kb(),
+  };
+}
+
+// ---------- نمای ماهانه (ماه شمسی) ----------
+async function monthlyScreen(env: Env): Promise<Screen> {
+  const [st, pays] = await Promise.all([statsByDay(env), loadPayments(env)]);
+  const rev = await revenueByDay(env, pays);
+  const ms = new Map<string, { label: string; started: number; ok: number; fail: number; nu: number; sales: number; money: number }>();
+  const get = (day: string) => {
+    const m = pmonth(day); let x = ms.get(m.key);
+    if (!x) ms.set(m.key, (x = { label: m.label, started: 0, ok: 0, fail: 0, nu: 0, sales: 0, money: 0 }));
+    return x;
+  };
+  for (const [day, v] of Object.entries(st)) { const x = get(day); x.started += v.started ?? 0; x.ok += v.ok ?? 0; x.fail += v.fail ?? 0; x.nu += v.newusers ?? 0; }
+  for (const [day, v] of rev) { const x = get(day); x.sales += v.n; x.money += v.a; }
+  const list = [...ms.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 12);
+  const body = list.map(([, m], i) => {
+    const rate = m.ok + m.fail > 0 ? pct(m.ok, m.ok + m.fail) : "—";
+    return `<b>${m.label}</b>${i === 0 ? " (جاری)" : ""}\n    🆕 ${fa(m.nu)} · ▶️ ${fa(m.started)} · ✅ ${fa(m.ok)} · ❌ ${fa(m.fail)} · 📈 ${rate}\n    💳 ${fa(m.sales)} فروش · ${money(m.money)} تومان`;
+  });
+  return {
+    text: "📅 <b>آمار ماهانه</b> (ماه شمسی)\n\n" + (body.length ? body.join("\n\n") : "هنوز آماری نیست.") +
+      "\n\n<i>آمار ارائه تا پیش از این به‌روزرسانی فقط ۶۰ روز نگه داشته می‌شد؛ ماه‌های قدیمی‌تر ناقص‌اند. از این به بعد ۴۰۰ روز نگه داشته می‌شود.</i>",
+    kb: [[cb("📊 آمار", "ad:st:7"), cb("💰 پرداخت‌ها", "ad:pm:s:0"), cb("🔻 قیف", "ad:fn:30")], [cb("🔄 تازه‌سازی", "ad:mo"), ...backHome]],
   };
 }
 
@@ -650,6 +874,9 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "sb": return await show(await subsScreen(env, Math.max(0, Math.min(2000, Number(b) || 0))));
       case "bn": return await show(await bannedScreen(env));
       case "dk": return await show(await decksScreen(env));
+      case "pm": return await show(await paymentScreen(env, b === "l" ? "l" : b === "p" ? "p" : "s", Math.max(0, Math.min(2000, Number(c) || 0))));
+      case "fn": return await show(await funnelScreen(env, [7, 30, 90, 0].includes(Number(b)) ? Number(b) : 30));
+      case "mo": return await show(await monthlyScreen(env));
       case "iv": return await show(await referralScreen(env, b === "r" ? "r" : "t", Math.max(0, Math.min(2000, Number(c) || 0))));
       case "sy": return await show(await systemScreen(env));
       case "lg": return await show(await logScreen(env));

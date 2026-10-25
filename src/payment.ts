@@ -54,7 +54,8 @@ const DP_AMOUNT_UNIT: "toman" | "rial" = "rial";
 
 export const payEnabled = (env: Env) => { const c = cfg(env); return Boolean(c.clientId && c.clientSecret && c.username && c.password); };
 
-interface PayRecord { uid: string; plan?: string; count: number; amount: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string; redirect?: string }
+/** issue/it: وقتی کاربر از درگاه «موفق» برگشته ولی تایید یا فعال‌سازی کامل نشده (برای هشدار در گزارش پرداخت پنل مدیر؛ وضعیت pending می‌ماند تا تایید دوباره ممکن باشد) */
+interface PayRecord { uid: string; plan?: string; count: number; amount: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string; redirect?: string; issue?: string; it?: number }
 const TTL = 60 * 60 * 24 * 14;
 
 const json = (data: unknown, status = 200) =>
@@ -117,6 +118,25 @@ function normalizeMobile(v: unknown): string | null {
 /** شماره‌ی سفارش یکتا (providerId) */
 const newOrderId = () => `pp${Date.now()}${String(crypto.getRandomValues(new Uint32Array(1))[0] % 10_000).padStart(4, "0")}`; // pp + ۱۳ رقم زمان + ۴ رقم تصادفیِ امن
 const ORDER_RE = /^pp\d{13,17}$/;
+
+/** پرداختِ «موفق» از دید درگاه که تایید نشد را برای پنل مدیر علامت می‌زند (فقط رکورد pending؛ ۸۴ روز نگه داشته می‌شود). خطا هرگز مسیر پرداخت را نمی‌شکند. */
+async function flagIssue(env: Env, rec: PayRecord, issue: string, trackingCode: string): Promise<void> {
+  try {
+    await env.DB.prepare("UPDATE kv SET v=?2, exp=?3 WHERE k=?1 AND json_extract(v,'$.state')='pending'")
+      .bind(`pay:${rec.order}`, JSON.stringify({ ...rec, issue: issue.slice(0, 40), ref: trackingCode, it: Date.now() }), Math.floor(Date.now() / 1000) + TTL * 6).run();
+  } catch (e) { console.error("flagIssue", e); }
+}
+
+/** آمار دائمی فروش روزانه (به وقت ایران) برای نمای ماهانه‌ی پنل مدیر: rv:<روز> = {n: تعداد، a: تومان}. رکوردهای pay: فقط ۸۴ روز می‌مانند. */
+async function noteSale(env: Env, rec: PayRecord, plan: Plan | undefined): Promise<void> {
+  try {
+    const day = new Date(rec.t).toLocaleDateString("sv-SE", { timeZone: "Asia/Tehran" });
+    const toman = plan ? plan.price * 1000 : Math.round(rec.amount / 10);
+    await env.DB.prepare(
+      "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1, '$.a', COALESCE(json_extract(v, '$.a'), 0) + ?3)")
+      .bind(`rv:${day}`, JSON.stringify({ n: 1, a: toman }), toman).run();
+  } catch (e) { console.error("noteSale", e); }
+}
 
 /** POST /api/pay/start  { plan } → { url }  (کاربر باید وارد شده باشد) */
 export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
@@ -206,6 +226,7 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   }
   if (Number(field("amount")) !== rec.amount) {
     console.error("digipay amount mismatch", order, field("amount"), rec.amount);
+    await flagIssue(env, rec, "amount", trackingCode);
     return go("pay=fail");
   }
 
@@ -213,16 +234,18 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   let res: any = null;
   for (let i = 0; i < 4; i++) {
     res = await dp(env, `purchases/verify?type=${type}`, { trackingCode, providerId: order }).catch((e) => { console.error("digipay verify", e); return null; });
-    if (!res) return go("pay=error"); // خطای شبکه: وضعیت pending می‌ماند تا تایید دوباره
+    if (!res) { await flagIssue(env, rec, "net", trackingCode); return go("pay=error"); } // خطای شبکه: وضعیت pending می‌ماند تا تایید دوباره
     if (String(res?.result?.status) !== "9011") break;
     await new Promise((r) => setTimeout(r, 2000));
   }
   if (dpOk(res) && res?.amount != null && Number(res.amount) !== rec.amount) {
     console.error("digipay verify amount mismatch", order, res.amount, rec.amount);
+    await flagIssue(env, rec, "vamount", trackingCode);
     return go("pay=fail");
   }
   if (!dpOk(res)) {
     console.error("digipay verify failed", JSON.stringify({ s: res?.result?.status, m: res?.result?.message }).slice(0, 300));
+    await flagIssue(env, rec, `verify:${res?.result?.status ?? "?"}`, trackingCode);
     return go("pay=fail");
   }
 
@@ -240,7 +263,7 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   const by = crypto.randomUUID(); // نشانه‌ی برنده؛ نوشتن اشتراک فقط وقتی انجام می‌شود که رکورد پرداخت همین نشانه را داشته باشد
   const nowSec = Math.floor(Date.now() / 1000);
   const claim = env.DB.prepare("UPDATE kv SET v=?2, exp=?3 WHERE k=?1 AND json_extract(v,'$.state') != 'paid'")
-    .bind(`pay:${order}`, JSON.stringify({ ...rec, state: "paid", ref: trackingCode, by }), nowSec + TTL * 6);
+    .bind(`pay:${order}`, JSON.stringify({ ...rec, state: "paid", ref: trackingCode, by, issue: undefined, it: undefined }), nowSec + TTL * 6);
   const plan = rec.plan ? PLANS.find((p) => p.id === rec.plan) : undefined;
   let won: boolean;
   if (plan) {
@@ -256,6 +279,6 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
     won = (await claim.run()).meta.changes === 1;
     if (won) await setBonus(env, rec.uid, (await getBonus(env, rec.uid)) + rec.count);
   }
-  if (won) console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode);
+  if (won) { console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode); await noteSale(env, rec, plan); }
   return go(okQ);
 }
