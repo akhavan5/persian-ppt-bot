@@ -19,6 +19,9 @@ export const PLAN_MAX_SLIDES: Record<string, number> = { plus: 20, pro: 35 };
 export const FREE_MAX_IMAGES = 1;
 export const ABS_MAX_IMAGES = 6;
 export const PLAN_MAX_IMAGES: Record<string, number> = { plus: 3, pro: 6 };
+/** تعداد تصویر ارائه به‌صورت ضمنی از روی تعداد اسلاید (کاربر فقط «اسلاید تصویر داشته باشد؟ بله/خیر» را می‌بیند):
+ *  تا ۱۰ اسلاید ۱ تصویر، تا ۱۵ → ۲، تا ۲۰ → ۳، تا ۲۵ → ۴، تا ۳۰ → ۵، تا ۳۵ → ۶ */
+export const imagesForSlides = (slides: number): number => Math.max(1, Math.min(ABS_MAX_IMAGES, Math.ceil((Math.round(Number(slides) || 0) - 5) / 5)));
 /** گزینه‌های انتخاب تعداد اسلاید در وب (گزینه‌های بالاتر از سقف پلن کاربر قفل نمایش داده می‌شوند) */
 export const WEB_SLIDE_CHOICES = [5, 6, 8, 10, 12, 15, 20, 25, 30, 35];
 

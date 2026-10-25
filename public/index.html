@@ -340,7 +340,7 @@ address{font-style:normal}
     </div>
     <div class="gen">
       <div><label for="slides" style="margin-top:0">تعداد اسلاید</label><select id="slides"></select></div>
-      <div><label for="imgCount" style="margin-top:0">تعداد تصویر</label><select id="imgCount"></select></div>
+      <div><label for="imgCount" style="margin-top:0">اسلاید حاوی تصویر باشد؟</label><select id="imgCount"><option value="1">بله</option><option value="0">خیر</option></select></div>
     </div>
     <div class="posterBox" id="posterBox" hidden>
       <label class="pOn" style="margin-top:0"><input type="checkbox" id="pOn"> 🖼 پوستر (اینفوگرافیک) هم ساخته شود <span class="free">+۱ اعتبار</span></label>
@@ -709,17 +709,14 @@ function renderCommon() {
 }
 
 // ---------- تعداد اسلاید (سقف بر اساس پلن: رایگان ۸، پلاس ۲۰، پرو ۳۵) ----------
-let lastSlides = 8, lastImages = 1;
+let lastSlides = 8;
 const slideMax = () => (me && me.maxSlides) || cfg.freeMaxSlides || 8;
 const imgMax = () => (me && me.maxImages) || cfg.freeMaxImages || 1;
 const planImages = (id) => ((cfg.plans || []).find((p) => p.id === id) || {}).maxImages || 0;
 const planSlides = (id) => ((cfg.plans || []).find((p) => p.id === id) || {}).maxSlides || 0;
 function renderImages() {
   if (!cfg) return;
-  const el = $("#imgCount"), max = imgMax();
-  const want = Math.min(me && me.settings.imageCount != null ? me.settings.imageCount : (el.value !== "" ? Number(el.value) : 1), max);
-  el.replaceChildren(...[0, 1, 2, 3, 4, 5, 6].map((n) => h("option", { value: n }, (n ? fa(n) : "بدون تصویر") + (n > max ? " 🔒" : ""))));
-  el.value = String(want); lastImages = want;
+  $("#imgCount").value = me ? (me.settings.images === false ? "0" : "1") : ($("#imgCount").value || "1"); // پیش‌فرض: بله
 }
 function renderSlides() {
   if (!cfg) return;
@@ -730,13 +727,7 @@ function renderSlides() {
   sl.value = String([...cfg.slideChoices].reverse().find((n) => n <= want) ?? cfg.slideChoices[0]);
   lastSlides = Number(sl.value);
 }
-$("#imgCount").onchange = (e) => {
-  const n = Number(e.target.value);
-  if (n > imgMax()) {
-    e.target.value = String(lastImages);
-    openBuy(`ساخت ${fa(n)} تصویر در هر ارائه فقط با پلن‌های پولی ممکن است: پلن رایگان ${fa(cfg.freeMaxImages || 1)}، پلاس تا ${fa(planImages("plus"))} و پرو تا ${fa(planImages("pro"))} تصویر.`);
-  } else { lastImages = n; if (me) saveSetting({ imageCount: n }); }
-};
+$("#imgCount").onchange = (e) => { if (me) saveSetting({ images: e.target.value === "1" }); };
 $("#slides").onchange = (e) => {
   const n = Number(e.target.value);
   if (n > slideMax()) {
@@ -1357,7 +1348,7 @@ $("#go").onclick = async () => {
   }
   try {
     // تا شروع کار، دکمه «در حال ارسال…» نشان می‌دهد؛ بعد از موفقیت قفل می‌ماند تا پایان ساخت (track آزادش می‌کند)
-    const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), imageCount: Number($("#imgCount").value), ...(srcText ? { source: srcText } : {}), ...(cfg.poster && $("#pOn").checked ? { poster: $("#pChoice").value } : {}), ...($("#hOn").checked ? { handout: true } : {}) } }), { disabled: true });
+    const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: { topic, slides: Number($("#slides").value), images: $("#imgCount").value === "1", ...(srcText ? { source: srcText } : {}), ...(cfg.poster && $("#pOn").checked ? { poster: $("#pChoice").value } : {}), ...($("#hOn").checked ? { handout: true } : {}) } }), { disabled: true });
     $("#jobText").textContent = "⏳ در صف…"; jobView("run");
     $("#job").scrollIntoView({ behavior: "smooth", block: "center" });
     refreshMe(); track(r.jobId);

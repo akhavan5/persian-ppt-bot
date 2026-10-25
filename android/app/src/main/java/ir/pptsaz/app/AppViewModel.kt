@@ -154,7 +154,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ ساخت ارائه
 
-    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, imageCount: Int) {
+    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean) {
         if (topic.trim().length < 3) {
             toast("موضوع ارائه را بنویسید")
             return
@@ -162,7 +162,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, imageCount)
+                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, images)
                 _state.update { it.copy(busy = false) }
                 if (id.isEmpty()) toast("شروع ساخت انجام نشد") else watch(id)
             } catch (e: ApiException) {
@@ -349,7 +349,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         "model" -> s.copy(model = value as String)
         "mode" -> s.copy(mode = value as String)
         "slides" -> s.copy(slides = value as Int)
-        "imageCount" -> s.copy(imageCount = value as Int)
+        "images" -> s.copy(images = value as Boolean)
         "digits" -> s.copy(digits = value as Boolean)
         "sources" -> s.copy(sources = value as Boolean)
         "questions" -> s.copy(questions = value as Boolean)

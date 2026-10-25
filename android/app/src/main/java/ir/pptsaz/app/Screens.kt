@@ -515,16 +515,12 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                         )
                         Spacer(Modifier.height(2.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("تعداد تصویر", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                            Text(if (s.imageCount == 0) "بدون تصویر" else s.imageCount.fa(), style = MaterialTheme.typography.titleSmall, color = cs.primary)
+                            Text("اسلاید حاوی تصویر باشد؟", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            Text(if (s.images) "بله" else "خیر", style = MaterialTheme.typography.titleSmall, color = cs.primary)
                         }
                         Segmented(
-                            options = (0..6).toList(), selected = s.imageCount, label = { it.fa() },
-                            locked = { it > me.maxImages },
-                            onSelect = { n ->
-                                if (n > me.maxImages) vm.toast("ساخت " + n.fa() + " تصویر در هر ارائه فقط با پلن‌های پولی ممکن است")
-                                else vm.setSetting("imageCount", n)
-                            },
+                            options = listOf(true, false), selected = s.images, label = { if (it) "بله" else "خیر" },
+                            onSelect = { v -> vm.setSetting("images", v) },
                         )
                     }
                 }
@@ -579,7 +575,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
         ) {
             GradientButton(
                 text = if (running) "در حال ساخت…" else "ساخت ارائه",
-                onClick = { vm.generate(form.topic, s.slides, form.handout, form.source, (if (cfg.poster) form.poster.ifEmpty { null } else null), s.imageCount) },
+                onClick = { vm.generate(form.topic, s.slides, form.handout, form.source, (if (cfg.poster) form.poster.ifEmpty { null } else null), s.images) },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !running && !st.busy,
                 icon = AppIcons.Sparkles,

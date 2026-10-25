@@ -25,7 +25,7 @@ data class Config(
 
 data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "",
     val mode: String = "normal", val digits: Boolean = false, val sources: Boolean = false, val questions: Boolean = false,
-    val imageCount: Int = 0,
+    val images: Boolean = true,
 )
 
 data class Me(
@@ -102,7 +102,7 @@ fun parseMe(j: JSONObject): Me? {
             slides = st.optInt("slides", 8), model = st.str("model"),
             mode = st.str("mode").ifEmpty { "normal" },
             digits = st.optBoolean("digits"), sources = st.optBoolean("sources"), questions = st.optBoolean("questions"),
-            imageCount = st.optInt("imageCount", if (st.optBoolean("images")) 1 else 0),
+            images = st.optBoolean("images", true),
         ),
         activeJob = j.str("activeJob").ifEmpty { null },
         plans = j.optJSONArray("plans").objects().map {

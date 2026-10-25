@@ -3,7 +3,7 @@ import type { Mode, Settings } from "./types";
 import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
-  EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, ABS_MAX_IMAGES, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
+  EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
   maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
@@ -15,7 +15,7 @@ import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
-import { BUY_SITE_NOTE, beginDeck, buyKbFor, imagesLimitMsg, launchDeck, posterEnabled, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
+import { BUY_SITE_NOTE, beginDeck, buyKbFor, launchDeck, posterEnabled, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { parseRequest } from "./parse";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
@@ -26,7 +26,7 @@ const THEME_DOT: Record<string, string> = { ocean: "🟦", forest: "🟩", sunse
 const HELP =
   "سلام! 👋\n" +
   "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
-  "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد مرحله‌به‌مرحله <b>مدل، تعداد اسلاید و تعداد تصویر</b> را انتخاب می‌کنی و ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
+  "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد مرحله‌به‌مرحله <b>مدل، تعداد اسلاید و داشتن تصویر</b> را انتخاب می‌کنی و ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش</code>\n\n" +
   "🖼 در مرحله‌های آخر می‌توانی یک <b>پوستر (اینفوگرافیک)</b> و یک <b>جزوه‌ی Word</b> هم همراه ارائه بگیری.\n\n" +
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
@@ -49,19 +49,19 @@ const getCaps = async (env: Env, uid: Uid): Promise<Caps> => {
   const [maxSlides, maxImg, premium] = await Promise.all([maxSlidesFor(env, uid), maxImagesFor(env, uid), hasPlanAccess(env, uid)]);
   return { maxSlides, maxImg, premium };
 };
-const imgCountOf = (s: Settings, caps: Caps) => Math.min(caps.maxImg, s.imageCount ?? (s.images ? 1 : 0));
+/** اسلایدها تصویر داشته باشند؟ (تعداد تصویر ضمنی و از روی تعداد اسلاید محاسبه می‌شود) */
+const wantsImgs = (s: Settings) => s.images !== false;
 
 function mainMenu(env: Env, s: Settings, caps: Caps) {
   const models = modelList(env);
   const model = models.find((m) => m.id === s.model) ?? models[0];
   const modeBtn: Btn = { text: `${MODES[s.mode].emoji} حالت: ${MODES[s.mode].name}`, callback_data: "t:mode" };
-  const n = imgCountOf(s, caps);
   const tpl = TEMPLATES[(isTemplate(s.template) ? s.template : DEFAULT_TEMPLATE) as TemplateKey];
   const rows: Btn[][] = [
     [{ text: `${tpl.emoji} قالب: ${tpl.name}`, callback_data: "m:tpl" }],
     [{ text: `🎨 تم: ${THEMES[s.theme].name}`, callback_data: "m:theme" }, { text: `🗣 لحن: ${TONES[s.tone]}`, callback_data: "m:tone" }],
     [{ text: `🔤 فونت: ${s.font}`, callback_data: "m:font" }, { text: `📄 اسلاید: ${toFa(String(Math.min(s.slides, caps.maxSlides)))}`, callback_data: "m:slides" }],
-    [{ text: `🖼 تصویر: ${n ? toFa(String(n)) : "خاموش"}`, callback_data: "m:imgs" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
+    [{ text: `🖼 تصویر در اسلاید: ${wantsImgs(s) ? "بله" : "خیر"}`, callback_data: "t:images" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
     models.length > 1 ? [{ text: `🤖 مدل: ${model.name}`, callback_data: "m:model" }, modeBtn] : [modeBtn],
     [{ text: `📚 منابع: ${s.mode === "student" || s.mode === "thesis" ? "روشن (" + MODES[s.mode].name + ")" : s.sources ? "روشن" : "خاموش"}`, callback_data: "t:sources" },
       { text: `❓ پرسش پایانی: ${s.mode === "teacher" ? "روشن (معلم)" : s.questions ? "روشن" : "خاموش"}`, callback_data: "t:questions" }],
@@ -87,12 +87,6 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
   } else if (kind === "font") {
     title = `🔤 فونت\n<i>Vazirmatn (<a href="${FONT_URL}">دانلود</a>) و فونت‌های B Nazanin و B Titr (<a href="${B_FONTS_URL}">دانلود</a>) باید روی دستگاه نمایش‌دهنده نصب باشند؛ Tahoma و Arial همه‌جا کار می‌کنند.</i>`;
     opts = FONTS.map((f) => ({ text: mark(s.font === f, f), callback_data: `v:font:${f}` }));
-  } else if (kind === "imgs") {
-    const cur = imgCountOf(s, caps);
-    title = `🖼 تعداد تصویر در هر ارائه\n<i>سقف حساب تو: ${toFa(String(caps.maxImg))} تصویر. گزینه‌های 🔒 با پلن پلاس/پرو باز می‌شوند.</i>`;
-    opts = Array.from({ length: ABS_MAX_IMAGES + 1 }, (_, n) => ({
-      text: lock(n > caps.maxImg, mark(cur === n, n === 0 ? "بدون تصویر" : toFa(String(n)))), callback_data: `v:imgs:${n}`,
-    }));
   } else if (kind === "model") {
     title = "🤖 مدل هوش مصنوعی";
     opts = modelList(env).map((m, i) => ({ text: lock(!!m.extra && !caps.premium, mark(s.model === m.id, m.name)), callback_data: `v:model:${i}` }));
@@ -106,12 +100,12 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
   return { text: title, ...kb(rows) };
 }
 
-// ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← تعداد تصویر) ----------
+// ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← اسلاید حاوی تصویر؟) ----------
 type Step = "model" | "slides" | "imgs" | "poster" | "handout";
 /** پوستر (اینفوگرافیک) همراه ارائه: none = نه، wide = افقی، tall = عمودی */
 type PosterChoice = "none" | "wide" | "tall";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
-interface Pending { /** جزوه‌ی Word همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; imgs: number; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string; /** منبع از روی لینک وب است (file = نام سایت) */ link?: boolean }
+interface Pending { /** جزوه‌ی Word همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; /** اسلاید حاوی تصویر باشد؟ (پیش‌فرض بله) */ imgs: boolean; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string; /** منبع از روی لینک وب است (file = نام سایت) */ link?: boolean }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
@@ -156,10 +150,11 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
       [{ text: mark(p.handout === false, "بدون جزوه"), callback_data: "p:handout:0" }],
     ];
   } else {
-    ask = "🖼 <b>تعداد تصویر</b> را انتخاب کن:" + (steps[steps.length - 1] === "imgs" ? "\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>" : "");
-    opts = chunk(Array.from({ length: ABS_MAX_IMAGES + 1 }, (_, n) => ({
-      text: lock(n > caps.maxImg, mark(p.imgs === n, n === 0 ? "بدون تصویر" : toFa(String(n)))), callback_data: `p:imgs:${n}`,
-    })), 4);
+    ask = "🖼 <b>اسلایدها حاوی تصویر باشند؟</b>" + (steps[steps.length - 1] === "imgs" ? "\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>" : "");
+    opts = [[
+      { text: mark(p.imgs, "✅ بله (پیش‌فرض)"), callback_data: "p:imgs:1" },
+      { text: mark(!p.imgs, "❌ خیر"), callback_data: "p:imgs:0" },
+    ]];
   }
 
   const topicShown = p.topic.length > 200 ? p.topic.slice(0, 200) + "…" : p.topic;
@@ -184,7 +179,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 /** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
 async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
   const wantPoster = p.poster === "wide" || p.poster === "tall";
-  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout !== false, slides: p.slides, imageCount: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
+  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout !== false, slides: p.slides, images: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
   if (!begin.ok) {
     const d = begin.denied;
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
@@ -265,9 +260,8 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
     if (b !== "none" && b !== "wide" && b !== "tall") return await answer();
     p.poster = b;
   } else if (a === "imgs") {
-    if (!(Number.isInteger(Number(b)) && Number(b) >= 0 && Number(b) <= ABS_MAX_IMAGES)) return await answer();
-    if (Number(b) > caps.maxImg) return await answer(imagesLimitMsg(caps.maxImg), true);
-    p.imgs = Number(b); s.imageCount = p.imgs; s.images = p.imgs > 0;
+    if (!(Number.isInteger(Number(b)) && Number(b) >= 0)) return await answer();
+    p.imgs = Number(b) > 0; s.images = p.imgs;
   } else return await answer();
   await saveSettings(env, uid, s).catch((e) => console.error("saveSettings", e));
 
@@ -358,7 +352,7 @@ async function handleCallback(env: Env, cq: any) {
   }
   if (act === "m") view = subMenu(env, a, s, caps);
   else if (act === "t") {
-    if (a === "images") { s.images = !s.images; s.imageCount = s.images ? Math.min(1, caps.maxImg) : 0; } // دکمه‌های قدیمی
+    if (a === "images") s.images = !s.images;
     if (a === "digits") s.digits = !s.digits;
     if (a === "mode") s.mode = nextMode(s.mode);
     if (a === "sources") s.sources = !s.sources;
@@ -374,11 +368,7 @@ async function handleCallback(env: Env, cq: any) {
       if (Number(b) > caps.maxSlides) return await alertLimit(slidesLimitMsg(caps.maxSlides));
       s.slides = clampSlides(Number(b), caps.maxSlides);
     }
-    if (a === "imgs" && Number.isInteger(Number(b)) && Number(b) >= 0 && Number(b) <= ABS_MAX_IMAGES) {
-      if (Number(b) > caps.maxImg) return await alertLimit(imagesLimitMsg(caps.maxImg));
-      s.imageCount = Number(b);
-      s.images = s.imageCount > 0;
-    }
+    if (a === "imgs" && Number.isInteger(Number(b)) && Number(b) >= 0) s.images = Number(b) > 0; // دکمه‌های قدیمی
     if (a === "model") {
       const m = modelList(env)[Number(b)];
       if (m?.extra && !caps.premium) return await alertLimit(EXTRA_MODEL_MSG);
@@ -600,7 +590,7 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     topic: o.topic, mid: 0,
     ...(o.orig?.trim() ? { orig: o.orig.replace(/\s+/g, " ").trim().slice(0, 300) } : {}),
     slides: Math.min(o.slides ?? s.slides, caps.maxSlides),
-    imgs: imgCountOf(s, caps),
+    imgs: wantsImgs(s),
     model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,
     poster: "wide", // پیش‌فرض: با پوستر افقی
     handout: true, // جزوه‌ی Word: پیش‌فرض روشن

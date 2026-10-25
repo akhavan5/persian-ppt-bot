@@ -16,7 +16,7 @@ import {
   googleEnabled, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
   sessionCookie, type WebUser,
 } from "./auth";
-import { beginDeck, imagesLimitMsg, launchDeck, posterEnabled, runningJob, slidesLimitMsg } from "./deck-service";
+import { beginDeck, launchDeck, posterEnabled, runningJob, slidesLimitMsg } from "./deck-service";
 import { OCR_TYPES } from "./extract";
 import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { WEB_MAX_FILE, extractFileBytes } from "./tg-file";
@@ -213,7 +213,6 @@ async function me(env: Env, user: WebUser): Promise<Response> {
   const [c, settings, running, sub, maxSlides, maxImages, telegram] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id), getLinkedTg(env, user.id)]);
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
-  settings.imageCount = Math.min(settings.imageCount ?? (settings.images ? FREE_MAX_IMAGES : 0), maxImages);
   const activeJob = running.busy ? running.jobId : null;
   return json({
     user: publicUser(user),
@@ -246,12 +245,6 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
     const max = await maxSlidesFor(env, user.id);
     if (Math.round(b.slides) > max) return json({ error: slidesLimitMsg(max), needPlan: true }, 403);
     s.slides = clampSlides(b.slides, max);
-  }
-  if (typeof b.imageCount === "number" && Number.isFinite(b.imageCount)) {
-    const maxImg = await maxImagesFor(env, user.id);
-    if (Math.round(b.imageCount) > maxImg) return json({ error: imagesLimitMsg(maxImg), needPlan: true }, 403);
-    s.imageCount = Math.max(0, Math.round(b.imageCount));
-    s.images = s.imageCount > 0;
   }
   if (typeof b.model === "string" && modelList(env).some((m) => m.id === b.model)) {
     if (!(await canUseModel(env, user.id, b.model))) return json({ error: EXTRA_MODEL_MSG.replace("🔒 ", ""), needPlan: true }, 403);
@@ -293,7 +286,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
     handout: b?.handout === true,
     source: typeof b?.source === "string" ? b.source : undefined,
     slides: typeof b?.slides === "number" ? b.slides : undefined,
-    imageCount: typeof b?.imageCount === "number" ? b.imageCount : undefined,
+    images: typeof b?.images === "boolean" ? b.images : undefined,
   });
   if (!begin.ok) {
     const d = begin.denied;

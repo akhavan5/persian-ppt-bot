@@ -130,8 +130,8 @@ object Api {
 
     suspend fun files(): List<FileItem> = parseFiles(call("GET", "/api/files"))
 
-    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, imageCount: Int): String {
-        val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout).put("imageCount", imageCount)
+    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean): String {
+        val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout).put("images", images)
         if (poster != null) b.put("poster", poster)
         if (source.isNotEmpty()) b.put("source", source)
         return call("POST", "/api/generate", b).optString("jobId")
