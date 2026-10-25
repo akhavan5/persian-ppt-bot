@@ -4,14 +4,14 @@ import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getActiveSub, getBonus, putSub, setBo
 import { hitLimit, type WebUser } from "./auth";
 
 /**
- * پلن‌های ماهانه (price: هزار تومان): پلاس ۱۹۹ و پرو ۳۴۹. هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
+ * پلن‌های ماهانه (price: هزار تومان): پلاس ۲۹۹ و پرو ۴۴۹. هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
  * مدل‌های کلودفلر برای همه رایگان است؛ مدل‌های ویژه‌ی ارائه‌دهنده‌ی دوم (EXTRA_LLM_*) فقط برای دارندگان پلن فعال است. پلن‌ها اعتبار می‌فروشند و سقف اسلاید هر ارائه را بالا می‌برند
  * (رایگان ۸، پلاس ۲۰، پرو ۳۵ اسلاید) و تعداد تصویر هر ارائه را (رایگان ۱، پلاس ۳، پرو ۶).
  */
 export interface Plan { id: string; name: string; price: number; credits: number; days: number; maxSlides: number; maxImages: number }
 export const PLANS: Plan[] = [
-  { id: "plus", name: "پلاس", price: 199, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
-  { id: "pro", name: "پرو", price: 349, credits: 20, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
+  { id: "plus", name: "پلاس", price: 299, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
+  { id: "pro", name: "پرو", price: 449, credits: 20, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
 ];
 
 /**
