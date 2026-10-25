@@ -13,7 +13,7 @@ import type { Env } from "./env";
 import type { Uid } from "./settings";
 import { loadFileDirect, loadPreview, pptxImageName } from "./files";
 import { pdfPageHeight, renderPreview } from "./preview";
-import { hasBrowser, hasRemoteBrowser, remotePdf } from "./browser-api";
+import { hasBrowser, hasRemoteBrowser, remotePdf, useBindingForRender } from "./browser-api";
 
 const TTL = 24 * 60 * 60;
 const pdfKey = (userId: Uid, id: string) => `pdf:${userId}:${id}`;
@@ -33,8 +33,8 @@ export async function cachedPdf(env: Env, userId: Uid, id: string): Promise<Uint
 }
 
 /** راه‌اندازی مرورگر؛ اگر کلودفلر به‌خاطر محدودیت تعداد مرورگر تازه در دقیقه/هم‌زمانی ۴۲۹ داد، چند بار با فاصله دوباره تلاش می‌کند */
-export async function launchWithRetry(env: Env) {
-  const waits = hasRemoteBrowser(env) ? [] : [3000, 7000, 12000]; // حساب پشتیبان داریم ⇒ با اولین خطا بی‌معطلی سراغ آن‌ها می‌رویم
+export async function launchWithRetry(env: Env, failFast = false) {
+  const waits = failFast ? [] : [3000, 7000, 12000]; // failFast (PDF/پوستر با حساب پشتیبان): با اولین خطا بی‌معطلی سراغ حساب‌ها می‌رویم؛ OCR همچنان تلاش مجدد دارد
   for (let i = 0; ; i++) {
     try {
       return await puppeteer.launch(env.BROWSER!);
@@ -70,9 +70,9 @@ export async function buildDeckPdf(env: Env, userId: Uid, id: string): Promise<P
   const html = renderPreview(p.deck, { id, theme: p.theme, template: p.template, font: p.font, digits: p.digits, images: p.images, nonce: "", pdf: pdfImgs });
   const width = "13.333in", height = `${pdfPageHeight(p.deck)}in`;
   let data: Uint8Array | null = null;
-  if (env.BROWSER) {
+  if (useBindingForRender(env)) {
     try {
-      const browser = await launchWithRetry(env);
+      const browser = await launchWithRetry(env, hasRemoteBrowser(env));
       try {
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: "networkidle0", timeout: 40_000 });

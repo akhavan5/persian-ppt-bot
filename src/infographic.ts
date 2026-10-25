@@ -8,7 +8,7 @@ import { TONES } from "./themes";
 import { toEn } from "./util";
 import { LlmError, askJson, hasKey } from "./llm";
 import { launchWithRetry } from "./pdf";
-import { hasBrowser, hasRemoteBrowser, remoteScreenshot } from "./browser-api";
+import { hasBrowser, hasRemoteBrowser, remoteScreenshot, useBindingForRender } from "./browser-api";
 
 /** wide = افقی سه‌ستونه (شبیه NotebookLM)؛ tall = عمودی دوستونه (مناسب اشتراک در پیام‌رسان) */
 export type IgLayout = "wide" | "tall";
@@ -209,7 +209,7 @@ const MAX_PNG = 9_000_000;
 
 export async function renderInfographicImage(env: Env, html: string, width: number): Promise<IgImage> {
   if (!hasBrowser(env)) throw new Error("Browser Rendering (BROWSER) تعریف نشده است");
-  if (env.BROWSER) {
+  if (useBindingForRender(env)) {
     try { return await renderViaBinding(env, html, width); }
     catch (e) {
       if (!hasRemoteBrowser(env)) throw e;
@@ -223,7 +223,7 @@ export async function renderInfographicImage(env: Env, html: string, width: numb
 }
 
 async function renderViaBinding(env: Env, html: string, width: number): Promise<IgImage> {
-  const browser = await launchWithRetry(env);
+  const browser = await launchWithRetry(env, hasRemoteBrowser(env));
   try {
     const page = await browser.newPage();
     await page.setViewport({ width, height: 900, deviceScaleFactor: 1.5 });

@@ -17,6 +17,8 @@ export interface Env {
   BROWSER?: Fetcher;
   /** اختیاری: حساب‌های کلودفلر پشتیبان برای مرورگر (وقتی binding به سقف ۴۲۹ می‌خورد). هر خط یا «;» یک حساب: ACCOUNT_ID|API_TOKEN (توکن با دسترسی Browser Rendering - Edit) */
   BROWSER_ACCOUNTS?: string;
+  /** اختیاری: api ⇒ PDF و پوستر فقط از BROWSER_ACCOUNTS ساخته می‌شود و binding نادیده گرفته می‌شود (OCR همچنان از binding استفاده می‌کند). خالی = اول binding، با خطا حساب‌های پشتیبان */
+  BROWSER_MODE?: string;
   DECK_WORKFLOW: Workflow<DeckParams>;
   BROADCAST_WORKFLOW: Workflow<BroadcastParams>;
   /** خواندن فایل‌های PDF/عکس تلگرام (OCR چندصفحه‌ای) خارج از سقف ۳۰ ثانیه‌ی waitUntil؛ اختیاری: اگر تعریف نشود، مسیر درون‌خطی */

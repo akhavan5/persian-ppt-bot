@@ -22,6 +22,9 @@ export const hasBrowser = (env: Env) => !!env.BROWSER || browserAccounts(env).le
 /** حساب پشتیبان تعریف شده؟ (برای اینکه با ۴۲۹ binding بی‌معطلی سراغ آن‌ها برویم) */
 export const hasRemoteBrowser = (env: Env) => browserAccounts(env).length > 0;
 
+/** binding برای PDF/پوستر استفاده شود؟ (BROWSER_MODE=api و وجود حساب پشتیبان ⇒ خیر) */
+export const useBindingForRender = (env: Env) => !!env.BROWSER && !(String(env.BROWSER_MODE ?? "").trim().toLowerCase() === "api" && hasRemoteBrowser(env));
+
 const BASES = ["browser-run", "browser-rendering"]; // نام جدید و قدیم مسیر API؛ اگر اولی ۴۰۴ داد دومی
 
 /** درخواست به همه‌ی حساب‌ها به ترتیب تصادفی؛ ۴۲۹/۵xx/خطای شبکه ⇒ حساب بعدی. بایت‌های پاسخ را برمی‌گرداند. */
