@@ -17,6 +17,7 @@ import { modelList } from "./llm";
 import { PLANS } from "./payment";
 import { BUY_SITE_NOTE, beginDeck, buyKbFor, launchDeck, posterEnabled, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
+import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
 import { fetchLinkSource, findLinkInText, linkCapNote, linkEnabled, linkLimitHit } from "./link-source";
@@ -481,7 +482,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
         ? [{ text: `📝 ${f.title.slice(0, 32)} (جزوه)`, callback_data: `f:${f.id}` }]
         : [
           { text: `📥 ${f.title.slice(0, 32)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` },
-          ...(env.BROWSER ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),
+          ...(hasBrowser(env) ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),
         ])));
   }
   if (cmd === "/invite") {

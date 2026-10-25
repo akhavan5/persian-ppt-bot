@@ -11,6 +11,7 @@ import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { adminIds, bumpStat, getCredit, getUserSeen, refundCredit, releaseLock } from "./settings";
 import { BUY_SITE_NOTE, buyKbFor } from "./deck-service";
+import { hasBrowser } from "./browser-api";
 import { logDeck, saveFile, savePreview } from "./files";
 import { fontCaption } from "./themes";
 import { generateImage } from "./images";
@@ -118,7 +119,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}`,
               // دکمه‌ی دریافت نسخه‌ی PDF (فقط اگر پیش‌نمایش ذخیره شده و مرورگر کلودفلر وصل است)
               { reply_markup: { inline_keyboard: [
-                ...(this.env.BROWSER ? [[{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${event.instanceId}` }]] : []),
+                ...(hasBrowser(this.env) ? [[{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${event.instanceId}` }]] : []),
                 [{ text: "💬 ارسال نظر", callback_data: "fb:s" }], // نظر کاربر فقط برای مدیر فرستاده می‌شود (ذخیره نمی‌شود)
               ] } });
             // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)

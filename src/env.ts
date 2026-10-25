@@ -15,6 +15,8 @@ export interface Env {
   ASSETS: Fetcher;
   /** Browser Rendering (مرورگر بدون‌سر کلودفلر) برای ساخت PDF در ربات تلگرام؛ در wrangler.jsonc با کلید browser تعریف می‌شود */
   BROWSER?: Fetcher;
+  /** اختیاری: حساب‌های کلودفلر پشتیبان برای مرورگر (وقتی binding به سقف ۴۲۹ می‌خورد). هر خط یا «;» یک حساب: ACCOUNT_ID|API_TOKEN (توکن با دسترسی Browser Rendering - Edit) */
+  BROWSER_ACCOUNTS?: string;
   DECK_WORKFLOW: Workflow<DeckParams>;
   BROADCAST_WORKFLOW: Workflow<BroadcastParams>;
   /** خواندن فایل‌های PDF/عکس تلگرام (OCR چندصفحه‌ای) خارج از سقف ۳۰ ثانیه‌ی waitUntil؛ اختیاری: اگر تعریف نشود، مسیر درون‌خطی */

@@ -13,6 +13,7 @@ import type { Env } from "./env";
 import type { Uid } from "./settings";
 import { loadFileDirect, loadPreview, pptxImageName } from "./files";
 import { pdfPageHeight, renderPreview } from "./preview";
+import { hasBrowser, hasRemoteBrowser, remotePdf } from "./browser-api";
 
 const TTL = 24 * 60 * 60;
 const pdfKey = (userId: Uid, id: string) => `pdf:${userId}:${id}`;
@@ -33,7 +34,7 @@ export async function cachedPdf(env: Env, userId: Uid, id: string): Promise<Uint
 
 /** راه‌اندازی مرورگر؛ اگر کلودفلر به‌خاطر محدودیت تعداد مرورگر تازه در دقیقه/هم‌زمانی ۴۲۹ داد، چند بار با فاصله دوباره تلاش می‌کند */
 export async function launchWithRetry(env: Env) {
-  const waits = [3000, 7000, 12000];
+  const waits = hasRemoteBrowser(env) ? [] : [3000, 7000, 12000]; // حساب پشتیبان داریم ⇒ با اولین خطا بی‌معطلی سراغ آن‌ها می‌رویم
   for (let i = 0; ; i++) {
     try {
       return await puppeteer.launch(env.BROWSER!);
@@ -49,7 +50,7 @@ export async function launchWithRetry(env: Env) {
 export async function buildDeckPdf(env: Env, userId: Uid, id: string): Promise<PdfResult> {
   const p = await loadPreview(env, userId, id);
   if (!p) return { ok: false, error: "⌛️ این ارائه منقضی شده است (ارائه‌ها ۲۴ ساعت نگه داشته می‌شوند)." };
-  if (!env.BROWSER) return { ok: false, error: "⚠️ ساخت PDF روی این سرویس فعال نیست." };
+  if (!hasBrowser(env)) return { ok: false, error: "⚠️ ساخت PDF روی این سرویس فعال نیست." };
 
   // تصویرهای اسلایدها از داخل فایل PPTX بیرون کشیده و به‌صورت data: URI در صفحه گذاشته می‌شوند (مرورگر بدون‌سر به نشست کاربر دسترسی ندارد)
   const pdfImgs: Record<number, string> = {};
@@ -67,17 +68,27 @@ export async function buildDeckPdf(env: Env, userId: Uid, id: string): Promise<P
   }
 
   const html = renderPreview(p.deck, { id, theme: p.theme, template: p.template, font: p.font, digits: p.digits, images: p.images, nonce: "", pdf: pdfImgs });
-  const browser = await launchWithRetry(env);
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 40_000 });
-    await page.evaluate("document.fonts.ready.then(function(){return 1})"); // فونت وب کامل بارگذاری شود
-    const buf = await page.pdf({ width: "13.333in", height: `${pdfPageHeight(p.deck)}in`, printBackground: true, preferCSSPageSize: true });
-    const data = new Uint8Array(buf);
-    if (data.byteLength < 1000) return { ok: false, error: "⚠️ ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن." };
-    if (data.byteLength <= 24 * 1024 * 1024) await env.FILES.put(pdfKey(userId, id), data, { expirationTtl: TTL }).catch((e) => console.error("pdf cache", e));
-    return { ok: true, data, title: p.deck.title };
-  } finally {
-    await browser.close().catch(() => {});
+  const width = "13.333in", height = `${pdfPageHeight(p.deck)}in`;
+  let data: Uint8Array | null = null;
+  if (env.BROWSER) {
+    try {
+      const browser = await launchWithRetry(env);
+      try {
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: "networkidle0", timeout: 40_000 });
+        await page.evaluate("document.fonts.ready.then(function(){return 1})"); // فونت وب کامل بارگذاری شود
+        data = new Uint8Array(await page.pdf({ width, height, printBackground: true, preferCSSPageSize: true }));
+      } finally {
+        await browser.close().catch(() => {});
+      }
+    } catch (e) {
+      if (!hasRemoteBrowser(env)) throw e;
+      console.error("pdf binding failed, using backup accounts", String(e instanceof Error ? e.message : e).slice(0, 200));
+    }
   }
+  if (!data && hasRemoteBrowser(env)) data = await remotePdf(env, html, { width, height });
+  if (!data) return { ok: false, error: "⚠️ ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن." };
+  if (data.byteLength < 1000) return { ok: false, error: "⚠️ ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن." };
+  if (data.byteLength <= 24 * 1024 * 1024) await env.FILES.put(pdfKey(userId, id), data, { expirationTtl: TTL }).catch((e) => console.error("pdf cache", e));
+  return { ok: true, data, title: p.deck.title };
 }

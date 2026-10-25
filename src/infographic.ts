@@ -8,6 +8,7 @@ import { TONES } from "./themes";
 import { toEn } from "./util";
 import { LlmError, askJson, hasKey } from "./llm";
 import { launchWithRetry } from "./pdf";
+import { hasBrowser, hasRemoteBrowser, remoteScreenshot } from "./browser-api";
 
 /** wide = افقی سه‌ستونه (شبیه NotebookLM)؛ tall = عمودی دوستونه (مناسب اشتراک در پیام‌رسان) */
 export type IgLayout = "wide" | "tall";
@@ -207,7 +208,21 @@ export interface IgImage { data: Uint8Array; mime: "image/png" | "image/jpeg"; e
 const MAX_PNG = 9_000_000;
 
 export async function renderInfographicImage(env: Env, html: string, width: number): Promise<IgImage> {
-  if (!env.BROWSER) throw new Error("Browser Rendering (BROWSER) تعریف نشده است");
+  if (!hasBrowser(env)) throw new Error("Browser Rendering (BROWSER) تعریف نشده است");
+  if (env.BROWSER) {
+    try { return await renderViaBinding(env, html, width); }
+    catch (e) {
+      if (!hasRemoteBrowser(env)) throw e;
+      console.error("poster binding failed, using backup accounts", String(e instanceof Error ? e.message : e).slice(0, 200));
+    }
+  }
+  const png = await remoteScreenshot(env, html, { width, scale: 1.5, type: "png" });
+  if (png.byteLength < 2000) throw new Error("screenshot is empty");
+  if (png.byteLength <= MAX_PNG) return { data: png, mime: "image/png", ext: "png" };
+  return { data: await remoteScreenshot(env, html, { width, scale: 1.5, type: "jpeg", quality: 92 }), mime: "image/jpeg", ext: "jpg" };
+}
+
+async function renderViaBinding(env: Env, html: string, width: number): Promise<IgImage> {
   const browser = await launchWithRetry(env);
   try {
     const page = await browser.newPage();

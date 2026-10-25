@@ -12,6 +12,7 @@ import {
 } from "./settings";
 import { PLANS } from "./payment";
 import { toFa } from "./util";
+import { hasBrowser } from "./browser-api";
 import { supportLink, type Uid } from "./settings";
 import { createLoginToken } from "./link";
 
@@ -153,7 +154,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
 }
 
 /** پوستر (اینفوگرافیک) همراه ارائه: فقط به Browser Rendering نیاز دارد (همان که PDF استفاده می‌کند)؛ بدون آن، گزینه‌ی پوستر نمایش داده نمی‌شود */
-export const posterEnabled = (env: Env) => !!env.BROWSER;
+export const posterEnabled = (env: Env) => hasBrowser(env);
 export interface PosterWant { layout: "wide" | "tall" }
 
 export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }

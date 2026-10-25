@@ -10,6 +10,7 @@ import { getDeckLog, listFiles, loadFile } from "./files";
 import { hasKey, modelList } from "./llm";
 import { PLANS, activatePlan, payEnabled } from "./payment";
 import { runningJob } from "./deck-service";
+import { hasBrowser } from "./browser-api";
 import { toEn, toFa } from "./util";
 import { AUDIENCES, isAudience, listAudience, type Audience } from "./broadcast";
 
@@ -404,7 +405,7 @@ async function systemScreen(env: Env): Promise<Screen> {
       `${ok(env.AI)} تولید تصویر (Workers AI) · ${ok(env.PEXELS_API_KEY)} Pexels\n` +
       `${ok((env.WEB_SEARCH ?? "").toLowerCase() !== "off")} جستجوی وب · ${ok(env.TAVILY_API_KEY)} Tavily\n` +
       `${ok(env.OCR_SPACE_API_KEY)} OCR.space · ${ok(env.OCR_WORKFLOW)} OCR تلگرام · ${ok(env.WEB_OCR_WORKFLOW)} OCR وب\n` +
-      `${ok(env.BROWSER)} ساخت PDF · ${ok(payEnabled(env))} درگاه پرداخت · ${ok(otpEnabled(env))} پیامک · ${ok(googleEnabled(env))} ورود گوگل\n\n` +
+      `${ok(hasBrowser(env))} ساخت PDF · ${ok(payEnabled(env))} درگاه پرداخت · ${ok(otpEnabled(env))} پیامک · ${ok(googleEnabled(env))} ورود گوگل\n\n` +
       `👮 مدیرها: ${fa(admins)} · 🔒 فهرست مجاز: ${restricted ? fa(restricted) + " نفر" : "همه آزادند"}\n` +
       `🗄 ردیف‌های پایگاه‌داده: ${fa(rowsN)}\n` +
       `🔗 وب‌هوک: ${info?.url ? "✅ فعال" : "❌ تنظیم نشده"} · در صف: ${fa(info?.pending_update_count ?? 0)}${hookErr}`,
