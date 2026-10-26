@@ -471,20 +471,21 @@ async function onFiles(files) {
   if (!files.every((f) => IMG_EXT.includes(extOf(f)))) { upMsg("انتخاب چند فایل فقط برای عکس‌ها (PNG/JPG) ممکن است؛ فایل‌های دیگر را یکی‌یکی بده."); $("#file").value = ""; return; }
   if (files.some((f) => f.size > MAX_FILE)) { upMsg("حجم هر فایل حداکثر ۲۴ مگابایت می‌تواند باشد."); $("#file").value = ""; return; }
   const my = ++upSeq; extracting = true; $("#pick").disabled = true;
-  const parts = [];
+  const parts = [], failed = [];
   try {
     for (const [i, f] of files.entries()) {
       upPrefix = `عکس ${fa(i + 1)} از ${fa(files.length)} · `;
       $("#upHint").textContent = upPrefix + "⏳ در حال خواندن…";
-      let t;
+      let t = "";
       try { t = tidy(await readImage(f, extOf(f), my)); }
-      catch (e) { if (my !== upSeq) return; throw new Error(`عکس ${fa(i + 1)} (${f.name}): ${e.message}`); }
+      catch (e) { if (my !== upSeq) return; failed.push(i + 1); continue; } // عکسی که خوانده نشد رد می‌شود و بقیه ادامه می‌یابند
       if (my !== upSeq) return;
-      if (t.length >= 10) parts.push(t);
+      if (t.length >= 10) parts.push(t); else failed.push(i + 1);
     }
     const raw = parts.join("\n\n");
     if (raw.length < 30) throw new Error("متنی در عکس‌ها پیدا نشد؛ عکس‌های واضح‌تر امتحان کن.");
-    setSource(raw, `${fa(files.length)} عکس`, "ارائه از روی محتوای همه‌ی عکس‌ها ساخته می‌شود.");
+    const skip = failed.length ? ` عکس ${failed.map(fa).join("، ")} خوانده نشد و رد شد.` : "";
+    setSource(raw, `${fa(files.length - failed.length)} عکس`, "ارائه از روی محتوای عکس‌های خوانده‌شده ساخته می‌شود." + skip);
   } catch (e) {
     if (my === upSeq) { upMsg(e.message || "خواندن عکس‌ها ناموفق بود."); $("#upHint").textContent = HINT; }
   } finally { upPrefix = ""; if (my === upSeq) { extracting = false; $("#pick").disabled = false; } $("#file").value = ""; }
