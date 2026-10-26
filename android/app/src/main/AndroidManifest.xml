@@ -10,6 +10,7 @@
     </queries>
 
     <application
+        android:name=".PptSazApp"
         android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"

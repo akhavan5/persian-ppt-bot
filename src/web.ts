@@ -8,6 +8,7 @@ import {
   EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
 } from "./settings";
 import { modelList } from "./llm";
+import { appCrash } from "./app-crash";
 import { PLANS, bazaarEnabled, bazaarVerify, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { renderPreview } from "./preview";
@@ -76,6 +77,12 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       payEnabled: payEnabled(env),
       // خرید درون‌برنامه‌ای کافه‌بازار (فقط اپ اندروید)
       bazaar: bazaarEnabled(env),
+      // نسخه‌ی اپ اندروید: latest = آخرین نسخه‌ی منتشرشده، min = کمترین نسخه‌ی مجاز (۰ = بدون بررسی)
+      app: {
+        latest: Number(env.ANDROID_LATEST_VERSION) || 0,
+        min: Number(env.ANDROID_MIN_VERSION) || 0,
+        url: (env.ANDROID_UPDATE_URL ?? "").trim() || `https://cafebazaar.ir/app/${(env.ANDROID_PACKAGE || "ir.pptsaz.app").trim()}`,
+      },
       templates: Object.entries(TEMPLATES).map(([key, v]) => ({ key, name: v.name, emoji: v.emoji, hint: v.hint })),
       themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent, bg: t.bg, surface: t.surface, dark: t.dark, text: t.text, muted: t.muted, onPrimary: t.onPrimary })),
       tones: TONES,
@@ -95,6 +102,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     });
   }
 
+  if (path === "/api/app/crash" && method === "POST") return appCrash(req, env, clientIp(req));
   if (path === "/api/auth/otp/send" && method === "POST") return otpSend(req, env);
   if (path === "/api/auth/otp/verify" && method === "POST") return otpVerify(req, env);
   if (path === "/api/auth/logout" && method === "POST") {

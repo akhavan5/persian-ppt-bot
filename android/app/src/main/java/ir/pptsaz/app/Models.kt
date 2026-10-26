@@ -22,6 +22,9 @@ data class Config(
     val models: List<ModelOpt>,
     val dailyFree: Int,
     val bazaar: Boolean = false,
+    val latestVersion: Int = 0, // آخرین versionCode منتشرشده (۰ = اعلام نشده)
+    val minVersion: Int = 0, // کمترین versionCode مجاز؛ پایین‌تر از آن اپ باید حتماً به‌روز شود
+    val updateUrl: String = "",
 )
 
 data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "",
@@ -78,6 +81,9 @@ fun parseConfig(j: JSONObject): Config {
         poster = j.optBoolean("poster"),
         dailyFree = j.optInt("dailyFree"),
         bazaar = j.optBoolean("bazaar"),
+        latestVersion = j.optJSONObject("app")?.optInt("latest") ?: 0,
+        minVersion = j.optJSONObject("app")?.optInt("min") ?: 0,
+        updateUrl = j.optJSONObject("app")?.optString("url").orEmpty(),
     )
 }
 

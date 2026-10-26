@@ -48,6 +48,7 @@ data class UiState(
     val extractedText: String? = null,
     val viewer: Viewer? = null,
     val bazaarReady: Boolean = false,
+    val updateDialog: Boolean = false,
 )
 
 sealed interface Event {
@@ -70,6 +71,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Api.init(app)
+        viewModelScope.launch { CrashReporter.sendPending(app) }
         refresh()
     }
 
@@ -401,6 +403,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openUrl(url: String) {
         _events.trySend(Event.OpenUrl(url))
+    }
+
+    private var updateAsked = false
+
+    /** یک بار در هر اجرا: اگر نسخه‌ی جدیدتری منتشر شده، پیشنهاد به‌روزرسانی نشان بده. */
+    fun maybeAskUpdate() {
+        val c = _state.value.config ?: return
+        if (!updateAsked && c.latestVersion > BuildConfig.VERSION_CODE) {
+            updateAsked = true
+            _state.update { it.copy(updateDialog = true) }
+        }
+    }
+
+    fun dismissUpdate() {
+        _state.update { it.copy(updateDialog = false) }
+    }
+
+    /** دکمه‌ی «بررسی به‌روزرسانی» در تب حساب: تنظیمات را تازه می‌گیرد و نتیجه را می‌گوید. */
+    fun checkUpdate() {
+        viewModelScope.launch {
+            try {
+                val c = Api.config()
+                _state.update { it.copy(config = c) }
+                if (c.latestVersion > BuildConfig.VERSION_CODE || c.minVersion > BuildConfig.VERSION_CODE) {
+                    _state.update { it.copy(updateDialog = true) }
+                } else {
+                    toast("نسخه‌ی شما به‌روز است ✓")
+                }
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+            }
+        }
     }
 
     fun setBazaarReady(ok: Boolean) {

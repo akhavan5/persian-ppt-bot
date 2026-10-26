@@ -112,6 +112,11 @@ object Api {
 
     suspend fun config(): Config = parseConfig(call("GET", "/api/config"))
 
+    /** گزارش کرش دفعه‌ی قبل (بدون ورود هم کار می‌کند). */
+    suspend fun reportCrash(report: JSONObject) {
+        call("POST", "/api/app/crash", report)
+    }
+
     /** null یعنی وارد نشده‌اید. */
     suspend fun me(): Me? = parseMe(call("GET", "/api/me"))
 

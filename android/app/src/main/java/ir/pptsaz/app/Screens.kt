@@ -137,6 +137,20 @@ fun Root(st: UiState, vm: AppViewModel, snack: SnackbarHostState) {
                     Screen.Main -> MainScreen(st, vm)
                 }
             }
+            val cfg = st.config
+            val forced = cfg != null && cfg.minVersion > BuildConfig.VERSION_CODE
+            LaunchedEffect(cfg?.latestVersion) { vm.maybeAskUpdate() }
+            if (forced) {
+                UpdateRequiredScreen(cfg!!.updateUrl) { vm.openUrl(it) }
+            } else if (st.updateDialog && cfg != null) {
+                AlertDialog(
+                    onDismissRequest = { vm.dismissUpdate() },
+                    title = { Text("نسخه‌ی جدید موجود است") },
+                    text = { Text("نسخه‌ی تازه‌ی پاورپوینت‌ساز منتشر شده است. برای استفاده از امکانات و اصلاحات جدید، اپ را به‌روزرسانی کنید.") },
+                    confirmButton = { TextButton(onClick = { vm.dismissUpdate(); vm.openUrl(cfg.updateUrl) }) { Text("به‌روزرسانی") } },
+                    dismissButton = { TextButton(onClick = { vm.dismissUpdate() }) { Text("بعداً") } },
+                )
+            }
             SnackbarHost(
                 hostState = snack,
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -145,6 +159,26 @@ fun Root(st: UiState, vm: AppViewModel, snack: SnackbarHostState) {
                     .imePadding(),
             ) { data -> Snackbar(data, modifier = Modifier.padding(12.dp), shape = RoundedCornerShape(16.dp)) }
         }
+    }
+}
+
+@Composable
+private fun UpdateRequiredScreen(url: String, open: (String) -> Unit) {
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        LogoBadge()
+        Spacer(Modifier.height(24.dp))
+        Text("به‌روزرسانی لازم است", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "این نسخه‌ی اپ دیگر پشتیبانی نمی‌شود. برای ادامه، آخرین نسخه را نصب کنید.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(24.dp))
+        GradientButton("به‌روزرسانی", { open(url) }, Modifier.fillMaxWidth())
     }
 }
 
@@ -931,6 +965,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
 
             ContactCard(vm)
 
+            SoftButton("بررسی به‌روزرسانی (نسخه‌ی " + BuildConfig.VERSION_NAME + ")", { vm.checkUpdate() }, Modifier.fillMaxWidth(), icon = AppIcons.Refresh)
             TextButton(onClick = { vm.openUrl(Api.BASE + "/privacy") }, modifier = Modifier.fillMaxWidth()) { Text("شرایط استفاده و حریم خصوصی") }
             SoftButton("خروج از حساب", { vm.logout() }, Modifier.fillMaxWidth(), icon = AppIcons.Logout)
             Text(
