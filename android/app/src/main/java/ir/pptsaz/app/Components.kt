@@ -16,6 +16,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -50,8 +55,9 @@ fun hexColor(hex: String?, fallback: Color = Color(0xFF2563EB)): Color = try {
 }
 
 @Composable
-fun AppIcon(icon: ImageVector, modifier: Modifier = Modifier, tint: Color = LocalContentColor.current, size: Dp = 24.dp) {
-    Icon(icon, contentDescription = null, modifier = modifier.size(size), tint = tint)
+fun AppIcon(icon: ImageVector, modifier: Modifier = Modifier, tint: Color = LocalContentColor.current, size: Dp = 24.dp, description: String? = null) {
+    // description = null یعنی آیکن تزئینی است (کنارش متن هست)؛ برای آیکنِ تنها (داخل IconButton) حتماً بنویسید تا TalkBack نام دکمه را بخواند
+    Icon(icon, contentDescription = description, modifier = modifier.size(size), tint = tint)
 }
 
 @Composable
@@ -123,7 +129,8 @@ fun SelectChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: 
     Row(
         modifier.clip(shape).background(bg)
             .border(1.5.dp, if (selected) cs.primary else Color.Transparent, shape)
-            .clickable(role = Role.RadioButton, onClick = onClick)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick) // «انتخاب‌شده» به TalkBack گفته می‌شود
+            .semantics { if (locked) stateDescription = "نیازمند اشتراک" }
             .padding(horizontal = 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -155,7 +162,8 @@ fun <T> Segmented(options: List<T>, selected: T, label: (T) -> String, onSelect:
             val fg = if (sel) cs.onPrimary else cs.onSurfaceVariant
             Row(
                 Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(12.dp)).background(bg)
-                    .clickable(role = Role.RadioButton) { onSelect(o) },
+                    .selectable(selected = sel, role = Role.RadioButton, onClick = { onSelect(o) })
+                    .semantics { if (lk) stateDescription = "نیازمند اشتراک" },
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -196,7 +204,7 @@ fun ScreenHeader(title: String, subtitle: String? = null, trailing: (@Composable
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineSmall)
+            Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         trailing?.invoke()
@@ -206,7 +214,7 @@ fun ScreenHeader(title: String, subtitle: String? = null, trailing: (@Composable
 @Composable
 fun ToggleRow(title: String, subtitle: String? = null, icon: ImageVector? = null, checked: Boolean, badge: String? = null, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Switch) { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChange).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -221,7 +229,7 @@ fun ToggleRow(title: String, subtitle: String? = null, icon: ImageVector? = null
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (badge != null) Pill(badge, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = null) // کل ردیف toggleable است؛ کنترل جداگانه‌ی Switch در TalkBack تکراری می‌شد
     }
 }
 
@@ -233,7 +241,7 @@ fun OptionCard(title: String, desc: String? = null, selected: Boolean, onClick: 
     Row(
         Modifier.fillMaxWidth().clip(shape).background(bg)
             .border(1.5.dp, if (selected) cs.primary else cs.outlineVariant, shape)
-            .clickable(role = Role.RadioButton, onClick = onClick)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

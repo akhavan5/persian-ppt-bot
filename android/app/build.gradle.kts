@@ -68,6 +68,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.12.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("androidx.core:core-ktx:1.17.0")
+    // اسپلش واحد: جلوگیری از پرش بین اسپلش سیستم و صفحه‌ی بارگذاری Compose
+    implementation("androidx.core:core-splashscreen:1.0.1")
     // جهت (EXIF) عکس‌ها در اندروید ۷ و ۸
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     // خواندن خودکار کد پیامکی (نیازمند Google Play Services؛ اگر نبود اپ بدون آن کار می‌کند)

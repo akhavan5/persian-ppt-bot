@@ -1,7 +1,3 @@
-<resources>
-    <style name="Theme.PptSaz" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">@color/brand</item>
-        <item name="android:windowBackground">@color/page_bg</item>
-        <item name="android:windowSplashScreenBackground">@color/page_bg</item>
-    </style>
-</resources>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- دیگر لازم نیست: اسپلش در Theme.PptSaz.Starting (values/themes.xml) تعریف شده است. این فایل را می‌توانید حذف کنید. -->
+<resources />

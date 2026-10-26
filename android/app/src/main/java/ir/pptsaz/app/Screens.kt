@@ -67,6 +67,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -144,13 +150,14 @@ import androidx.compose.material3.Snackbar
 
 @Composable
 fun Root(st: UiState, vm: AppViewModel, snack: SnackbarHostState) {
+    val wide = LocalConfiguration.current.screenWidthDp >= 600 // تبلت/فولدبل: به‌جای نوار پایین، ریل کناری
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
             Crossfade(targetState = st.screen, animationSpec = tween(250), label = "root") { s ->
                 when (s) {
                     Screen.Loading -> LoadingScreen()
-                    Screen.Error -> ErrorScreen(st, vm)
-                    Screen.Login -> LoginScreen(st, vm)
+                    Screen.Error -> CenteredColumn(520.dp) { ErrorScreen(st, vm) }
+                    Screen.Login -> CenteredColumn(520.dp) { LoginScreen(st, vm) }
                     Screen.Main -> MainScreen(st, vm)
                 }
             }
@@ -171,11 +178,19 @@ fun Root(st: UiState, vm: AppViewModel, snack: SnackbarHostState) {
             SnackbarHost(
                 hostState = snack,
                 modifier = Modifier.align(Alignment.BottomCenter)
-                    .padding(bottom = if (st.screen == Screen.Main) 84.dp else 0.dp)
+                    .padding(bottom = if (st.screen == Screen.Main && !wide) 84.dp else 0.dp)
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .imePadding(),
             ) { data -> Snackbar(data, modifier = Modifier.padding(12.dp), shape = RoundedCornerShape(16.dp)) }
         }
+    }
+}
+
+/** روی صفحه‌ی بزرگ محتوا را وسط و با حداکثر عرض نگه می‌دارد؛ روی گوشی هیچ تغییری نمی‌دهد. */
+@Composable
+private fun CenteredColumn(maxWidth: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.widthIn(max = maxWidth).fillMaxSize()) { content() }
     }
 }
 
@@ -395,6 +410,11 @@ class CreateForm(topic: String = "", source: String = "", handout: Boolean = tru
     }
 }
 
+@Composable
+private fun VerticalDividerLine() {
+    Box(Modifier.fillMaxHeight().width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+}
+
 private data class NavItem(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
 private val NAV = listOf(
@@ -419,42 +439,73 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
     val cs = MaterialTheme.colorScheme
     // Back در تب‌های «فایل‌ها/تنظیمات/حساب» اول به تب «ساخت» برمی‌گردد و فقط از آنجا از اپ خارج می‌شود
     BackHandler(enabled = st.tab != 0 && st.viewer == null) { vm.setTab(0) }
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
+    val navColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = cs.onPrimaryContainer,
+        selectedTextColor = cs.primary,
+        indicatorColor = cs.primaryContainer,
+        unselectedIconColor = cs.onSurfaceVariant,
+        unselectedTextColor = cs.onSurfaceVariant,
+    )
+    val railColors = NavigationRailItemDefaults.colors(
+        selectedIconColor = cs.onPrimaryContainer,
+        selectedTextColor = cs.primary,
+        indicatorColor = cs.primaryContainer,
+        unselectedIconColor = cs.onSurfaceVariant,
+        unselectedTextColor = cs.onSurfaceVariant,
+    )
     Scaffold(
         containerColor = cs.background,
         bottomBar = {
-            Column {
-                HorizontalDivider(color = cs.outlineVariant)
-                NavigationBar(containerColor = cs.surface, tonalElevation = 0.dp) {
-                    NAV.forEachIndexed { i, item ->
-                        NavigationBarItem(
-                            selected = st.tab == i,
-                            onClick = { vm.setTab(i) },
-                            icon = { AppIcon(item.icon, size = 24.dp) },
-                            label = { Text(item.label, style = MaterialTheme.typography.labelMedium) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = cs.onPrimaryContainer,
-                                selectedTextColor = cs.primary,
-                                indicatorColor = cs.primaryContainer,
-                                unselectedIconColor = cs.onSurfaceVariant,
-                                unselectedTextColor = cs.onSurfaceVariant,
-                            ),
-                        )
+            if (!wide) {
+                Column {
+                    HorizontalDivider(color = cs.outlineVariant)
+                    NavigationBar(containerColor = cs.surface, tonalElevation = 0.dp) {
+                        NAV.forEachIndexed { i, item ->
+                            NavigationBarItem(
+                                selected = st.tab == i,
+                                onClick = { vm.setTab(i) },
+                                icon = { AppIcon(item.icon, size = 24.dp) },
+                                label = { Text(item.label, style = MaterialTheme.typography.labelMedium) },
+                                colors = navColors,
+                            )
+                        }
                     }
                 }
             }
         },
     ) { pad ->
-        Box(Modifier.padding(pad).consumeWindowInsets(pad).imePadding().fillMaxSize()) {
-            AnimatedContent(
-                targetState = st.tab,
-                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
-                label = "tabs",
-            ) { tab ->
-                when (tab) {
-                    0 -> CreateTab(st, me, vm, form)
-                    1 -> FilesTab(st, vm)
-                    2 -> SettingsTab(st, me, vm)
-                    else -> AccountTab(st, me, vm)
+        Row(Modifier.padding(pad).consumeWindowInsets(pad).imePadding().fillMaxSize()) {
+            if (wide) {
+                NavigationRail(containerColor = cs.surface) {
+                    Spacer(Modifier.height(8.dp))
+                    NAV.forEachIndexed { i, item ->
+                        NavigationRailItem(
+                            selected = st.tab == i,
+                            onClick = { vm.setTab(i) },
+                            icon = { AppIcon(item.icon, size = 24.dp) },
+                            label = { Text(item.label, style = MaterialTheme.typography.labelMedium) },
+                            colors = railColors,
+                        )
+                    }
+                }
+                VerticalDividerLine()
+            }
+            // روی صفحه‌ی بزرگ عرض محتوا محدود و وسط‌چین می‌شود تا فرم‌ها کشیده نشوند
+            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                Box(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
+                    AnimatedContent(
+                        targetState = st.tab,
+                        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
+                        label = "tabs",
+                    ) { tab ->
+                        when (tab) {
+                            0 -> CreateTab(st, me, vm, form)
+                            1 -> FilesTab(st, vm)
+                            2 -> SettingsTab(st, me, vm)
+                            else -> AccountTab(st, me, vm)
+                        }
+                    }
                 }
             }
         }
@@ -751,7 +802,7 @@ private fun JobCard(job: JobState, vm: AppViewModel) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 AppIcon(AppIcons.Warning, tint = cs.error)
                 Text(job.message, color = cs.onErrorContainer, modifier = Modifier.weight(1f))
-                IconButton(onClick = { vm.dismissJob() }) { AppIcon(AppIcons.Close, tint = cs.onErrorContainer, size = 20.dp) }
+                IconButton(onClick = { vm.dismissJob() }) { AppIcon(AppIcons.Close, tint = cs.onErrorContainer, size = 20.dp, description = "بستن پیام") }
             }
         }
         job.done -> SurfaceCard {
@@ -764,7 +815,7 @@ private fun JobCard(job: JobState, vm: AppViewModel) {
                         Text("ارائه آماده شد", style = MaterialTheme.typography.labelMedium, color = ex.success)
                         Text(job.title.ifEmpty { "ارائه‌ی شما" }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
-                    IconButton(onClick = { vm.dismissJob() }) { AppIcon(AppIcons.Close, tint = cs.onSurfaceVariant, size = 20.dp) }
+                    IconButton(onClick = { vm.dismissJob() }) { AppIcon(AppIcons.Close, tint = cs.onSurfaceVariant, size = 20.dp, description = "بستن") }
                 }
                 GradientButton("دانلود ارائه (PPTX)", { vm.download(job.id) }, Modifier.fillMaxWidth(), icon = AppIcons.Download)
                 SoftButton("پیش‌نمایش اسلایدها", { vm.openViewer(Viewer.Preview(job.id)) }, Modifier.fillMaxWidth(), icon = AppIcons.Eye)
@@ -806,7 +857,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
             trailing = {
                 IconButton(onClick = { vm.loadFiles() }, enabled = !st.filesLoading) {
                     if (st.filesLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else AppIcon(AppIcons.Refresh, tint = cs.onSurfaceVariant)
+                    else AppIcon(AppIcons.Refresh, tint = cs.onSurfaceVariant, description = "تازه‌سازی فهرست")
                 }
             },
         )
@@ -877,12 +928,12 @@ private fun FileRow(f: FileItem, vm: AppViewModel) {
                 )
             }
             if (f.poster) {
-                IconButton(onClick = { vm.openViewer(Viewer.Poster(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant) }
+                IconButton(onClick = { vm.openViewer(Viewer.Poster(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "نمایش پوستر") }
             } else if (!f.handout) {
-                IconButton(onClick = { vm.openViewer(Viewer.Preview(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant) }
+                IconButton(onClick = { vm.openViewer(Viewer.Preview(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "پیش‌نمایش اسلایدها") }
             }
-            IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant) }
-            FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp) }
+            IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
+            FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "دانلود") }
         }
     }
 }
@@ -949,7 +1000,7 @@ fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
 private fun ThemeSwatch(o: Opt, selected: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Column(
-        Modifier.width(68.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
+        Modifier.width(68.dp).clip(RoundedCornerShape(16.dp)).selectable(selected = selected, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = onClick).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Box(
@@ -993,7 +1044,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                             val sub = me.mobile.ifEmpty { me.email }
                             if (sub.isNotEmpty()) Text(sub.faStr(), style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f), maxLines = 1)
                         }
-                        IconButton(onClick = { nameDialog = true }) { AppIcon(AppIcons.Edit, tint = Color.White, size = 22.dp) }
+                        IconButton(onClick = { nameDialog = true }) { AppIcon(AppIcons.Edit, tint = Color.White, size = 22.dp, description = "ویرایش نام") }
                     }
                     if (me.unlimited) {
                         StatBox("اعتبار", "نامحدود", Modifier.fillMaxWidth())
@@ -1224,7 +1275,7 @@ fun PreviewDialog(id: String, vm: AppViewModel) {
                 Modifier.fillMaxWidth().background(cs.surface).padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { vm.closeViewer() }) { AppIcon(AppIcons.Close, tint = cs.onSurface) }
+                IconButton(onClick = { vm.closeViewer() }) { AppIcon(AppIcons.Close, tint = cs.onSurface, description = "بستن پیش‌نمایش") }
                 Text("پیش‌نمایش اسلایدها", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 TextButton(
                     enabled = !loading && !failed,
