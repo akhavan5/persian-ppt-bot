@@ -790,7 +790,12 @@ async function pasteFromClipboard(forLink) {
 $("#pasteTopic").onclick = () => pasteFromClipboard(false);
 $("#linkPaste").onclick = () => pasteFromClipboard(true);
 
-const genErr = (msg, buy) => { if (msg) TG.haptic("error"); $("#genErr").textContent = msg || ""; show($("#genErr"), !!msg); show($("#buyBox"), !!buy); };
+// خطا هم زیر فرم نشان داده می‌شود و هم به‌صورت toast؛ چون وقتی «دکمه‌ی اصلی تلگرام» فعال است دکمه‌ی داخل صفحه پنهان است و متن خطای زیر فرم از دید کاربر بیرون می‌ماند (علت «هیچ واکنشی نداشت»)
+const genErr = (msg, buy) => {
+  if (msg) TG.haptic("error");
+  $("#genErr").textContent = msg || ""; show($("#genErr"), !!msg); show($("#buyBox"), !!buy);
+  if (msg) { toast(msg); try { $("#genErr").scrollIntoView({ block: "center", behavior: "smooth" }); } catch {} }
+};
 $("#go").onclick = async () => {
   genErr("");
   const topic = $("#topic").value.trim();
