@@ -21,8 +21,19 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "1.1.0"
-        // کلید عمومی RSA پرداخت درون‌برنامه‌ای کافه‌بازار (کلید عمومی است؛ محرمانه نیست)
-        buildConfigField("String", "BAZAAR_RSA_KEY", "\"MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwDXfSTtYYKzEZfiN3uOiRiZL6B6VeaYy3sKYGufqwD5pu4sYNmCSfth7VE1dedYe/ylS5+lvjiQkwZog7HRNuPuG2gntNnYT5WbuMqJScB7u9cEj1vpmk3ENuuGp5ngCtk45jtAdSZ408ZDYZqpWjCJZ65lMCZsf8SBVV6YISYlLb0fM85fL9GQhbLLIHb8JeCPbHhoqAqsWcXvzcJR97qHopblekWaMRtdRayinYECAwEAAQ==\"")
+    }
+
+    // دو نسخه از یک کد: «bazaar» با پرداخت پولکی و مجوز بازار، «myket» کاملاً بدون مجوز و کتابخانه‌ی بازار
+    flavorDimensions += "store"
+    productFlavors {
+        create("bazaar") {
+            dimension = "store"
+            // کلید عمومی RSA پرداخت درون‌برنامه‌ای کافه‌بازار (کلید عمومی است؛ محرمانه نیست)
+            buildConfigField("String", "BAZAAR_RSA_KEY", "\"MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwDXfSTtYYKzEZfiN3uOiRiZL6B6VeaYy3sKYGufqwD5pu4sYNmCSfth7VE1dedYe/ylS5+lvjiQkwZog7HRNuPuG2gntNnYT5WbuMqJScB7u9cEj1vpmk3ENuuGp5ngCtk45jtAdSZ408ZDYZqpWjCJZ65lMCZsf8SBVV6YISYlLb0fM85fL9GQhbLLIHb8JeCPbHhoqAqsWcXvzcJR97qHopblekWaMRtdRayinYECAwEAAQ==\"")
+        }
+        create("myket") {
+            dimension = "store"
+        }
     }
 
     signingConfigs {
@@ -77,7 +88,7 @@ dependencies {
     implementation("androidx.browser:browser:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)
-    implementation("com.github.cafebazaar.Poolakey:poolakey:2.2.0")
+    "bazaarImplementation"("com.github.cafebazaar.Poolakey:poolakey:2.2.0")
     // بررسی پس‌زمینه‌ی پایان ساخت ارائه (اعلان محلی)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

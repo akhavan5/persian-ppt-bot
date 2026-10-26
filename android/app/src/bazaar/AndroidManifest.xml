@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- فقط نسخه‌ی کافه‌بازار: مجوز پرداخت و دیدن برنامه‌ی بازار. نسخه‌ی مایکت این‌ها را ندارد. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="com.farsitel.bazaar.permission.PAY_THROUGH_BAZAAR" />
+
+    <queries>
+        <package android:name="com.farsitel.bazaar" />
+    </queries>
+</manifest>
