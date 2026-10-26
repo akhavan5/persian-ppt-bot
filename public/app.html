@@ -469,7 +469,7 @@ async function boot() {
     if (!me.user || (me.telegram && myTg && me.telegram !== myTg)) { token = ""; keep.set(null); await login(); me = await api("/api/me"); }
   } catch (e) { showFail(e); return; }
   show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
-  show($("#go"), !TG.main.ok); // با دکمه‌ی اصلی تلگرام، دکمه‌ی داخل صفحه لازم نیست
+  show($("#go"), true); // دکمه‌ی داخل صفحه همیشه می‌ماند: اگر کلاینت تلگرام (یا نسخه‌های غیررسمی) رویداد دکمه‌ی اصلی را نرساند، ساخت باز هم کار کند
   show($("#pasteTopic"), TG.canPaste);
   renderAll();
   if (!applyStart()) restoreDraft();
@@ -527,7 +527,7 @@ $("#nav").addEventListener("keydown", (e) => {
 function syncUI() {
   const live = !$("#app").hidden, make = live && tab === "make";
   const running = !$("#job").hidden, doneOn = !$("#done").hidden, same = $("#topic").value.trim() === lastTopic;
-  let text = "✨ بساز", active = $("#topic").value.trim().length >= 3 && !extracting && !$("#go").disabled, progress = false;
+  let text = "✨ بساز", active = !extracting && !$("#go").disabled, progress = false; // فعال می‌ماند تا لمسش همیشه واکنش (پیام خطا) داشته باشد، نه این‌که خاکستری و بی‌صدا باشد
   if (running) { text = "در حال ساخت…"; active = false; progress = true; }
   else if (extracting) { text = "در حال خواندن فایل…"; active = false; progress = true; }
   else if (doneOn && same) { text = "📥 ارسال ارائه به چت"; active = !$("#doneSend").disabled; }
