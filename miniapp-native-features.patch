@@ -1,0 +1,392 @@
+--- a/public/app.html	2026-10-26 14:49:15.248298176 +0330
++++ b/public/app.html	2026-10-26 14:49:37.421172312 +0330
+@@ -141,6 +141,7 @@
+         <div class="ok"><b>✅ ارائه آماده است</b></div>
+         <div style="margin:4px 0 10px"><b id="doneTitle"></b><span class="muted" id="doneSlides"></span></div>
+         <button class="btn" id="doneSend" type="button">📥 ارسال ارائه (PPTX) به چت</button>
++        <button class="btn ghost" id="doneDl" type="button" style="margin-top:8px" hidden>⬇️ دانلود مستقیم (PPTX)</button>
+         <button class="btn ghost" id="donePdf" type="button" style="margin-top:8px" hidden>📄 ارسال نسخه‌ی PDF به چت</button>
+         <button class="btn ghost" id="doneHandout" type="button" style="margin-top:8px" hidden>📝 ارسال جزوه (Word) به چت</button>
+         <button class="btn ghost" id="donePoster" type="button" style="margin-top:8px" hidden>🖼 ارسال پوستر به چت</button>
+@@ -218,7 +219,16 @@
+   const initData = hp.get("tgWebAppData") || store.get("tgInit") || "";
+   if (hp.get("tgWebAppData")) store.set("tgInit", initData);
+   let themeRaw = hp.get("tgWebAppThemeParams") || store.get("tgTheme") || "";
++  const ver = hp.get("tgWebAppVersion") || store.get("tgVer") || "0";
++  if (hp.get("tgWebAppVersion")) store.set("tgVer", ver);
++  const startParam = hp.get("tgWebAppStartParam") || "";
+   const inIframe = window.parent !== window;
++  // نسخه‌ی Bot API کلاینت از «نسخه» به بالاست؟ (مثلاً since("6.9")) — هر قابلیت فقط در نسخه‌ی پشتیبان‌شده فعال می‌شود
++  const since = (v) => {
++    const a = ver.split(".").map(Number), b = v.split(".").map(Number);
++    for (let i = 0; i < 2; i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x > y; }
++    return true;
++  };
+   function post(type, data) {
+     try {
+       if (window.TelegramWebviewProxy) window.TelegramWebviewProxy.postEvent(type, JSON.stringify(data || {}));
+@@ -234,15 +244,94 @@
+     if (p.section_bg_color == null && p.bg_color) r.setProperty("--card", p.bg_color);
+     if (p.bg_color) r.setProperty("--line", "color-mix(in srgb, " + (p.hint_color || "#888") + " 28%, transparent)");
+   }
++  // رنگ هدر/پس‌زمینه‌ی تلگرام با رنگ صفحه یکی می‌شود (۶.۱+؛ نوار پایین ۷.۱۰+)
++  function paint() {
++    const cs = getComputedStyle(document.documentElement);
++    const hex = (n) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : null; };
++    const sec = hex("--sec"), card = hex("--card");
++    if (since("6.1")) { post("web_app_set_header_color", { color_key: "secondary_bg_color" }); if (sec) post("web_app_set_background_color", { color: sec }); }
++    if (card && since("7.10")) post("web_app_set_bottom_bar_color", { color: card });
++  }
++
++  // ثبت شنونده‌ی رویدادهای تلگرام (main_button_pressed، back_button_pressed، custom_method_invoked، …)
++  const hs = {};
++  const on = (t, f) => { (hs[t] = hs[t] || []).push(f); };
+   window.Telegram = window.Telegram || {};
+-  window.Telegram.WebView = { receiveEvent(type, data) { if (type === "theme_changed" && data) { applyTheme(data.theme_params); } } };
+-  addEventListener("message", (e) => { try { const d = JSON.parse(e.data); if (d && d.eventType) window.Telegram.WebView.receiveEvent(d.eventType, d.eventData); } catch {} });
++  window.Telegram.WebView = { receiveEvent(type, data) {
++    if (type === "theme_changed" && data) { applyTheme(data.theme_params); paint(); }
++    for (const f of (hs[type] || []).slice()) { try { f(data || {}); } catch {} }
++  } };
++  // در iframe (Telegram Web) فقط پیام‌هایی که از خود پنجره‌ی والد می‌آیند پذیرفته می‌شود؛ بیرون از iframe رویدادها مستقیم به receiveEvent می‌رسند
++  addEventListener("message", (e) => {
++    if (!inIframe || e.source !== window.parent) return;
++    try { const d = JSON.parse(e.data); if (d && d.eventType) window.Telegram.WebView.receiveEvent(d.eventType, d.eventData); } catch {}
++  });
+   try { applyTheme(JSON.parse(themeRaw || "{}")); } catch {}
+   if (inIframe) post("iframe_ready", { reload_supported: true });
+   post("web_app_ready"); post("web_app_expand");
+   post("web_app_setup_swipe_behavior", { allow_vertical_swipe: false });
++  paint();
++
++  // دکمه‌ی اصلی تلگرام (MainButton، ۶.۰+)؛ فقط وقتی حالتش عوض شود پیام فرستاده می‌شود
++  let mbKey = "";
++  const main = {
++    ok: since("6.0"), onPress: null,
++    set(o) {
++      if (!main.ok) return;
++      const k = JSON.stringify(o); if (k === mbKey) return; mbKey = k;
++      post("web_app_setup_main_button", o.visible
++        ? { is_visible: true, is_active: !!o.active, is_progress_visible: !!o.progress, text: String(o.text || "").slice(0, 64) }
++        : { is_visible: false });
++    },
++  };
++  on("main_button_pressed", () => { if (main.onPress) main.onPress(); });
++
++  // دکمه‌ی بازگشت (۶.۱+)
++  let backKey = null;
++  const back = {
++    onPress: null,
++    set(v) { if (!since("6.1") || backKey === !!v) return; backKey = !!v; post("web_app_setup_back_button", { is_visible: !!v }); },
++  };
++  on("back_button_pressed", () => { if (back.onPress) back.onPress(); });
++
++  // تأیید قبل از بستن (۶.۲+)
++  let closeKey = null;
++  const confirmClose = (v) => { if (!since("6.2") || closeKey === !!v) return; closeKey = !!v; post("web_app_setup_closing_behavior", { need_confirmation: !!v }); };
++
++  // لرزش لمسی (۶.۱+): "select" | "light" | "success" | "error" | "warning"
++  const haptic = (kind) => {
++    if (!since("6.1")) return;
++    post("web_app_trigger_haptic_feedback", kind === "select" ? { type: "selection_change" } : kind === "light" ? { type: "impact", impact_style: "light" } : { type: "notification", notification_type: kind });
++  };
++
++  // CloudStorage (۶.۹+) از راه web_app_invoke_custom_method؛ ناموفق/پشتیبانی‌نشده ⇒ null
++  let rid = 0; const pend = {};
++  on("custom_method_invoked", (d) => { const f = pend[d.req_id]; if (!f) return; delete pend[d.req_id]; f(d.error ? null : d.result); });
++  const call = (method, params) => new Promise((res) => {
++    if (!since("6.9")) return res(null);
++    const id = "r" + (++rid); pend[id] = res;
++    post("web_app_invoke_custom_method", { req_id: id, method, params });
++    setTimeout(() => { if (pend[id]) { delete pend[id]; res(null); } }, 4000);
++  });
++  const cloud = {
++    get: async (key) => { const r = await call("getStorageValue", { key }); return typeof r === "string" ? r : ""; },
++    set: (key, value) => call("saveStorageValue", { key, value }),
++  };
++
++  // دانلود مستقیم (۸.۰+): تلگرام آدرس را بدون هدر Authorization می‌گیرد، پس آدرس باید توکن کوتاه‌مدت داشته باشد
++  let dlWait = null;
++  on("file_download_requested", (d) => { const f = dlWait; dlWait = null; if (f) f(d.status || null); });
++  const download = (url, name) => new Promise((res) => {
++    if (!since("8.0")) return res(null);
++    dlWait = res;
++    post("web_app_request_file_download", { url, file_name: name });
++    setTimeout(() => { if (dlWait === res) { dlWait = null; res("timeout"); } }, 90000);
++  });
++
++  paint();
+   return {
+-    initData,
++    initData, startParam, since, on, main, back, confirmClose, haptic, cloud, download, paint,
++    canDownload: since("8.0"),
+     openTg(path) { if (window.TelegramWebviewProxy || inIframe) post("web_app_open_tg_link", { path_full: path }); else window.open("https://t.me" + path, "_blank"); },
+     openLink(url) { if (window.TelegramWebviewProxy || inIframe) post("web_app_open_link", { url, try_instant_view: false }); else window.open(url, "_blank"); },
+   };
+@@ -250,6 +339,7 @@
+ 
+ // ---------- API ----------
+ let cfg = null, me = null, token = store.get("tok") || "", tracking = 0, srcText = "";
++let tab = "make", lastTopic = "", syncT = 0;
+ async function raw(path, { method = "GET", body } = {}) {
+   const headers = {}; if (body) headers["content-type"] = "application/json"; if (token) headers.authorization = "Bearer " + token;
+   return fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+@@ -292,7 +382,11 @@
+     show($("#boot"), false); $("#failMsg").textContent = e.message; show($("#fail"), true); return;
+   }
+   show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
++  show($("#go"), !TG.main.ok); // با دکمه‌ی اصلی تلگرام، دکمه‌ی داخل صفحه لازم نیست
+   renderAll();
++  if (!applyStart()) restoreDraft();
++  if (!syncT) syncT = setInterval(syncUI, 500);
++  syncUI();
+   if (me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.");
+   if (me.activeJob) track(me.activeJob);
+ }
+@@ -312,23 +406,87 @@
+ async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderHead(); renderCreditInfo(); } } catch {} }
+ 
+ // ---------- تب‌ها ----------
+-document.querySelectorAll("#nav button").forEach((b) => b.onclick = () => {
+-  document.querySelectorAll("#nav button").forEach((x) => x.classList.toggle("on", x === b));
+-  for (const t of ["make", "files", "set"]) show($("#t-" + t), t === b.dataset.t);
+-  if (b.dataset.t === "files") loadFiles();
+-  scrollTo(0, 0);
+-});
++function setTab(t) {
++  tab = t;
++  document.querySelectorAll("#nav button").forEach((x) => x.classList.toggle("on", x.dataset.t === t));
++  for (const k of ["make", "files", "set"]) show($("#t-" + k), k === t);
++  if (t === "files") loadFiles();
++  scrollTo(0, 0); syncUI();
++}
++document.querySelectorAll("#nav button").forEach((b) => b.onclick = () => { if (b.dataset.t !== tab) TG.haptic("select"); setTab(b.dataset.t); });
++TG.back.onPress = () => setTab("make");
++
++// ---------- هماهنگی با دکمه‌های تلگرام: MainButton، BackButton، تأیید بستن ----------
++function syncUI() {
++  const live = !$("#app").hidden, make = live && tab === "make";
++  const running = !$("#job").hidden, doneOn = !$("#done").hidden, same = $("#topic").value.trim() === lastTopic;
++  let text = "✨ بساز", active = $("#topic").value.trim().length >= 3 && !extracting && !$("#go").disabled, progress = false;
++  if (running) { text = "در حال ساخت…"; active = false; progress = true; }
++  else if (extracting) { text = "در حال خواندن فایل…"; active = false; progress = true; }
++  else if (doneOn && same) { text = "📥 ارسال ارائه به چت"; active = !$("#doneSend").disabled; }
++  TG.main.set({ visible: make, text, active, progress });
++  TG.back.set(live && tab !== "make");
++  TG.confirmClose(live && (extracting || !!srcText)); // فایل/لینک خوانده‌شده با بسته شدن اپ از دست می‌رود (ساخت ارائه در سرور ادامه می‌یابد)
++}
++TG.main.onPress = () => {
++  if (tab !== "make" || !$("#job").hidden) return;
++  TG.haptic("light");
++  if (!$("#done").hidden && $("#topic").value.trim() === lastTopic) $("#doneSend").click(); else $("#go").click();
++};
++
++// ---------- لینک عمیق (startapp) و پیش‌نویس در CloudStorage ----------
++// startapp=files | settings | t_<متن موضوع به base64url>
++function applyStart() {
++  const sp = TG.startParam;
++  if (!sp) return false;
++  if (sp === "files" || sp === "settings") { setTab(sp === "files" ? "files" : "set"); return true; }
++  const m = /^t_([A-Za-z0-9_-]{1,512})$/.exec(sp);
++  if (!m) return false;
++  try {
++    const b = m[1].replace(/-/g, "+").replace(/_/g, "/");
++    const bin = atob(b + "=".repeat((4 - (b.length % 4)) % 4));
++    const t = new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))).slice(0, 600).trim();
++    if (t.length >= 3) { $("#topic").value = t; return true; }
++  } catch {}
++  return false;
++}
++let draftT;
++function saveDraft() {
++  clearTimeout(draftT);
++  draftT = setTimeout(() => {
++    const topic = $("#topic").value.slice(0, 600);
++    TG.cloud.set("draft", topic.trim() ? JSON.stringify({ t: topic, s: $("#slides").value, i: $("#imgs").value, p: $("#pOn").checked, pc: $("#pChoice").value, h: $("#hOn").checked }) : "");
++  }, 1200);
++}
++async function restoreDraft() {
++  const raw = await TG.cloud.get("draft");
++  if (!raw || $("#topic").value) return;
++  try {
++    const d = JSON.parse(raw);
++    if (typeof d.t === "string" && d.t.trim()) $("#topic").value = d.t.slice(0, 600);
++    if ([...$("#slides").options].some((o) => o.value === String(d.s))) $("#slides").value = String(d.s);
++    if (d.i === "0" || d.i === "1") $("#imgs").value = d.i;
++    if (typeof d.p === "boolean") $("#pOn").checked = d.p;
++    if (d.pc === "wide" || d.pc === "tall") $("#pChoice").value = d.pc;
++    if (typeof d.h === "boolean") $("#hOn").checked = d.h;
++    show($("#pLay"), !!cfg.poster && $("#pOn").checked);
++  } catch {}
++}
++for (const id of ["#topic", "#slides", "#imgs", "#pOn", "#pChoice", "#hOn"]) for (const ev of ["input", "change"]) $(id).addEventListener(ev, saveDraft);
+ 
+ // ---------- ساخت ----------
+ function renderMake() {
++  const prevS = $("#slides").value, prevI = $("#imgs").value; // انتخاب‌های فعلی فرم (با ذخیره‌ی تنظیمات پاک نشوند)
+   const max = me.maxSlides, cur = Math.min(me.settings.slides, max);
+   const choices = cfg.slideChoices.filter((n) => n <= max);
+   $("#slides").replaceChildren(...choices.map((n) => h("option", { value: n }, fa(n) + " اسلاید")));
+   $("#slides").value = String(choices.includes(cur) ? cur : choices[choices.length - 1]);
+   $("#imgs").value = me.settings.images === false || me.maxImages <= 0 ? "0" : "1";
++  if (prevS && choices.includes(Number(prevS))) $("#slides").value = prevS;
++  if (prevI && me.maxImages > 0) $("#imgs").value = prevI;
+   show($("#pRow"), !!cfg.poster); show($("#pLay"), !!cfg.poster && $("#pOn").checked); show($("#linkBtn"), !!cfg.link && !srcText);
+   $("#pOn").onchange = () => show($("#pLay"), $("#pOn").checked);
+-  $("#examples").replaceChildren(...EXAMPLES.map((t) => h("button", { type: "button", onclick: () => { $("#topic").value = t; } }, t)));
++  $("#examples").replaceChildren(...EXAMPLES.map((t) => h("button", { type: "button", onclick: () => { $("#topic").value = t; saveDraft(); TG.haptic("select"); } }, t)));
+ }
+ // ---------- منبع: فایل یا لینک (همان مسیر نسخه‌ی وب) ----------
+ const EXAMPLES = ["هوش مصنوعی در آموزش", "مدیریت زمان برای دانشجویان", "انرژی‌های تجدیدپذیر در ایران", "اصول طراحی تجربه‌ی کاربری"];
+@@ -509,7 +667,7 @@
+   finally { if (my === upSeq) { extracting = false; $("#linkGo").disabled = $("#pick").disabled = false; } }
+ };
+ 
+-const genErr = (msg, buy) => { $("#genErr").textContent = msg || ""; show($("#genErr"), !!msg); show($("#buyBox"), !!buy); };
++const genErr = (msg, buy) => { if (msg) TG.haptic("error"); $("#genErr").textContent = msg || ""; show($("#genErr"), !!msg); show($("#buyBox"), !!buy); };
+ $("#go").onclick = async () => {
+   genErr("");
+   const topic = $("#topic").value.trim();
+@@ -522,7 +680,7 @@
+       ...(cfg.poster && $("#pOn").checked ? { poster: $("#pChoice").value } : {}),
+       ...($("#hOn").checked ? { handout: true } : {}),
+     } }));
+-    refreshMe(); track(r.jobId);
++    refreshMe(); track(r.jobId); TG.cloud.set("draft", ""); // ساخت شروع شد؛ پیش‌نویس پاک شود
+   } catch (e) {
+     genErr(e.message, e.data && (e.data.noCredit || e.data.needPlan));
+     if (e.data && (e.data.needPlan || e.data.noCredit)) refreshMe();
+@@ -541,12 +699,14 @@
+     if (s.state === "running") { $("#jobText").textContent = s.message; await sleep(3000); continue; }
+     $("#go").disabled = false; refreshMe(); loadFiles();
+     if (s.state === "done") return showDone(jobId, s);
+-    $("#jobErrText").textContent = s.message; return view("jobErr");
++    $("#jobErrText").textContent = s.message; TG.haptic("error"); return view("jobErr");
+   }
+   if (my === tracking) { $("#go").disabled = false; view(null); }
+ }
+ 
+ function showDone(jobId, s) {
++  lastTopic = $("#topic").value.trim(); TG.haptic("success");
++  const dl = $("#doneDl"); show(dl, TG.canDownload); dl.onclick = (e) => dlFile(jobId, e.currentTarget);
+   $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = s.slides ? ` — ${fa(s.slides)} اسلاید` : "";
+   $("#doneSend").onclick = (e) => sendToChat(jobId, e.currentTarget);
+   const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg"), pdfBtn = $("#donePdf");
+@@ -572,8 +732,24 @@
+ async function sendToChat(id, btn, kind = "send") {
+   return busy(btn, kind === "pdf" ? "در حال ساخت PDF…" : "در حال ارسال…", async () => {
+     for (let i = 0; i < 10; i++) {
+-      try { await api("/api/miniapp/" + kind, { method: "POST", body: { id } }); toast("✅ فایل به چت ربات ارسال شد"); return; }
+-      catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); return; } await sleep(3000); }
++      try { await api("/api/miniapp/" + kind, { method: "POST", body: { id } }); toast("✅ فایل به چت ربات ارسال شد"); TG.haptic("success"); return; }
++      catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); TG.haptic("error"); return; } await sleep(3000); }
++    }
++  });
++}
++
++// دانلود مستقیم با web_app_request_file_download: سرور لینک ۵ دقیقه‌ای می‌دهد (تلگرام هدر Authorization نمی‌فرستد)
++async function dlFile(id, btn) {
++  return busy(btn, "در حال آماده‌سازی…", async () => {
++    for (let i = 0; i < 10; i++) {
++      try {
++        const d = await api("/api/miniapp/dl", { method: "POST", body: { id } });
++        const st = await TG.download(location.origin + d.path, d.name);
++        if (st === "downloading") { TG.haptic("success"); toast("⬇️ دانلود شروع شد"); }
++        else if (st === "cancelled") toast("دانلود لغو شد");
++        else toast("دانلود مستقیم ممکن نشد؛ «ارسال به چت» را بزن.");
++        return;
++      } catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); return; } await sleep(3000); }
+     }
+   });
+ }
+@@ -590,6 +766,7 @@
+       h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${kind} · تا ${fa(hrs)} ساعت دیگر`)),
+       h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end" },
+         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
++        TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
+         !f.poster && !f.handout && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null));
+   }));
+ }
+@@ -621,7 +798,7 @@
+   renderCreditInfo();
+ }
+ async function save(patch) {
+-  try { me.settings = (await api("/api/settings", { method: "PUT", body: patch })).settings; renderSettings(); renderMake(); toast("ذخیره شد ✓"); }
++  try { me.settings = (await api("/api/settings", { method: "PUT", body: patch })).settings; renderSettings(); renderMake(); toast("ذخیره شد ✓"); TG.haptic("select"); }
+   catch (e) { toast(e.message); renderSettings(); }
+ }
+ $("#mode").onchange = (e) => save({ mode: e.target.value });
+--- a/src/miniapp.ts	2026-10-26 14:49:15.251772837 +0330
++++ b/src/miniapp.ts	2026-10-26 14:49:50.165713465 +0330
+@@ -7,7 +7,7 @@
+  * باز می‌کند و کوکی‌های SameSite در iframe فرستاده نمی‌شوند. سایر API ها (generate، jobs، files، settings) همان API نسخه‌ی وب‌اند.
+  */
+ import type { Env } from "./env";
+-import { createSession, getUserById, hitLimit, publicUser, type WebUser } from "./auth";
++import { createSession, getUserById, hitLimit, publicUser, randomToken, type WebUser } from "./auth";
+ import { REF_MAX, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
+ import { ensureUid, getLinkedTg } from "./link";
+ import { listFiles, loadFileDirect } from "./files";
+@@ -155,3 +155,34 @@
+   if (!me?.username) return err("ساخت لینک دعوت ممکن نشد؛ کمی بعد دوباره امتحان کن.", 502);
+   return json({ link: `https://t.me/${me.username}?start=ref_${tgId}`, max: REF_MAX });
+ }
++
++/** POST /api/miniapp/dl {id} ← {path, name} — لینک ۵ دقیقه‌ای برای web_app_request_file_download.
++ *  کلاینت تلگرام آدرس را بدون هدر Authorization دانلود می‌کند؛ پس مالکیت فایل همین‌جا بررسی و در توکن تصادفی ذخیره می‌شود. */
++export async function miniappDlLink(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
++  const id = typeof body?.id === "string" ? body.id : "";
++  if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
++  if (await hitLimit(env, `mdl:${user.id}`, 60, 3600)) return err("تعداد درخواست دانلود زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
++  const f = (await listFiles(env, user.id).catch(() => [])).find((x) => x.id === id);
++  if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
++  const token = randomToken(24);
++  await env.KV.put(`mdl:${token}`, `${user.id}|${id}`, { expirationTtl: 300 });
++  return json({ path: `/api/miniapp/dl/${token}`, name: f.name });
++}
++
++/** GET /api/miniapp/dl/<توکن> — بدون ورود؛ فقط با توکن کوتاه‌مدتِ ساخته‌شده در miniappDlLink */
++export async function miniappDownload(env: Env, token: string): Promise<Response> {
++  if (!/^[\w-]{20,64}$/.test(token)) return err("پیدا نشد", 404);
++  const v = await env.KV.get(`mdl:${token}`);
++  const i = v ? v.indexOf("|") : -1;
++  if (!v || i < 1) return err("لینک دانلود منقضی شده است.", 404);
++  const uid = v.slice(0, i), id = v.slice(i + 1);
++  if (!/^[\w-]{1,100}$/.test(id)) return err("پیدا نشد", 404);
++  const f = await loadFileDirect(env, uid, id);
++  if (!f) return err("فایل پیدا نشد یا منقضی شده است.", 404);
++  const ext = (f.entry.name.split(".").pop() ?? "").toLowerCase();
++  return new Response(f.data, { headers: {
++    "content-type": MIME[ext] ?? "application/octet-stream",
++    "content-disposition": `attachment; filename="file.${/^[a-z0-9]{1,5}$/.test(ext) ? ext : "bin"}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
++    "cache-control": "no-store", "x-content-type-options": "nosniff",
++  } });
++}
+--- a/src/web.ts	2026-10-26 14:49:15.255069552 +0330
++++ b/src/web.ts	2026-10-26 14:49:50.166659562 +0330
+@@ -25,7 +25,7 @@
+ import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
+ import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
+ import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
+-import { miniappBuy, miniappInvite, miniappLogin, miniappPdf, miniappSend } from "./miniapp";
++import { miniappBuy, miniappDlLink, miniappDownload, miniappInvite, miniappLogin, miniappPdf, miniappSend } from "./miniapp";
+ 
+ const SEC_HEADERS = {
+   "cache-control": "no-store",
+@@ -105,6 +105,8 @@
+     });
+   }
+ 
++  // دانلود مستقیم Mini App: کلاینت تلگرام هدر ندارد؛ فقط توکن کوتاه‌مدت اعتبار است
++  if (path.startsWith("/api/miniapp/dl/") && method === "GET") return miniappDownload(env, path.slice("/api/miniapp/dl/".length));
+   if (path === "/api/app/crash" && method === "POST") return appCrash(req, env, clientIp(req));
+   // Telegram Mini App: ورود با initData امضاشده‌ی تلگرام (بدون کوکی؛ توکن Bearer برمی‌گردد)
+   if (path === "/api/auth/miniapp" && method === "POST") return miniappLogin(req, env, clientIp(req));
+@@ -134,6 +136,7 @@
+   if (!user) return err("ابتدا وارد شو.", 401);
+ 
+   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
++  if (path === "/api/miniapp/dl" && method === "POST") return miniappDlLink(env, user, await readBody(req, 2_000));
+   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
+   if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000));
+   if (path === "/api/miniapp/invite" && method === "POST") return miniappInvite(env, user);

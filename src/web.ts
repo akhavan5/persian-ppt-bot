@@ -25,7 +25,7 @@ import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
-import { miniappBuy, miniappInvite, miniappLogin, miniappPdf, miniappSend } from "./miniapp";
+import { miniappBuy, miniappDlLink, miniappDownload, miniappInvite, miniappLogin, miniappPdf, miniappSend } from "./miniapp";
 
 const SEC_HEADERS = {
   "cache-control": "no-store",
@@ -105,6 +105,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     });
   }
 
+  // دانلود مستقیم Mini App: کلاینت تلگرام هدر ندارد؛ فقط توکن کوتاه‌مدت اعتبار است
+  if (path.startsWith("/api/miniapp/dl/") && method === "GET") return miniappDownload(env, path.slice("/api/miniapp/dl/".length));
   if (path === "/api/app/crash" && method === "POST") return appCrash(req, env, clientIp(req));
   // Telegram Mini App: ورود با initData امضاشده‌ی تلگرام (بدون کوکی؛ توکن Bearer برمی‌گردد)
   if (path === "/api/auth/miniapp" && method === "POST") return miniappLogin(req, env, clientIp(req));
@@ -134,6 +136,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (!user) return err("ابتدا وارد شو.", 401);
 
   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
+  if (path === "/api/miniapp/dl" && method === "POST") return miniappDlLink(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
   if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/invite" && method === "POST") return miniappInvite(env, user);

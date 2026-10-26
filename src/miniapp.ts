@@ -7,7 +7,7 @@
  * باز می‌کند و کوکی‌های SameSite در iframe فرستاده نمی‌شوند. سایر API ها (generate، jobs، files، settings) همان API نسخه‌ی وب‌اند.
  */
 import type { Env } from "./env";
-import { createSession, getUserById, hitLimit, publicUser, type WebUser } from "./auth";
+import { createSession, getUserById, hitLimit, publicUser, randomToken, type WebUser } from "./auth";
 import { REF_MAX, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
 import { ensureUid, getLinkedTg } from "./link";
 import { listFiles, loadFileDirect } from "./files";
@@ -154,4 +154,35 @@ export async function miniappInvite(env: Env, user: WebUser): Promise<Response> 
   const me = await tg<{ username?: string }>(env, "getMe").catch(() => null);
   if (!me?.username) return err("ساخت لینک دعوت ممکن نشد؛ کمی بعد دوباره امتحان کن.", 502);
   return json({ link: `https://t.me/${me.username}?start=ref_${tgId}`, max: REF_MAX });
+}
+
+/** POST /api/miniapp/dl {id} ← {path, name} — لینک ۵ دقیقه‌ای برای web_app_request_file_download.
+ *  کلاینت تلگرام آدرس را بدون هدر Authorization دانلود می‌کند؛ پس مالکیت فایل همین‌جا بررسی و در توکن تصادفی ذخیره می‌شود. */
+export async function miniappDlLink(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
+  if (await hitLimit(env, `mdl:${user.id}`, 60, 3600)) return err("تعداد درخواست دانلود زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
+  const f = (await listFiles(env, user.id).catch(() => [])).find((x) => x.id === id);
+  if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
+  const token = randomToken(24);
+  await env.KV.put(`mdl:${token}`, `${user.id}|${id}`, { expirationTtl: 300 });
+  return json({ path: `/api/miniapp/dl/${token}`, name: f.name });
+}
+
+/** GET /api/miniapp/dl/<توکن> — بدون ورود؛ فقط با توکن کوتاه‌مدتِ ساخته‌شده در miniappDlLink */
+export async function miniappDownload(env: Env, token: string): Promise<Response> {
+  if (!/^[\w-]{20,64}$/.test(token)) return err("پیدا نشد", 404);
+  const v = await env.KV.get(`mdl:${token}`);
+  const i = v ? v.indexOf("|") : -1;
+  if (!v || i < 1) return err("لینک دانلود منقضی شده است.", 404);
+  const uid = v.slice(0, i), id = v.slice(i + 1);
+  if (!/^[\w-]{1,100}$/.test(id)) return err("پیدا نشد", 404);
+  const f = await loadFileDirect(env, uid, id);
+  if (!f) return err("فایل پیدا نشد یا منقضی شده است.", 404);
+  const ext = (f.entry.name.split(".").pop() ?? "").toLowerCase();
+  return new Response(f.data, { headers: {
+    "content-type": MIME[ext] ?? "application/octet-stream",
+    "content-disposition": `attachment; filename="file.${/^[a-z0-9]{1,5}$/.test(ext) ? ext : "bin"}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
+    "cache-control": "no-store", "x-content-type-options": "nosniff",
+  } });
 }
