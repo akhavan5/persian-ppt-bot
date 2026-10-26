@@ -57,6 +57,9 @@ jobs:
           if "$BT/aapt2" dump permissions dist/pptsaz-myket.apk | grep -qi bazaar; then
             echo "::error::myket APK still contains a Bazaar permission"; exit 1
           fi
+          if ! "$BT/aapt2" dump permissions dist/pptsaz-myket.apk | grep -q "ir.mservices.market.BILLING"; then
+            echo "::error::myket APK is missing ir.mservices.market.BILLING (manifest placeholders?)"; exit 1
+          fi
           if "$BT/aapt2" dump xmltree --file AndroidManifest.xml dist/pptsaz-myket.apk | grep -qi farsitel; then
             echo "::error::myket APK manifest still references com.farsitel.bazaar"; exit 1
           fi
