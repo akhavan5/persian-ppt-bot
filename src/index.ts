@@ -111,6 +111,8 @@ export default {
         drop_pending_updates: true,
       });
       await tg(env, "setMyCommands", { commands: BOT_COMMANDS });
+      // دکمه‌ی منوی ربات (کنار کادر پیام) Mini App را باز می‌کند؛ آدرس دامنه‌ی اصلی سایت است تا از ایران هم باز شود
+      await tg(env, "setChatMenuButton", { menu_button: { type: "web_app", text: "ساخت ارائه", web_app: { url: `${SITE}/app` } } }).catch((e) => console.error("menu button", e));
       // منوی کامل‌تر فقط برای چت خود مدیرها
       for (const id of adminIds(env)) {
         await tg(env, "setMyCommands", { commands: ADMIN_COMMANDS, scope: { type: "chat", chat_id: Number(id) } }).catch((e) => console.error("admin commands", e));

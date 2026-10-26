@@ -35,6 +35,7 @@ const HELP =
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
   "⚙️ /settings ← تغییر تم، لحن، فونت، حالت (عادی، دانشجویی، کسب‌وکار، معلم، دفاع پایان‌نامه)، منابع و تعداد اسلاید\n" +
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)\n" +
+  "📱 /app ← اپ ساخت ارائه داخل تلگرام (Mini App)\n" +
   "🌐 /site ← ورود خودکار به سایت pptsaz.ir (پلن‌ها و پرداخت آنلاین)\n" +
   "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
   "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX، PDF، پوستر و جزوه) تا ۲۴ ساعت\n\n" +
@@ -461,6 +462,10 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (!msg.document && !msg.photo && (await handleFeedback(env, msg, userId, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
 
+  if (cmd === "/app") {
+    return await sendMessage(env, chatId, "📱 با دکمه‌ی زیر اپ ساخت ارائه باز می‌شود (ساخت، فایل‌ها، تنظیمات و اعتبار، همه با همین حساب).",
+      { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${siteUrl(env)}/app` } }]] } });
+  }
   if (cmd === "/site") {
     return await sendMessage(env, chatId, "🌐 با دکمه‌ی زیر بدون ثبت‌نام و رمز، با همین حساب تلگرامت وارد سایت می‌شوی (پلن‌ها، پرداخت آنلاین، پروفایل).",
       kb([[{ text: "🌐 ورود به سایت", url: await siteLoginUrl(env, userId, "home") }]]));

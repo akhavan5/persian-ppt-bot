@@ -25,6 +25,7 @@ import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
+import { miniappBuy, miniappLogin, miniappSend } from "./miniapp";
 
 const SEC_HEADERS = {
   "cache-control": "no-store",
@@ -105,6 +106,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
 
   if (path === "/api/app/crash" && method === "POST") return appCrash(req, env, clientIp(req));
+  // Telegram Mini App: ورود با initData امضاشده‌ی تلگرام (بدون کوکی؛ توکن Bearer برمی‌گردد)
+  if (path === "/api/auth/miniapp" && method === "POST") return miniappLogin(req, env, clientIp(req));
   if (path === "/api/auth/otp/send" && method === "POST") return otpSend(req, env);
   if (path === "/api/auth/otp/verify" && method === "POST") return otpVerify(req, env);
   if (path === "/api/auth/logout" && method === "POST") {
@@ -130,6 +133,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
   if (!user) return err("ابتدا وارد شو.", 401);
 
+  if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
+  if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
   if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
   if (path === "/api/profile/telegram/send" && method === "POST") return tgLinkSend(req, env, user);

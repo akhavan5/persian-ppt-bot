@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="light dark">
+<title>ساخت ارائه | pptsaz</title>
+<style>
+@font-face{font-family:Vazirmatn;font-weight:400;font-display:swap;src:url(/fonts/Vazirmatn-Regular.woff2) format("woff2")}
+@font-face{font-family:Vazirmatn;font-weight:700;font-display:swap;src:url(/fonts/Vazirmatn-Bold.woff2) format("woff2")}
+:root{
+  --bg:#fff;--fg:#17212b;--hint:#6b7a8a;--link:#2481cc;--btn:#2481cc;--btn-fg:#fff;--sec:#f1f3f6;--card:#fff;--line:#e3e8ee;--danger:#d14343;--ok:#1f9d55;
+  --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root{--bg:#18222d;--fg:#f5f5f5;--hint:#8a9aab;--link:#6ab3f3;--btn:#2ea6ff;--btn-fg:#fff;--sec:#101921;--card:#1f2c39;--line:#2b3a49;--danger:#ff6b6b;--ok:#4cc38a}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--sec);color:var(--fg);font:400 15px/1.8 Vazirmatn,Tahoma,sans-serif}
+body{padding:calc(var(--sat) + 10px) 12px calc(76px + var(--sab));min-height:100vh}
+main{max-width:560px;margin:0 auto}
+h2{font-size:1rem;margin:0 0 8px}
+.muted{color:var(--hint);font-size:.82rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 12px}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.row>*{min-width:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.f{display:block;font-size:.82rem;color:var(--hint);margin:0 0 2px}
+textarea,select,input[type=url]{width:100%;font:inherit;color:var(--fg);background:var(--sec);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+textarea{min-height:104px;resize:vertical}
+textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-offset:-1px}
+.btn{font:700 .95rem Vazirmatn,Tahoma,sans-serif;border:0;border-radius:12px;padding:11px 16px;background:var(--btn);color:var(--btn-fg);width:100%;cursor:pointer}
+.btn.ghost{background:var(--sec);color:var(--fg);border:1px solid var(--line)}
+.btn.sm{width:auto;padding:6px 12px;font-size:.82rem;border-radius:9px}
+.btn:disabled{opacity:.55}
+.btn.busy::after{content:"";display:inline-block;width:.9em;height:.9em;margin-inline-start:8px;vertical-align:-2px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line)}
+.sw:first-of-type{border-top:0}
+.sw input{width:22px;height:22px;accent-color:var(--btn)}
+.head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 12px}
+.who{display:flex;align-items:center;gap:10px}
+.av{width:38px;height:38px;border-radius:50%;background:var(--btn);color:var(--btn-fg);display:grid;place-items:center;font-weight:700}
+.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:.85rem;white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;align-items:center;gap:7px;border:2px solid var(--line);background:var(--sec);color:var(--fg);border-radius:999px;padding:4px 12px;font:inherit;font-size:.85rem;cursor:pointer}
+.chip.on{border-color:var(--btn)}
+.dot{width:14px;height:14px;border-radius:50%;display:inline-block}
+.file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.file:first-child{border-top:0}
+.file strong{display:block;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file>div:first-child{min-width:0;flex:1}
+.err{color:var(--danger);font-size:.88rem;margin-top:8px}
+.ok{color:var(--ok)}
+.poster{width:100%;border-radius:10px;margin-top:10px;border:1px solid var(--line)}
+nav{position:fixed;inset:auto 0 0 0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 8px calc(6px + var(--sab));z-index:5}
+nav button{flex:1;background:none;border:0;color:var(--hint);font:inherit;font-size:.78rem;padding:4px 0;cursor:pointer}
+nav button b{display:block;font-size:1.25rem;line-height:1.4}
+nav button.on{color:var(--btn);font-weight:700}
+#toast{position:fixed;left:50%;bottom:calc(84px + var(--sab));transform:translate(-50%,20px);background:#222;color:#fff;border-radius:12px;padding:9px 16px;font-size:.88rem;opacity:0;pointer-events:none;transition:.25s;z-index:9;max-width:90vw;text-align:center}
+#toast.on{opacity:.96;transform:translate(-50%,0)}
+[hidden]{display:none!important}
+.center{text-align:center;padding:48px 8px}
+.spin{width:30px;height:30px;margin:0 auto 12px;border:3px solid var(--line);border-top-color:var(--btn);border-radius:50%;animation:sp .8s linear infinite}
+</style>
+</head>
+<body>
+<main>
+  <section id="boot" class="center"><div class="spin"></div><div class="muted" id="bootMsg">در حال ورود…</div></section>
+
+  <section id="outside" class="card center" hidden>
+    <h2>این صفحه باید داخل تلگرام باز شود</h2>
+    <p class="muted">اپ ساخت ارائه فقط از داخل ربات کار می‌کند. ربات را باز کن و دکمه‌ی «ساخت ارائه» یا دستور /app را بزن.</p>
+    <p><a class="btn" style="display:block;text-decoration:none" href="https://t.me/pptsaz_bot">باز کردن ربات</a></p>
+    <p><a class="muted" href="/">یا از نسخه‌ی وب استفاده کن</a></p>
+  </section>
+
+  <section id="fail" class="card center" hidden>
+    <h2>ورود انجام نشد</h2>
+    <p class="muted" id="failMsg"></p>
+    <button class="btn" id="retry" type="button">تلاش دوباره</button>
+  </section>
+
+  <div id="app" hidden>
+    <div class="head">
+      <div class="who"><div class="av" id="av"></div><div><b id="uname"></b><div class="muted" id="plan"></div></div></div>
+      <div class="pill" id="credit"></div>
+    </div>
+
+    <!-- ساخت -->
+    <section id="t-make">
+      <div class="card" id="maker">
+        <label class="f" for="topic">موضوع ارائه</label>
+        <textarea id="topic" maxlength="600" placeholder="مثلاً: هوش مصنوعی در آموزش؛ فرصت‌ها و چالش‌ها"></textarea>
+
+        <div id="linkBox" hidden style="margin-top:10px">
+          <div class="row" id="linkRow">
+            <input type="url" id="linkUrl" placeholder="یا آدرس یک مقاله/صفحه‌ی وب" dir="ltr" inputmode="url">
+            <button class="btn ghost sm" id="linkGo" type="button">خواندن</button>
+          </div>
+          <div class="muted" id="linkInfo" hidden></div>
+        </div>
+
+        <div class="grid2" style="margin-top:12px">
+          <div><label class="f" for="slides">تعداد اسلاید</label><select id="slides"></select></div>
+          <div><label class="f" for="imgs">اسلایدها تصویر داشته باشند؟</label><select id="imgs"><option value="1">بله</option><option value="0">خیر</option></select></div>
+        </div>
+
+        <div style="margin-top:6px">
+          <label class="sw" id="pRow" hidden><span>🖼 پوستر (اینفوگرافیک) <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="pOn"></label>
+          <div id="pLay" hidden style="padding-bottom:6px"><select id="pChoice"><option value="wide">پوستر افقی (مناسب نمایش روی صفحه)</option><option value="tall">پوستر عمودی (مناسب پیام‌رسان)</option></select></div>
+          <label class="sw"><span>📝 جزوه‌ی Word <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="hOn"></label>
+        </div>
+
+        <button class="btn" id="go" type="button" style="margin-top:12px">✨ بساز</button>
+        <div class="err" id="genErr" hidden></div>
+        <div id="buyBox" hidden style="margin-top:10px"><button class="btn ghost" id="buy1" type="button">💳 خرید پلن در سایت</button></div>
+        <div class="muted" style="margin-top:10px">برای ساخت از روی فایل Word، PDF یا عکس، فایل را همین‌طور داخل چت ربات بفرست.</div>
+      </div>
+
+      <div class="card" id="job" hidden>
+        <div class="row"><b>در حال ساخت…</b><div class="spin" style="margin:0;width:22px;height:22px"></div></div>
+        <div class="muted" id="jobText" style="margin-top:6px"></div>
+        <div class="muted" style="margin-top:6px">معمولاً ۱ تا ۲ دقیقه؛ می‌توانی برنامه را ببندی و بعداً از «فایل‌ها» بگیری.</div>
+      </div>
+
+      <div class="card" id="done" hidden>
+        <div class="ok"><b>✅ ارائه آماده است</b></div>
+        <div style="margin:4px 0 10px"><b id="doneTitle"></b><span class="muted" id="doneSlides"></span></div>
+        <button class="btn" id="doneSend" type="button">📥 ارسال ارائه (PPTX) به چت</button>
+        <button class="btn ghost" id="doneHandout" type="button" style="margin-top:8px" hidden>📝 ارسال جزوه (Word) به چت</button>
+        <button class="btn ghost" id="donePoster" type="button" style="margin-top:8px" hidden>🖼 ارسال پوستر به چت</button>
+        <div class="err" id="doneWarn" hidden></div>
+        <img class="poster" id="posterImg" alt="پوستر" hidden>
+      </div>
+
+      <div class="card" id="jobErr" hidden><b>⚠️ ساخت ارائه ناموفق بود</b><div class="err" id="jobErrText"></div></div>
+    </section>
+
+    <!-- فایل‌ها -->
+    <section id="t-files" hidden>
+      <div class="card"><h2>فایل‌های ۲۴ ساعت اخیر</h2><div id="files"></div></div>
+    </section>
+
+    <!-- تنظیمات -->
+    <section id="t-set" hidden>
+      <div class="card"><h2>تم رنگی</h2><div class="chips" id="themes"></div></div>
+      <div class="card">
+        <div class="grid2">
+          <div><label class="f" for="mode">حالت ساخت</label><select id="mode">
+            <option value="normal">📄 عادی</option><option value="student">🎓 دانشجویی</option><option value="business">💼 کسب‌وکار</option><option value="teacher">🍎 معلم</option><option value="thesis">🎓 دفاع پایان‌نامه</option></select></div>
+          <div><label class="f" for="tone">لحن</label><select id="tone"></select></div>
+          <div><label class="f" for="font">فونت</label><select id="font"></select></div>
+          <div id="tplBox"><label class="f" for="tpl">قالب اسلاید</label><select id="tpl"></select></div>
+        </div>
+        <div id="modelBox" style="margin-top:10px" hidden><label class="f" for="model">مدل هوش مصنوعی</label><select id="model"></select></div>
+        <div style="margin-top:8px">
+          <label class="sw"><span>ارقام فارسی</span><input type="checkbox" id="digits"></label>
+          <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
+          <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>اعتبار و پلن</h2>
+        <div id="creditInfo" class="muted" style="line-height:2"></div>
+        <button class="btn" id="buy2" type="button" style="margin-top:10px">💳 خرید / ارتقای پلن</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<nav id="nav" hidden>
+  <button data-t="make" class="on"><b>✨</b>ساخت</button>
+  <button data-t="files"><b>📁</b>فایل‌ها</button>
+  <button data-t="set"><b>⚙️</b>تنظیمات</button>
+</nav>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const fa = (n) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (k.startsWith("on")) el[k] = v; else if (v != null && v !== false) el.setAttribute(k, v === true ? "" : v); }
+  for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
+  return el;
+}
+let toastT;
+function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("on"), 3200); }
+const show = (el, on) => { el.hidden = !on; };
+
+// ---------- ارتباط با تلگرام (بدون اسکریپت telegram.org؛ در ایران ممکن است فیلتر باشد) ----------
+// تلگرام initData و تم را در هش آدرس (#tgWebAppData=…) می‌دهد و رویدادها را با postEvent رد و بدل می‌کند؛ همان کاری که telegram-web-app.js می‌کند.
+const TG = (() => {
+  const hp = new URLSearchParams(location.hash.slice(1));
+  const initData = hp.get("tgWebAppData") || store.get("tgInit") || "";
+  if (hp.get("tgWebAppData")) store.set("tgInit", initData);
+  let themeRaw = hp.get("tgWebAppThemeParams") || store.get("tgTheme") || "";
+  const inIframe = window.parent !== window;
+  function post(type, data) {
+    try {
+      if (window.TelegramWebviewProxy) window.TelegramWebviewProxy.postEvent(type, JSON.stringify(data || {}));
+      else if (window.external && "notify" in window.external) window.external.notify(JSON.stringify({ eventType: type, eventData: data || {} }));
+      else if (inIframe) window.parent.postMessage(JSON.stringify({ eventType: type, eventData: data || {} }), "*");
+    } catch {}
+  }
+  function applyTheme(p) {
+    if (!p) return;
+    const m = { bg_color: "--bg", text_color: "--fg", hint_color: "--hint", link_color: "--link", button_color: "--btn", button_text_color: "--btn-fg", secondary_bg_color: "--sec", section_bg_color: "--card", destructive_text_color: "--danger" };
+    const r = document.documentElement.style;
+    for (const [k, v] of Object.entries(m)) if (typeof p[k] === "string" && /^#[0-9a-f]{6}$/i.test(p[k])) r.setProperty(v, p[k]);
+    if (p.section_bg_color == null && p.bg_color) r.setProperty("--card", p.bg_color);
+    if (p.bg_color) r.setProperty("--line", "color-mix(in srgb, " + (p.hint_color || "#888") + " 28%, transparent)");
+  }
+  window.Telegram = window.Telegram || {};
+  window.Telegram.WebView = { receiveEvent(type, data) { if (type === "theme_changed" && data) { applyTheme(data.theme_params); } } };
+  addEventListener("message", (e) => { try { const d = JSON.parse(e.data); if (d && d.eventType) window.Telegram.WebView.receiveEvent(d.eventType, d.eventData); } catch {} });
+  try { applyTheme(JSON.parse(themeRaw || "{}")); } catch {}
+  if (inIframe) post("iframe_ready", { reload_supported: true });
+  post("web_app_ready"); post("web_app_expand");
+  post("web_app_setup_swipe_behavior", { allow_vertical_swipe: false });
+  return {
+    initData,
+    openLink(url) { if (window.TelegramWebviewProxy || inIframe) post("web_app_open_link", { url, try_instant_view: false }); else window.open(url, "_blank"); },
+  };
+})();
+
+// ---------- API ----------
+let cfg = null, me = null, token = store.get("tok") || "", tracking = 0, srcText = "", srcInfo = "";
+async function raw(path, { method = "GET", body } = {}) {
+  const headers = {}; if (body) headers["content-type"] = "application/json"; if (token) headers.authorization = "Bearer " + token;
+  return fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+}
+async function login() {
+  const r = await fetch("/api/auth/miniapp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ initData: TG.initData }) });
+  const d = await r.json().catch(() => null);
+  if (!r.ok) { const e = new Error((d && d.error) || "ورود انجام نشد؛ دوباره امتحان کن."); e.status = r.status; throw e; }
+  token = d.token; store.set("tok", token);
+}
+async function api(path, opt = {}, retried = false) {
+  const r = await raw(path, opt);
+  let d = null; try { d = await r.json(); } catch {}
+  if (r.status === 401 && !retried && TG.initData) { await login(); return api(path, opt, true); }
+  if (!r.ok) { const e = new Error((d && d.error) || "خطایی رخ داد؛ دوباره امتحان کن."); e.status = r.status; e.data = d; throw e; }
+  return d;
+}
+async function busy(btn, label, fn) {
+  if (btn.classList.contains("busy")) return;
+  const o = btn.textContent; btn.classList.add("busy"); btn.disabled = true; btn.textContent = label;
+  try { return await fn(); } finally { btn.classList.remove("busy"); btn.disabled = false; btn.textContent = o; }
+}
+
+// ---------- راه‌اندازی ----------
+async function boot() {
+  show($("#fail"), false);
+  if (!TG.initData) { show($("#boot"), false); show($("#outside"), true); return; }
+  show($("#boot"), true);
+  try {
+    if (!cfg) cfg = await api("/api/config");
+    if (!token) await login();
+    me = await api("/api/me");
+    if (!me.user) { await login(); me = await api("/api/me"); }
+  } catch (e) {
+    show($("#boot"), false); $("#failMsg").textContent = e.message; show($("#fail"), true); return;
+  }
+  show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
+  renderAll();
+  if (me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.");
+  if (me.activeJob) track(me.activeJob);
+}
+$("#retry").onclick = () => { token = ""; store.set("tok", ""); boot(); };
+
+function renderAll() { renderHead(); renderMake(); renderSettings(); loadFiles(); }
+
+function creditText() { return me.credit.unlimited ? "اعتبار: نامحدود" : `اعتبار: ${fa(me.credit.total)}`; }
+function renderHead() {
+  const name = me.user.name || "کاربر";
+  $("#av").textContent = name.trim().charAt(0) || "؟";
+  $("#uname").textContent = name;
+  const p = me.plan && me.plans.find((x) => x.id === me.plan.id);
+  $("#plan").textContent = me.plan ? `پلن ${p ? p.name : me.plan.id}` : "پلن رایگان";
+  $("#credit").textContent = creditText();
+}
+async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderHead(); renderCreditInfo(); } } catch {} }
+
+// ---------- تب‌ها ----------
+document.querySelectorAll("#nav button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("#nav button").forEach((x) => x.classList.toggle("on", x === b));
+  for (const t of ["make", "files", "set"]) show($("#t-" + t), t === b.dataset.t);
+  if (b.dataset.t === "files") loadFiles();
+  scrollTo(0, 0);
+});
+
+// ---------- ساخت ----------
+function renderMake() {
+  const max = me.maxSlides, cur = Math.min(me.settings.slides, max);
+  const choices = cfg.slideChoices.filter((n) => n <= max);
+  $("#slides").replaceChildren(...choices.map((n) => h("option", { value: n }, fa(n) + " اسلاید")));
+  $("#slides").value = String(choices.includes(cur) ? cur : choices[choices.length - 1]);
+  $("#imgs").value = me.settings.images === false || me.maxImages <= 0 ? "0" : "1";
+  show($("#pRow"), !!cfg.poster); show($("#linkBox"), !!cfg.link);
+  $("#pOn").onchange = () => show($("#pLay"), $("#pOn").checked);
+}
+$("#linkGo").onclick = () => busy($("#linkGo"), "…", async () => {
+  const url = $("#linkUrl").value.trim();
+  try {
+    const d = await api("/api/link", { method: "POST", body: { url } });
+    srcText = d.text; srcInfo = d.host || "لینک";
+    $("#linkInfo").textContent = `✅ متن ${srcInfo} خوانده شد${d.truncated ? " (بخشی از آن)" : ""}؛ ارائه از روی آن ساخته می‌شود.`; show($("#linkInfo"), true);
+  } catch (e) { srcText = ""; $("#linkInfo").textContent = e.message; show($("#linkInfo"), true); }
+});
+
+const genErr = (msg, buy) => { $("#genErr").textContent = msg || ""; show($("#genErr"), !!msg); show($("#buyBox"), !!buy); };
+$("#go").onclick = async () => {
+  genErr("");
+  const topic = $("#topic").value.trim();
+  if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
+  try {
+    const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: {
+      topic, slides: Number($("#slides").value), images: $("#imgs").value === "1",
+      ...(srcText ? { source: srcText } : {}),
+      ...(cfg.poster && $("#pOn").checked ? { poster: $("#pChoice").value } : {}),
+      ...($("#hOn").checked ? { handout: true } : {}),
+    } }));
+    refreshMe(); track(r.jobId);
+  } catch (e) {
+    genErr(e.message, e.data && (e.data.noCredit || e.data.needPlan));
+    if (e.data && (e.data.needPlan || e.data.noCredit)) refreshMe();
+  }
+};
+
+const view = (name) => { for (const id of ["job", "done", "jobErr"]) show($("#" + id), id === name); };
+async function track(jobId) {
+  const my = ++tracking;
+  $("#go").disabled = true; $("#jobText").textContent = "⏳ در صف…"; view("job");
+  for (let i = 0; i < 400 && my === tracking; i++) {
+    let s;
+    try { s = await api("/api/jobs/" + jobId); }
+    catch (e) { if (e.status === 404) { view(null); $("#go").disabled = false; return; } await sleep(4000); continue; }
+    if (my !== tracking) return;
+    if (s.state === "running") { $("#jobText").textContent = s.message; await sleep(3000); continue; }
+    $("#go").disabled = false; refreshMe(); loadFiles();
+    if (s.state === "done") return showDone(jobId, s);
+    $("#jobErrText").textContent = s.message; return view("jobErr");
+  }
+  if (my === tracking) { $("#go").disabled = false; view(null); }
+}
+
+function showDone(jobId, s) {
+  $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = s.slides ? ` — ${fa(s.slides)} اسلاید` : "";
+  $("#doneSend").onclick = (e) => sendToChat(jobId, e.currentTarget);
+  const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg");
+  show(hBtn, s.handout === "ok" && !!s.handoutId); show(pBtn, s.poster === "ok" && !!s.posterId); show(img, false);
+  if (!hBtn.hidden) hBtn.onclick = (e) => sendToChat(s.handoutId, e.currentTarget);
+  if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
+  const warn = [s.poster === "failed" ? "ساخت پوستر ناموفق بود و اعتبارش برگشت." : "", s.handout === "failed" ? "ساخت جزوه ناموفق بود و اعتبارش برگشت." : ""].filter(Boolean).join(" ");
+  $("#doneWarn").textContent = warn; show($("#doneWarn"), !!warn);
+  view("done"); $("#done").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+// پیش‌نمایش پوستر: تصویر با هدر Authorization گرفته می‌شود (تگ img نمی‌تواند هدر بفرستد)؛ فایل تازه چند ثانیه برای KV دیده نمی‌شود
+async function posterPreview(id) {
+  for (let i = 0; i < 8; i++) {
+    const r = await raw("/api/files/" + encodeURIComponent(id) + "?inline=1").catch(() => null);
+    if (r && r.ok) { const img = $("#posterImg"); img.src = URL.createObjectURL(await r.blob()); show(img, true); return; }
+    if (!r || r.status !== 404) return;
+    await sleep(3000);
+  }
+}
+
+// ارسال فایل توسط ربات به چت؛ ۴۰۴ تازه‌ساخت چند بار دوباره امتحان می‌شود
+async function sendToChat(id, btn) {
+  return busy(btn, "در حال ارسال…", async () => {
+    for (let i = 0; i < 10; i++) {
+      try { await api("/api/miniapp/send", { method: "POST", body: { id } }); toast("✅ فایل به چت ربات ارسال شد"); return; }
+      catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); return; } await sleep(3000); }
+    }
+  });
+}
+
+// ---------- فایل‌ها ----------
+async function loadFiles() {
+  let list; try { list = (await api("/api/files")).files; } catch { return; }
+  const box = $("#files");
+  if (!list.length) { box.replaceChildren(h("span", { class: "muted" }, "فایلی نداری. فایل هر ارائه تا ۲۴ ساعت اینجا می‌ماند.")); return; }
+  box.replaceChildren(...list.map((f) => {
+    const hrs = Math.max(1, Math.ceil((f.t + 86400000 - Date.now()) / 3600000));
+    const kind = f.poster ? "🖼 پوستر" : f.handout ? "📝 جزوه (Word)" : `📊 ${fa(f.slides)} اسلاید`;
+    return h("div", { class: "file" },
+      h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${kind} · تا ${fa(hrs)} ساعت دیگر`)),
+      h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"));
+  }));
+}
+
+// ---------- تنظیمات ----------
+function renderCreditInfo() {
+  const c = me.credit, box = $("#creditInfo");
+  if (c.unlimited) { box.textContent = "اعتبار شما نامحدود است."; return; }
+  const lines = [`💳 اعتبار باقی‌مانده: ${fa(c.total)} ارائه`];
+  if (me.plan) lines.push(`• اعتبار پلن: ${fa(me.plan.credits)}`);
+  if (c.bonus > 0) lines.push(`• اعتبار هدیه و شارژ: ${fa(c.bonus)}`);
+  lines.push(`📄 حداکثر ${fa(me.maxSlides)} اسلاید و 🖼 ${fa(me.maxImages)} تصویر در هر ارائه`);
+  if (cfg.dailyFree) lines.push(`🎁 هر روز ${fa(cfg.dailyFree)} اعتبار رایگان (وقتی اعتبارت صفر باشد)`);
+  box.replaceChildren(...lines.flatMap((l, i) => [i ? h("br") : null, l]));
+}
+function renderSettings() {
+  const s = me.settings;
+  $("#themes").replaceChildren(...cfg.themes.map((t) => h("button", { type: "button", class: "chip" + (s.theme === t.key ? " on" : ""), "data-k": t.key, onclick: () => save({ theme: t.key }) },
+    h("span", { class: "dot", style: `background:linear-gradient(135deg,${t.primary} 50%,${t.accent} 50%)` }), t.name)));
+  const fill = (sel, opts, val) => { $(sel).replaceChildren(...opts.map(([v, l]) => h("option", { value: v }, l))); $(sel).value = val; };
+  fill("#tone", Object.entries(cfg.tones), s.tone);
+  fill("#font", cfg.fonts.map((f) => [f, f]), s.font);
+  $("#mode").value = s.mode;
+  const tpls = cfg.templates || []; show($("#tplBox"), tpls.length > 1);
+  fill("#tpl", tpls.map((t) => [t.key, `${t.emoji} ${t.name}`]), s.template || "classic");
+  show($("#modelBox"), (cfg.models || []).length > 1);
+  fill("#model", (cfg.models || []).map((m) => [m.id, m.name + (m.free === false ? " (ویژه)" : "")]), s.model || (cfg.models.find((m) => m.free !== false) || cfg.models[0] || {}).id);
+  for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
+  renderCreditInfo();
+}
+async function save(patch) {
+  try { me.settings = (await api("/api/settings", { method: "PUT", body: patch })).settings; renderSettings(); renderMake(); toast("ذخیره شد ✓"); }
+  catch (e) { toast(e.message); renderSettings(); }
+}
+$("#mode").onchange = (e) => save({ mode: e.target.value });
+$("#tone").onchange = (e) => save({ tone: e.target.value });
+$("#font").onchange = (e) => save({ font: e.target.value });
+$("#tpl").onchange = (e) => save({ template: e.target.value });
+$("#model").onchange = (e) => save({ model: e.target.value });
+for (const k of ["digits", "sources", "questions"]) $("#" + k).onchange = (e) => save({ [k]: e.target.checked });
+
+// ---------- خرید پلن (در مرورگر بیرونی؛ لینک یک‌بارمصرف با ورود خودکار) ----------
+async function openBuy(btn) {
+  return busy(btn, "در حال آماده‌سازی…", async () => {
+    try { const d = await api("/api/miniapp/buy", { method: "POST" }); TG.openLink(d.url); }
+    catch (e) { toast(e.message); }
+  });
+}
+$("#buy1").onclick = (e) => openBuy(e.currentTarget);
+$("#buy2").onclick = (e) => openBuy(e.currentTarget);
+
+// برگشت به برنامه (مثلاً بعد از خرید): اعتبار و پلن تازه شود
+document.addEventListener("visibilitychange", () => { if (!document.hidden && me) refreshMe(); });
+
+boot();
+</script>
+</body>
+</html>

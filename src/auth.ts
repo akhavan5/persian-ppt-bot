@@ -108,7 +108,8 @@ export async function renewSession(env: Env, req: Request): Promise<string | nul
 }
 
 export async function authUser(env: Env, req: Request): Promise<WebUser | null> {
-  const token = getCookie(req, SESSION_COOKIE);
+  // کوکی (سایت و اپ اندروید)، وگرنه توکن Bearer (Telegram Mini App؛ در iframe تلگرام وب کوکی SameSite فرستاده نمی‌شود)
+  const token = getCookie(req, SESSION_COOKIE) ?? /^Bearer ([\w-]{20,100})$/.exec(req.headers.get("authorization") ?? "")?.[1] ?? null;
   if (!token || token.length > 100) return null;
   const id = await env.KV.get(`ws:${await sha256hex(token)}`);
   return id ? getUserById(env, id) : null;
