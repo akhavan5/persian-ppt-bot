@@ -650,37 +650,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun telegramSend(tgId: String, onDone: (Boolean) -> Unit) {
-        viewModelScope.launch {
-            try {
-                val sent = Api.telegramSend(normDigits(tgId))
-                if (sent) toast("کد در تلگرام ارسال شد") else {
-                    reloadMe()
-                    toast("تلگرام قبلاً وصل شده است ✓")
-                }
-                onDone(sent)
-            } catch (e: ApiException) {
-                toast(e.message ?: "")
-                onDone(false)
-            }
-        }
-    }
-
-    fun telegramVerify(code: String, onDone: (Boolean) -> Unit) {
-        viewModelScope.launch {
-            try {
-                Api.telegramVerify(normDigits(code))
-                reloadMe()
-                loadFiles() // ارائه‌های ربات هم به فهرست فایل‌ها می‌آید
-                toast("تلگرام به حساب وصل شد ✓")
-                onDone(true)
-            } catch (e: ApiException) {
-                toast(e.message ?: "")
-                onDone(false)
-            }
-        }
-    }
-
     fun openUrl(url: String) {
         refreshOnNextResume = true
         _events.trySend(Event.OpenUrl(url))

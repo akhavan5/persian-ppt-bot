@@ -45,7 +45,6 @@ data class Me(
     val planCredits: Int,
     val bonus: Int,
     val dailyFree: Boolean,
-    val telegram: String,
     val settings: Settings,
     val activeJob: String?,
     val plans: List<PlanInfo>,
@@ -104,7 +103,6 @@ fun parseMe(j: JSONObject): Me? {
         planCredits = cr?.optInt("plan") ?: 0,
         bonus = cr?.optInt("bonus") ?: 0,
         dailyFree = j.optBoolean("dailyFree"),
-        telegram = j.str("telegram"),
         planId = j.optJSONObject("plan")?.str("id")?.ifEmpty { null },
         settings = Settings(
             theme = st.str("theme"), template = st.str("template"), tone = st.str("tone"), font = st.str("font"),
@@ -152,12 +150,6 @@ fun normalizeIranMobile(raw: String): String? {
         else -> d
     }.removePrefix("0")
     return if (Regex("^9\\d{9}$").matches(d)) "0$d" else null
-}
-
-/** آیدی عددی تلگرام (۵ تا ۱۵ رقم) را با پذیرش ارقام فارسی/عربی و فاصله برمی‌گرداند؛ اگر معتبر نبود null. */
-fun normalizeTelegramId(raw: String): String? {
-    val d = normDigits(raw).filter { !it.isWhitespace() }
-    return if (Regex("^\\d{5,15}$").matches(d)) d else null
 }
 
 /** اولین رشته‌ی ۴ تا ۸ رقمی در پیامک (کد تأیید) را برمی‌گرداند. */

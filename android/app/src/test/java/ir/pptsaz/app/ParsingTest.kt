@@ -7,7 +7,7 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-/** تست‌های واحد منطق خالص (بدون نیاز به امولاتور): شماره‌ی موبایل، کد پیامکی، آیدی تلگرام و خواندن فایل‌های متنی/Word. */
+/** تست‌های واحد منطق خالص (بدون نیاز به امولاتور): شماره‌ی موبایل، کد پیامکی و خواندن فایل‌های متنی/Word. */
 class ParsingTest {
 
     @Test
@@ -38,16 +38,6 @@ class ParsingTest {
         assertNull(extractOtp("بدون کد"))
         assertNull(extractOtp("123")) // کوتاه‌تر از ۴ رقم
         assertNull(extractOtp("123456789")) // بلندتر از ۸ رقم، کد نیست
-    }
-
-    @Test
-    fun telegramId_normalizes() {
-        assertEquals("123456789", normalizeTelegramId("123456789"))
-        assertEquals("123456789", normalizeTelegramId("۱۲۳۴۵۶۷۸۹"))
-        assertEquals("123456789", normalizeTelegramId(" 12 345 6789 "))
-        assertNull(normalizeTelegramId("1234")) // کمتر از ۵ رقم
-        assertNull(normalizeTelegramId("1234567890123456")) // بیشتر از ۱۵ رقم
-        assertNull(normalizeTelegramId("@username")) // آیدی عددی لازم است
     }
 
     @Test

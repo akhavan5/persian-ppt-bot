@@ -149,16 +149,6 @@ object Api {
         call("PUT", "/api/settings", JSONObject().put(key, value))
     }
 
-    /** true یعنی کد در تلگرام ارسال شد؛ false یعنی تلگرام از قبل وصل بوده است. */
-    suspend fun telegramSend(tgId: String): Boolean {
-        val j = call("POST", "/api/profile/telegram/send", JSONObject().put("tgId", tgId))
-        return !j.optBoolean("already")
-    }
-
-    suspend fun telegramVerify(code: String) {
-        call("POST", "/api/profile/telegram/verify", JSONObject().put("code", code))
-    }
-
     /** متن PDF یا عکس را استخراج می‌کند (سرور کار را در پس‌زمینه انجام می‌دهد و ما وضعیت را پیگیری می‌کنیم). */
     suspend fun extractText(bytes: ByteArray, mime: String): String {
         val j = send("POST", "/api/extract", bytes.toRequestBody(mime.toMediaType()))

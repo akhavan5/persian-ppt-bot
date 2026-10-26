@@ -1220,8 +1220,6 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 )
             }
 
-            TelegramCard(me, vm)
-
             ContactCard(vm)
 
             SoftButton("بررسی به‌روزرسانی (نسخه‌ی " + BuildConfig.VERSION_NAME + ")", { vm.checkUpdate() }, Modifier.fillMaxWidth(), icon = AppIcons.Refresh)
@@ -1232,128 +1230,6 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
             )
-        }
-    }
-}
-
-/** اتصال حساب به ربات تلگرام (مثل پروفایل سایت): آیدی عددی ← کد ۶ رقمی که ربات در تلگرام می‌فرستد ← تأیید. */
-@Composable
-private fun TelegramCard(me: Me, vm: AppViewModel) {
-    val cs = MaterialTheme.colorScheme
-    val ex = LocalExtra.current
-    val brush = Brush.linearGradient(listOf(Color(0xFF29B6F6), Color(0xFF0288D1)))
-    var tgId by rememberSaveable { mutableStateOf("") }
-    var code by rememberSaveable { mutableStateOf("") }
-    var sent by rememberSaveable { mutableStateOf(false) }
-    var tick by rememberSaveable { mutableStateOf(0) } // با هر ارسال موفق یکی زیاد می‌شود تا شمارش معکوس دوباره شروع شود
-    var left by rememberSaveable { mutableStateOf(0) }
-    var sending by remember { mutableStateOf(false) }
-    var verifying by remember { mutableStateOf(false) }
-    val norm = normalizeTelegramId(tgId)
-    LaunchedEffect(tick) {
-        if (tick > 0) {
-            left = 60 // سرور هم بین دو درخواست کد ۶۰ ثانیه فاصله می‌خواهد
-            while (left > 0) {
-                delay(1000)
-                left--
-            }
-        }
-    }
-    SectionTitle("تلگرام", Modifier.padding(top = 4.dp))
-    SurfaceCard {
-        if (me.telegram.isNotBlank()) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                IconTile(AppIcons.Send, brush, 40.dp)
-                Column(Modifier.weight(1f)) {
-                    Text("تلگرام وصل است", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        me.telegram.faStr(),
-                        style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr), color = cs.onSurfaceVariant,
-                    )
-                }
-                Pill("وصل", ex.successBg, ex.success)
-            }
-        } else {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    IconTile(AppIcons.Send, brush, 40.dp)
-                    Text("اتصال حساب به ربات تلگرام", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                }
-                Text(
-                    "در ربات تلگرام دستور /id را بزنید و آیدی عددی‌تان را اینجا وارد کنید تا ربات یک کد ۶ رقمی برایتان بفرستد. " +
-                        "بعد از تأیید، اعتبار و ارائه‌های ربات و اپ یکی می‌شود.",
-                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
-                )
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = tgId,
-                        onValueChange = { tgId = it.filter { c -> c.isDigit() }.take(16) },
-                        placeholder = { Text("123456789", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center),
-                        singleLine = true,
-                        enabled = !sending,
-                        isError = tgId.length >= 5 && norm == null,
-                        supportingText = { if (tgId.length >= 5 && norm == null) Text("آیدی تلگرام فقط عدد است (۵ تا ۱۵ رقم)") },
-                        shape = RoundedCornerShape(16.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                        modifier = Modifier.weight(1f),
-                    )
-                    SoftButton(
-                        text = when {
-                            left > 0 -> left.fa() + " ثانیه"
-                            sent -> "ارسال دوباره"
-                            else -> "ارسال کد"
-                        },
-                        onClick = {
-                            norm?.let { id ->
-                                sending = true
-                                vm.telegramSend(id) { ok ->
-                                    sending = false
-                                    if (ok) {
-                                        sent = true
-                                        code = ""
-                                        tick++
-                                    }
-                                }
-                            }
-                        },
-                        modifier = Modifier.padding(top = 4.dp),
-                        enabled = norm != null && !sending && left == 0,
-                    )
-                }
-                AnimatedVisibility(sent, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = code,
-                            onValueChange = { code = it.filter { c -> c.isDigit() }.take(6) },
-                            placeholder = { Text("کد ۶ رقمی تلگرام", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center),
-                            singleLine = true,
-                            enabled = !verifying,
-                            shape = RoundedCornerShape(16.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                            modifier = Modifier.weight(1f),
-                        )
-                        GradientButton(
-                            "تأیید",
-                            {
-                                verifying = true
-                                vm.telegramVerify(code) { ok ->
-                                    verifying = false
-                                    if (ok) {
-                                        sent = false
-                                        code = ""
-                                        tgId = ""
-                                    }
-                                }
-                            },
-                            Modifier.width(110.dp),
-                            enabled = normDigits(code).length == 6 && !verifying,
-                            loading = verifying,
-                        )
-                    }
-                }
-            }
         }
     }
 }
