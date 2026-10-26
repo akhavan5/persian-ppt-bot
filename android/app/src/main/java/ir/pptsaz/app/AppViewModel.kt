@@ -80,7 +80,7 @@ sealed interface Share {
     data class TextShare(val text: String) : Share
 }
 
-private const val MAX_SOURCE_CHARS = 100_000
+private const val MAX_SOURCE_CHARS = 120_000
 
 /** حداکثر مدتی که اپ در حالت باز، وضعیت ساخت را (حتی با قطعی اینترنت) پیگیری می‌کند؛ هم‌اندازه‌ی JobWatcher پس‌زمینه (≈ ۲۰ دقیقه). */
 private const val MAX_WATCH_MS = 20L * 60 * 1000
@@ -100,7 +100,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var pendingShare: Share? = null
 
     /**
-     * فرم «ساخت» اینجا نگه داشته می‌شود تا با چرخش صفحه و تغییر تنظیمات سیستم بماند و متن منبعِ بلند (تا ۱۰۰ هزار نویسه)
+     * فرم «ساخت» اینجا نگه داشته می‌شود تا با چرخش صفحه و تغییر تنظیمات سیستم بماند و متن منبعِ بلند (تا ۱۲۰ هزار نویسه)
      * وارد Bundle ذخیره‌ی وضعیت Activity نشود؛ برای بسته‌شدن پردازش، همان پیش‌نویس روی گوشی (Draft) است.
      */
     val form: CreateForm = Draft.load(app)

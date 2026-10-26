@@ -21,7 +21,7 @@ object Draft {
     fun save(ctx: Context, f: CreateForm) {
         p(ctx).edit()
             .putString("topic", f.topic)
-            .putString("source", f.source.take(100_000))
+            .putString("source", f.source.take(120_000))
             .putBoolean("handout", f.handout)
             .putString("poster", f.poster)
             .apply()
