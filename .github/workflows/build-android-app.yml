@@ -38,19 +38,28 @@ jobs:
         env:
           KEYSTORE_FILE: ${{ github.workspace }}/android/pptsaz-release.keystore
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: gradle -p android assembleRelease bundleRelease --no-daemon --stacktrace
+        run: gradle -p android assembleBazaarRelease assembleMyketRelease bundleBazaarRelease bundleMyketRelease --no-daemon --stacktrace
 
-      - name: Verify APK
+      - name: Verify APKs
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          APK=android/app/build/outputs/apk/release/app-release.apk
-          "$BT/apksigner" verify --print-certs "$APK" | head -5
-          "$BT/aapt2" dump badging "$APK" | grep -E "^package|sdkVersion|targetSdk" 
           mkdir -p dist
-          cp "$APK" dist/pptsaz.apk
-          cp android/app/build/outputs/bundle/release/app-release.aab dist/pptsaz.aab
-          # نقشه‌ی R8 برای خواندن گزارش کرش‌ها؛ برای هر نسخه نگه دارید
-          cp android/app/build/outputs/mapping/release/mapping.txt dist/mapping.txt
+          for S in bazaar myket; do
+            APK=android/app/build/outputs/apk/$S/release/app-$S-release.apk
+            "$BT/apksigner" verify --print-certs "$APK" | head -5
+            "$BT/aapt2" dump badging "$APK" | grep -E "^package|sdkVersion|targetSdk"
+            cp "$APK" dist/pptsaz-$S.apk
+            cp android/app/build/outputs/bundle/${S}Release/app-$S-release.aab dist/pptsaz-$S.aab
+            # نقشه‌ی R8 برای خواندن گزارش کرش‌ها؛ برای هر نسخه نگه دارید
+            cp android/app/build/outputs/mapping/${S}Release/mapping.txt dist/mapping-$S.txt
+          done
+          # نسخه‌ی مایکت نباید هیچ نشانی از بازار داشته باشد
+          if "$BT/aapt2" dump permissions dist/pptsaz-myket.apk | grep -qi bazaar; then
+            echo "::error::myket APK still contains a Bazaar permission"; exit 1
+          fi
+          if "$BT/aapt2" dump xmltree --file AndroidManifest.xml dist/pptsaz-myket.apk | grep -qi farsitel; then
+            echo "::error::myket APK manifest still references com.farsitel.bazaar"; exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -63,7 +72,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [30, 34, 36]
+        include:
+          - { api: 30, store: bazaar }
+          - { api: 34, store: bazaar }
+          - { api: 34, store: myket }
+          - { api: 36, store: bazaar }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -79,9 +92,9 @@ jobs:
           api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
-          script: bash android/smoke.sh dist/pptsaz.apk smoke-out
+          script: bash android/smoke.sh dist/pptsaz-${{ matrix.store }}.apk smoke-out
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: smoke-api${{ matrix.api }}
+          name: smoke-${{ matrix.store }}-api${{ matrix.api }}
           path: smoke-out/*
