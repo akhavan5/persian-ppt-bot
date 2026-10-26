@@ -157,7 +157,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
 export const posterEnabled = (env: Env) => hasBrowser(env);
 export interface PosterWant { layout: "wide" | "tall" }
 
-export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
+export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** اعلان پایان کار در تلگرام (Mini App) */ notify?: boolean; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
 
 /** ساخت نمونه‌ی Workflow. شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow. در صورت شکست، اعتبار برمی‌گردد و false برمی‌گرداند. */
 export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid: string | number, jobId: string, d: Delivery, poster?: PosterWant): Promise<boolean> {
@@ -165,7 +165,7 @@ export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid:
   const typed = (d.orig ?? (d.channel === "web" ? b.topic : "")).replace(/\s+/g, " ").trim();
   const orig = (b.source ? `📎 ${typed || b.topic}` : typed).slice(0, 300);
   const params: DeckParams = {
-    chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId,
+    chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId, ...(d.notify ? { notify: true } : {}),
     topic: b.topic, ...(orig ? { orig } : {}), ...(b.source ? { source: b.source } : {}), settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
     // پوستر همراه ارائه (همین Workflow؛ ۱ اعتبار جدا که beginDeck کسر کرده) با تصویر تزئینی ثابت
     ...(poster && b.posterQuota ? { poster: { layout: poster.layout, credit: b.posterQuota.source, day: b.posterQuota.day } } : {}),

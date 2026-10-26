@@ -7,16 +7,18 @@
  * باز می‌کند و کوکی‌های SameSite در iframe فرستاده نمی‌شوند. سایر API ها (generate، jobs، files، settings) همان API نسخه‌ی وب‌اند.
  */
 import type { Env } from "./env";
-import { createSession, getUserById, hitLimit, publicUser, randomToken, type WebUser } from "./auth";
-import { REF_MAX, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
-import { ensureUid, getLinkedTg } from "./link";
+import { createSession, getUserById, hitLimit, publicUser, randomToken, reuseSession, type WebUser } from "./auth";
+import { REF_MAX, displayName, isAdmin, isAllowed, isBanned, noteActive, rewardReferral, touchUser } from "./settings";
+import { ensureUid, getLinkedTg, resolveUid } from "./link";
 import { listFiles, loadFileDirect } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
-import { esc, sendDocument, tg } from "./telegram";
+import { esc, sendDocument, sendMessage, tg } from "./telegram";
 import { siteLoginUrl } from "./deck-service";
 
 const enc = new TextEncoder();
 const INIT_MAX_AGE = 86_400; // ثانیه؛ initData قدیمی‌تر از یک روز پذیرفته نمی‌شود
+const IP_LOGIN_MAX = 400; // ورود در هر ۱۰ دقیقه برای هر IP (بالا: NAT/پروکسی)
+const TG_LOGIN_MAX = 20; // ورود در هر ۱۰ دقیقه برای هر حساب تلگرام (بعد از تأیید امضا)
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" } });
@@ -54,15 +56,33 @@ export async function verifyInitData(botToken: string, initData: string, now = D
   } catch { return null; }
 }
 
-/** POST /api/auth/miniapp {initData} ← {token, user}؛ توکن را کلاینت در هدر Authorization: Bearer می‌فرستد */
+/** نوشتن‌های جانبیِ ورود (کاربر دیده‌شده، فهرست «اخیر» مدیر، نگاشت تلگرام↔حساب، پاداش دعوت). روزی یک بار برای هر کاربر اجرا می‌شود،
+ *  نه در هر باز شدن Mini App؛ هر کدام جدا خطایش را می‌خورد تا ورود خراب نشود. */
+async function dailyTouch(env: Env, u: TgUser, uid: string, name: string, startParam: string): Promise<void> {
+  const isNew = await touchUser(env, u.id, u.username, name).catch((e) => { console.error("touchUser", e); return false; });
+  await noteActive(env, u.id, u.username, name).catch((e) => console.error("noteActive", e));
+  if ((await getLinkedTg(env, uid)) !== u.id) await env.KV.put(`w2tg:${uid}`, String(u.id)).catch(() => {});
+  // دعوت از راه startapp=ref_<شناسه>: start_param داخل initData امضا شده است، پس قابل جعل نیست؛ مثل /start ربات فقط برای کاربر «جدید»
+  const m = isNew ? /^ref_(\d{1,15})$/.exec(startParam) : null;
+  if (m) {
+    const inviter = Number(m[1]);
+    const ok = await rewardReferral(env, inviter, u.id, await resolveUid(env, inviter)).catch(() => false);
+    if (ok) await sendMessage(env, inviter, "🎉 یکی از دوستانت با لینک تو وارد ربات شد؛ <b>۱ ارائه‌ی رایگان</b> به اعتبارت اضافه شد. برای دیدن اعتبار: /credit").catch(() => {});
+  }
+}
+
+/** POST /api/auth/miniapp {initData} ← {token, user}؛ توکن را کلاینت در هدر Authorization: Bearer می‌فرستد.
+ *  کلاینت توکن را نگه می‌دارد و فقط وقتی ۴۰۱ بگیرد (یا حدود روزی یک بار) دوباره اینجا می‌آید؛ اگر هدر Bearer معتبرِ همین کاربر باشد، همان نشست تمدید می‌شود. */
 export async function miniappLogin(req: Request, env: Env, ip: string): Promise<Response> {
-  if (await hitLimit(env, `mal:${ip}`, 40, 600)) return err("تعداد درخواست زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);
+  // سقف IP فقط جلوی سیل درخواست را می‌گیرد و عمداً بالاست: پشت NAT یا پروکسی چند کاربر یک IP دارند. سقف دقیق بعد از تأیید امضا و بر پایه‌ی tgId است.
+  if (await hitLimit(env, `mal:${ip}`, IP_LOGIN_MAX, 600)) return err("تعداد درخواست از این شبکه زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);
   if (Number(req.headers.get("content-length") ?? 0) > 8_000) return err("درخواست نامعتبر", 413);
   const b = (await req.json().catch(() => null)) as { initData?: unknown } | null;
   const initData = typeof b?.initData === "string" ? b.initData : "";
   if (initData.length < 20 || initData.length > 4_096) return err("اطلاعات ورود از تلگرام نیامد؛ Mini App را از داخل ربات باز کن.", 400);
   const u = await verifyInitData(env.TELEGRAM_BOT_TOKEN, initData);
   if (!u || u.is_bot) return err("ورود از تلگرام تایید نشد؛ Mini App را بسته و دوباره از داخل ربات باز کن.", 401);
+  if (await hitLimit(env, `mal:t:${u.id}`, TG_LOGIN_MAX, 600)) return err("تعداد ورود زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);
 
   if (await isBanned(env, u.id)) return err("دسترسی شما مسدود شده است.", 403);
   if (!isAllowed(env, u.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
@@ -72,13 +92,16 @@ export async function miniappLogin(req: Request, env: Env, ip: string): Promise<
   const uid = await ensureUid(env, u.id, name); // پروفایل وب خودکار (همان پروفایل ربات)
   if (typeof uid !== "string") return err("حساب شما پیدا نشد؛ ابتدا ربات را Start کن.", 403);
   if (await isBanned(env, uid)) return err("دسترسی شما مسدود شده است.", 403);
-  await touchUser(env, u.id, u.username, name).catch((e) => console.error("touchUser", e));
-  await noteActive(env, u.id, u.username, name).catch((e) => console.error("noteActive", e));
-  await env.KV.put(`w2tg:${uid}`, String(u.id)).catch(() => {});
+
+  // نوشتن‌های جانبی روزی یک بار (شمارنده‌ی اتمی D1: فقط اولین ورودِ هر ۲۴ ساعت از سقف ۱ رد می‌شود)
+  if (!(await hitLimit(env, `mad:${u.id}`, 1, 86_400))) {
+    await dailyTouch(env, u, uid, name, new URLSearchParams(initData).get("start_param") ?? "");
+  }
 
   const user = await getUserById(env, uid);
   if (!user) return err("حساب شما پیدا نشد؛ دوباره امتحان کن.", 500);
-  return json({ token: await createSession(env, uid), user: publicUser(user) });
+  const token = (await reuseSession(env, req, uid)) ?? (await createSession(env, uid));
+  return json({ token, user: publicUser(user) });
 }
 
 const MIME: Record<string, string> = {

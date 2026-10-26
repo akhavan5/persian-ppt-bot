@@ -10,7 +10,8 @@ import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegr
 import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { adminIds, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
-import { BUY_SITE_NOTE, buyKbFor } from "./deck-service";
+import { BUY_SITE_NOTE, buyKbFor, siteUrl } from "./deck-service";
+import { getLinkedTg } from "./link";
 import { hasBrowser } from "./browser-api";
 import { logDeck, saveFile, savePreview } from "./files";
 import { fontCaption } from "./themes";
@@ -249,6 +250,18 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       await bumpStat(this.env, "ok").catch(() => {});
       await noteDeckDone(this.env, userId).catch((e) => console.error("noteDeckDone", e)); // قیف کاربران پنل مدیر
     });
+    // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ یک پیام کوتاه با دکمه‌ی باز کردن اپ (فایل‌ها داخل اپ‌اند).
+    // بعد از «finish» (قفل قبلاً آزاد شده) و بدون تلاش مجدد: شکست یا کندی این پیام نباید به «برگشت اعتبار» یا شکست کار برسد.
+    if (web && event.payload.notify) {
+      await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+        const tgChat = await getLinkedTg(this.env, String(userId));
+        if (!tgChat) return;
+        const extras = [built.poster === "ok" ? "🖼 پوستر" : "", built.handout === "ok" ? "📝 جزوه" : ""].filter(Boolean);
+        const text = `✅ <b>${esc(built.title)}</b> آماده شد (${toFa(String(built.slides))} اسلاید${extras.length ? " + " + extras.join(" + ") : ""}).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`;
+        await sendMessage(this.env, tgChat, text, { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${siteUrl(this.env)}/app` } }]] } });
+      }).catch((e) => console.error("notify-app", String(e).slice(0, 200)));
+    }
+
     // خروجی نمونه‌ی Workflow؛ وضعیت وب از همین‌جا خوانده می‌شود
     return built;
   }

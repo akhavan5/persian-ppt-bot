@@ -86,6 +86,16 @@ export async function createSession(env: Env, userId: string): Promise<string> {
   await env.KV.put(`ws:${await sha256hex(token)}`, userId, { expirationTtl: SESSION_TTL });
   return token;
 }
+/** نشست Bearer فعلی را اگر معتبر و مال همین کاربر باشد ۳۰ روز دیگر تمدید می‌کند و همان توکن را برمی‌گرداند (وگرنه null).
+ *  Mini App با آن به‌جای ساخت نشست تازه در هر ورود، یک نشست را نگه می‌دارد. */
+export async function reuseSession(env: Env, req: Request, userId: string): Promise<string | null> {
+  const token = /^Bearer ([\w-]{20,100})$/.exec(req.headers.get("authorization") ?? "")?.[1];
+  if (!token) return null;
+  const h = await sha256hex(token);
+  if ((await env.KV.get(`ws:${h}`)) !== userId) return null;
+  await env.KV.put(`ws:${h}`, userId, { expirationTtl: SESSION_TTL });
+  return token;
+}
 export const sessionCookie = (token: string) => setCookie(SESSION_COOKIE, token, SESSION_TTL);
 export const clearSessionCookie = () => setCookie(SESSION_COOKIE, "", 0);
 
