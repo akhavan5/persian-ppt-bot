@@ -159,7 +159,7 @@ textarea{min-height:110px;resize:vertical}
 .upchip button{border:0;background:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;line-height:1;color:var(--muted)}
 .upchip button:hover{color:var(--danger)}
 .trust{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:.88rem;margin:10px 0 30px}
-@media(max-width:560px){.trust{display:grid;grid-template-columns:1fr 1fr;gap:10px 8px;justify-items:start;padding:0 6px}.trust span{white-space:nowrap}}
+@media(max-width:560px){.trust{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 8px;justify-items:start;padding:0 6px}.trust span{min-width:0;white-space:normal;overflow-wrap:anywhere}.trust span:first-child{grid-column:1/-1}}
 #upHint{text-wrap:pretty}
 #go{padding:14px 48px;font-size:1.12rem;min-width:300px;max-width:100%}
 @media(max-width:560px){#go{width:100%;min-width:0;padding-inline:20px}}
