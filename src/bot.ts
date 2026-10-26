@@ -181,7 +181,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 /** فهرست پلن‌ها برای /credit: رایگان + پلاس/پرو با قیمت (هزار تومان)، اعتبار، سقف اسلاید و تصویر؛ پلن فعلی با ✅ */
 function plansText(curId?: string): string {
   const free = `${!curId ? "✅ " : "▫️ "}<b>رایگان</b> — روزی ${toFa(String(DAILY_FREE_CREDITS))} ارائه • تا ${toFa(String(FREE_MAX_SLIDES))} اسلاید • ${toFa(String(FREE_MAX_IMAGES))} تصویر`;
-  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — ${toFa(String(p.price))} هزار تومان • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • ${toFa(String(p.maxImages))} تصویر`);
+  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — ${toFa(String(p.price))} هزار تومان • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • تا ${toFa(String(p.maxImages))} تصویر`);
   return [free, ...rows].join("\n");
 }
 
