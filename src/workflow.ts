@@ -10,7 +10,7 @@ import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegr
 import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { adminIds, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
-import { BUY_SITE_NOTE, buyKbFor, siteUrl } from "./deck-service";
+import { BUY_SITE_NOTE, buyKbFor, miniappUrl } from "./deck-service";
 import { getLinkedTg } from "./link";
 import { hasBrowser } from "./browser-api";
 import { logDeck, saveFile, savePreview } from "./files";
@@ -258,7 +258,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         if (!tgChat) return;
         const extras = [built.poster === "ok" ? "🖼 پوستر" : "", built.handout === "ok" ? "📝 جزوه" : ""].filter(Boolean);
         const text = `✅ <b>${esc(built.title)}</b> آماده شد (${toFa(String(built.slides))} اسلاید${extras.length ? " + " + extras.join(" + ") : ""}).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`;
-        await sendMessage(this.env, tgChat, text, { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${siteUrl(this.env)}/app` } }]] } });
+        await sendMessage(this.env, tgChat, text, { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(this.env)}/app` } }]] } });
       }).catch((e) => console.error("notify-app", String(e).slice(0, 200)));
     }
 

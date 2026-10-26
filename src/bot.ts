@@ -15,7 +15,7 @@ import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
-import { BUY_SITE_NOTE, beginDeck, buyKbFor, launchDeck, posterEnabled, runningJob, siteLoginUrl, siteUrl, slidesLimitMsg } from "./deck-service";
+import { BUY_SITE_NOTE, beginDeck, buyKbFor, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
@@ -471,7 +471,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (cmd === "/app") {
     return await sendMessage(env, chatId, "📱 با دکمه‌ی زیر اپ ساخت ارائه باز می‌شود (ساخت، فایل‌ها، تنظیمات و اعتبار، همه با همین حساب).",
-      { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${siteUrl(env)}/app` } }]] } });
+      { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(env)}/app` } }]] } });
   }
   if (cmd === "/site") {
     return await sendMessage(env, chatId, "🌐 با دکمه‌ی زیر بدون ثبت‌نام و رمز، با همین حساب تلگرامت وارد سایت می‌شوی (پلن‌ها، پرداخت آنلاین، پروفایل).",

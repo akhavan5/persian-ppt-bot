@@ -17,6 +17,8 @@ import { supportLink, type Uid } from "./settings";
 import { createLoginToken } from "./link";
 
 export const siteUrl = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
+/** آدرس Mini App تلگرام: مستقیم Worker (بدون پروکسی/دامنه‌ی میانی) تا اتصال کمترین واسطه را داشته باشد. API ها همان‌جا (هم‌مبدأ) صدا زده می‌شوند. */
+export const miniappUrl = (env: Env) => (env.MINIAPP_URL || "https://persian-ppt-bot.umz1.workers.dev").replace(/\/+$/, "");
 
 export const BUY_SITE_NOTE = "💰 پلن‌های پلاس و پرو (اسلاید، تصویر و اعتبار بیشتر) با دکمه‌ی زیر در سایت خریداری می‌شوند؛ با همین حساب تلگرامت خودکار وارد می‌شوی و پلن همین‌جا هم فعال می‌شود.\n🎁 هر روز ۱ اعتبار رایگان هم هدیه می‌گیری (ربات برایت پیام می‌دهد).";
 /** دکمه‌های خرید: لینک ورود یک‌بارمصرف (کاربر بدون ثبت‌نام، واردشده به سایت می‌رسد)؛ tgId نبود ⇒ لینک ساده‌ی سایت */

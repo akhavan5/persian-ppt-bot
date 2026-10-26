@@ -103,6 +103,8 @@ export interface Env {
   OCR_VISION_MODELS?: string;
   /** آدرس اصلی سایت برای canonical/sitemap/OG (پیش‌فرض https://pptsaz.ir) */
   SITE_URL?: string;
+  /** اختیاری: آدرس Mini App تلگرام. پیش‌فرض آدرس مستقیم Worker (https://persian-ppt-bot.umz1.workers.dev)؛ برای برگشت به دامنه‌ی اصلی مقدار SITE_URL یا دامنه‌ی دلخواه را بگذارید */
+  MINIAPP_URL?: string;
   /** رمز مشترک بین nginx سرور ایرانی و Worker (هدر X-Proxy-Secret). با آن، دامنه‌ی واقعی (X-Forwarded-Host) و IP واقعی کاربر (X-Client-IP) پذیرفته می‌شود؛ بدون آن رفتار قبلی است */
   PROXY_SECRET?: string;
   /** اختیاری: اپ اندروید (کافه بازار). ANDROID_PACKAGE: شناسه‌ی بسته (پیش‌فرض ir.pptsaz.app)؛ ANDROID_CERT_SHA256: اثر انگشت SHA-256 کلید امضای APK (چند مقدار با کاما)؛ برای /.well-known/assetlinks.json */
