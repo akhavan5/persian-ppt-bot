@@ -1035,7 +1035,7 @@ function renderBuy() {
   }
   if (!(me && me.plan) && !(c && c.unlimited)) d.push(`حداکثر ${fa(cfg.freeMaxSlides)} اسلاید در هر ارائه.`);
   else if (me && me.maxSlides && !(c && c.unlimited)) d.push(`حداکثر ${fa(me.maxSlides)} اسلاید در هر ارائه.`);
-  if (c && !c.unlimited && cfg.dailyFree) d.push(`🎁 هر روز ${fa(cfg.dailyFree)} اعتبار رایگان هدیه می‌گیری.`);
+  if (c && !c.unlimited && !(me && me.plan) && cfg.dailyFree) d.push(`🎁 هر روز ${fa(cfg.dailyFree)} اعتبار رایگان هدیه می‌گیری.`);
   d.push(`تا ${fa(imgMax())} تصویر در هر ارائه.`);
   $("#creditDetail").textContent = d.join(" ");
   $("#plans").replaceChildren(...list.map((p) => {

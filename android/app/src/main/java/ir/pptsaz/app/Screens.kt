@@ -1069,7 +1069,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 }
             }
 
-            if (cfg != null && cfg.dailyFree > 0 && !me.unlimited) {
+            if (cfg != null && cfg.dailyFree > 0 && !me.unlimited && me.planId == null) {
                 SurfaceCard(color = ex.warnBg, borderColor = null) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("🎁", fontSize = 22.sp)
