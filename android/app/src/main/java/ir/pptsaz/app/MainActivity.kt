@@ -1,6 +1,7 @@
 package ir.pptsaz.app
 
 import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
@@ -50,7 +51,7 @@ private class CreateDocWithMime : ActivityResultContract<Pair<String, String>, U
             .putExtra(Intent.EXTRA_TITLE, input.second)
 
     override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
-        if (resultCode == RESULT_OK) intent?.data else null
+        if (resultCode == Activity.RESULT_OK) intent?.data else null
 }
 
 class MainActivity : ComponentActivity() {
