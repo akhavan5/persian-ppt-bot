@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- میان‌برهای ثابت (نگه‌داشتن آیکن اپ). intentها همان MainActivity را با اکشن اختصاصی باز می‌کنند؛ پردازش در MainActivity.handleIntent -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_deck"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_new"
+        android:shortcutShortLabel="@string/shortcut_new_short"
+        android:shortcutLongLabel="@string/shortcut_new_long">
+        <intent
+            android:action="ir.pptsaz.app.action.NEW_DECK"
+            android:targetPackage="ir.pptsaz.app"
+            android:targetClass="ir.pptsaz.app.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="files"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_files"
+        android:shortcutShortLabel="@string/shortcut_files_short"
+        android:shortcutLongLabel="@string/shortcut_files_long">
+        <intent
+            android:action="ir.pptsaz.app.action.FILES"
+            android:targetPackage="ir.pptsaz.app"
+            android:targetClass="ir.pptsaz.app.MainActivity" />
+    </shortcut>
+</shortcuts>

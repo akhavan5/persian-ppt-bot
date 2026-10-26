@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">پاورپوینت‌ساز</string>
+    <!-- منوی انتخاب متن (PROCESS_TEXT) -->
+    <string name="process_text_label">ساخت ارائه با پاورپوینت‌ساز</string>
+    <!-- میان‌برهای آیکن؛ برچسب کوتاه حداکثر حدود ۱۰ نویسه -->
+    <string name="shortcut_new_short">ارائه‌ی جدید</string>
+    <string name="shortcut_new_long">ساخت ارائه‌ی جدید</string>
+    <string name="shortcut_files_short">فایل‌ها</string>
+    <string name="shortcut_files_long">فایل‌های من</string>
 </resources>

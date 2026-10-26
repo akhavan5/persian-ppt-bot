@@ -54,6 +54,12 @@ private class CreateDocWithMime : ActivityResultContract<Pair<String, String>, U
 }
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** اکشن‌های میان‌بر (res/xml/shortcuts.xml) */
+        const val ACTION_NEW_DECK = "ir.pptsaz.app.action.NEW_DECK"
+        const val ACTION_FILES = "ir.pptsaz.app.action.FILES"
+    }
+
     private val vm: AppViewModel by viewModels()
     private lateinit var billing: BazaarBilling
 
@@ -169,6 +175,21 @@ class MainActivity : ComponentActivity() {
         }
 
         when (i.action) {
+            // میان‌برهای نگه‌داشتن آیکن
+            ACTION_NEW_DECK -> {
+                vm.setTab(0)
+                i.action = null
+            }
+            ACTION_FILES -> {
+                vm.setTab(1)
+                i.action = null
+            }
+            // «ساخت ارائه با پاورپوینت‌ساز» از منوی انتخاب متن؛ مثل اشتراک‌گذاری متن به منبع اضافه می‌شود (لینک → خواندن صفحه)
+            Intent.ACTION_PROCESS_TEXT -> {
+                val text = i.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.trim().orEmpty()
+                if (text.isNotEmpty()) vm.onShare(Share.TextShare(text))
+                i.action = null
+            }
             Intent.ACTION_SEND -> {
                 val uri = streamUri(i)
                 val text = i.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim().orEmpty()
