@@ -286,7 +286,7 @@ export async function acquireLock(env: Env, userId: Uid): Promise<boolean> {
 export const releaseLock = (env: Env, userId: Uid) => env.KV.delete(lockKey(userId));
 
 // ---------- آمار ----------
-export type StatName = "started" | "ok" | "fail" | "newusers";
+export type StatName = "started" | "ok" | "fail" | "newusers" | "newapp";
 export async function bumpStat(env: Env, name: StatName) {
   const k = `stat:${name}:${today()}`;
   const n = Number(await env.KV.get(k)) || 0;

@@ -68,6 +68,7 @@ async function rows(env: Env, sql: string, ...binds: unknown[]): Promise<{ k: st
  *  پروفایل‌های خودکارِ ربات (بدون ایمیل/موبایل/گوگل) شمرده نمی‌شوند. */
 const WEB_ONLY =
   "(COALESCE(json_extract(v,'$.email'),'') != '' OR COALESCE(json_extract(v,'$.mobile'),'') != '' OR json_extract(v,'$.google') IS NOT NULL)";
+const APP_USER = "json_extract(v,'$.app') = 1";
 const likeArg = (s: string) => "%" + s.replace(/[\\%_]/g, "\\$&") + "%";
 
 // ---------- گزارش اقدامات مدیر ----------
@@ -103,9 +104,10 @@ const cb = (text: string, data: string): Btn => ({ text, callback_data: data });
 
 async function homeScreen(env: Env): Promise<Screen> {
   const day = new Date().toISOString().slice(0, 10);
-  const [tgUsers, webOnly, subs, banned, st, payIssues] = await Promise.all([
+  const [tgUsers, webOnly, appUsers, subs, banned, st, payIssues] = await Promise.all([
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY}`, "wu:", "wu:" + MAXC),
+    count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_USER}`, "wu:", "wu:" + MAXC),
     activeSubCount(env),
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "ban:", "ban:" + MAXC),
     statsByDay(env),
@@ -115,9 +117,9 @@ async function homeScreen(env: Env): Promise<Screen> {
   return {
     text:
       "🛠 <b>پنل مدیریت</b>\n\n" +
-      `👥 کاربران تلگرام: <b>${fa(tgUsers)}</b> · 🌐 وب: <b>${fa(webOnly)}</b>\n` +
+      `👥 کاربران تلگرام: <b>${fa(tgUsers)}</b> · 🌐 وب: <b>${fa(webOnly)}</b> · 📱 اپ: <b>${fa(appUsers)}</b>\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
-      `📅 امروز: ▶️ ${fa(t.started ?? 0)} · ✅ ${fa(t.ok ?? 0)} · ❌ ${fa(t.fail ?? 0)} · 🆕 ${fa(t.newusers ?? 0)}\n` +
+      `📅 امروز: ▶️ ${fa(t.started ?? 0)} · ✅ ${fa(t.ok ?? 0)} · ❌ ${fa(t.fail ?? 0)} · 🆕 ${fa(t.newusers ?? 0)} (📱 ${fa(t.newapp ?? 0)})\n` +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") + "\n" +
       "<i>یک بخش را انتخاب کن. برای مدیریت یک کاربر، شناسه یا نامش را در «جستجو» بنویس.</i>",
     kb: [
@@ -149,13 +151,14 @@ async function statsByDay(env: Env): Promise<Record<string, Record<string, numbe
 }
 
 async function statsScreen(env: Env, days: number): Promise<Screen> {
-  const [st, tgUsers, webUsers, subs, bonusSum, bonusUsers] = await Promise.all([
+  const [st, tgUsers, webUsers, subs, bonusSum, bonusUsers, appUsers] = await Promise.all([
     statsByDay(env),
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "seen:", "seen:" + MAXC),
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "wu:", "wu:" + MAXC),
     activeSubCount(env),
     count(env, "SELECT SUM(CAST(v AS INTEGER)) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3)", "bonus:", "bonus:" + MAXC, nowSec()),
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND CAST(v AS INTEGER) > 0", "bonus:", "bonus:" + MAXC, nowSec()),
+    count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_USER}`, "wu:", "wu:" + MAXC),
   ]);
   const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
   const sum = (n: string) => dates.reduce((a, d) => a + (st[d]?.[n] ?? 0), 0);
@@ -170,16 +173,17 @@ async function statsScreen(env: Env, days: number): Promise<Screen> {
   const daily = last7.map((d) => {
     const x = st[d] ?? {};
     const md = new Date(d + "T00:00:00Z").toLocaleDateString("fa-IR", { month: "2-digit", day: "2-digit", timeZone: "UTC" });
-    return `${md} ${bar(x.ok ?? 0)} ✅${fa(x.ok ?? 0)} ❌${fa(x.fail ?? 0)} 🆕${fa(x.newusers ?? 0)}`;
+    return `${md} ${bar(x.ok ?? 0)} ✅${fa(x.ok ?? 0)} ❌${fa(x.fail ?? 0)} 🆕${fa(x.newusers ?? 0)} 📱${fa(x.newapp ?? 0)}`;
   });
 
   return {
     text:
       `📊 <b>آمار — ${label}</b>\n` +
-      `🆕 کاربر جدید: ${fa(sum("newusers"))}\n▶️ شروع‌شده: ${fa(sum("started"))}\n✅ موفق: ${fa(ok)}\n❌ ناموفق: ${fa(fail)}` +
+      `🆕 کاربر جدید: ${fa(sum("newusers"))} (📱 از اپ اندروید: ${fa(sum("newapp"))})\n▶️ شروع‌شده: ${fa(sum("started"))}\n✅ موفق: ${fa(ok)}\n❌ ناموفق: ${fa(fail)}` +
       (rate === null ? "" : `\n📈 نرخ موفقیت: ${fa(rate)}٪`) +
       "\n\n<b>کل</b>\n" +
       `👥 کاربران تلگرام: ${fa(tgUsers)} · 🌐 پروفایل وب: ${fa(webUsers)}\n` +
+      `📱 کاربران اپ اندروید: ${fa(appUsers)}\n` +
       `👑 پلن‌های فعال: ${fa(subs)}\n` +
       `🎁 اعتبار هدیه/شارژِ مصرف‌نشده: ${fa(bonusSum)} (نزد ${fa(bonusUsers)} کاربر)\n\n` +
       "<b>ریز ۷ روز اخیر</b>\n" + daily.join("\n") +
@@ -217,15 +221,15 @@ async function usersScreen(env: Env, kind: "t" | "w", page: number): Promise<Scr
       `SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY} ORDER BY json_extract(v,'$.created') DESC LIMIT ?3 OFFSET ?4`,
       "wu:", "wu:" + MAXC, PAGE, page * PAGE);
     for (const r of rs) {
-      const wid = r.k.slice(3); const v = json<{ name?: string; email?: string; mobile?: string; created?: number }>(r.v);
+      const wid = r.k.slice(3); const v = json<{ name?: string; email?: string; mobile?: string; created?: number; app?: boolean }>(r.v);
       if (!WEB_ID.test(wid) || !v) continue;
       const t = Number(await env.KV.get(`w2tg:${wid}`).catch(() => null));
       const linked = Number.isSafeInteger(t) && t > 0;
       const id: Uid = linked ? t : wid; // وصل‌شده به تلگرام: کارت با شناسه‌ی تلگرام باز می‌شود
-      items.push({ id, label: (linked ? "🔗 " : "") + (v.name || v.email || v.mobile || wid), line: `<b>${esc(v.name || "—")}</b> ${linked ? "🔗" : "🌐"}\n    ${v.email ? esc(v.email) : v.mobile ? esc(v.mobile) : "—"} · 🕒 ${v.created ? fmtTime(v.created) : "—"}` });
+      items.push({ id, label: (linked ? "🔗 " : "") + (v.name || v.email || v.mobile || wid), line: `<b>${esc(v.name || "—")}</b> ${v.app ? "📱" : ""}${linked ? "🔗" : "🌐"}\n    ${v.email ? esc(v.email) : v.mobile ? esc(v.mobile) : "—"} · 🕒 ${v.created ? fmtTime(v.created) : "—"}` });
     }
   }
-  const head = kind === "t" ? "👥 <b>کاربران تلگرام</b> (جدیدترین اول، به وقت ایران)" : "🌐 <b>کاربران وب</b> (ثبت‌نام‌شده از سایت؛ 🔗 = تلگرام هم وصل کرده)";
+  const head = kind === "t" ? "👥 <b>کاربران تلگرام</b> (جدیدترین اول، به وقت ایران)" : "🌐 <b>کاربران وب</b> (ثبت‌نام‌شده از سایت یا اپ؛ 📱 = از اپ اندروید، 🔗 = تلگرام هم وصل کرده)";
   return {
     text: `${head}\nکل: ${fa(total)}\n\n` + (items.length ? items.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.line}`).join("\n") : "موردی نیست.") + "\n\n<i>برای مدیریت، روی نام کاربر بزن.</i>",
     kb: [
@@ -267,7 +271,8 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
     tgId ? `🆔 تلگرام: <code>${tgId}</code>${seen?.u ? ` · @${esc(seen.u)}` : ""}` : "🆔 تلگرام: وصل نشده",
     webId ? `🌐 پروفایل وب: <code>${webId}</code>` : "",
     web?.email ? `✉️ ایمیل: ${esc(web.email)}` : "",
-    web?.mobile ? `📱 موبایل: ${esc(web.mobile)}` : "",
+    web?.mobile ? `📞 موبایل: ${esc(web.mobile)}` : "",
+    web?.app ? `📱 منبع: اپ اندروید${web.via === "app" ? " (ثبت‌نام از اپ)" : " (ثبت‌نام از وب، از اپ هم وارد شده)"}` : "",
     seen ? `🕒 اولین پیام: ${fmtTime(seen.t)}` : web ? `🕒 ثبت‌نام: ${fmtTime(web.created)}` : "",
     "",
     `💳 اعتبار: <b>${creditLine}</b>`,
@@ -592,7 +597,7 @@ async function decksScreen(env: Env): Promise<Screen> {
     const w = await getUserById(env, uid).catch(() => null);
     if (!w || !(w.email || w.mobile || w.google)) return "✈️ تلگرامی";
     const linked = Number(await env.KV.get(`w2tg:${uid}`).catch(() => null)) > 0;
-    return linked ? "🌐 وبی 🔗" : "🌐 وبی";
+    return (linked ? "🌐 وبی 🔗" : "🌐 وبی") + (w.app ? " 📱" : "");
   };
   const kinds = new Map<string, string>();
   for (const x of list) if (!kinds.has(String(x.userId))) kinds.set(String(x.userId), await kindOf(x.userId));

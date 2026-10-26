@@ -103,6 +103,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
 
   const user = await authUser(env, req);
+  if (user && fromApp(req) && !user.app) { user.app = true; await saveWebUser(env, user).catch(() => {}); } // علامت «کاربر اپ» برای پنل مدیر (یک‌بار نوشته می‌شود)
   if (path === "/api/me" && method === "GET") {
     if (!user) return json({ user: null });
     const res = await me(env, user);
@@ -152,6 +153,9 @@ async function otpSend(req: Request, env: Env): Promise<Response> {
 }
 
 /** ورود/ثبت‌نام یکپارچه: حساب موجود ⇒ ورود؛ وگرنه حساب جدید با همین شماره ساخته می‌شود */
+/** درخواست از اپ اندروید؟ اپ در User-Agent عبارت PptSazApp/<نسخه> می‌فرستد (فقط برای آمار؛ امنیتی نیست) */
+const fromApp = (req: Request) => /PptSazApp\//.test(req.headers.get("user-agent") ?? "");
+
 async function otpVerify(req: Request, env: Env): Promise<Response> {
   const b = await readBody(req);
   const mobile = normMobile(b?.mobile), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
@@ -164,7 +168,10 @@ async function otpVerify(req: Request, env: Env): Promise<Response> {
     // جلوگیری از ساخت انبوه حساب برای گرفتن سهمیه‌ی رایگان
     const day = new Date().toISOString().slice(0, 10);
     if (await hitLimit(env, `rg:${clientIp(req)}:${day}`, 5, 172_800)) return err("تعداد ثبت‌نام از این شبکه امروز به سقف رسیده است.", 429);
-    user = await createUser(env, { mobile, name: `کاربر ${mobile.slice(-4)}` });
+    user = await createUser(env, { mobile, name: `کاربر ${mobile.slice(-4)}`, via: fromApp(req) ? "app" : undefined });
+  } else if (fromApp(req) && !user.app) {
+    user.app = true;
+    await saveWebUser(env, user).catch(() => {});
   }
   const token = await createSession(env, user.id);
   return json({ user: publicUser(user), created: Date.now() - user.created < 5000 }, 200, { "set-cookie": sessionCookie(token) });
