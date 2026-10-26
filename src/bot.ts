@@ -4,7 +4,7 @@ import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
-  maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
+  DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
@@ -176,6 +176,13 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
     ...(p.note ? [`\n⚠️ <i>${esc(p.note)}</i>`] : []),
   ].join("\n");
   return { text, ...kb(opts) };
+}
+
+/** فهرست پلن‌ها برای /credit: رایگان + پلاس/پرو با قیمت (هزار تومان)، اعتبار، سقف اسلاید و تصویر؛ پلن فعلی با ✅ */
+function plansText(curId?: string): string {
+  const free = `${!curId ? "✅ " : "▫️ "}<b>رایگان</b> — روزی ${toFa(String(DAILY_FREE_CREDITS))} ارائه • تا ${toFa(String(FREE_MAX_SLIDES))} اسلاید • ${toFa(String(FREE_MAX_IMAGES))} تصویر`;
+  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — ${toFa(String(p.price))} هزار تومان • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • ${toFa(String(p.maxImages))} تصویر`);
+  return [free, ...rows].join("\n");
 }
 
 /** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
@@ -510,7 +517,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const out = head +
       `👑 ${sub ? `پلن ${planName} تا ${fmtDate(sub.exp)}` : "پلن رایگان"}\n` +
       `📄 حداکثر ${toFa(String(caps.maxSlides))} اسلاید و 🖼 ${toFa(String(caps.maxImg))} تصویر در هر ارائه\n` +
-      (c.unlimited ? "" : `\n${BUY_SITE_NOTE}`);
+      (c.unlimited ? "" : `\n<b>📋 پلن‌ها</b> (ماهانه)\n${plansText(sub?.plan)}\n\n${BUY_SITE_NOTE}`);
     return await sendMessage(env, chatId, out, c.unlimited ? undefined : await buyKbFor(env, uid, userId));
   }
   if (cmd === "/start" || cmd === "/help") {
