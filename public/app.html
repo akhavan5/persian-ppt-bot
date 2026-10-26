@@ -19,7 +19,7 @@ html,body{margin:0;background:var(--sec);color:var(--fg);font:400 15px/1.8 Vazir
 body{padding:calc(var(--sat) + 10px) 12px calc(76px + var(--sab));min-height:100vh;min-height:100dvh}
 main{max-width:560px;margin:0 auto}
 h2{font-size:1rem;margin:0 0 8px}
-.muted{color:var(--hint);font-size:.82rem}
+.muted{color:var(--hint);font-size:.82rem;unicode-bidi:isolate}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 12px}
 .row{display:flex;gap:10px;align-items:center;justify-content:space-between}
 .row>*{min-width:0}
@@ -150,7 +150,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <div style="margin-top:6px">
           <label class="sw" id="pRow" hidden><span>🖼 پوستر (اینفوگرافیک) <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="pOn" checked></label>
           <div id="pLay" style="padding-bottom:6px" hidden><select id="pChoice"><option value="wide">پوستر افقی (مناسب نمایش روی صفحه)</option><option value="tall">پوستر عمودی (مناسب پیام‌رسان)</option></select></div>
-          <label class="sw"><span>📝 جزوه‌ی Word <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="hOn" checked></label>
+          <label class="sw"><span>📝 جزوه‌ی <bdi>Word</bdi> <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="hOn" checked></label>
         </div>
 
         <button class="btn" id="go" type="button" style="margin-top:12px">✨ بساز</button>
@@ -696,7 +696,7 @@ async function extractFile(file, my) {
 }
 function setSource(text, label, hint) {
   srcText = text.slice(0, MAX_SRC);
-  $("#upName").textContent = `${label} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true);
+  $("#upName").textContent = `\u2068${label}\u2069 · ${fa(srcText.length)} نویسه`; show($("#upChip"), true);
   show($("#pick"), false); show($("#linkBtn"), false); show($("#linkRow"), false);
   $("#upHint").textContent = text.length > MAX_SRC ? `متن بلند است؛ فقط ${fa(MAX_SRC)} نویسه‌ی اول استفاده می‌شود.` : hint;
 }
