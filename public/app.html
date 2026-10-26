@@ -951,12 +951,15 @@ function renderCreditInfo() {
   const c = me.credit, box = $("#creditInfo");
   if (c.unlimited) { box.textContent = "اعتبار شما نامحدود است."; $("#plansBox").replaceChildren(); return; }
   $("#plansBox").replaceChildren(plansTable());
-  const lines = [`💳 اعتبار باقی‌مانده: ${fa(c.total)} ارائه`];
-  if (me.plan) lines.push(`• اعتبار پلن: ${fa(me.plan.credits)}`);
+  const pl = me.plan && (me.plans || []).find((x) => x.id === me.plan.id);
+  const planName = me.plan ? (pl ? pl.name : me.plan.id) : "رایگان";
+  const exp = me.plan && me.plan.exp ? new Date(me.plan.exp).toLocaleDateString("fa-IR") : "";
+  const lines = [`👑 پلن: ${planName}${exp ? ` (تا ${exp})` : ""}`, `💳 اعتبار باقی‌مانده: ${fa(c.total)} ارائه`];
+  if (me.plan) lines.push(`• اعتبار پلن: ${fa(c.plan != null ? c.plan : me.plan.credits)}`);
   if (c.bonus > 0) lines.push(`• اعتبار هدیه و شارژ: ${fa(c.bonus)}`);
   lines.push(`📄 حداکثر ${fa(me.maxSlides)} اسلاید و 🖼 ${fa(me.maxImages)} تصویر در هر ارائه`);
   if (cfg.dailyFree) lines.push(`🎁 هر روز ${fa(cfg.dailyFree)} اعتبار رایگان (وقتی اعتبارت صفر باشد)`);
-  box.replaceChildren(...lines.flatMap((l, i) => [i ? h("br") : null, l]));
+  box.replaceChildren(...lines.flatMap((l, i) => (i ? [h("br"), l] : [l]))); // null نباید به replaceChildren برسد (به‌صورت متن «null» نمایش داده می‌شود)
 }
 function renderSettings() {
   const s = me.settings;
