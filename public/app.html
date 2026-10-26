@@ -145,6 +145,8 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <div><label class="f" for="imgs">اسلایدها تصویر داشته باشند؟</label><select id="imgs"><option value="1">بله</option><option value="0">خیر</option></select></div>
         </div>
 
+        <div id="modelBox" style="margin-top:12px" hidden><label class="f" for="model">مدل هوش مصنوعی</label><select id="model"></select></div>
+
         <div style="margin-top:6px">
           <label class="sw" id="pRow" hidden><span>🖼 پوستر (اینفوگرافیک) <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="pOn" checked></label>
           <div id="pLay" style="padding-bottom:6px" hidden><select id="pChoice"><option value="wide">پوستر افقی (مناسب نمایش روی صفحه)</option><option value="tall">پوستر عمودی (مناسب پیام‌رسان)</option></select></div>
@@ -195,7 +197,6 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <div><label class="f" for="font">فونت</label><select id="font"></select></div>
           <div id="tplBox"><label class="f" for="tpl">قالب اسلاید</label><select id="tpl"></select></div>
         </div>
-        <div id="modelBox" style="margin-top:10px" hidden><label class="f" for="model">مدل هوش مصنوعی</label><select id="model"></select></div>
         <div style="margin-top:8px">
           <label class="sw"><span>ارقام فارسی</span><input type="checkbox" id="digits"></label>
           <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
@@ -958,7 +959,7 @@ function renderCreditInfo() {
   if (me.plan) lines.push(`• اعتبار پلن: ${fa(c.plan != null ? c.plan : me.plan.credits)}`);
   if (c.bonus > 0) lines.push(`• اعتبار هدیه و شارژ: ${fa(c.bonus)}`);
   lines.push(`📄 حداکثر ${fa(me.maxSlides)} اسلاید و 🖼 ${fa(me.maxImages)} تصویر در هر ارائه`);
-  if (cfg.dailyFree) lines.push(`🎁 هر روز ${fa(cfg.dailyFree)} اعتبار رایگان (وقتی اعتبارت صفر باشد)`);
+  if (cfg.dailyFree) lines.push(`🎁 هر روز ${fa(cfg.dailyFree)} اعتبار رایگان`);
   box.replaceChildren(...lines.flatMap((l, i) => (i ? [h("br"), l] : [l]))); // null نباید به replaceChildren برسد (به‌صورت متن «null» نمایش داده می‌شود)
 }
 function renderSettings() {
