@@ -138,6 +138,10 @@ class JobWatchWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                 "done" -> {
                     Notifier.cancelProgress(applicationContext, id)
                     if (!AppForeground.on) Notifier.done(applicationContext, id, j.optString("title"))
+                    // اپ بسته است: نسخه‌ی محلی را همین‌جا بی‌صدا ذخیره می‌کنیم (فایل‌های سرور بعد از ۲۴ ساعت پاک می‌شوند)
+                    val h = if (j.optString("handout") == "ok") j.optString("handoutId").ifEmpty { null } else null
+                    val p = if (j.optString("poster") == "ok") j.optString("posterId").ifEmpty { null } else null
+                    LocalFiles.autoSave(applicationContext, id, j.optString("title"), j.optInt("slides"), h, p)
                     return Result.success()
                 }
                 "error" -> {

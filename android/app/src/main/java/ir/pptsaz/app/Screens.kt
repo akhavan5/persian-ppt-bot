@@ -2,8 +2,11 @@
 
 package ir.pptsaz.app
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.speech.RecognizerIntent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.print.PrintAttributes
@@ -567,6 +570,29 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
             vm.consumeExtracted()
         }
     }
+    // ورودی صوتی موضوع: پنجره‌ی تشخیص گفتار خودِ سیستم (RecognizerIntent) باز می‌شود؛ چون ضبط را سیستم انجام می‌دهد، مجوز RECORD_AUDIO لازم نیست
+    val voice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        if (r.resultCode == Activity.RESULT_OK) {
+            val said = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim().orEmpty()
+            if (said.isNotEmpty()) form.topic = if (form.topic.isBlank()) said else form.topic.trimEnd() + " " + said
+        }
+    }
+    fun speakTopic() {
+        val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "fa-IR")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "موضوع ارائه را بگویید…")
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+        try {
+            voice.launch(i)
+        } catch (e: ActivityNotFoundException) {
+            vm.toast("تشخیص گفتار روی این گوشی نصب نیست؛ از میکروفونِ صفحه‌کلید استفاده کنید")
+        } catch (e: Exception) {
+            vm.toast("باز کردن تشخیص گفتار ممکن نشد")
+        }
+    }
     val job = st.job
     val running = job != null && !job.done && !job.failed
     val s = me.settings
@@ -591,7 +617,10 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             IconTile(AppIcons.Sparkles, LocalExtra.current.brand, 36.dp)
-                            Text("موضوع ارائه", style = MaterialTheme.typography.titleMedium)
+                            Text("موضوع ارائه", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { speakTopic() }, enabled = !running) {
+                                AppIcon(AppIcons.Mic, tint = if (running) cs.onSurfaceVariant else cs.primary, description = "گفتن موضوع با صدا")
+                            }
                         }
                         TextField(
                             value = form.topic,
@@ -857,7 +886,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
     val cs = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
-            title = "فایل‌های من", subtitle = "ارائه‌های ۲۴ ساعت اخیر",
+            title = "فایل‌های من", subtitle = "ارائه‌های ۲۴ ساعت اخیر و نسخه‌های روی گوشی",
             trailing = {
                 IconButton(onClick = { vm.loadFiles() }, enabled = !st.filesLoading) {
                     if (st.filesLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -875,10 +904,14 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                 TextButton(onClick = { vm.loadFiles() }, enabled = !st.filesLoading) { Text("تلاش دوباره") }
             }
         }
+        // فایل‌هایی که از سرور پاک شده‌اند (بعد از ۲۴ ساعت) ولی نسخه‌ی محلی‌شان روی گوشی مانده
+        val localIds = st.localFiles.map { it.id }.toSet()
+        val localOnly = st.localFiles.filter { lf -> st.files.none { it.id == lf.id } }
+        val nothing = st.files.isEmpty() && localOnly.isEmpty()
         when {
-            st.filesLoading && st.files.isEmpty() ->
+            st.filesLoading && nothing ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            st.files.isEmpty() && st.filesError ->
+            nothing && st.filesError ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     EmptyState(
                         AppIcons.Warning, "اتصال برقرار نشد",
@@ -886,7 +919,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                         "تلاش دوباره", { vm.loadFiles() },
                     )
                 }
-            st.files.isEmpty() ->
+            nothing ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     EmptyState(
                         AppIcons.Folder, "هنوز فایلی نساخته‌اید",
@@ -901,7 +934,19 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(st.files, key = { it.id }) { f -> FileRow(f, vm) }
+                    items(st.files, key = { it.id }) { f -> FileRow(f, vm, f.id in localIds) }
+                    if (localOnly.isNotEmpty()) {
+                        item(key = "local-header") {
+                            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                SectionTitle("ذخیره‌شده روی گوشی")
+                                Text(
+                                    "این فایل‌ها از سرور پاک شده‌اند ولی نسخه‌ی آن‌ها روی همین گوشی مانده است.",
+                                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp),
+                                )
+                            }
+                        }
+                        items(localOnly, key = { "local-" + it.id }) { lf -> LocalFileRow(lf, vm) }
+                    }
                 }
             }
         }
@@ -909,7 +954,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
 }
 
 @Composable
-private fun FileRow(f: FileItem, vm: AppViewModel) {
+private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false) {
     val cs = MaterialTheme.colorScheme
     val (icon, brush) = when {
         f.poster -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
@@ -927,7 +972,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(f.title.ifBlank { "بدون عنوان" }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    listOf(kind, fmtDate(f.t)).filter { it.isNotEmpty() }.joinToString(" • "),
+                    listOf(kind, fmtDate(f.t), if (onPhone) "روی گوشی ✓" else "").filter { it.isNotEmpty() }.joinToString(" • "),
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                 )
             }
@@ -939,6 +984,47 @@ private fun FileRow(f: FileItem, vm: AppViewModel) {
             IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "دانلود") }
         }
+    }
+}
+
+/** ردیف فایلی که فقط نسخه‌ی محلی‌اش مانده (پیش‌نمایش نیاز به سرور دارد، پس نیست). */
+@Composable
+private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
+    val cs = MaterialTheme.colorScheme
+    var confirm by remember { mutableStateOf(false) }
+    val (icon, brush) = when (f.kind) {
+        "poster" -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
+        "handout" -> AppIcons.Doc to Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFF97316)))
+        else -> AppIcons.Slides to LocalExtra.current.brand
+    }
+    val kind = when (f.kind) {
+        "poster" -> "پوستر"
+        "handout" -> "جزوه‌ی Word"
+        else -> if (f.slides > 0) f.slides.fa() + " اسلاید" else "ارائه"
+    }
+    SurfaceCard {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconTile(icon, brush, 46.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(f.title.ifBlank { f.name.ifBlank { "بدون عنوان" } }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOf(kind, fmtDate(f.t)).filter { it.isNotEmpty() }.joinToString(" • "),
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = { confirm = true }) { AppIcon(AppIcons.Delete, tint = cs.onSurfaceVariant, description = "حذف از گوشی") }
+            IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
+            FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "ذخیره در دانلودها") }
+        }
+    }
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("حذف از گوشی؟") },
+            text = { Text("این فایل از سرور هم پاک شده است؛ بعد از حذف دیگر راهی برای بازگرداندنش نیست.") },
+            confirmButton = { TextButton(onClick = { confirm = false; vm.deleteLocal(f.id) }) { Text("حذف") } },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("انصراف") } },
+        )
     }
 }
 
@@ -994,6 +1080,8 @@ fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
                 ToggleRow("اسلاید منابع", "فهرست منابع در پایان ارائه", null, s.sources) { vm.setSetting("sources", it) }
                 HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 ToggleRow("اسلاید پرسش‌های پایانی", "پرسش و پاسخ برای جمع‌بندی", null, s.questions) { vm.setSetting("questions", it) }
+                HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+                ToggleRow("ذخیره‌ی خودکار روی گوشی", "بعد از ساخت، یک نسخه روی گوشی می‌ماند تا بعد از ۲۴ ساعت هم در دسترس باشد", null, st.autoSave) { vm.setAutoSave(it) }
             }
 
         }

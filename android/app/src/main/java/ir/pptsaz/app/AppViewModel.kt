@@ -45,6 +45,8 @@ data class UiState(
     val config: Config? = null,
     val me: Me? = null,
     val files: List<FileItem> = emptyList(),
+    val localFiles: List<LocalFile> = emptyList(), // نسخه‌های ذخیره‌شده روی گوشی (بعد از ۲۴ ساعت سرور هم می‌مانند)
+    val autoSave: Boolean = true, // ذخیره‌ی خودکار روی گوشی بعد از ساخت
     val filesLoading: Boolean = false,
     val tab: Int = 0,
     val busy: Boolean = false,
@@ -121,7 +123,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Api.init(app)
-        _state.update { it.copy(files = FileCache.load(app)) }
+        _state.update { it.copy(files = FileCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app)) }
         viewModelScope.launch { CrashReporter.sendPending(app) }
         try {
             app.getSystemService(ConnectivityManager::class.java)?.registerNetworkCallback(
@@ -175,6 +177,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** وقتی کاربر از مرورگر (بعد از پرداخت) برمی‌گردد اعتبار را به‌روز می‌کند. */
     fun onResume(force: Boolean = false) {
         if (_state.value.screen != Screen.Main) return
+        refreshLocal() // کار پس‌زمینه ممکن است وقتی اپ بسته بود فایلی ذخیره کرده باشد
         val now = SystemClock.elapsedRealtime()
         val must = force || refreshOnNextResume
         refreshOnNextResume = false
@@ -245,6 +248,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             Api.logout()
             Draft.clear(getApplication())
             FileCache.clear(getApplication())
+            LocalFiles.clear(getApplication())
             form.reset()
             _state.update { UiState(screen = Screen.Login, config = it.config) }
         }
@@ -301,6 +305,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             loadFiles()
                             onResume(force = true) // اعتبار مصرف‌شده یا برگشت‌خورده فوراً به‌روز شود
                             val app = getApplication<Application>()
+                            // نسخه‌ی محلی (بی‌صدا): فایل‌ها سمت سرور فقط ۲۴ ساعت می‌مانند
+                            val deckTitle = j.optString("title")
+                            val deckSlides = j.optInt("slides")
+                            val posterSave = if (posterOk) j.optString("posterId").ifEmpty { null } else null
+                            viewModelScope.launch {
+                                if (LocalFiles.autoSave(app, id, deckTitle, deckSlides, h, posterSave)) refreshLocal()
+                            }
                             JobWatcher.cancel(app, id)
                             Notifier.cancelProgress(app, id)
                             if (!AppForeground.on) Notifier.done(app, id, j.optString("title"))
@@ -376,8 +387,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun refreshLocal() {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { LocalFiles.list(app) }
+            _state.update { it.copy(localFiles = list) }
+        }
+    }
+
+    fun setAutoSave(on: Boolean) {
+        LocalFiles.setAuto(getApplication(), on)
+        _state.update { it.copy(autoSave = on) }
+    }
+
+    fun deleteLocal(id: String) {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { LocalFiles.remove(app, id) }
+            refreshLocal()
+            toast("از گوشی حذف شد")
+        }
+    }
+
     fun download(fileId: String, share: Boolean = false) {
         viewModelScope.launch {
+            // اگر نسخه‌ی محلی داریم، بدون اینترنت (و حتی بعد از ۲۴ ساعت) همان را در Downloads می‌گذاریم
+            val app = getApplication<Application>()
+            try {
+                val saved = withContext(Dispatchers.IO) {
+                    LocalFiles.read(app, fileId)?.let { Storage.save(app, it.name, it.mime, it.bytes) }
+                }
+                if (saved != null) {
+                    _events.trySend(Event.FileReady(saved, share))
+                    return@launch
+                }
+            } catch (_: Exception) {
+                // نسخه‌ی محلی خراب بود؛ از سرور می‌گیریم
+            }
             toast("در حال دانلود…")
             try {
                 // فایلی که در فهرست سرور هست حتماً وجود دارد؛ فقط فایلِ تازه‌ساخته (هنوز در فهرست نیامده) ممکن است چند ثانیه 404 بدهد

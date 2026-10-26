@@ -234,13 +234,15 @@ object Api {
         call("POST", "/api/pay/" + Store.ID, JSONObject().put("productId", productId).put("purchaseToken", purchaseToken))
     }
 
+    class Fetched(val name: String, val mime: String, val bytes: ByteArray)
+
     private class Raw(val code: Int, val bytes: ByteArray, val disposition: String?, val type: String?)
 
     /**
      * فایل را می‌گیرد و در پوشه‌ی Downloads ذخیره می‌کند. بلافاصله بعد از اتمام کار ممکن است فایل چند ثانیه 404 بدهد؛ پس تا maxRetries بار
      * (هر ۳ ثانیه) دوباره تلاش می‌کنیم. برای فایلی که از قبل در فهرست سرور هست عدد کوچک بدهید تا فایل منقضی‌شده یک دقیقه کاربر را معطل نکند.
      */
-    suspend fun downloadFile(ctx: Context, id: String, maxRetries: Int = 20): Saved {
+    suspend fun fetchFile(id: String, maxRetries: Int = 20): Fetched {
         var attempt = 0
         while (true) {
             val raw = withContext(Dispatchers.IO) {
@@ -262,7 +264,7 @@ object Api {
                     val decoded = try { star?.let { URLDecoder.decode(it, "UTF-8") } } catch (e: Exception) { null }
                     val name = decoded ?: plain ?: "presentation.pptx"
                     val mime = raw.type?.substringBefore(';')?.trim().orEmpty()
-                    return withContext(Dispatchers.IO) { Storage.save(ctx, name, mime, raw.bytes) }
+                    return Fetched(name, mime, raw.bytes)
                 }
                 raw.code == 404 && attempt < maxRetries -> {
                     attempt++
@@ -274,5 +276,11 @@ object Api {
                 }
             }
         }
+    }
+
+    /** فایل را می‌گیرد و در پوشه‌ی Downloads ذخیره می‌کند (جزئیات دریافت و تلاش دوباره در fetchFile). */
+    suspend fun downloadFile(ctx: Context, id: String, maxRetries: Int = 20): Saved {
+        val f = fetchFile(id, maxRetries)
+        return withContext(Dispatchers.IO) { Storage.save(ctx, f.name, f.mime, f.bytes) }
     }
 }
