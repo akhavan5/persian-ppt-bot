@@ -103,6 +103,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -245,6 +251,21 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             GradientButton("ارسال کد تأیید", { vm.sendOtp(mobile) }, Modifier.fillMaxWidth(), enabled = mobile.length >= 10, loading = st.busy)
+                            val linkColor = cs.primary
+                            Text(
+                                buildAnnotatedString {
+                                    append("با ادامه، ")
+                                    withLink(
+                                        LinkAnnotation.Clickable(
+                                            tag = "privacy",
+                                            styles = TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)),
+                                        ) { vm.openUrl(Api.BASE + "/privacy") },
+                                    ) { append("شرایط استفاده و حریم خصوصی") }
+                                    append(" را می‌پذیرم.")
+                                },
+                                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                            )
                         } else {
                             Text("کد تأیید را وارد کنید", style = MaterialTheme.typography.titleLarge)
                             Text("کد به شماره‌ی " + mobile.faStr() + " ارسال شد.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
@@ -910,6 +931,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
 
             ContactCard(vm)
 
+            TextButton(onClick = { vm.openUrl(Api.BASE + "/privacy") }, modifier = Modifier.fillMaxWidth()) { Text("شرایط استفاده و حریم خصوصی") }
             SoftButton("خروج از حساب", { vm.logout() }, Modifier.fillMaxWidth(), icon = AppIcons.Logout)
             Text(
                 "پاورپوینت‌ساز • نسخه‌ی " + BuildConfig.VERSION_NAME.faStr(),
