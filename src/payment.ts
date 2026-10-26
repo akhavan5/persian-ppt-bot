@@ -363,11 +363,18 @@ export async function bazaarVerify(env: Env, user: WebUser, b: Record<string, un
   if (!v.ok) return json({ error: "تایید خرید با بازار ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن (اپ را باز کنید؛ خرید شما از بین نمی‌رود)." }, 502);
   if (Number(v.data?.purchaseState) !== 0) return json({ error: "این خرید لغو یا برگشت خورده است." }, 400);
 
-  // ادعای اتمی (مثل callback دیجی‌پی): ثبت توکن و فعال‌سازی پلن در «یک تراکنش» D1؛ فقط یک درخواست برنده می‌شود
+  return storeClaim(env, user, plan, productId, key, String(v.data?.orderId ?? ""), "bazaar", seen);
+}
+
+/** ادعای اتمی (مثل callback دیجی‌پی) برای خرید فروشگاه‌ها: ثبت توکن و فعال‌سازی پلن در «یک تراکنش» D1؛ فقط یک درخواست برنده می‌شود */
+async function storeClaim(
+  env: Env, user: WebUser, plan: Plan, productId: string, key: string, orderId: string, tag: string,
+  seen: () => Promise<Response | null>,
+): Promise<Response> {
   const by = crypto.randomUUID();
   const nowSec = Math.floor(Date.now() / 1000);
   const claim = env.DB.prepare("INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO NOTHING")
-    .bind(key, JSON.stringify({ uid: user.id, plan: plan.id, sku: productId, order: String(v.data?.orderId ?? ""), t: Date.now(), by }));
+    .bind(key, JSON.stringify({ uid: user.id, plan: plan.id, sku: productId, order: orderId, t: Date.now(), by }));
   const sub = nextSub(await getActiveSub(env, user.id), plan);
   const subExp = nowSec + Math.max(60, Math.ceil((sub.exp - Date.now()) / 1000) + 86_400); // مثل putSub
   const write = env.DB.prepare(
@@ -377,7 +384,65 @@ export async function bazaarVerify(env: Env, user: WebUser, b: Record<string, un
   const won = (await env.DB.batch([claim, write]))[0].meta.changes === 1;
   if (!won) return (await seen()) ?? json({ error: "ثبت خرید انجام نشد؛ دوباره امتحان کن." }, 409);
 
-  console.log("bazaar payment ok", user.id, plan.id);
+  console.log(`${tag} payment ok`, user.id, plan.id);
   await noteSale(env, { uid: user.id, plan: plan.id, count: plan.credits, amount: plan.price * 10_000, order: key, state: "paid", t: Date.now() }, plan);
   return json({ ok: true, plan: plan.id });
+}
+
+// ---------- مایکت (اپ اندروید، نسخه‌ی مایکت) ----------
+/**
+ * خرید درون‌برنامه‌ای مایکت: همان محصولات مصرفی plan_<id> (plan_plus، plan_pro) در پنل توسعه‌دهندگان مایکت ساخته می‌شوند.
+ * اپ بعد از خرید { j: JSON خرید (getOriginalJson), s: امضا (getSignature) } را در purchaseToken به POST /api/pay/myket می‌فرستد؛
+ * سرور امضا (SHA1withRSA) را با کلید عمومی مایکت تایید می‌کند و پلن را فعال می‌کند؛ سپس اپ خرید را «مصرف» می‌کند.
+ * هر توکن خرید فقط یک بار پلن را فعال می‌کند (کلید mkp:<sha256 توکن>، دائمی). کلید عمومی محرمانه نیست؛ با MYKET_PUBLIC_KEY قابل تغییر است.
+ */
+const MK_DEFAULT_KEY =
+  "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQD39JomlD/MfP2+OYY9DCw6fRp5mnBKBHYuWYrAvg3wml2Njceh0LivP3iTo0w7b3UfSgQBi9Of7op9y0lr3Px6AkORg07mk71tbmsZqY/IKO60zGI273bxEJOnRDH2aL4Ce+TW4A7IFE2h3bh/MtmZKRF1p9JFdhR3r96PckFcNwIDAQAB";
+export const myketEnabled = (env: Env) => (env.MYKET_PAY ?? "").trim().toLowerCase() !== "off";
+const b64Bytes = (b64: string) => Uint8Array.from(atob(b64.replace(/\s+/g, "")), (c) => c.charCodeAt(0));
+
+async function mkVerifySignature(env: Env, data: string, signatureB64: string): Promise<boolean> {
+  try {
+    const key = await crypto.subtle.importKey(
+      "spki", b64Bytes((env.MYKET_PUBLIC_KEY ?? "").trim() || MK_DEFAULT_KEY),
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-1" }, false, ["verify"],
+    );
+    return await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64Bytes(signatureB64), new TextEncoder().encode(data));
+  } catch (e) {
+    console.error("myket signature", e);
+    return false;
+  }
+}
+
+/** POST /api/pay/myket  { productId, purchaseToken: '{"j":"<originalJson>","s":"<signature>"}' } → { ok, plan, already? } */
+export async function myketVerify(env: Env, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
+  if (!myketEnabled(env)) return json({ error: "پرداخت از طریق مایکت هنوز فعال نشده است." }, 503);
+  const productId = String(b?.productId ?? "");
+  const plan = PLANS.find((p) => bzSku(p) === productId); // پلن فقط از شناسه‌ی محصول مشخص می‌شود، نه از ادعای کلاینت
+  if (!plan) return json({ error: "محصول نامعتبر است." }, 400);
+  let pack: { j?: unknown; s?: unknown } = {};
+  try { pack = JSON.parse(String(b?.purchaseToken ?? "")); } catch { /* پایین رد می‌شود */ }
+  const raw = typeof pack.j === "string" ? pack.j : "";
+  const sig = typeof pack.s === "string" ? pack.s : "";
+  if (!raw || !sig || raw.length > 4000 || sig.length > 1000) return json({ error: "اطلاعات خرید نامعتبر است." }, 400);
+  if (await hitLimit(env, `mkrl:${user.id}`, 30, 3600)) return json({ error: "درخواست‌های زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
+
+  let d: any;
+  try { d = JSON.parse(raw); } catch { return json({ error: "اطلاعات خرید نامعتبر است." }, 400); }
+  if (!(await mkVerifySignature(env, raw, sig))) return json({ error: "امضای خرید معتبر نیست." }, 400);
+  if (String(d?.productId ?? "") !== productId) return json({ error: "محصول خرید با درخواست نمی‌خواند." }, 400);
+  if (d?.packageName && String(d.packageName) !== bzCfg(env).pkg) return json({ error: "این خرید برای این برنامه نیست." }, 400);
+  if (d?.purchaseState !== undefined && Number(d.purchaseState) !== 0) return json({ error: "این خرید لغو یا برگشت خورده است." }, 400);
+  const token = String(d?.purchaseToken ?? d?.token ?? d?.orderId ?? "");
+  if (token.length < 4 || token.length > 500) return json({ error: "اطلاعات خرید نامعتبر است." }, 400);
+
+  const key = `mkp:${await sha256hex(token)}`;
+  const seen = async (): Promise<Response | null> => {
+    const r = (await env.KV.get(key, "json")) as { uid?: string } | null;
+    if (!r) return null;
+    return r.uid === user.id ? json({ ok: true, plan: plan.id, already: true }) : json({ error: "این خرید قبلاً برای حساب دیگری ثبت شده است." }, 409);
+  };
+  const dup = await seen();
+  if (dup) return dup;
+  return storeClaim(env, user, plan, productId, key, String(d?.orderId ?? ""), "myket", seen);
 }

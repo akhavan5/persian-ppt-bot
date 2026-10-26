@@ -1120,7 +1120,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 }
                 Text(
                     when {
-                        cfg?.bazaar == true && st.bazaarReady -> "پرداخت امن از طریق کافه‌بازار انجام می‌شود."
+                        cfg?.bazaar == true && st.bazaarReady -> "پرداخت امن از طریق " + Store.NAME_FA + " انجام می‌شود."
                         cfg?.payEnabled == true -> "پرداخت در مرورگر انجام می‌شود و بعد از آن به اپ برمی‌گردید."
                         else -> "پرداخت از طریق ربات تلگرام انجام می‌شود."
                     },

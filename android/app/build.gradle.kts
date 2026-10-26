@@ -33,6 +33,12 @@ android {
         }
         create("myket") {
             dimension = "store"
+            // کتابخانه‌ی پرداخت مایکت مجوز و queries خودش را با این placeholderها به manifest اضافه می‌کند (ir.mservices.market.BILLING)
+            manifestPlaceholders["marketApplicationId"] = "ir.mservices.market"
+            manifestPlaceholders["marketBindAddress"] = "ir.mservices.market.InAppBillingService.BIND"
+            manifestPlaceholders["marketPermission"] = "ir.mservices.market.BILLING"
+            // کلید عمومی RSA پرداخت درون‌برنامه‌ای مایکت (کلید عمومی است؛ محرمانه نیست)
+            buildConfigField("String", "IAB_PUBLIC_KEY", "\"MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQD39JomlD/MfP2+OYY9DCw6fRp5mnBKBHYuWYrAvg3wml2Njceh0LivP3iTo0w7b3UfSgQBi9Of7op9y0lr3Px6AkORg07mk71tbmsZqY/IKO60zGI273bxEJOnRDH2aL4Ce+TW4A7IFE2h3bh/MtmZKRF1p9JFdhR3r96PckFcNwIDAQAB\"")
         }
     }
 
@@ -91,6 +97,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)
     "bazaarImplementation"("com.github.cafebazaar.Poolakey:poolakey:2.2.0")
+    // پرداخت درون‌برنامه‌ای مایکت (فقط نسخه‌ی مایکت)
+    "myketImplementation"("com.github.myketstore:myket-billing-client:1.6")
     // بررسی پس‌زمینه‌ی پایان ساخت ارائه (اعلان محلی)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

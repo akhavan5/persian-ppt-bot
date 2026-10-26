@@ -1,25 +1,191 @@
 package ir.pptsaz.app
 
 import androidx.activity.ComponentActivity
+import ir.myket.billingclient.IabHelper
+import org.json.JSONObject
+import java.util.UUID
+
+/** مشخصات فروشگاه این نسخه‌ی اپ (هر flavor نسخه‌ی خودش را دارد). */
+object Store {
+    const val ID = "myket" // کلید فلگ در /api/config و بخش آخر مسیر /api/pay/<ID>
+    const val NAME_FA = "مایکت"
+
+    /** آدرس به‌روزرسانی: اگر سرور آدرس بازار را داده بود، صفحه‌ی اپ در مایکت باز شود. */
+    fun updateUrl(fromServer: String): String =
+        if (fromServer.isBlank() || fromServer.contains("cafebazaar", ignoreCase = true)) "https://myket.ir/app/ir.pptsaz.app" else fromServer
+}
 
 /**
- * نسخه‌ی مایکت (و هر فروشگاه دیگر): بدون پولکی و بدون هیچ مجوز کافه‌بازار.
- * API همان کلاس نسخه‌ی بازار است؛ onReady(false) یعنی پرداخت از طریق درگاه وب انجام می‌شود.
+ * پرداخت درون‌برنامه‌ای مایکت (IabHelper). نام کلاس و API همان نسخه‌ی بازار است تا MainActivity و AppViewModel فرقی نکنند.
+ * هر پلن یک محصول «مصرفی» با شناسه‌ی plan_<id> است (plan_plus، plan_pro) که باید در پنل توسعه‌دهندگان مایکت ساخته شود.
+ *
+ * «توکن» در این نسخه یک رشته‌ی JSON به شکل {"j": originalJson, "s": signature} است؛ سرور امضا را با کلید عمومی مایکت تایید می‌کند.
+ * مایکت هر لحظه فقط یک درخواست async می‌پذیرد، پس همه‌ی عملیات در یک صف پشت‌سرهم اجرا می‌شوند.
  */
-@Suppress("UNUSED_PARAMETER")
 class BazaarBilling(
-    activity: ComponentActivity,
+    private val activity: ComponentActivity,
     private val onReady: (Boolean) -> Unit,
 ) {
-    fun connect() = onReady(false)
+    private var helper: IabHelper? = null
+    private var ready = false
+    private var buying = false
 
-    fun disconnect() {}
+    /** توکن (JSON) → اجرای «مصرف» همان خرید؛ شیء Purchase داخل lambda نگه داشته می‌شود. */
+    private val consumers = HashMap<String, (IabHelper.OnConsumeFinishedListener) -> Unit>()
 
-    fun purchase(sku: String, onPurchase: (productId: String, token: String) -> Unit, onError: (String) -> Unit) {
-        onError("پرداخت درون‌برنامه‌ای در این نسخه فعال نیست.")
+    private val queue = ArrayDeque<(() -> Unit) -> Unit>()
+    private var busy = false
+
+    private fun enqueue(op: (done: () -> Unit) -> Unit) {
+        queue.addLast(op)
+        pump()
     }
 
-    fun consume(token: String, done: (Boolean) -> Unit = {}) = done(false)
+    private fun pump() {
+        if (busy) return
+        val op = queue.removeFirstOrNull() ?: return
+        busy = true
+        var finished = false
+        val done = {
+            if (!finished) {
+                finished = true
+                busy = false
+                pump()
+            }
+        }
+        try { op(done) } catch (_: Exception) { done() }
+    }
 
-    fun unconsumed(cb: (List<Pair<String, String>>) -> Unit) = cb(emptyList())
+    private fun pack(json: String, signature: String): String = JSONObject().put("j", json).put("s", signature).toString()
+
+    private fun skuOf(json: String): String? = try { JSONObject(json).optString("productId").ifEmpty { null } } catch (_: Exception) { null }
+
+    fun connect() {
+        if (helper != null) return
+        try {
+            val h = IabHelper(activity, BuildConfig.IAB_PUBLIC_KEY)
+            h.enableDebugLogging(false)
+            helper = h
+            h.startSetup(IabHelper.OnIabSetupFinishedListener { r ->
+                if (helper == null) return@OnIabSetupFinishedListener
+                ready = r.isSuccess
+                if (!ready) {
+                    try { h.disposeWhenFinished() } catch (_: Exception) {}
+                    helper = null
+                }
+                onReady(ready)
+            })
+        } catch (_: Throwable) {
+            helper = null
+            ready = false
+            onReady(false)
+        }
+    }
+
+    fun disconnect() {
+        try { helper?.disposeWhenFinished() } catch (_: Exception) {}
+        helper = null
+        ready = false
+        queue.clear()
+        busy = false
+        consumers.clear()
+    }
+
+    /** onError با متن خالی یعنی کاربر خودش انصراف داده و پیامی لازم نیست. */
+    fun purchase(sku: String, onPurchase: (productId: String, token: String) -> Unit, onError: (String) -> Unit) {
+        if (!ready) { onError("اتصال به مایکت برقرار نیست. مایکت را باز کنید و دوباره تلاش کنید."); return }
+        if (buying) return
+        buying = true
+        enqueue { done ->
+            val h = helper
+            if (h == null) {
+                buying = false
+                onError("اتصال به مایکت برقرار نیست. مایکت را باز کنید و دوباره تلاش کنید.")
+                done()
+            } else {
+                try {
+                    h.launchPurchaseFlow(
+                        activity, sku,
+                        IabHelper.OnIabPurchaseFinishedListener { r, p ->
+                            buying = false
+                            done()
+                            if (helper == null) return@OnIabPurchaseFinishedListener
+                            if (r.isFailure || p == null) {
+                                val cancelled = r.message?.contains("cancel", ignoreCase = true) == true
+                                onError(if (cancelled) "" else "خرید انجام نشد. دوباره تلاش کنید.")
+                                return@OnIabPurchaseFinishedListener
+                            }
+                            val json = p.originalJson.orEmpty()
+                            val token = pack(json, p.signature.orEmpty())
+                            consumers[token] = { l -> h.consumeAsync(p, l) }
+                            onPurchase(skuOf(json) ?: sku, token)
+                        },
+                        "pptsaz-" + UUID.randomUUID().toString().take(8),
+                    )
+                } catch (_: Exception) {
+                    buying = false
+                    done()
+                    onError("باز کردن صفحه‌ی پرداخت مایکت ممکن نشد. از نصب‌بودن مایکت مطمئن شوید.")
+                }
+            }
+        }
+    }
+
+    /** خرید را مصرف می‌کند تا دوباره قابل خرید شود. فقط بعد از تایید موفق سرور صدا زده شود. */
+    fun consume(token: String, done: (Boolean) -> Unit = {}) {
+        enqueue { fin ->
+            val h = helper
+            val c = consumers[token]
+            if (h == null || c == null) {
+                done(false)
+                fin()
+            } else {
+                try {
+                    c(IabHelper.OnConsumeFinishedListener { _, r ->
+                        if (r.isSuccess) consumers.remove(token)
+                        done(r.isSuccess)
+                        fin()
+                    })
+                } catch (_: Exception) {
+                    done(false)
+                    fin()
+                }
+            }
+        }
+    }
+
+    /** خریدهای مصرف‌نشده (مثلاً پرداخت شده ولی اپ قبل از تایید بسته شده) → فهرست (شناسه‌ی محصول، توکن). */
+    fun unconsumed(cb: (List<Pair<String, String>>) -> Unit) {
+        if (!ready) { cb(emptyList()); return }
+        enqueue { fin ->
+            val h = helper
+            if (h == null) {
+                cb(emptyList())
+                fin()
+            } else {
+                try {
+                    h.queryInventoryAsync(
+                        false, null, null,
+                        IabHelper.QueryInventoryFinishedListener { r, inv ->
+                            val out = ArrayList<Pair<String, String>>()
+                            if (helper != null && r.isSuccess && inv != null) {
+                                for (p in inv.allPurchases.orEmpty()) {
+                                    val json = p.originalJson.orEmpty()
+                                    val sku = skuOf(json) ?: continue
+                                    val token = pack(json, p.signature.orEmpty())
+                                    consumers[token] = { l -> h.consumeAsync(p, l) }
+                                    out += sku to token
+                                }
+                            }
+                            fin()
+                            cb(out)
+                        },
+                    )
+                } catch (_: Exception) {
+                    cb(emptyList())
+                    fin()
+                }
+            }
+        }
+    }
 }

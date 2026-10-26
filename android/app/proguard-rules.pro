@@ -12,3 +12,10 @@
 -keep class ir.cafebazaar.poolakey.** { *; }
 -keep class com.farsitel.bazaar.** { *; }
 -dontwarn ir.cafebazaar.poolakey.**
+
+# مایکت (پرداخت درون‌برنامه‌ای)
+-keep class ir.myket.billingclient.** { *; }
+-keep interface ir.myket.billingclient.** { *; }
+-keep class com.android.vending.billing.** { *; }
+-keep interface com.android.vending.billing.** { *; }
+-dontwarn ir.myket.billingclient.**

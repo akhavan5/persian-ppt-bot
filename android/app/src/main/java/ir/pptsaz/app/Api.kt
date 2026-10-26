@@ -230,7 +230,7 @@ object Api {
 
     /** تایید خرید کافه‌بازار روی سرور؛ بعد از موفقیت پلن فعال می‌شود (تکراری‌بودن مشکلی ندارد). */
     suspend fun bazaarVerify(productId: String, purchaseToken: String) {
-        call("POST", "/api/pay/bazaar", JSONObject().put("productId", productId).put("purchaseToken", purchaseToken))
+        call("POST", "/api/pay/" + Store.ID, JSONObject().put("productId", productId).put("purchaseToken", purchaseToken))
     }
 
     private class Raw(val code: Int, val bytes: ByteArray, val disposition: String?, val type: String?)

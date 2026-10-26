@@ -81,10 +81,10 @@ fun parseConfig(j: JSONObject): Config {
         models = j.optJSONArray("models").objects().map { ModelOpt(it.str("id"), it.str("name"), it.str("brand"), it.optBoolean("free", true)) },
         poster = j.optBoolean("poster"),
         dailyFree = j.optInt("dailyFree"),
-        bazaar = j.optBoolean("bazaar"),
+        bazaar = j.optBoolean(Store.ID), // «bazaar» در نسخه‌ی بازار، «myket» در نسخه‌ی مایکت
         latestVersion = j.optJSONObject("app")?.optInt("latest") ?: 0,
         minVersion = j.optJSONObject("app")?.optInt("min") ?: 0,
-        updateUrl = j.optJSONObject("app")?.optString("url").orEmpty(),
+        updateUrl = Store.updateUrl(j.optJSONObject("app")?.optString("url").orEmpty()),
     )
 }
 

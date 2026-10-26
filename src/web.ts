@@ -9,7 +9,7 @@ import {
 } from "./settings";
 import { modelList } from "./llm";
 import { appCrash } from "./app-crash";
-import { PLANS, bazaarEnabled, bazaarVerify, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
+import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { renderPreview } from "./preview";
 import {
@@ -77,6 +77,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       payEnabled: payEnabled(env),
       // خرید درون‌برنامه‌ای کافه‌بازار (فقط اپ اندروید)
       bazaar: bazaarEnabled(env),
+      // خرید درون‌برنامه‌ای مایکت (فقط نسخه‌ی مایکت اپ اندروید)
+      myket: myketEnabled(env),
       // نسخه‌ی اپ اندروید: latest = آخرین نسخه‌ی منتشرشده، min = کمترین نسخه‌ی مجاز (۰ = بدون بررسی)
       app: {
         latest: Number(env.ANDROID_LATEST_VERSION) || 0,
@@ -139,6 +141,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path.startsWith("/api/extract/") && method === "GET") return ocrStatus(env, user, path.slice("/api/extract/".length));
   if (path === "/api/pay/start" && method === "POST") return startPayment(env, url, user, await readBody(req));
   if (path === "/api/pay/bazaar" && method === "POST") return bazaarVerify(env, user, await readBody(req));
+  if (path === "/api/pay/myket" && method === "POST") return myketVerify(env, user, await readBody(req));
 
   if (path.startsWith("/api/jobs/") && method === "GET") return jobStatus(env, user, path.slice("/api/jobs/".length));
 

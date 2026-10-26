@@ -80,6 +80,9 @@ export interface Env {
   BAZAAR_CLIENT_ID?: string;
   BAZAAR_CLIENT_SECRET?: string;
   BAZAAR_REFRESH_TOKEN?: string;
+  /** پرداخت درون‌برنامه‌ای مایکت: کلید عمومی RSA پنل مایکت (اختیاری؛ پیش‌فرض داخل کد است) و MYKET_PAY=off برای خاموش‌کردن. شناسه‌ی محصول‌ها مثل بازار: plan_plus و plan_pro (مصرفی) */
+  MYKET_PUBLIC_KEY?: string;
+  MYKET_PAY?: string;
   /** ورود با پیامک یک‌بارمصرف (OTP) از وب‌سرویس s.api.ir؛ بدون SMS_API_TOKEN ورود با شماره‌ی موبایل غیرفعال است */
   SMS_API_TOKEN?: string;
   /** اختیاری: آدرس وب‌سرویس (پیش‌فرض https://s.api.ir/api/sw1/SmsOTP) */

@@ -7,6 +7,13 @@ import ir.cafebazaar.poolakey.config.PaymentConfiguration
 import ir.cafebazaar.poolakey.config.SecurityCheck
 import ir.cafebazaar.poolakey.request.PurchaseRequest
 
+/** مشخصات فروشگاه این نسخه‌ی اپ (هر flavor نسخه‌ی خودش را دارد). */
+object Store {
+    const val ID = "bazaar" // کلید فلگ در /api/config و بخش آخر مسیر /api/pay/<ID>
+    const val NAME_FA = "کافه‌بازار"
+    fun updateUrl(fromServer: String): String = fromServer
+}
+
 /**
  * پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی). هر پلن یک محصول «مصرفی» با شناسه‌ی plan_<id> است (plan_plus، plan_pro).
  * ترتیب: خرید ← تایید روی سرور (فعال‌سازی پلن) ← مصرف‌کردن خرید تا ماه بعد دوباره قابل خرید باشد.
