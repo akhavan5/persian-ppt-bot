@@ -34,6 +34,9 @@ jobs:
           echo "$KS_B64" | base64 -d > android/pptsaz-release.keystore
           keytool -list -keystore android/pptsaz-release.keystore -storepass "$KS_PASS" -alias pptsaz | tail -3
 
+      - name: Unit tests
+        run: gradle -p android testBazaarDebugUnitTest --no-daemon --stacktrace
+
       - name: Build APK + AAB
         env:
           KEYSTORE_FILE: ${{ github.workspace }}/android/pptsaz-release.keystore
