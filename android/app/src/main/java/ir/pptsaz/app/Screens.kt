@@ -1,14 +1,28 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
 
 package ir.pptsaz.app
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.print.PrintAttributes
 import android.print.PrintManager
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -233,7 +247,28 @@ private fun ErrorScreen(st: UiState, vm: AppViewModel) {
 fun LoginScreen(st: UiState, vm: AppViewModel) {
     var mobile by rememberSaveable { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
+    var left by rememberSaveable { mutableStateOf(0) } // ثانیه‌های مانده تا امکان «ارسال دوباره‌ی کد»
+    val norm = normalizeIranMobile(mobile)
     val otpOn = st.config?.otp != false
+    // با هر ارسال کد، شمارش معکوس از اول شروع می‌شود
+    LaunchedEffect(st.otpSent, st.otpTick) {
+        if (st.otpSent) {
+            left = 60
+            while (left > 0) {
+                delay(1000)
+                left--
+            }
+        }
+    }
+    // کد از پیامک خوانده شد (SMS User Consent): در کادر می‌نشیند و ورود خودکار انجام می‌شود
+    LaunchedEffect(st.smsCode) {
+        val c = st.smsCode
+        if (c != null) {
+            code = c
+            vm.consumeSmsCode()
+            if (norm != null && !st.busy) vm.verifyOtp(norm, c)
+        }
+    }
     val cs = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding()) {
         // بخش بالایی با گرادیان برند
@@ -278,16 +313,19 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                             Text("شماره‌ی موبایل خود را وارد کنید تا کد تأیید برایتان پیامک شود.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                             OutlinedTextField(
                                 value = mobile,
-                                onValueChange = { mobile = it.filter { c -> c.isDigit() }.take(11) },
+                                onValueChange = { mobile = it.filter { c -> c.isDigit() || c == '+' }.take(14) },
                                 placeholder = { Text("09123456789", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
                                 textStyle = fieldStyle,
                                 singleLine = true,
                                 enabled = !st.busy,
+                                isError = mobile.length >= 10 && norm == null,
+                                supportingText = { if (mobile.length >= 10 && norm == null) Text("شماره‌ی موبایل معتبر نیست؛ مثل 09123456789") },
                                 shape = RoundedCornerShape(18.dp),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { if (norm != null) vm.sendOtp(norm) }),
+                                modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.PhoneNumber },
                             )
-                            GradientButton("ارسال کد تأیید", { vm.sendOtp(mobile) }, Modifier.fillMaxWidth(), enabled = mobile.length >= 10, loading = st.busy)
+                            GradientButton("ارسال کد تأیید", { norm?.let { vm.sendOtp(it) } }, Modifier.fillMaxWidth(), enabled = norm != null, loading = st.busy)
                             val linkColor = cs.primary
                             Text(
                                 buildAnnotatedString {
@@ -305,7 +343,7 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                             )
                         } else {
                             Text("کد تأیید را وارد کنید", style = MaterialTheme.typography.titleLarge)
-                            Text("کد به شماره‌ی " + mobile.faStr() + " ارسال شد.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                            Text("کد به شماره‌ی " + (norm ?: mobile).faStr() + " ارسال شد.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                             OutlinedTextField(
                                 value = code,
                                 onValueChange = { code = it.filter { c -> c.isDigit() }.take(8) },
@@ -313,10 +351,19 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                                 textStyle = fieldStyle.copy(letterSpacing = 8.sp),
                                 singleLine = true,
                                 shape = RoundedCornerShape(18.dp),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { if (code.length >= 4 && !st.busy) vm.verifyOtp(mobile, code) }),
+                                modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.SmsOtpCode },
                             )
                             GradientButton("ورود", { vm.verifyOtp(mobile, code) }, Modifier.fillMaxWidth(), enabled = code.length >= 4, loading = st.busy)
+                            TextButton(
+                                onClick = { vm.sendOtp(mobile) }, enabled = left == 0 && !st.busy,
+                                modifier = Modifier.align(Alignment.CenterHorizontally),
+                            ) {
+                                AppIcon(AppIcons.Refresh, size = 18.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (left > 0) "ارسال دوباره‌ی کد تا " + left.fa() + " ثانیه‌ی دیگر" else "ارسال دوباره‌ی کد")
+                            }
                             TextButton(onClick = { vm.editMobile() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                                 AppIcon(AppIcons.Edit, size = 18.dp)
                                 Spacer(Modifier.width(6.dp))
@@ -370,6 +417,8 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
         }
     }
     val cs = MaterialTheme.colorScheme
+    // Back در تب‌های «فایل‌ها/تنظیمات/حساب» اول به تب «ساخت» برمی‌گردد و فقط از آنجا از اپ خارج می‌شود
+    BackHandler(enabled = st.tab != 0 && st.viewer == null) { vm.setTab(0) }
     Scaffold(
         containerColor = cs.background,
         bottomBar = {
@@ -436,8 +485,28 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
     val cs = MaterialTheme.colorScheme
     var link by rememberSaveable { mutableStateOf("") }
     var sourceOpen by rememberSaveable { mutableStateOf(form.source.isNotBlank()) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) vm.importFile(uri)
+    val ctx = LocalContext.current
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) vm.importFiles(uris)
+    }
+    // عکس مستقیم از دوربین (برای کتاب/جزوه)؛ بدون مجوز CAMERA چون برنامه‌ی دوربین سیستم عکس را می‌گیرد
+    var camUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val u = camUri
+        camUri = null
+        if (ok && u != null) vm.importFiles(listOf(u))
+    }
+    fun takePhoto() {
+        try {
+            val dir = File(ctx.cacheDir, "camera").apply { mkdirs() }
+            val now = System.currentTimeMillis()
+            dir.listFiles()?.forEach { if (now - it.lastModified() > 3_600_000L) it.delete() } // عکس‌های قدیمی پاک شوند
+            val u = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", File(dir, "scan-$now.jpg"))
+            camUri = u
+            camera.launch(u)
+        } catch (e: Exception) {
+            vm.toast("باز کردن دوربین ممکن نشد")
+        }
     }
     LaunchedEffect(st.extractedText) {
         val t = st.extractedText
@@ -505,7 +574,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                         }
                         Column(Modifier.weight(1f)) {
                             Text("منبع (اختیاری)", style = MaterialTheme.typography.titleSmall)
-                            Text("ارائه را بر پایه‌ی متن، PDF، عکس یا لینک بسازید", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                            Text("ارائه را بر پایه‌ی متن، PDF، Word، عکس یا لینک بسازید", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                         }
                         AppIcon(AppIcons.ChevronDown, tint = cs.onSurfaceVariant, modifier = Modifier.rotate(if (sourceOpen) 180f else 0f))
                     }
@@ -517,9 +586,20 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                                 minLines = 3, maxLines = 8, enabled = !running, shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            SoftButton(
-                                "افزودن از PDF یا عکس", { picker.launch(arrayOf("application/pdf", "image/png", "image/jpeg")) },
-                                Modifier.fillMaxWidth(), enabled = !running && st.extractBusy == null, icon = AppIcons.Attach,
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SoftButton(
+                                    "افزودن فایل",
+                                    { picker.launch(arrayOf("application/pdf", "image/*", DocReader.DOCX_MIME, "text/plain")) },
+                                    Modifier.weight(1f), enabled = !running && st.extractBusy == null, icon = AppIcons.Attach,
+                                )
+                                SoftButton(
+                                    "دوربین", { takePhoto() },
+                                    Modifier.weight(1f), enabled = !running && st.extractBusy == null, icon = AppIcons.Camera,
+                                )
+                            }
+                            Text(
+                                "PDF، عکس، Word (DOCX) یا متن ساده؛ چند فایل را می‌توانید با هم انتخاب کنید.",
+                                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                             )
                             if (cfg.link) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -698,7 +778,7 @@ private fun JobCard(job: JobState, vm: AppViewModel) {
                 Text("در حال ساخت ارائه…", style = MaterialTheme.typography.titleMedium, color = Color.White)
                 LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape), color = Color.White, trackColor = Color.White.copy(alpha = 0.3f))
                 Text(job.message, color = Color.White.copy(alpha = 0.95f), style = MaterialTheme.typography.bodyMedium)
-                Text("لطفاً تا آماده شدن ارائه، اپ را باز نگه دارید.", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                Text("می‌توانید اپ را ببندید؛ وقتی ارائه آماده شد با اعلان خبرتان می‌کنیم.", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -759,11 +839,15 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                         "ساخت اولین ارائه", { vm.setTab(0) },
                     )
                 }
-            else -> LazyColumn(
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize(),
+            else -> PullToRefreshBox(
+                isRefreshing = st.filesLoading, onRefresh = { vm.loadFiles() }, modifier = Modifier.fillMaxSize(),
             ) {
-                items(st.files) { f -> FileRow(f, vm) }
+                LazyColumn(
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(st.files, key = { it.id }) { f -> FileRow(f, vm) }
+                }
             }
         }
     }
@@ -797,6 +881,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel) {
             } else if (!f.handout) {
                 IconButton(onClick = { vm.openViewer(Viewer.Preview(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant) }
             }
+            IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant) }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp) }
         }
     }
@@ -1115,7 +1200,12 @@ fun PosterDialog(id: String, vm: AppViewModel) {
     }
 }
 
-/** پیش‌نمایش اسلایدها را خود سرور به‌صورت صفحه‌ی HTML می‌سازد؛ فقط همین صفحه داخل یک WebView نمایش داده می‌شود. */
+/**
+ * پیش‌نمایش اسلایدها را خود سرور به‌صورت صفحه‌ی HTML می‌سازد؛ همین صفحه داخل یک WebView نمایش داده می‌شود.
+ * (اندپوینت /img/{n} فقط عکس داخل هر اسلاید را می‌دهد، نه تصویر کل اسلاید؛ پس نمایش بومی نیازمند اندپوینت جدید در سرور است.)
+ * سخت‌گیری‌ها: نشانگر بارگذاری، صفحه‌ی خطا با «تلاش دوباره»، فقط دامنه‌ی خود سایت داخل WebView باز می‌شود
+ * (لینک‌های بیرونی در برنامه‌ی بیرونی)، و دسترسی به فایل‌های گوشی بسته است.
+ */
 @Composable
 fun PreviewDialog(id: String, vm: AppViewModel) {
     val url = remember(id) {
@@ -1125,6 +1215,9 @@ fun PreviewDialog(id: String, vm: AppViewModel) {
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
     var web by remember { mutableStateOf<WebView?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var failed by remember { mutableStateOf(false) }
+    val ownHost = remember { Uri.parse(Api.BASE).host.orEmpty() }
     Dialog(onDismissRequest = { vm.closeViewer() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Column(Modifier.fillMaxSize().background(cs.background).systemBarsPadding()) {
             Row(
@@ -1133,30 +1226,90 @@ fun PreviewDialog(id: String, vm: AppViewModel) {
             ) {
                 IconButton(onClick = { vm.closeViewer() }) { AppIcon(AppIcons.Close, tint = cs.onSurface) }
                 Text("پیش‌نمایش اسلایدها", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = {
-                    web?.let { w ->
-                        val pm = ctx.getSystemService(Context.PRINT_SERVICE) as PrintManager
-                        pm.print("presentation", w.createPrintDocumentAdapter("presentation"), PrintAttributes.Builder().build())
-                    }
-                }) {
+                TextButton(
+                    enabled = !loading && !failed,
+                    onClick = {
+                        web?.let { w ->
+                            val pm = ctx.getSystemService(Context.PRINT_SERVICE) as PrintManager
+                            pm.print("presentation", w.createPrintDocumentAdapter("presentation"), PrintAttributes.Builder().build())
+                        }
+                    },
+                ) {
                     AppIcon(AppIcons.Download, size = 18.dp)
                     Spacer(Modifier.width(6.dp))
                     Text("ذخیره PDF")
                 }
             }
             HorizontalDivider(color = cs.outlineVariant)
-            AndroidView(
-                factory = { c ->
-                    WebView(c).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        webViewClient = WebViewClient()
-                        loadUrl(url)
-                    }.also { web = it }
-                },
-                onRelease = { it.destroy() },
-                modifier = Modifier.fillMaxSize(),
-            )
+            Box(Modifier.fillMaxSize()) {
+                AndroidView(
+                    factory = { c ->
+                        WebView(c).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.allowFileAccess = false // در اندروید ۷–۱۰ پیش‌فرض true است
+                            settings.allowContentAccess = false
+                            settings.setSupportMultipleWindows(false)
+                            webViewClient = object : WebViewClient() {
+                                override fun onPageStarted(view: WebView?, u: String?, favicon: Bitmap?) {
+                                    loading = true
+                                    failed = false
+                                }
+
+                                override fun onPageFinished(view: WebView?, u: String?) {
+                                    loading = false
+                                }
+
+                                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                                    if (request?.isForMainFrame == true) {
+                                        failed = true
+                                        loading = false
+                                    }
+                                }
+
+                                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
+                                    if (request?.isForMainFrame == true && (errorResponse?.statusCode ?: 0) >= 400) {
+                                        failed = true
+                                        loading = false
+                                    }
+                                }
+
+                                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                    val target = request?.url ?: return true
+                                    if (target.host == ownHost) return false
+                                    // لینک بیرونی داخل خود پیش‌نمایش (و کوکی نشست) باز نمی‌شود
+                                    try {
+                                        ctx.startActivity(Intent(Intent.ACTION_VIEW, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    } catch (_: Exception) {
+                                    }
+                                    return true
+                                }
+                            }
+                            loadUrl(url)
+                        }.also { web = it }
+                    },
+                    onRelease = { it.destroy() },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                if (loading && !failed) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
+                }
+                if (failed) {
+                    Box(Modifier.fillMaxSize().background(cs.background), contentAlignment = Alignment.Center) {
+                        EmptyState(
+                            AppIcons.Warning, "پیش‌نمایش باز نشد",
+                            "اینترنت خود را بررسی کنید. اگر ارائه بیش از ۲۴ ساعت پیش ساخته شده، دیگر در سرور نیست.",
+                            "تلاش دوباره",
+                            {
+                                failed = false
+                                loading = true
+                                Api.syncCookiesToWebView()
+                                web?.loadUrl(url)
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 }

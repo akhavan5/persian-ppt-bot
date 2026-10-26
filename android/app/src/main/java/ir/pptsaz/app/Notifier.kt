@@ -39,31 +39,41 @@ object Notifier {
         }
     }
 
-    private fun show(ctx: Context, jobId: String, title: String, text: String) {
+    /** extras برای MainActivity: «open» = رفتن به کارت همان ارائه، «download» / «preview» = دکمه‌های روی اعلان. */
+    private fun pending(ctx: Context, jobId: String, action: String, code: Int): PendingIntent {
+        val i = Intent(ctx, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("job_action", action)
+            putExtra("job_id", jobId)
+            putExtra("nid", jobId.hashCode())
+        }
+        // requestCode باید برای هر دکمه فرق کند؛ PendingIntent فقط با action/data/type مقایسه می‌شود و extras را نمی‌بیند
+        return PendingIntent.getActivity(ctx, jobId.hashCode() * 4 + code, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    private fun show(ctx: Context, jobId: String, title: String, text: String, withActions: Boolean) {
         val nm = NotificationManagerCompat.from(ctx)
         if (!nm.areNotificationsEnabled()) return
         ensureChannel(ctx)
-        val open = Intent(ctx, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("tab", 1) // تب «فایل‌ها»
-        }
-        val pi = PendingIntent.getActivity(ctx, jobId.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val n = NotificationCompat.Builder(ctx, CHANNEL)
+        val b = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_notify)
             .setContentTitle(title)
             .setContentText(text)
-            .setContentIntent(pi)
+            .setContentIntent(pending(ctx, jobId, "open", 0)) // اپ را روی کارت همین ارائه باز می‌کند
             .setAutoCancel(true)
             .setOnlyAlertOnce(true) // اگر VM و Worker هر دو خبر بدهند، یک اعلان می‌ماند
-            .build()
-        try { nm.notify(jobId.hashCode(), n) } catch (_: SecurityException) {}
+        if (withActions) {
+            b.addAction(0, "دانلود", pending(ctx, jobId, "download", 1))
+            b.addAction(0, "پیش‌نمایش", pending(ctx, jobId, "preview", 2))
+        }
+        try { nm.notify(jobId.hashCode(), b.build()) } catch (_: SecurityException) {}
     }
 
     fun done(ctx: Context, jobId: String, deckTitle: String) =
-        show(ctx, jobId, "ارائه‌ات آماده شد ✓", deckTitle.ifBlank { "برای دانلود، تب فایل‌ها را باز کن." })
+        show(ctx, jobId, "ارائه‌ات آماده شد ✓", deckTitle.ifBlank { "برای دانلود یا پیش‌نمایش، اعلان را باز کن." }, withActions = true)
 
     fun failed(ctx: Context, jobId: String, message: String) =
-        show(ctx, jobId, "ساخت ارائه ناموفق بود", message.ifBlank { "دوباره تلاش کن." }.take(120))
+        show(ctx, jobId, "ساخت ارائه ناموفق بود", message.ifBlank { "دوباره تلاش کن." }.take(120), withActions = false)
 }
 
 /**

@@ -1,11 +1,13 @@
 package ir.pptsaz.app
 
 import android.app.Application
+import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -54,19 +56,24 @@ data class UiState(
     val bazaarReady: Boolean = false,
     val updateDialog: Boolean = false,
     val filesError: Boolean = false, // آخرین بارگیری فهرست فایل‌ها به خاطر شبکه ناموفق بود (فهرست ذخیره‌شده نمایش داده می‌شود)
+    val smsCode: String? = null, // کدی که از پیامک خوانده شد (SMS User Consent)؛ صفحه‌ی ورود آن را برمی‌دارد
+    val otpTick: Int = 0, // با هر ارسال موفق کد یکی زیاد می‌شود (برای شروع دوباره‌ی تایمر و گوش‌دادن به پیامک)
 )
 
 sealed interface Event {
     data class Toast(val msg: String) : Event
     data class OpenUrl(val url: String) : Event
-    data class OpenFile(val uri: Uri, val mime: String, val name: String) : Event
+    /** فایل دانلود شد. share = true یعنی کاربر «اشتراک‌گذاری» را زده است. */
+    data class FileReady(val saved: Saved, val share: Boolean) : Event
+    /** اجازه‌ی اعلان داده نشده؛ راهنمایی برای فعال‌سازی نشان بده. */
+    data object NotifHint : Event
     data class BazaarBuy(val sku: String) : Event
     data object AskNotify : Event
 }
 
 /** چیزی که برنامه‌ی دیگری از «اشتراک‌گذاری» به اپ فرستاده */
 sealed interface Share {
-    data class FileShare(val uri: Uri) : Share
+    data class FileShare(val uris: List<Uri>) : Share
     data class TextShare(val text: String) : Share
 }
 
@@ -155,17 +162,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun sendOtp(mobile: String) {
+        val m = normalizeIranMobile(mobile)
+        if (m == null) {
+            toast("شماره‌ی موبایل معتبر نیست؛ مثل 09123456789 بنویسید")
+            return
+        }
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                Api.otpSend(normDigits(mobile))
-                _state.update { it.copy(busy = false, otpSent = true) }
+                Api.otpSend(m)
+                _state.update { it.copy(busy = false, otpSent = true, otpTick = it.otpTick + 1) }
                 toast("کد تأیید ارسال شد")
             } catch (e: ApiException) {
                 _state.update { it.copy(busy = false) }
                 toast(e.message ?: "")
             }
         }
+    }
+
+    /** کد از پیامک خوانده شد (SMS User Consent). */
+    fun onSmsCode(code: String) {
+        _state.update { it.copy(smsCode = code) }
+    }
+
+    fun consumeSmsCode() {
+        _state.update { it.copy(smsCode = null) }
+    }
+
+    fun notifHint() {
+        _events.trySend(Event.NotifHint)
     }
 
     fun editMobile() {
@@ -176,7 +201,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                Api.otpVerify(normDigits(mobile), normDigits(code))
+                Api.otpVerify(normalizeIranMobile(mobile) ?: normDigits(mobile), normDigits(code))
                 _state.update { it.copy(busy = false, otpSent = false) }
                 refresh()
             } catch (e: ApiException) {
@@ -275,6 +300,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** باز شدن اپ از روی اعلان: وضعیت/دکمه‌های همان ارائه را روی کارت صفحه‌ی «ساخت» نشان می‌دهد (حتی بعد از بسته‌شدن اپ). */
+    fun showJob(id: String) {
+        if (id.isEmpty() || _state.value.job?.id == id) return
+        watch(id)
+    }
+
     fun dismissJob() {
         pollJob?.cancel()
         _state.update { it.copy(job = null) }
@@ -301,12 +332,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun download(fileId: String) {
+    fun download(fileId: String, share: Boolean = false) {
         viewModelScope.launch {
             toast("در حال دانلود…")
             try {
                 val r = Api.downloadFile(getApplication(), fileId)
-                _events.trySend(Event.OpenFile(r.uri, r.mime, r.name))
+                _events.trySend(Event.FileReady(r, share))
             } catch (e: ApiException) {
                 toast(e.message ?: "دانلود انجام نشد")
             } catch (e: Exception) {
@@ -329,7 +360,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         pendingShare = null
         _state.update { it.copy(tab = 0) }
         when (sh) {
-            is Share.FileShare -> importFile(sh.uri)
+            is Share.FileShare -> importFiles(sh.uris)
             is Share.TextShare -> {
                 val t = sh.text.trim()
                 if (Regex("^https?://\\S+$").matches(t)) importLink(t)
@@ -345,35 +376,90 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(extractedText = null) }
     }
 
-    fun importFile(uri: Uri) {
+    /** نوع فایل: اول از سیستم، و اگر نامشخص بود از پسوند نام فایل. */
+    private fun detectMime(ctx: Context, uri: Uri): String {
+        val t = ctx.contentResolver.getType(uri).orEmpty().lowercase()
+        if (t.isNotEmpty() && t != "application/octet-stream") return t
+        var name = ""
+        try {
+            ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) name = it.getString(0).orEmpty()
+            }
+        } catch (_: Exception) {
+        }
+        return when (name.substringAfterLast('.', "").lowercase()) {
+            "pdf" -> "application/pdf"
+            "docx" -> DocReader.DOCX_MIME
+            "txt" -> "text/plain"
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "heic", "heif" -> "image/heic"
+            else -> t
+        }
+    }
+
+    /** متن یک فایل (PDF/عکس با سرور؛ Word و txt روی خود گوشی) را برمی‌گرداند. */
+    private suspend fun readSource(ctx: Context, uri: Uri, status: (String) -> Unit): String {
+        val mime = detectMime(ctx, uri)
+        val supported = mime == "application/pdf" || mime.startsWith("image/") || mime == DocReader.DOCX_MIME || mime == "text/plain"
+        if (!supported) throw ApiException("فقط PDF، عکس، Word (DOCX) یا متن ساده پشتیبانی می‌شود.")
+        val bytes = withContext(Dispatchers.IO) {
+            ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        } ?: throw ApiException("فایل خوانده نشد.")
+        return when {
+            mime == "application/pdf" -> {
+                if (bytes.size > 24 * 1024 * 1024) throw ApiException("حجم PDF بیشتر از ۲۴ مگابایت است.")
+                status("در حال استخراج متن (ممکن است چند دقیقه طول بکشد)…")
+                Api.extractText(bytes, mime)
+            }
+            mime.startsWith("image/") -> {
+                // همه‌ی عکس‌ها (WebP/HEIC هم) با جهت درست و حجم مناسب به JPEG تبدیل می‌شوند
+                val jpg = try {
+                    withContext(Dispatchers.Default) { Images.normalize(bytes) }
+                } catch (e: Exception) {
+                    throw ApiException("این عکس خوانده نشد.")
+                }
+                status("در حال استخراج متن (ممکن است چند دقیقه طول بکشد)…")
+                Api.extractText(jpg, "image/jpeg")
+            }
+            mime == DocReader.DOCX_MIME -> {
+                val t = withContext(Dispatchers.Default) {
+                    try { DocReader.docxToText(bytes) } catch (e: Exception) { throw ApiException("فایل Word قابل خواندن نیست.") }
+                }
+                t.ifBlank { throw ApiException("متنی در فایل Word پیدا نشد.") }
+            }
+            else -> DocReader.plainText(bytes).ifBlank { throw ApiException("فایل متنی خالی است.") }
+        }
+    }
+
+    /** یک یا چند فایل (انتخاب‌گر، دوربین یا اشتراک‌گذاری)؛ متن همه‌ی آن‌ها پشت‌سرهم به منبع اضافه می‌شود. */
+    fun importFiles(uris: List<Uri>) {
+        if (uris.isEmpty()) return
         val ctx = getApplication<Application>()
         viewModelScope.launch {
-            _state.update { it.copy(extractBusy = "در حال خواندن فایل…") }
-            try {
-                val mime = ctx.contentResolver.getType(uri) ?: ""
-                if (mime != "application/pdf" && mime != "image/png" && mime != "image/jpeg") {
-                    throw ApiException("فقط PDF یا عکس PNG/JPG پشتیبانی می‌شود.")
+            val parts = ArrayList<String>()
+            var failed = 0
+            var lastError = ""
+            for ((idx, uri) in uris.withIndex()) {
+                val label = if (uris.size > 1) " (" + (idx + 1).fa() + " از " + uris.size.fa() + ")" else ""
+                _state.update { it.copy(extractBusy = "در حال خواندن فایل$label…") }
+                try {
+                    parts += readSource(ctx, uri) { msg -> _state.update { it.copy(extractBusy = msg + label) } }
+                } catch (e: ApiException) {
+                    failed++
+                    lastError = e.message ?: ""
+                } catch (e: Exception) {
+                    failed++
+                    lastError = "خواندن فایل انجام نشد"
                 }
-                var bytes = withContext(Dispatchers.IO) {
-                    ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                } ?: throw ApiException("فایل خوانده نشد.")
-                var m = mime
-                if (mime.startsWith("image/") && bytes.size > 3_800_000) {
-                    bytes = withContext(Dispatchers.Default) { Images.shrink(bytes) }
-                    m = "image/jpeg"
-                } else if (mime == "application/pdf" && bytes.size > 24 * 1024 * 1024) {
-                    throw ApiException("حجم PDF بیشتر از ۲۴ مگابایت است.")
-                }
-                _state.update { it.copy(extractBusy = "در حال استخراج متن (ممکن است چند دقیقه طول بکشد)…") }
-                val text = Api.extractText(bytes, m)
-                _state.update { it.copy(extractBusy = null, extractedText = text) }
-                toast("متن فایل به منبع اضافه شد")
-            } catch (e: ApiException) {
-                _state.update { it.copy(extractBusy = null) }
-                toast(e.message ?: "")
-            } catch (e: Exception) {
-                _state.update { it.copy(extractBusy = null) }
-                toast("خواندن فایل انجام نشد")
+            }
+            val text = parts.joinToString("\n\n").take(MAX_SOURCE_CHARS)
+            _state.update { it.copy(extractBusy = null, extractedText = text.ifEmpty { null }) }
+            when {
+                parts.isEmpty() -> toast(lastError.ifEmpty { "خواندن فایل انجام نشد" })
+                failed > 0 -> toast("متن " + parts.size.fa() + " فایل اضافه شد؛ " + failed.fa() + " فایل خوانده نشد. " + lastError)
+                else -> toast(if (parts.size > 1) "متن فایل‌ها به منبع اضافه شد" else "متن فایل به منبع اضافه شد")
             }
         }
     }

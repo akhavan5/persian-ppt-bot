@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <external-files-path name="downloads" path="Download/" />
+    <!-- اگر حافظه‌ی خارجی در دسترس نبود، فایل‌ها اینجا ذخیره می‌شوند -->
+    <files-path name="downloads_internal" path="downloads/" />
+    <!-- عکسی که با دوربین گرفته می‌شود -->
+    <cache-path name="camera" path="camera/" />
 </paths>

@@ -54,7 +54,8 @@ data class Me(
 
 data class FileItem(val id: String, val title: String, val slides: Int, val t: Long, val poster: Boolean, val handout: Boolean)
 
-data class Saved(val uri: android.net.Uri, val mime: String, val name: String)
+/** isPublic = false یعنی فایل در حافظه‌ی اختصاصی اپ است (اندروید ۷–۹) و کاربر باید «ذخیره در گوشی» را بزند. */
+data class Saved(val uri: android.net.Uri, val mime: String, val name: String, val isPublic: Boolean = true)
 
 private fun JSONArray?.objects(): List<JSONObject> {
     if (this == null) return emptyList()
@@ -137,6 +138,24 @@ fun normDigits(s: String): String = buildString {
         )
     }
 }
+
+/**
+ * شماره‌ی موبایل ایران را به شکل استاندارد 09xxxxxxxxx برمی‌گرداند؛ اگر معتبر نبود null.
+ * ورودی‌های قابل قبول: 09123456789، 9123456789، +989123456789، 00989123456789، 989123456789 (با ارقام فارسی و فاصله/خط تیره).
+ */
+fun normalizeIranMobile(raw: String): String? {
+    var d = normDigits(raw).filter { it.isDigit() || it == '+' }
+    d = when {
+        d.startsWith("+98") -> d.substring(3)
+        d.startsWith("0098") -> d.substring(4)
+        d.startsWith("98") && d.length == 12 -> d.substring(2)
+        else -> d
+    }.removePrefix("0")
+    return if (Regex("^9\\d{9}$").matches(d)) "0$d" else null
+}
+
+/** اولین رشته‌ی ۴ تا ۸ رقمی در پیامک (کد تأیید) را برمی‌گرداند. */
+fun extractOtp(sms: String): String? = Regex("(?<!\\d)\\d{4,8}(?!\\d)").find(normDigits(sms))?.value
 
 /** ارقام لاتین را برای نمایش فارسی می‌کند. */
 fun Int.fa(): String = toString().map { if (it in '0'..'9') '۰' + (it - '0') else it }.joinToString("")

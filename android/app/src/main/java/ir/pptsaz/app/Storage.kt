@@ -11,7 +11,11 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.io.IOException
 
-/** ذخیره‌ی فایل در پوشه‌ی Downloads (اندروید ۱۰+ با MediaStore؛ نسخه‌های قدیمی‌تر در پوشه‌ی اختصاصی اپ و با FileProvider). */
+/**
+ * ذخیره‌ی فایل: اندروید ۱۰+ در پوشه‌ی Downloads عمومی (MediaStore).
+ * اندروید ۷ تا ۹ بدون مجوز حافظه نمی‌تواند در Downloads عمومی بنویسد؛ پس در حافظه‌ی اختصاصی اپ (با FileProvider) ذخیره می‌شود
+ * و Saved.isPublic = false برمی‌گردد تا اپ «ذخیره در گوشی» (ACTION_CREATE_DOCUMENT) را به کاربر پیشنهاد دهد.
+ */
 object Storage {
     private fun cleanName(raw: String, mime: String): String {
         var n = raw.replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]"), "_").trim().trimStart('.')
@@ -56,12 +60,20 @@ object Storage {
             values.put(MediaStore.Downloads.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
         } else {
-            val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: ctx.filesDir
+            // اگر حافظه‌ی خارجی در دسترس نبود، پوشه‌ی داخلی (در file_paths.xml تعریف شده است)
+            val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: File(ctx.filesDir, "downloads")
             dir.mkdirs()
             val f = uniqueFile(dir, name)
             f.writeBytes(bytes)
             uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
         }
-        return Saved(uri, mime, name)
+        return Saved(uri, mime, name, isPublic = Build.VERSION.SDK_INT >= 29)
+    }
+
+    /** محتوای فایل ذخیره‌شده را به مقصدی که کاربر با «ذخیره در گوشی» انتخاب کرده کپی می‌کند. */
+    fun copyTo(ctx: Context, src: Uri, dest: Uri) {
+        val inp = ctx.contentResolver.openInputStream(src) ?: throw IOException("open source failed")
+        val out = ctx.contentResolver.openOutputStream(dest) ?: throw IOException("open dest failed")
+        inp.use { i -> out.use { o -> i.copyTo(o) } }
     }
 }

@@ -68,6 +68,10 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.12.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("androidx.core:core-ktx:1.17.0")
+    // جهت (EXIF) عکس‌ها در اندروید ۷ و ۸
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+    // خواندن خودکار کد پیامکی (نیازمند Google Play Services؛ اگر نبود اپ بدون آن کار می‌کند)
+    implementation("com.google.android.gms:play-services-auth-api-phone:18.2.0")
     implementation("androidx.browser:browser:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)
