@@ -25,7 +25,7 @@ import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
-import { miniappBuy, miniappLogin, miniappSend } from "./miniapp";
+import { miniappBuy, miniappInvite, miniappLogin, miniappPdf, miniappSend } from "./miniapp";
 
 const SEC_HEADERS = {
   "cache-control": "no-store",
@@ -135,6 +135,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
+  if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000));
+  if (path === "/api/miniapp/invite" && method === "POST") return miniappInvite(env, user);
   if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
   if (path === "/api/profile/telegram/send" && method === "POST") return tgLinkSend(req, env, user);

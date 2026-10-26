@@ -8,10 +8,11 @@
  */
 import type { Env } from "./env";
 import { createSession, getUserById, hitLimit, publicUser, type WebUser } from "./auth";
-import { displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
+import { REF_MAX, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
 import { ensureUid, getLinkedTg } from "./link";
-import { loadFileDirect } from "./files";
-import { esc, sendDocument } from "./telegram";
+import { listFiles, loadFileDirect } from "./files";
+import { buildDeckPdf, cachedPdf } from "./pdf";
+import { esc, sendDocument, tg } from "./telegram";
 import { siteLoginUrl } from "./deck-service";
 
 const enc = new TextEncoder();
@@ -111,4 +112,46 @@ export async function miniappSend(env: Env, user: WebUser, body: Record<string, 
 export async function miniappBuy(env: Env, user: WebUser): Promise<Response> {
   const tgId = await getLinkedTg(env, user.id);
   return json({ url: await siteLoginUrl(env, tgId ?? undefined, "buy") });
+}
+
+/** سقف روزانه‌ی ساخت PDF؛ همان کلید و سقف ربات (pdf:<کاربر>:<روز>) تا مصرف مرورگر مشترک حساب شود */
+const PDF_DAILY_LIMIT = 8;
+
+/** POST /api/miniapp/pdf {id} — نسخه‌ی PDF ارائه (مثل دکمه‌ی PDF ربات) ساخته و به چت تلگرام کاربر فرستاده می‌شود */
+export async function miniappPdf(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
+  const tgId = await getLinkedTg(env, user.id);
+  if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
+  const name = (title: string) => `${title.replace(/[\\/:*?"<>|\n\r]+/g, " ").trim().slice(0, 80) || "presentation"}.pdf`;
+  const cap = (title: string) => `📄 <b>${esc(title)}</b>\nنسخه‌ی PDF`;
+  try {
+    const hit = await cachedPdf(env, user.id, id).catch(() => null); // قبلاً ساخته شده: بدون مصرف مرورگر و سقف
+    if (hit) {
+      const f = (await listFiles(env, user.id).catch(() => [])).find((x) => x.id === id);
+      await sendDocument(env, tgId, hit, name(f?.title ?? "presentation"), cap(f?.title ?? "ارائه"), { mime: "application/pdf" });
+      return json({ ok: true });
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    if (await hitLimit(env, `pdf:${user.id}:${day}`, PDF_DAILY_LIMIT, 172_800)) return err("سقف روزانه‌ی ساخت PDF تمام شد؛ فردا دوباره امتحان کن (فایل PPTX همیشه در دسترس است).", 429);
+    const r = await buildDeckPdf(env, user.id, id);
+    if (!r.ok) return err(r.error, 404);
+    await sendDocument(env, tgId, r.data, name(r.title), cap(r.title), { mime: "application/pdf" });
+    return json({ ok: true });
+  } catch (e) {
+    const msg = String(e instanceof Error ? e.message : e);
+    console.error("miniapp pdf", msg.slice(0, 400));
+    return err(/time limit/i.test(msg) ? "سقف ساخت PDF برای امروز تمام شده است؛ فردا دوباره امتحان کن. فایل PPTX همیشه در دسترس است."
+      : /429|rate|too many|concurrent/i.test(msg) ? "الان سرویس ساخت PDF شلوغ است؛ حدود یک دقیقه دیگر دوباره امتحان کن."
+      : "ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن.", 502);
+  }
+}
+
+/** POST /api/miniapp/invite — لینک دعوت اختصاصی (هر دوست جدید = ۱ ارائه‌ی رایگان؛ مثل /invite ربات) */
+export async function miniappInvite(env: Env, user: WebUser): Promise<Response> {
+  const tgId = await getLinkedTg(env, user.id);
+  if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
+  const me = await tg<{ username?: string }>(env, "getMe").catch(() => null);
+  if (!me?.username) return err("ساخت لینک دعوت ممکن نشد؛ کمی بعد دوباره امتحان کن.", 502);
+  return json({ link: `https://t.me/${me.username}?start=ref_${tgId}`, max: REF_MAX });
 }

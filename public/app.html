@@ -49,6 +49,11 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .file:first-child{border-top:0}
 .file strong{display:block;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .file>div:first-child{min-width:0;flex:1}
+.src{display:inline-flex;align-items:center;gap:8px;background:var(--sec);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 12px;font-size:.82rem;max-width:100%}
+.src span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src button{border:0;background:none;color:var(--hint);font-size:1rem;cursor:pointer}
+.ex{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ex button{border:1px solid var(--line);background:var(--sec);color:var(--hint);border-radius:999px;padding:2px 10px;font:inherit;font-size:.78rem;cursor:pointer}
 .err{color:var(--danger);font-size:.88rem;margin-top:8px}
 .ok{color:var(--ok)}
 .poster{width:100%;border-radius:10px;margin-top:10px;border:1px solid var(--line)}
@@ -92,12 +97,22 @@ nav button.on{color:var(--btn);font-weight:700}
         <label class="f" for="topic">موضوع ارائه</label>
         <textarea id="topic" maxlength="600" placeholder="مثلاً: هوش مصنوعی در آموزش؛ فرصت‌ها و چالش‌ها"></textarea>
 
-        <div id="linkBox" hidden style="margin-top:10px">
-          <div class="row" id="linkRow">
-            <input type="url" id="linkUrl" placeholder="یا آدرس یک مقاله/صفحه‌ی وب" dir="ltr" inputmode="url">
-            <button class="btn ghost sm" id="linkGo" type="button">خواندن</button>
+        <div class="ex" id="examples"></div>
+
+        <div id="upBox" style="margin-top:12px">
+          <input type="file" id="file" hidden accept=".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg">
+          <div class="row" id="upBtns" style="justify-content:flex-start;flex-wrap:wrap">
+            <button class="btn ghost sm" id="pick" type="button">📎 آپلود فایل (اختیاری)</button>
+            <button class="btn ghost sm" id="linkBtn" type="button" hidden>🔗 افزودن لینک</button>
           </div>
-          <div class="muted" id="linkInfo" hidden></div>
+          <div class="row" id="linkRow" hidden style="margin-top:8px">
+            <input type="url" id="linkUrl" placeholder="https://example.com/article" dir="ltr" inputmode="url" maxlength="2000">
+            <button class="btn sm" id="linkGo" type="button">دریافت</button>
+            <button class="btn ghost sm" id="linkCancel" type="button">انصراف</button>
+          </div>
+          <span class="src" id="upChip" hidden><span id="upName"></span><button id="upDel" type="button" aria-label="حذف">✕</button></span>
+          <div class="muted" id="upHint" style="margin-top:6px">Word، PDF، PowerPoint، Excel، متن یا عکس؛ ارائه از روی محتوای فایل ساخته می‌شود.</div>
+          <div class="err" id="upMsg" hidden></div>
         </div>
 
         <div class="grid2" style="margin-top:12px">
@@ -106,16 +121,15 @@ nav button.on{color:var(--btn);font-weight:700}
         </div>
 
         <div style="margin-top:6px">
-          <label class="sw" id="pRow" hidden><span>🖼 پوستر (اینفوگرافیک) <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="pOn"></label>
-          <div id="pLay" hidden style="padding-bottom:6px"><select id="pChoice"><option value="wide">پوستر افقی (مناسب نمایش روی صفحه)</option><option value="tall">پوستر عمودی (مناسب پیام‌رسان)</option></select></div>
-          <label class="sw"><span>📝 جزوه‌ی Word <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="hOn"></label>
+          <label class="sw" id="pRow" hidden><span>🖼 پوستر (اینفوگرافیک) <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="pOn" checked></label>
+          <div id="pLay" style="padding-bottom:6px" hidden><select id="pChoice"><option value="wide">پوستر افقی (مناسب نمایش روی صفحه)</option><option value="tall">پوستر عمودی (مناسب پیام‌رسان)</option></select></div>
+          <label class="sw"><span>📝 جزوه‌ی Word <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="hOn" checked></label>
         </div>
 
         <button class="btn" id="go" type="button" style="margin-top:12px">✨ بساز</button>
         <div class="err" id="genErr" hidden></div>
         <div id="buyBox" hidden style="margin-top:10px"><button class="btn ghost" id="buy1" type="button">💳 خرید پلن در سایت</button></div>
-        <div class="muted" style="margin-top:10px">برای ساخت از روی فایل Word، PDF یا عکس، فایل را همین‌طور داخل چت ربات بفرست.</div>
-      </div>
+              </div>
 
       <div class="card" id="job" hidden>
         <div class="row"><b>در حال ساخت…</b><div class="spin" style="margin:0;width:22px;height:22px"></div></div>
@@ -127,6 +141,7 @@ nav button.on{color:var(--btn);font-weight:700}
         <div class="ok"><b>✅ ارائه آماده است</b></div>
         <div style="margin:4px 0 10px"><b id="doneTitle"></b><span class="muted" id="doneSlides"></span></div>
         <button class="btn" id="doneSend" type="button">📥 ارسال ارائه (PPTX) به چت</button>
+        <button class="btn ghost" id="donePdf" type="button" style="margin-top:8px" hidden>📄 ارسال نسخه‌ی PDF به چت</button>
         <button class="btn ghost" id="doneHandout" type="button" style="margin-top:8px" hidden>📝 ارسال جزوه (Word) به چت</button>
         <button class="btn ghost" id="donePoster" type="button" style="margin-top:8px" hidden>🖼 ارسال پوستر به چت</button>
         <div class="err" id="doneWarn" hidden></div>
@@ -158,6 +173,11 @@ nav button.on{color:var(--btn);font-weight:700}
           <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
           <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
         </div>
+      </div>
+      <div class="card">
+        <h2>🎁 دعوت دوستان</h2>
+        <div class="muted">به‌ازای هر دوستی که با لینک تو وارد ربات شود ۱ ارائه‌ی رایگان می‌گیری.</div>
+        <button class="btn ghost" id="inv" type="button" style="margin-top:10px">📤 ارسال لینک دعوت به دوستان</button>
       </div>
       <div class="card">
         <h2>اعتبار و پلن</h2>
@@ -223,12 +243,13 @@ const TG = (() => {
   post("web_app_setup_swipe_behavior", { allow_vertical_swipe: false });
   return {
     initData,
+    openTg(path) { if (window.TelegramWebviewProxy || inIframe) post("web_app_open_tg_link", { path_full: path }); else window.open("https://t.me" + path, "_blank"); },
     openLink(url) { if (window.TelegramWebviewProxy || inIframe) post("web_app_open_link", { url, try_instant_view: false }); else window.open(url, "_blank"); },
   };
 })();
 
 // ---------- API ----------
-let cfg = null, me = null, token = store.get("tok") || "", tracking = 0, srcText = "", srcInfo = "";
+let cfg = null, me = null, token = store.get("tok") || "", tracking = 0, srcText = "";
 async function raw(path, { method = "GET", body } = {}) {
   const headers = {}; if (body) headers["content-type"] = "application/json"; if (token) headers.authorization = "Bearer " + token;
   return fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
@@ -245,6 +266,11 @@ async function api(path, opt = {}, retried = false) {
   if (r.status === 401 && !retried && TG.initData) { await login(); return api(path, opt, true); }
   if (!r.ok) { const e = new Error((d && d.error) || "خطایی رخ داد؛ دوباره امتحان کن."); e.status = r.status; e.data = d; throw e; }
   return d;
+}
+async function authFetch(path, init = {}, retried = false) {
+  const r = await fetch(path, { ...init, headers: { ...(init.headers || {}), authorization: "Bearer " + token } });
+  if (r.status === 401 && !retried && TG.initData) { await login(); return authFetch(path, init, true); }
+  return r;
 }
 async function busy(btn, label, fn) {
   if (btn.classList.contains("busy")) return;
@@ -300,22 +326,163 @@ function renderMake() {
   $("#slides").replaceChildren(...choices.map((n) => h("option", { value: n }, fa(n) + " اسلاید")));
   $("#slides").value = String(choices.includes(cur) ? cur : choices[choices.length - 1]);
   $("#imgs").value = me.settings.images === false || me.maxImages <= 0 ? "0" : "1";
-  show($("#pRow"), !!cfg.poster); show($("#linkBox"), !!cfg.link);
+  show($("#pRow"), !!cfg.poster); show($("#pLay"), !!cfg.poster && $("#pOn").checked); show($("#linkBtn"), !!cfg.link && !srcText);
   $("#pOn").onchange = () => show($("#pLay"), $("#pOn").checked);
+  $("#examples").replaceChildren(...EXAMPLES.map((t) => h("button", { type: "button", onclick: () => { $("#topic").value = t; } }, t)));
 }
-$("#linkGo").onclick = () => busy($("#linkGo"), "…", async () => {
-  const url = $("#linkUrl").value.trim();
+// ---------- منبع: فایل یا لینک (همان مسیر نسخه‌ی وب) ----------
+const EXAMPLES = ["هوش مصنوعی در آموزش", "مدیریت زمان برای دانشجویان", "انرژی‌های تجدیدپذیر در ایران", "اصول طراحی تجربه‌ی کاربری"];
+const MAX_FILE = 24 * 1024 * 1024, MAX_SRC = 120000, IMG_MAX = 4000000, OCR_WAIT = 6 * 60 * 1000;
+let extracting = false, upSeq = 0;
+const HINT = $("#upHint").textContent;
+const upMsg = (t) => { $("#upMsg").textContent = t || ""; show($("#upMsg"), !!t); };
+const tidy = (t) => t.replace(/\u0000/g, "").replace(/[ \t\u00A0]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+const xml = (t) => new DOMParser().parseFromString(t, "application/xml");
+const ns = (d, uri, tag) => Array.from(d.getElementsByTagNameNS(uri, tag));
+const NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main", NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main", NS_S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+let zipLib;
+const loadZip = () => zipLib || (zipLib = new Promise((res, rej) => { const el = h("script", { src: "/jszip.min.js" }); el.onload = res; el.onerror = () => { zipLib = null; rej(new Error("بارگذاری ابزار خواندن فایل ممکن نشد؛ اینترنت را بررسی کن.")); }; document.head.append(el); }));
+
+async function readDocx(zip) {
+  const f = zip.file("word/document.xml"); if (!f) throw new Error("ساختار فایل Word معتبر نیست.");
+  return ns(xml(await f.async("string")), NS_W, "p").map((p) => {
+    const text = ns(p, NS_W, "t").map((t) => t.textContent).join("");
+    const st = ns(p, NS_W, "pStyle")[0]; const sv = st ? (st.getAttributeNS(NS_W, "val") || "") : "";
+    return text && /^(Heading|Title|عنوان)/i.test(sv) ? "# " + text : text;
+  }).filter(Boolean).join("\n");
+}
+async function readPptx(zip) {
+  const names = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+  if (!names.length) throw new Error("ساختار فایل PowerPoint معتبر نیست.");
+  const out = [];
+  for (const [i, n] of names.entries()) {
+    const paras = ns(xml(await zip.file(n).async("string")), NS_A, "p").map((p) => ns(p, NS_A, "t").map((t) => t.textContent).join("")).filter(Boolean);
+    if (paras.length) out.push(`# اسلاید ${i + 1}\n` + paras.join("\n"));
+  }
+  return out.join("\n\n");
+}
+async function readXlsx(zip) {
+  const sst = zip.file("xl/sharedStrings.xml");
+  const shared = sst ? ns(xml(await sst.async("string")), NS_S, "si").map((si) => ns(si, NS_S, "t").map((t) => t.textContent).join("")) : [];
+  const names = Object.keys(zip.files).filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+  if (!names.length) throw new Error("ساختار فایل Excel معتبر نیست.");
+  const out = [];
+  for (const [i, n] of names.entries()) {
+    const rows = ns(xml(await zip.file(n).async("string")), NS_S, "row").slice(0, 200).map((r) => ns(r, NS_S, "c").map((c) => {
+      const t = c.getAttribute("t"), v = ns(c, NS_S, "v")[0];
+      if (t === "s") return shared[Number(v && v.textContent)] || "";
+      if (t === "inlineStr") return ns(c, NS_S, "t").map((x) => x.textContent).join("");
+      return v ? v.textContent : "";
+    }).join("\t")).filter((r) => r.replace(/\t/g, "").trim());
+    if (rows.length) out.push(`# برگه ${i + 1}\n` + rows.join("\n"));
+  }
+  return out.join("\n\n");
+}
+// تصویر را کوچک می‌کند تا زیر سقف حجم (۴ مگابایت) بماند
+async function jpegUnder(source, w, hh) {
+  let scale = Math.min(1, 2000 / Math.max(w, hh));
+  for (let q = 0.85; ; q -= 0.15) {
+    const c = h("canvas"); c.width = Math.round(w * scale); c.height = Math.round(hh * scale);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(source, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", Math.max(q, 0.4)));
+    if (blob && blob.size <= IMG_MAX) return blob;
+    if (q < 0.5) scale *= 0.7;
+    if (scale < 0.2) throw new Error("تصویر برای تبدیل به متن خیلی حجیم است.");
+  }
+}
+// PDF و تصویر روی سرور خوانده می‌شود (PDF متنی، اسکن و ترکیبی)؛ کار در Workflow است و وضعیتش هر ۲ ثانیه پرسیده می‌شود
+async function serverExtract(blob, my) {
+  const r = await authFetch("/api/extract", { method: "POST", headers: { "content-type": blob.type }, body: blob });
+  let d = null; try { d = await r.json(); } catch {}
+  if (!r.ok) throw new Error((d && d.error) || "خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.");
+  if (d && typeof d.text === "string") return d.text;
+  if (!d || !d.jobId) throw new Error("خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.");
+  $("#upHint").textContent = "⏳ در حال خواندن فایل… (PDF اسکن‌شده ممکن است تا چند دقیقه طول بکشد)";
+  const end = Date.now() + OCR_WAIT; let fails = 0;
+  while (Date.now() < end) {
+    await sleep(2000);
+    if (my !== upSeq) throw new Error("لغو شد");
+    let pr, pd = null;
+    try { pr = await authFetch("/api/extract/" + encodeURIComponent(d.jobId)); pd = await pr.json().catch(() => null); }
+    catch { if (++fails > 5) throw new Error("ارتباط با سرور قطع شد؛ دوباره امتحان کن."); continue; }
+    if (pr.status === 404) throw new Error("خواندن فایل پیدا نشد؛ دوباره آپلودش کن.");
+    if (!pr.ok) { if (++fails > 5) throw new Error((pd && pd.error) || "خواندن فایل ناموفق بود؛ دوباره امتحان کن."); continue; }
+    fails = 0;
+    if (pd && pd.state === "done") return pd.text;
+    if (pd && pd.state === "error") throw new Error(pd.message || "خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.");
+  }
+  throw new Error("خواندن فایل بیش از حد طول کشید؛ دوباره امتحان کن.");
+}
+async function readImage(file, ext, my) {
+  const type = ext === "png" ? "image/png" : "image/jpeg";
+  if (file.size <= IMG_MAX) return serverExtract(file.type === type ? file : new Blob([file], { type }), my);
+  const bmp = await createImageBitmap(file); return serverExtract(await jpegUnder(bmp, bmp.width, bmp.height), my);
+}
+async function extractFile(file, my) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (["txt", "md", "csv", "json", "html", "htm"].includes(ext)) {
+    const t = await file.text();
+    return ext.startsWith("htm") ? (new DOMParser().parseFromString(t, "text/html").body.textContent || "") : t;
+  }
+  if (["docx", "pptx", "xlsx"].includes(ext)) {
+    await loadZip(); const zip = await JSZip.loadAsync(file);
+    return ext === "docx" ? readDocx(zip) : ext === "pptx" ? readPptx(zip) : readXlsx(zip);
+  }
+  if (ext === "pdf") return serverExtract(file.type === "application/pdf" ? file : new Blob([file], { type: "application/pdf" }), my);
+  if (["png", "jpg", "jpeg"].includes(ext)) return readImage(file, ext, my);
+  throw new Error("این نوع فایل پشتیبانی نمی‌شود. فایل Word، PDF، PowerPoint، Excel، متن یا تصویر بده (فایل‌های قدیمی doc/ppt را ابتدا به docx/pptx تبدیل کن).");
+}
+function setSource(text, label, hint) {
+  srcText = text.slice(0, MAX_SRC);
+  $("#upName").textContent = `${label} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true);
+  show($("#pick"), false); show($("#linkBtn"), false); show($("#linkRow"), false);
+  $("#upHint").textContent = text.length > MAX_SRC ? `متن بلند است؛ فقط ${fa(MAX_SRC)} نویسه‌ی اول استفاده می‌شود.` : hint;
+}
+function clearSource() {
+  upSeq++; srcText = ""; extracting = false; $("#file").value = ""; $("#linkUrl").value = "";
+  show($("#upChip"), false); show($("#linkRow"), false); show($("#pick"), true); $("#pick").disabled = false; show($("#linkBtn"), !!cfg.link);
+  $("#linkGo").disabled = false; $("#upHint").textContent = HINT; upMsg("");
+}
+async function onFile(file) {
+  if (!file) return;
+  upMsg(""); show($("#linkRow"), false); const my = ++upSeq;
+  if (file.size > MAX_FILE) { upMsg("حجم فایل حداکثر ۲۴ مگابایت می‌تواند باشد."); return; }
+  extracting = true; $("#pick").disabled = true; $("#upHint").textContent = "⏳ در حال خواندن فایل…";
+  try {
+    const raw = tidy(await extractFile(file, my));
+    if (my !== upSeq) return;
+    if (raw.length < 30) throw new Error("متنی در فایل پیدا نشد (اگر اسکن یا تصویر است، واضح‌تر و کم‌حجم‌تر امتحان کن).");
+    setSource(raw, file.name, "ارائه از روی محتوای این فایل ساخته می‌شود.");
+    const t = $("#topic"); if (!t.value.trim()) t.value = file.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").slice(0, 120);
+  } catch (e) {
+    if (my === upSeq) { upMsg(e.message || "خواندن فایل ناموفق بود."); $("#upHint").textContent = HINT; }
+  } finally { if (my === upSeq) { extracting = false; $("#pick").disabled = false; } $("#file").value = ""; }
+}
+$("#pick").onclick = () => $("#file").click();
+$("#file").onchange = (e) => onFile(e.target.files[0]);
+$("#upDel").onclick = clearSource;
+$("#linkBtn").onclick = () => { if (extracting || srcText) return; upMsg(""); show($("#linkRow"), true); $("#linkUrl").focus(); };
+$("#linkCancel").onclick = () => { show($("#linkRow"), false); upMsg(""); };
+$("#linkGo").onclick = async () => {
+  if (extracting || srcText) return;
+  const url = $("#linkUrl").value.trim(); if (!url) return;
+  upMsg(""); const my = ++upSeq; extracting = true; $("#linkGo").disabled = $("#pick").disabled = true; $("#upHint").textContent = "⏳ در حال خواندن لینک…";
   try {
     const d = await api("/api/link", { method: "POST", body: { url } });
-    srcText = d.text; srcInfo = d.host || "لینک";
-    $("#linkInfo").textContent = `✅ متن ${srcInfo} خوانده شد${d.truncated ? " (بخشی از آن)" : ""}؛ ارائه از روی آن ساخته می‌شود.`; show($("#linkInfo"), true);
-  } catch (e) { srcText = ""; $("#linkInfo").textContent = e.message; show($("#linkInfo"), true); }
-});
+    if (my !== upSeq) return;
+    const raw = tidy(d.text || "");
+    if (raw.length < 30) throw new Error("متن کافی در این لینک پیدا نشد.");
+    setSource(raw, "🔗 " + (d.host || url), d.truncated ? "فقط بخشی از صفحه خوانده شد؛ ارائه از روی همان ساخته می‌شود." : "ارائه از روی محتوای این لینک ساخته می‌شود.");
+    const t = $("#topic"); if (!t.value.trim() && d.title) t.value = String(d.title).slice(0, 120);
+  } catch (e) { if (my === upSeq) { upMsg(e.message); $("#upHint").textContent = HINT; } }
+  finally { if (my === upSeq) { extracting = false; $("#linkGo").disabled = $("#pick").disabled = false; } }
+};
 
 const genErr = (msg, buy) => { $("#genErr").textContent = msg || ""; show($("#genErr"), !!msg); show($("#buyBox"), !!buy); };
 $("#go").onclick = async () => {
   genErr("");
   const topic = $("#topic").value.trim();
+  if (extracting) return genErr("صبر کن تا خواندن فایل یا لینک تمام شود.");
   if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
   try {
     const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: {
@@ -351,7 +518,8 @@ async function track(jobId) {
 function showDone(jobId, s) {
   $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = s.slides ? ` — ${fa(s.slides)} اسلاید` : "";
   $("#doneSend").onclick = (e) => sendToChat(jobId, e.currentTarget);
-  const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg");
+  const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg"), pdfBtn = $("#donePdf");
+  show(pdfBtn, !!cfg.poster); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
   show(hBtn, s.handout === "ok" && !!s.handoutId); show(pBtn, s.poster === "ok" && !!s.posterId); show(img, false);
   if (!hBtn.hidden) hBtn.onclick = (e) => sendToChat(s.handoutId, e.currentTarget);
   if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
@@ -370,10 +538,10 @@ async function posterPreview(id) {
 }
 
 // ارسال فایل توسط ربات به چت؛ ۴۰۴ تازه‌ساخت چند بار دوباره امتحان می‌شود
-async function sendToChat(id, btn) {
-  return busy(btn, "در حال ارسال…", async () => {
+async function sendToChat(id, btn, kind = "send") {
+  return busy(btn, kind === "pdf" ? "در حال ساخت PDF…" : "در حال ارسال…", async () => {
     for (let i = 0; i < 10; i++) {
-      try { await api("/api/miniapp/send", { method: "POST", body: { id } }); toast("✅ فایل به چت ربات ارسال شد"); return; }
+      try { await api("/api/miniapp/" + kind, { method: "POST", body: { id } }); toast("✅ فایل به چت ربات ارسال شد"); return; }
       catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); return; } await sleep(3000); }
     }
   });
@@ -389,7 +557,9 @@ async function loadFiles() {
     const kind = f.poster ? "🖼 پوستر" : f.handout ? "📝 جزوه (Word)" : `📊 ${fa(f.slides)} اسلاید`;
     return h("div", { class: "file" },
       h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${kind} · تا ${fa(hrs)} ساعت دیگر`)),
-      h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"));
+      h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end" },
+        h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
+        !f.poster && !f.handout && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null));
   }));
 }
 
@@ -437,6 +607,12 @@ async function openBuy(btn) {
     catch (e) { toast(e.message); }
   });
 }
+$("#inv").onclick = (e) => busy(e.currentTarget, "در حال آماده‌سازی…", async () => {
+  try {
+    const d = await api("/api/miniapp/invite", { method: "POST" });
+    TG.openTg("/share/url?url=" + encodeURIComponent(d.link) + "&text=" + encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇"));
+  } catch (err) { toast(err.message); }
+});
 $("#buy1").onclick = (e) => openBuy(e.currentTarget);
 $("#buy2").onclick = (e) => openBuy(e.currentTarget);
 
