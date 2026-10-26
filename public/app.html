@@ -259,6 +259,9 @@ const TG = (() => {
   const ver = hp.get("tgWebAppVersion") || store.get("tgVer") || "0";
   if (hp.get("tgWebAppVersion")) store.set("tgVer", ver);
   const startParam = hp.get("tgWebAppStartParam") || "";
+  const platform = hp.get("tgWebAppPlatform") || store.get("tgPlat") || "";
+  if (hp.get("tgWebAppPlatform")) store.set("tgPlat", platform);
+  const winDesktop = platform === "tdesktop" && /Windows/i.test(navigator.userAgent); // در تلگرام دسکتاپ ویندوز دکمه‌ی اصلی (MainButton) درست کار نمی‌کند؛ فقط دکمه‌ی داخل صفحه
   const inIframe = window.parent !== window;
   // نسخه‌ی Bot API کلاینت از «نسخه» به بالاست؟ (مثلاً since("6.9")) — هر قابلیت فقط در نسخه‌ی پشتیبان‌شده فعال می‌شود
   const since = (v) => {
@@ -312,7 +315,7 @@ const TG = (() => {
   // دکمه‌ی اصلی تلگرام (MainButton، ۶.۰+)؛ فقط وقتی حالتش عوض شود پیام فرستاده می‌شود
   let mbKey = "";
   const main = {
-    ok: since("6.0"), onPress: null,
+    ok: since("6.0") && !winDesktop, onPress: null,
     set(o) {
       if (!main.ok) return;
       const k = JSON.stringify(o); if (k === mbKey) return; mbKey = k;
