@@ -79,6 +79,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.12.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("androidx.core:core-ktx:1.17.0")
+    // play-services (پیامک) Fragment قدیمی ۱.۰ را می‌آورد و lint برای registerForActivityResult خطای fatal می‌دهد؛ نسخه‌ی جدید را صریح مشخص می‌کنیم
+    implementation("androidx.fragment:fragment-ktx:1.8.9")
     // اسپلش واحد: جلوگیری از پرش بین اسپلش سیستم و صفحه‌ی بارگذاری Compose
     implementation("androidx.core:core-splashscreen:1.0.1")
     // جهت (EXIF) عکس‌ها در اندروید ۷ و ۸
