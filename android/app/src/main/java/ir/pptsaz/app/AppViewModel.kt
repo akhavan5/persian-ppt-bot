@@ -131,7 +131,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------ شروع و ورود
 
     fun refresh() {
-        viewModelScope.launch {
+        viewModelScope.launch { load() }
+    }
+
+    private suspend fun load() {
             try {
                 val cfg = _state.value.config ?: Api.config()
                 val me = Api.me()
@@ -148,7 +151,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (_state.value.screen == Screen.Main) toast(e.message ?: "") else
                     _state.update { it.copy(screen = Screen.Error, error = e.message) }
             }
-        }
     }
 
     /** وقتی کاربر از مرورگر (بعد از پرداخت) برمی‌گردد اعتبار را به‌روز می‌کند. */
@@ -202,8 +204,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(busy = true) }
             try {
                 Api.otpVerify(normalizeIranMobile(mobile) ?: normDigits(mobile), normDigits(code))
+                // تا آماده‌شدن صفحه‌ی اصلی روی همان صفحه‌ی کد با حالت «در حال ورود» می‌مانیم؛
+                // قبلاً otpSent زودتر false می‌شد و چند ثانیه صفحه‌ی شماره دوباره دیده می‌شد
+                load()
                 _state.update { it.copy(busy = false, otpSent = false) }
-                refresh()
             } catch (e: ApiException) {
                 _state.update { it.copy(busy = false) }
                 toast(e.message ?: "")
@@ -272,6 +276,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             onResume()
                             val app = getApplication<Application>()
                             JobWatcher.cancel(app, id)
+                            Notifier.cancelProgress(app, id)
                             if (!AppForeground.on) Notifier.done(app, id, j.optString("title"))
                             return@launch
                         }
@@ -279,10 +284,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             _state.update { it.copy(job = JobState(id, j.optString("message", "ساخت ناموفق بود"), failed = true)) }
                             val app = getApplication<Application>()
                             JobWatcher.cancel(app, id)
+                            Notifier.cancelProgress(app, id)
                             if (!AppForeground.on) Notifier.failed(app, id, j.optString("message"))
                             return@launch
                         }
-                        else -> _state.update { it.copy(job = JobState(id, j.optString("message", "در حال ساخت…"))) }
+                        else -> {
+                            val msg = j.optString("message", "در حال ساخت…")
+                            _state.update { it.copy(job = JobState(id, msg)) }
+                            // اعلان «در حال ساخت» فقط وقتی اپ جلوی چشم نیست
+                            val app = getApplication<Application>()
+                            if (AppForeground.on) Notifier.cancelProgress(app, id) else Notifier.progress(app, id, msg)
+                        }
                     }
                 } catch (e: ApiException) {
                     if (e.status == 404 || e.status == 401) {
@@ -308,6 +320,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissJob() {
         pollJob?.cancel()
+        _state.value.job?.let { Notifier.cancelProgress(getApplication(), it.id) }
         _state.update { it.copy(job = null) }
     }
 

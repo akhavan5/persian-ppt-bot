@@ -9,7 +9,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -204,10 +203,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // اسپلش سیستم تا آماده‌شدن config و me می‌ماند (حداکثر ۲٫۵ ثانیه)، پس LoadingScreen دیگر چشمک نمی‌زند
-        val splash = installSplashScreen()
-        val t0 = SystemClock.uptimeMillis()
-        splash.setKeepOnScreenCondition { vm.state.value.screen == Screen.Loading && SystemClock.uptimeMillis() - t0 < 2500 }
+        // اسپلش سیستم فقط یک پس‌زمینه‌ی ساده است (بدون آیکن) و بلافاصله به LoadingScreen می‌رسد؛ فقط یک اسپلش دیده می‌شود
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) handleIntent(intent)

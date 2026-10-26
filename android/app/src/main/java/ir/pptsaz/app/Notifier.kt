@@ -27,6 +27,7 @@ object AppForeground {
 /** اعلان محلی «ارائه آماده شد»؛ بدون FCM و بدون سرویس خارجی (در ایران مطمئن‌تر). */
 object Notifier {
     private const val CHANNEL = "jobs"
+    private const val CHANNEL_PROGRESS = "jobs_progress"
 
     fun ensureChannel(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
@@ -35,6 +36,13 @@ object Notifier {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL, "آماده شدن ارائه", NotificationManager.IMPORTANCE_DEFAULT)
                     .apply { description = "وقتی ساخت ارائه تمام شد خبر می‌دهد" },
+            )
+        }
+        // کانال جدا و بی‌صدا برای «در حال ساخت»، تا اعلان پایان همچنان صدا بدهد
+        if (nm.getNotificationChannel(CHANNEL_PROGRESS) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_PROGRESS, "در حال ساخت ارائه", NotificationManager.IMPORTANCE_LOW)
+                    .apply { description = "نشان می‌دهد ارائه هنوز در حال ساخت است" },
             )
         }
     }
@@ -67,6 +75,29 @@ object Notifier {
             b.addAction(0, "پیش‌نمایش", pending(ctx, jobId, "preview", 2))
         }
         try { nm.notify(jobId.hashCode(), b.build()) } catch (_: SecurityException) {}
+    }
+
+    private fun progressId(jobId: String) = jobId.hashCode() xor 0x5A5A5A
+
+    /** اعلان ثابت و بی‌صدای «در حال ساخت» با نوار پیشرفت نامعین؛ با پایان کار یا باز شدن اپ برداشته می‌شود. */
+    fun progress(ctx: Context, jobId: String, message: String) {
+        val nm = NotificationManagerCompat.from(ctx)
+        if (!nm.areNotificationsEnabled()) return
+        ensureChannel(ctx)
+        val b = NotificationCompat.Builder(ctx, CHANNEL_PROGRESS)
+            .setSmallIcon(R.drawable.ic_stat_notify)
+            .setContentTitle("در حال ساخت ارائه…")
+            .setContentText(message.ifBlank { "کمی صبر کنید؛ آماده که شد خبرتان می‌کنیم." }.take(120))
+            .setContentIntent(pending(ctx, jobId, "open", 3))
+            .setProgress(0, 0, true)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+        try { nm.notify(progressId(jobId), b.build()) } catch (_: SecurityException) {}
+    }
+
+    fun cancelProgress(ctx: Context, jobId: String) {
+        NotificationManagerCompat.from(ctx).cancel(progressId(jobId))
     }
 
     fun done(ctx: Context, jobId: String, deckTitle: String) =
@@ -105,13 +136,16 @@ class JobWatchWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             val j = Api.job(id)
             when (j.optString("state")) {
                 "done" -> {
+                    Notifier.cancelProgress(applicationContext, id)
                     if (!AppForeground.on) Notifier.done(applicationContext, id, j.optString("title"))
                     return Result.success()
                 }
                 "error" -> {
+                    Notifier.cancelProgress(applicationContext, id)
                     if (!AppForeground.on) Notifier.failed(applicationContext, id, j.optString("message"))
                     return Result.success()
                 }
+                else -> if (!AppForeground.on) Notifier.progress(applicationContext, id, j.optString("message"))
             }
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 404) return Result.success() // نشست تمام شده یا کار پاک شده

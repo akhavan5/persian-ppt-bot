@@ -7,7 +7,7 @@
     <!-- تم لحظه‌ی شروع (اسپلش)؛ بعد از آماده‌شدن اپ به Theme.PptSaz تبدیل می‌شود. رنگ پس‌زمینه در حالت شب خودکار تیره است (colors.xml در values-night) -->
     <style name="Theme.PptSaz.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/page_bg</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_empty</item>
         <item name="postSplashScreenTheme">@style/Theme.PptSaz</item>
     </style>
 </resources>

@@ -572,8 +572,12 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
     val s = me.settings
     val firstName = me.name.trim().split(" ").firstOrNull().orEmpty()
 
+    // با شروع ساخت، صفحه به بالا می‌رود تا کارت «در حال ساخت» دیده شود
+    val scroll = rememberScrollState()
+    LaunchedEffect(job?.id) { if (job != null) scroll.animateScrollTo(0) }
+
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 112.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 112.dp)) {
             ScreenHeader(
                 title = if (firstName.isBlank()) "سلام 👋" else "سلام $firstName 👋",
                 subtitle = "امروز چه ارائه‌ای بسازیم؟",
