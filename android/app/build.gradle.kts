@@ -71,6 +71,11 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // تست‌های واحد روی JVM اجرا می‌شوند؛ کلاس‌های android.* پیاده‌سازی ندارند و به‌جای خطا مقدار پیش‌فرض برمی‌گردانند
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 kotlin {
@@ -102,4 +107,6 @@ dependencies {
     // بررسی پس‌زمینه‌ی پایان ساخت ارائه (اعلان محلی)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    testImplementation("junit:junit:4.13.2")
 }

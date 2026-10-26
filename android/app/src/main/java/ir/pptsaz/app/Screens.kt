@@ -108,7 +108,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
@@ -394,7 +393,7 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
 
 // ================================================================== قاب اصلی
 
-/** وضعیت فرم «ساخت»؛ بالاتر از تب‌ها نگه داشته می‌شود تا با عوض‌کردن تب پاک نشود. */
+/** وضعیت فرم «ساخت»؛ در AppViewModel نگه داشته می‌شود تا با عوض‌کردن تب و چرخش صفحه پاک نشود (و متن بلند وارد Bundle نشود). */
 @Stable
 class CreateForm(topic: String = "", source: String = "", handout: Boolean = true, poster: String = "wide") {
     var topic by mutableStateOf(topic)
@@ -402,11 +401,12 @@ class CreateForm(topic: String = "", source: String = "", handout: Boolean = tru
     var handout by mutableStateOf(handout)
     var poster by mutableStateOf(poster)
 
-    companion object {
-        val Saver = listSaver<CreateForm, Any>(
-            save = { listOf(it.topic, it.source, it.handout, it.poster) },
-            restore = { CreateForm(it[0] as String, it[1] as String, it[2] as Boolean, it[3] as String) },
-        )
+    /** برگشت به حالت اولِ فرم (مقادیر پیش‌فرض همان‌هایی است که Draft.load برای پیش‌نویس خالی می‌دهد). */
+    fun reset() {
+        topic = ""
+        source = ""
+        handout = true
+        poster = "wide"
     }
 }
 
@@ -428,7 +428,7 @@ private val NAV = listOf(
 fun MainScreen(st: UiState, vm: AppViewModel) {
     val me = st.me ?: return
     val ctx = LocalContext.current
-    val form = rememberSaveable(saver = CreateForm.Saver) { Draft.load(ctx) }
+    val form = vm.form
     // ذخیره‌ی خودکار پیش‌نویس روی گوشی (با ۰٫۷ ثانیه تاخیر تا با هر حرف نوشته نشود)
     LaunchedEffect(form) {
         snapshotFlow { listOf<Any>(form.topic, form.source, form.handout, form.poster) }.collectLatest {
@@ -1132,6 +1132,8 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 )
             }
 
+            TelegramCard(me, vm)
+
             ContactCard(vm)
 
             SoftButton("بررسی به‌روزرسانی (نسخه‌ی " + BuildConfig.VERSION_NAME + ")", { vm.checkUpdate() }, Modifier.fillMaxWidth(), icon = AppIcons.Refresh)
@@ -1142,6 +1144,128 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
             )
+        }
+    }
+}
+
+/** اتصال حساب به ربات تلگرام (مثل پروفایل سایت): آیدی عددی ← کد ۶ رقمی که ربات در تلگرام می‌فرستد ← تأیید. */
+@Composable
+private fun TelegramCard(me: Me, vm: AppViewModel) {
+    val cs = MaterialTheme.colorScheme
+    val ex = LocalExtra.current
+    val brush = Brush.linearGradient(listOf(Color(0xFF29B6F6), Color(0xFF0288D1)))
+    var tgId by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
+    var sent by rememberSaveable { mutableStateOf(false) }
+    var tick by rememberSaveable { mutableStateOf(0) } // با هر ارسال موفق یکی زیاد می‌شود تا شمارش معکوس دوباره شروع شود
+    var left by rememberSaveable { mutableStateOf(0) }
+    var sending by remember { mutableStateOf(false) }
+    var verifying by remember { mutableStateOf(false) }
+    val norm = normalizeTelegramId(tgId)
+    LaunchedEffect(tick) {
+        if (tick > 0) {
+            left = 60 // سرور هم بین دو درخواست کد ۶۰ ثانیه فاصله می‌خواهد
+            while (left > 0) {
+                delay(1000)
+                left--
+            }
+        }
+    }
+    SectionTitle("تلگرام", Modifier.padding(top = 4.dp))
+    SurfaceCard {
+        if (me.telegram.isNotBlank()) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                IconTile(AppIcons.Send, brush, 40.dp)
+                Column(Modifier.weight(1f)) {
+                    Text("تلگرام وصل است", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        me.telegram.faStr(),
+                        style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr), color = cs.onSurfaceVariant,
+                    )
+                }
+                Pill("وصل", ex.successBg, ex.success)
+            }
+        } else {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    IconTile(AppIcons.Send, brush, 40.dp)
+                    Text("اتصال حساب به ربات تلگرام", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                }
+                Text(
+                    "در ربات تلگرام دستور /id را بزنید و آیدی عددی‌تان را اینجا وارد کنید تا ربات یک کد ۶ رقمی برایتان بفرستد. " +
+                        "بعد از تأیید، اعتبار و ارائه‌های ربات و اپ یکی می‌شود.",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                )
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = tgId,
+                        onValueChange = { tgId = it.filter { c -> c.isDigit() }.take(16) },
+                        placeholder = { Text("123456789", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center),
+                        singleLine = true,
+                        enabled = !sending,
+                        isError = tgId.length >= 5 && norm == null,
+                        supportingText = { if (tgId.length >= 5 && norm == null) Text("آیدی تلگرام فقط عدد است (۵ تا ۱۵ رقم)") },
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        modifier = Modifier.weight(1f),
+                    )
+                    SoftButton(
+                        text = when {
+                            left > 0 -> left.fa() + " ثانیه"
+                            sent -> "ارسال دوباره"
+                            else -> "ارسال کد"
+                        },
+                        onClick = {
+                            norm?.let { id ->
+                                sending = true
+                                vm.telegramSend(id) { ok ->
+                                    sending = false
+                                    if (ok) {
+                                        sent = true
+                                        code = ""
+                                        tick++
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(top = 4.dp),
+                        enabled = norm != null && !sending && left == 0,
+                    )
+                }
+                AnimatedVisibility(sent, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = code,
+                            onValueChange = { code = it.filter { c -> c.isDigit() }.take(6) },
+                            placeholder = { Text("کد ۶ رقمی تلگرام", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Ltr, textAlign = TextAlign.Center),
+                            singleLine = true,
+                            enabled = !verifying,
+                            shape = RoundedCornerShape(16.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                            modifier = Modifier.weight(1f),
+                        )
+                        GradientButton(
+                            "تأیید",
+                            {
+                                verifying = true
+                                vm.telegramVerify(code) { ok ->
+                                    verifying = false
+                                    if (ok) {
+                                        sent = false
+                                        code = ""
+                                        tgId = ""
+                                    }
+                                }
+                            },
+                            Modifier.width(110.dp),
+                            enabled = normDigits(code).length == 6 && !verifying,
+                            loading = verifying,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1331,11 +1455,15 @@ fun PreviewDialog(id: String, vm: AppViewModel) {
 
                                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                     val target = request?.url ?: return true
-                                    if (target.host == ownHost) return false
-                                    // لینک بیرونی داخل خود پیش‌نمایش (و کوکی نشست) باز نمی‌شود
-                                    try {
-                                        ctx.startActivity(Intent(Intent.ACTION_VIEW, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                                    } catch (_: Exception) {
+                                    val scheme = target.scheme.orEmpty()
+                                    if (scheme == "https" && target.host == ownHost) return false
+                                    // لینک بیرونی داخل خود پیش‌نمایش (و کوکی نشست) باز نمی‌شود؛ فقط http/https/mailto به برنامه‌ی بیرونی داده می‌شود
+                                    // (schemeهای دیگر مثل intent: یا file: هرگز اجرا نمی‌شوند)
+                                    if (scheme == "https" || scheme == "http" || scheme == "mailto") {
+                                        try {
+                                            ctx.startActivity(Intent(Intent.ACTION_VIEW, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                        } catch (_: Exception) {
+                                        }
                                     }
                                     return true
                                 }

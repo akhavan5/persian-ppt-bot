@@ -58,8 +58,9 @@ class PrefsCookieJar(context: Context) : CookieJar {
 
 object Api {
     const val BASE = "https://pptsaz.ir"
-    private const val UA =
-        "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 PptSazApp/2.0"
+    // نسخه‌ی واقعی اپ در User-Agent می‌رود (سرور فقط وجود «PptSazApp/» را بررسی می‌کند)؛ برای تشخیص نسخه‌ی کاربر در لاگ‌ها مفید است
+    private val UA: String =
+        "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 PptSazApp/" + BuildConfig.VERSION_NAME
     private const val NO_NET = "اتصال برقرار نشد. اینترنت خود را بررسی کنید."
 
     private lateinit var jar: PrefsCookieJar
@@ -235,8 +236,11 @@ object Api {
 
     private class Raw(val code: Int, val bytes: ByteArray, val disposition: String?, val type: String?)
 
-    /** فایل را می‌گیرد و در پوشه‌ی Downloads ذخیره می‌کند. بلافاصله بعد از اتمام کار ممکن است فایل چند ثانیه 404 بدهد؛ پس چند بار تلاش می‌کنیم. */
-    suspend fun downloadFile(ctx: Context, id: String): Saved {
+    /**
+     * فایل را می‌گیرد و در پوشه‌ی Downloads ذخیره می‌کند. بلافاصله بعد از اتمام کار ممکن است فایل چند ثانیه 404 بدهد؛ پس تا maxRetries بار
+     * (هر ۳ ثانیه) دوباره تلاش می‌کنیم. برای فایلی که از قبل در فهرست سرور هست عدد کوچک بدهید تا فایل منقضی‌شده یک دقیقه کاربر را معطل نکند.
+     */
+    suspend fun downloadFile(ctx: Context, id: String, maxRetries: Int = 20): Saved {
         var attempt = 0
         while (true) {
             val raw = withContext(Dispatchers.IO) {
@@ -260,7 +264,7 @@ object Api {
                     val mime = raw.type?.substringBefore(';')?.trim().orEmpty()
                     return withContext(Dispatchers.IO) { Storage.save(ctx, name, mime, raw.bytes) }
                 }
-                raw.code == 404 && attempt < 20 -> {
+                raw.code == 404 && attempt < maxRetries -> {
                     attempt++
                     delay(3000)
                 }

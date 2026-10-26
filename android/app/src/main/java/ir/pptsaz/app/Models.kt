@@ -154,6 +154,12 @@ fun normalizeIranMobile(raw: String): String? {
     return if (Regex("^9\\d{9}$").matches(d)) "0$d" else null
 }
 
+/** آیدی عددی تلگرام (۵ تا ۱۵ رقم) را با پذیرش ارقام فارسی/عربی و فاصله برمی‌گرداند؛ اگر معتبر نبود null. */
+fun normalizeTelegramId(raw: String): String? {
+    val d = normDigits(raw).filter { !it.isWhitespace() }
+    return if (Regex("^\\d{5,15}$").matches(d)) d else null
+}
+
 /** اولین رشته‌ی ۴ تا ۸ رقمی در پیامک (کد تأیید) را برمی‌گرداند. */
 fun extractOtp(sms: String): String? = Regex("(?<!\\d)\\d{4,8}(?!\\d)").find(normDigits(sms))?.value
 

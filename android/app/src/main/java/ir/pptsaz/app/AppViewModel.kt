@@ -7,6 +7,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -79,6 +80,12 @@ sealed interface Share {
 
 private const val MAX_SOURCE_CHARS = 100_000
 
+/** حداکثر مدتی که اپ در حالت باز، وضعیت ساخت را (حتی با قطعی اینترنت) پیگیری می‌کند؛ هم‌اندازه‌ی JobWatcher پس‌زمینه (≈ ۲۰ دقیقه). */
+private const val MAX_WATCH_MS = 20L * 60 * 1000
+
+/** حداقل فاصله‌ی دو بار «تازه‌کردن حساب» هنگام برگشت به اپ (ثانیه‌های کم بین باز و بسته‌شدن‌های پشت‌سرهم درخواست اضافه نمی‌سازد). */
+private const val RESUME_REFRESH_MS = 15_000L
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
@@ -89,6 +96,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var pollJob: Job? = null
 
     private var pendingShare: Share? = null
+
+    /**
+     * فرم «ساخت» اینجا نگه داشته می‌شود تا با چرخش صفحه و تغییر تنظیمات سیستم بماند و متن منبعِ بلند (تا ۱۰۰ هزار نویسه)
+     * وارد Bundle ذخیره‌ی وضعیت Activity نشود؛ برای بسته‌شدن پردازش، همان پیش‌نویس روی گوشی (Draft) است.
+     */
+    val form: CreateForm = Draft.load(app)
+
+    private var lastMeRefresh = 0L
+
+    /** کاربر برای پرداخت/لینک بیرونی از اپ رفته؛ با برگشتن، بدون توجه به فاصله‌ی زمانی حساب (اعتبار/پلن) تازه می‌شود. */
+    private var refreshOnNextResume = false
 
     // وقتی اینترنت برگشت: صفحه‌ی خطا یا فهرست فایل‌های ناموفق خودکار دوباره امتحان می‌شود
     private val netCallback = object : ConnectivityManager.NetworkCallback() {
@@ -142,6 +160,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     _state.update { it.copy(config = cfg, me = null, screen = Screen.Login, error = null) }
                 } else {
                     _state.update { it.copy(config = cfg, me = me, screen = Screen.Main, error = null) }
+                    lastMeRefresh = SystemClock.elapsedRealtime() // اولین onResume بعد از شروع، درخواست تکراری نمی‌فرستد
                     if (me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.")
                     loadFiles()
                     if (me.activeJob != null && _state.value.job == null) watch(me.activeJob)
@@ -154,8 +173,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** وقتی کاربر از مرورگر (بعد از پرداخت) برمی‌گردد اعتبار را به‌روز می‌کند. */
-    fun onResume() {
+    fun onResume(force: Boolean = false) {
         if (_state.value.screen != Screen.Main) return
+        val now = SystemClock.elapsedRealtime()
+        val must = force || refreshOnNextResume
+        refreshOnNextResume = false
+        if (!must && now - lastMeRefresh < RESUME_REFRESH_MS) return
+        lastMeRefresh = now
         viewModelScope.launch {
             try {
                 Api.me()?.let { me -> _state.update { it.copy(me = me) } }
@@ -221,6 +245,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             Api.logout()
             Draft.clear(getApplication())
             FileCache.clear(getApplication())
+            form.reset()
             _state.update { UiState(screen = Screen.Login, config = it.config) }
         }
     }
@@ -255,6 +280,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(job = JobState(id, "در صف ساخت…")) }
         pollJob = viewModelScope.launch {
             var fails = 0
+            val startedAt = SystemClock.elapsedRealtime()
             while (true) {
                 try {
                     val j = Api.job(id)
@@ -273,7 +299,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 )
                             }
                             loadFiles()
-                            onResume()
+                            onResume(force = true) // اعتبار مصرف‌شده یا برگشت‌خورده فوراً به‌روز شود
                             val app = getApplication<Application>()
                             JobWatcher.cancel(app, id)
                             Notifier.cancelProgress(app, id)
@@ -302,12 +328,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         return@launch
                     }
                     fails++
-                    if (fails > 20) {
-                        _state.update { it.copy(job = JobState(id, e.message ?: "قطع ارتباط", failed = true)) }
+                    // قطعی اینترنت یا خطای موقت سرور، ساخت را متوقف نمی‌کند (کار در سرور ادامه دارد و اعتبارش کم شده است)؛
+                    // پس به‌جای «ناموفق» نشان دادن، با فاصله‌ی بیشتر دوباره می‌پرسیم تا وقتی اینترنت برگردد.
+                    if (SystemClock.elapsedRealtime() - startedAt > MAX_WATCH_MS) {
+                        _state.update {
+                            it.copy(job = JobState(id, "ارتباط با سرور برقرار نشد. ارائه ممکن است ساخته شده باشد؛ چند دقیقه بعد تب «فایل‌ها» را بررسی کنید.", failed = true))
+                        }
                         return@launch
                     }
+                    if (fails >= 3) _state.update { it.copy(job = JobState(id, "اتصال قطع شد؛ ساخت ادامه دارد و دوباره تلاش می‌کنیم…")) }
                 }
-                delay(3000)
+                delay(if (fails >= 3) 8000 else 3000)
             }
         }
     }
@@ -349,7 +380,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             toast("در حال دانلود…")
             try {
-                val r = Api.downloadFile(getApplication(), fileId)
+                // فایلی که در فهرست سرور هست حتماً وجود دارد؛ فقط فایلِ تازه‌ساخته (هنوز در فهرست نیامده) ممکن است چند ثانیه 404 بدهد
+                val listed = _state.value.files.any { it.id == fileId }
+                val r = Api.downloadFile(getApplication(), fileId, maxRetries = if (listed) 2 else 20)
                 _events.trySend(Event.FileReady(r, share))
             } catch (e: ApiException) {
                 toast(e.message ?: "دانلود انجام نشد")
@@ -467,11 +500,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     lastError = "خواندن فایل انجام نشد"
                 }
             }
-            val text = parts.joinToString("\n\n").take(MAX_SOURCE_CHARS)
+            val full = parts.joinToString("\n\n")
+            val text = full.take(MAX_SOURCE_CHARS)
+            val truncated = full.length > MAX_SOURCE_CHARS
             _state.update { it.copy(extractBusy = null, extractedText = text.ifEmpty { null }) }
             when {
                 parts.isEmpty() -> toast(lastError.ifEmpty { "خواندن فایل انجام نشد" })
                 failed > 0 -> toast("متن " + parts.size.fa() + " فایل اضافه شد؛ " + failed.fa() + " فایل خوانده نشد. " + lastError)
+                truncated -> toast("متن فایل خیلی بلند بود؛ فقط " + MAX_SOURCE_CHARS.fa() + " نویسه‌ی اول به منبع اضافه شد")
                 else -> toast(if (parts.size > 1) "متن فایل‌ها به منبع اضافه شد" else "متن فایل به منبع اضافه شد")
             }
         }
@@ -539,12 +575,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         else -> s
     }
 
+    /** تنظیم را بلافاصله در صفحه اعمال می‌کند (بدون انتظار برای شبکه)؛ اگر سرور نپذیرفت به مقدار قبلی برمی‌گردد. */
     fun setSetting(key: String, value: Any) {
+        val before = _state.value.me?.settings ?: return
+        _state.update { st -> st.copy(me = st.me?.let { m -> m.copy(settings = applySetting(m.settings, key, value)) }) }
         viewModelScope.launch {
             try {
                 Api.putSetting(key, value)
-                _state.update { st -> st.copy(me = st.me?.let { m -> m.copy(settings = applySetting(m.settings, key, value)) }) }
             } catch (e: ApiException) {
+                // فقط همان کلید را برمی‌گردانیم؛ اگر کاربر در این فاصله تنظیم دیگری را عوض کرده، دست نمی‌خورد
+                val old: Any = when (key) {
+                    "theme" -> before.theme
+                    "template" -> before.template
+                    "tone" -> before.tone
+                    "font" -> before.font
+                    "model" -> before.model
+                    "mode" -> before.mode
+                    "slides" -> before.slides
+                    "images" -> before.images
+                    "digits" -> before.digits
+                    "sources" -> before.sources
+                    "questions" -> before.questions
+                    else -> value
+                }
+                _state.update { st -> st.copy(me = st.me?.let { m -> m.copy(settings = applySetting(m.settings, key, old)) }) }
                 toast(e.message ?: "")
             }
         }
@@ -571,6 +625,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 Api.telegramVerify(normDigits(code))
                 reloadMe()
+                loadFiles() // ارائه‌های ربات هم به فهرست فایل‌ها می‌آید
                 toast("تلگرام به حساب وصل شد ✓")
                 onDone(true)
             } catch (e: ApiException) {
@@ -581,6 +636,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openUrl(url: String) {
+        refreshOnNextResume = true
         _events.trySend(Event.OpenUrl(url))
     }
 
@@ -649,7 +705,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             try {
-                _events.trySend(Event.OpenUrl(Api.startPayment(planId)))
+                val url = Api.startPayment(planId)
+                refreshOnNextResume = true
+                _events.trySend(Event.OpenUrl(url))
             } catch (e: ApiException) {
                 toast(e.message ?: "")
             }
@@ -657,6 +715,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openSite() {
+        refreshOnNextResume = true
         _events.trySend(Event.OpenUrl(Api.BASE))
     }
 }
