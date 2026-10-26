@@ -60,6 +60,19 @@ class BazaarBilling(
 
     private fun skuOf(json: String): String? = try { JSONObject(json).optString("productId").ifEmpty { null } } catch (_: Exception) { null }
 
+    /** نسخه‌های مختلف کتابخانه اسم متد آزادسازی را فرق می‌دهند (dispose یا disposeWhenFinished)؛ هرکدام بود صدا زده می‌شود. */
+    private fun release(h: IabHelper) {
+        for (name in arrayOf("disposeWhenFinished", "dispose")) {
+            try {
+                h.javaClass.getMethod(name).invoke(h)
+                return
+            } catch (_: NoSuchMethodException) {
+            } catch (_: Exception) {
+                return
+            }
+        }
+    }
+
     fun connect() {
         if (helper != null) return
         try {
@@ -70,7 +83,7 @@ class BazaarBilling(
                 if (helper == null) return@OnIabSetupFinishedListener
                 ready = r.isSuccess
                 if (!ready) {
-                    try { h.disposeWhenFinished() } catch (_: Exception) {}
+                    release(h)
                     helper = null
                 }
                 onReady(ready)
@@ -83,7 +96,7 @@ class BazaarBilling(
     }
 
     fun disconnect() {
-        try { helper?.disposeWhenFinished() } catch (_: Exception) {}
+        helper?.let { release(it) }
         helper = null
         ready = false
         queue.clear()
@@ -165,7 +178,7 @@ class BazaarBilling(
             } else {
                 try {
                     h.queryInventoryAsync(
-                        false, null, null,
+                        false,
                         IabHelper.QueryInventoryFinishedListener { r, inv ->
                             val out = ArrayList<Pair<String, String>>()
                             if (helper != null && r.isSuccess && inv != null) {
