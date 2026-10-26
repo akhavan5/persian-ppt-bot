@@ -100,7 +100,7 @@ nav button.on{color:var(--btn);font-weight:700}
         <div class="ex" id="examples"></div>
 
         <div id="upBox" style="margin-top:12px">
-          <input type="file" id="file" hidden accept=".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg">
+          <input type="file" id="file" hidden multiple accept=".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg">
           <div class="row" id="upBtns" style="justify-content:flex-start;flex-wrap:wrap">
             <button class="btn ghost sm" id="pick" type="button">📎 آپلود فایل (اختیاری)</button>
             <button class="btn ghost sm" id="linkBtn" type="button" hidden>🔗 افزودن لینک</button>
@@ -111,7 +111,7 @@ nav button.on{color:var(--btn);font-weight:700}
             <button class="btn ghost sm" id="linkCancel" type="button">انصراف</button>
           </div>
           <span class="src" id="upChip" hidden><span id="upName"></span><button id="upDel" type="button" aria-label="حذف">✕</button></span>
-          <div class="muted" id="upHint" style="margin-top:6px">Word، PDF، PowerPoint، Excel، متن یا عکس؛ ارائه از روی محتوای فایل ساخته می‌شود.</div>
+          <div class="muted" id="upHint" style="margin-top:6px">Word، PDF، PowerPoint، Excel، متن یا عکس؛ چند عکس (مثلاً صفحه‌های یک جزوه، تا ۱۰ عدد) را یک‌جا انتخاب کن تا یک ارائه از همه‌ی آن‌ها ساخته شود.</div>
           <div class="err" id="upMsg" hidden></div>
         </div>
 
@@ -333,7 +333,8 @@ function renderMake() {
 // ---------- منبع: فایل یا لینک (همان مسیر نسخه‌ی وب) ----------
 const EXAMPLES = ["هوش مصنوعی در آموزش", "مدیریت زمان برای دانشجویان", "انرژی‌های تجدیدپذیر در ایران", "اصول طراحی تجربه‌ی کاربری"];
 const MAX_FILE = 24 * 1024 * 1024, MAX_SRC = 120000, IMG_MAX = 4000000, OCR_WAIT = 6 * 60 * 1000;
-let extracting = false, upSeq = 0;
+let extracting = false, upSeq = 0, upPrefix = "";
+const MAX_ALBUM = 10;
 const HINT = $("#upHint").textContent;
 const upMsg = (t) => { $("#upMsg").textContent = t || ""; show($("#upMsg"), !!t); };
 const tidy = (t) => t.replace(/\u0000/g, "").replace(/[ \t\u00A0]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -397,7 +398,7 @@ async function serverExtract(blob, my) {
   if (!r.ok) throw new Error((d && d.error) || "خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.");
   if (d && typeof d.text === "string") return d.text;
   if (!d || !d.jobId) throw new Error("خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.");
-  $("#upHint").textContent = "⏳ در حال خواندن فایل… (PDF اسکن‌شده ممکن است تا چند دقیقه طول بکشد)";
+  $("#upHint").textContent = upPrefix + "⏳ در حال خواندن فایل… (اسکن ممکن است تا چند دقیقه طول بکشد)";
   const end = Date.now() + OCR_WAIT; let fails = 0;
   while (Date.now() < end) {
     await sleep(2000);
@@ -459,7 +460,36 @@ async function onFile(file) {
   } finally { if (my === upSeq) { extracting = false; $("#pick").disabled = false; } $("#file").value = ""; }
 }
 $("#pick").onclick = () => $("#file").click();
-$("#file").onchange = (e) => onFile(e.target.files[0]);
+const IMG_EXT = ["png", "jpg", "jpeg"];
+const extOf = (f) => (f.name.split(".").pop() || "").toLowerCase();
+// آلبوم: چند عکس با هم خوانده و پشت‌سرهم به یک متن تبدیل می‌شود؛ فقط «یک» ارائه ساخته می‌شود (مثل آلبوم ربات)
+async function onFiles(files) {
+  if (files.length === 1) return onFile(files[0]);
+  if (!files.length) return;
+  upMsg(""); show($("#linkRow"), false);
+  if (files.length > MAX_ALBUM) { upMsg(`حداکثر ${fa(MAX_ALBUM)} عکس را می‌توانی یک‌جا بدهی.`); $("#file").value = ""; return; }
+  if (!files.every((f) => IMG_EXT.includes(extOf(f)))) { upMsg("انتخاب چند فایل فقط برای عکس‌ها (PNG/JPG) ممکن است؛ فایل‌های دیگر را یکی‌یکی بده."); $("#file").value = ""; return; }
+  if (files.some((f) => f.size > MAX_FILE)) { upMsg("حجم هر فایل حداکثر ۲۴ مگابایت می‌تواند باشد."); $("#file").value = ""; return; }
+  const my = ++upSeq; extracting = true; $("#pick").disabled = true;
+  const parts = [];
+  try {
+    for (const [i, f] of files.entries()) {
+      upPrefix = `عکس ${fa(i + 1)} از ${fa(files.length)} · `;
+      $("#upHint").textContent = upPrefix + "⏳ در حال خواندن…";
+      let t;
+      try { t = tidy(await readImage(f, extOf(f), my)); }
+      catch (e) { if (my !== upSeq) return; throw new Error(`عکس ${fa(i + 1)} (${f.name}): ${e.message}`); }
+      if (my !== upSeq) return;
+      if (t.length >= 10) parts.push(t);
+    }
+    const raw = parts.join("\n\n");
+    if (raw.length < 30) throw new Error("متنی در عکس‌ها پیدا نشد؛ عکس‌های واضح‌تر امتحان کن.");
+    setSource(raw, `${fa(files.length)} عکس`, "ارائه از روی محتوای همه‌ی عکس‌ها ساخته می‌شود.");
+  } catch (e) {
+    if (my === upSeq) { upMsg(e.message || "خواندن عکس‌ها ناموفق بود."); $("#upHint").textContent = HINT; }
+  } finally { upPrefix = ""; if (my === upSeq) { extracting = false; $("#pick").disabled = false; } $("#file").value = ""; }
+}
+$("#file").onchange = (e) => onFiles([...e.target.files]);
 $("#upDel").onclick = clearSource;
 $("#linkBtn").onclick = () => { if (extracting || srcText) return; upMsg(""); show($("#linkRow"), true); $("#linkUrl").focus(); };
 $("#linkCancel").onclick = () => { show($("#linkRow"), false); upMsg(""); };
