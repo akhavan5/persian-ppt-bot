@@ -1,10 +1,15 @@
 package ir.pptsaz.app
 
+import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -25,10 +30,60 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
     private lateinit var billing: BazaarBilling
+    private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** اجازه‌ی اعلان (اندروید ۱۳+) فقط یک بار و درست بعد از اولین ساخت ارائه پرسیده می‌شود. */
+    private fun askNotifications() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        val p = getSharedPreferences("prefs", MODE_PRIVATE)
+        if (p.getBoolean("asked_notif", false)) return
+        p.edit().putBoolean("asked_notif", true).apply()
+        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    /** اشتراک‌گذاری از برنامه‌های دیگر (ACTION_SEND) و باز شدن از روی اعلان (tab). */
+    private fun handleIntent(i: Intent?) {
+        if (i == null) return
+        val tab = i.getIntExtra("tab", -1)
+        if (tab in 0..3) {
+            vm.setTab(tab)
+            i.removeExtra("tab")
+        }
+        if (i.action == Intent.ACTION_SEND) {
+            if (i.type == "text/plain") {
+                val t = i.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+                if (t.isNotEmpty()) vm.onShare(Share.TextShare(t))
+            } else {
+                @Suppress("DEPRECATION")
+                val uri = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else i.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                if (uri != null) vm.onShare(Share.FileShare(uri))
+            }
+            i.action = null // با چرخش صفحه دوباره پردازش نشود
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AppForeground.count++
+    }
+
+    override fun onStop() {
+        AppForeground.count = (AppForeground.count - 1).coerceAtLeast(0)
+        super.onStop()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) handleIntent(intent)
         billing = BazaarBilling(this) { ok -> vm.setBazaarReady(ok) }
         billing.connect()
         setContent {
@@ -48,6 +103,7 @@ class MainActivity : ComponentActivity() {
                         vm.events.collect { e ->
                             when (e) {
                                 is Event.Toast -> say(e.msg)
+                                Event.AskNotify -> askNotifications()
                                 is Event.BazaarBuy -> billing.purchase(
                                     sku = e.sku,
                                     onPurchase = { sku, token ->

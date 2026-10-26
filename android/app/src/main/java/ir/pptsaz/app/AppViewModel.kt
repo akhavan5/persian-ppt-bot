@@ -1,6 +1,10 @@
 package ir.pptsaz.app
 
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -49,6 +53,7 @@ data class UiState(
     val viewer: Viewer? = null,
     val bazaarReady: Boolean = false,
     val updateDialog: Boolean = false,
+    val filesError: Boolean = false, // آخرین بارگیری فهرست فایل‌ها به خاطر شبکه ناموفق بود (فهرست ذخیره‌شده نمایش داده می‌شود)
 )
 
 sealed interface Event {
@@ -56,6 +61,13 @@ sealed interface Event {
     data class OpenUrl(val url: String) : Event
     data class OpenFile(val uri: Uri, val mime: String, val name: String) : Event
     data class BazaarBuy(val sku: String) : Event
+    data object AskNotify : Event
+}
+
+/** چیزی که برنامه‌ی دیگری از «اشتراک‌گذاری» به اپ فرستاده */
+sealed interface Share {
+    data class FileShare(val uri: Uri) : Share
+    data class TextShare(val text: String) : Share
 }
 
 private const val MAX_SOURCE_CHARS = 100_000
@@ -69,10 +81,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private var pollJob: Job? = null
 
+    private var pendingShare: Share? = null
+
+    // وقتی اینترنت برگشت: صفحه‌ی خطا یا فهرست فایل‌های ناموفق خودکار دوباره امتحان می‌شود
+    private val netCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            viewModelScope.launch {
+                val s = _state.value
+                if (s.screen == Screen.Error) refresh()
+                else if (s.screen == Screen.Main && s.filesError) loadFiles()
+            }
+        }
+    }
+
     init {
         Api.init(app)
+        _state.update { it.copy(files = FileCache.load(app)) }
         viewModelScope.launch { CrashReporter.sendPending(app) }
+        try {
+            app.getSystemService(ConnectivityManager::class.java)?.registerNetworkCallback(
+                NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), netCallback,
+            )
+        } catch (_: Exception) {
+        }
         refresh()
+    }
+
+    override fun onCleared() {
+        try { getApplication<Application>().getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(netCallback) } catch (_: Exception) {}
+        super.onCleared()
     }
 
     fun toast(msg: String) {
@@ -98,6 +135,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.")
                     loadFiles()
                     if (me.activeJob != null && _state.value.job == null) watch(me.activeJob)
+                    flushShare()
                 }
             } catch (e: ApiException) {
                 if (_state.value.screen == Screen.Main) toast(e.message ?: "") else
@@ -152,6 +190,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             pollJob?.cancel()
             Api.logout()
+            Draft.clear(getApplication())
+            FileCache.clear(getApplication())
             _state.update { UiState(screen = Screen.Login, config = it.config) }
         }
     }
@@ -168,7 +208,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, images)
                 _state.update { it.copy(busy = false) }
-                if (id.isEmpty()) toast("شروع ساخت انجام نشد") else watch(id)
+                if (id.isEmpty()) toast("شروع ساخت انجام نشد") else {
+                    watch(id)
+                    JobWatcher.schedule(getApplication(), id) // اگر اپ بسته شد، با اعلان خبر می‌دهیم
+                    _events.trySend(Event.AskNotify)
+                }
             } catch (e: ApiException) {
                 _state.update { it.copy(busy = false) }
                 toast(e.message ?: "")
@@ -201,10 +245,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             }
                             loadFiles()
                             onResume()
+                            val app = getApplication<Application>()
+                            JobWatcher.cancel(app, id)
+                            if (!AppForeground.on) Notifier.done(app, id, j.optString("title"))
                             return@launch
                         }
                         "error" -> {
                             _state.update { it.copy(job = JobState(id, j.optString("message", "ساخت ناموفق بود"), failed = true)) }
+                            val app = getApplication<Application>()
+                            JobWatcher.cancel(app, id)
+                            if (!AppForeground.on) Notifier.failed(app, id, j.optString("message"))
                             return@launch
                         }
                         else -> _state.update { it.copy(job = JobState(id, j.optString("message", "در حال ساخت…"))) }
@@ -237,10 +287,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(filesLoading = true) }
             try {
                 val list = Api.files()
-                _state.update { it.copy(files = list, filesLoading = false) }
+                FileCache.save(getApplication(), list)
+                _state.update { it.copy(files = list, filesLoading = false, filesError = false) }
             } catch (e: ApiException) {
-                _state.update { it.copy(filesLoading = false) }
-                if (e.status == 401) refresh()
+                if (e.status == 401) {
+                    _state.update { it.copy(filesLoading = false) }
+                    refresh()
+                } else {
+                    // خطای شبکه/سرور: فهرست قبلی (ذخیره‌شده) را نگه می‌داریم و دکمه‌ی تلاش دوباره نشان می‌دهیم
+                    _state.update { it.copy(filesLoading = false, filesError = true) }
+                }
             }
         }
     }
@@ -260,6 +316,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ------------------------------------------------------------ منبع: فایل و لینک
+
+    /** از MainActivity صدا زده می‌شود. اگر هنوز وارد نشده‌ایم، بعد از ورود اجرا می‌شود. */
+    fun onShare(share: Share) {
+        pendingShare = share
+        flushShare()
+    }
+
+    private fun flushShare() {
+        val sh = pendingShare ?: return
+        if (_state.value.screen != Screen.Main) return
+        pendingShare = null
+        _state.update { it.copy(tab = 0) }
+        when (sh) {
+            is Share.FileShare -> importFile(sh.uri)
+            is Share.TextShare -> {
+                val t = sh.text.trim()
+                if (Regex("^https?://\\S+$").matches(t)) importLink(t)
+                else {
+                    _state.update { it.copy(extractedText = t.take(MAX_SOURCE_CHARS)) }
+                    toast("متن به منبع اضافه شد")
+                }
+            }
+        }
+    }
 
     fun consumeExtracted() {
         _state.update { it.copy(extractedText = null) }

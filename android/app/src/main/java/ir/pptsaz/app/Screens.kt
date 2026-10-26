@@ -90,6 +90,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -357,7 +360,15 @@ private val NAV = listOf(
 @Composable
 fun MainScreen(st: UiState, vm: AppViewModel) {
     val me = st.me ?: return
-    val form = rememberSaveable(saver = CreateForm.Saver) { CreateForm() }
+    val ctx = LocalContext.current
+    val form = rememberSaveable(saver = CreateForm.Saver) { Draft.load(ctx) }
+    // ذخیره‌ی خودکار پیش‌نویس روی گوشی (با ۰٫۷ ثانیه تاخیر تا با هر حرف نوشته نشود)
+    LaunchedEffect(form) {
+        snapshotFlow { listOf<Any>(form.topic, form.source, form.handout, form.poster) }.collectLatest {
+            delay(700)
+            Draft.save(ctx, form)
+        }
+    }
     val cs = MaterialTheme.colorScheme
     Scaffold(
         containerColor = cs.background,
@@ -719,9 +730,27 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                 }
             },
         )
+        if (st.filesError && st.files.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)
+                    .background(cs.errorContainer, RoundedCornerShape(14.dp)).padding(start = 14.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("اتصال برقرار نشد؛ فهرست ذخیره‌شده را می‌بینید.", Modifier.weight(1f), color = cs.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { vm.loadFiles() }, enabled = !st.filesLoading) { Text("تلاش دوباره") }
+            }
+        }
         when {
             st.filesLoading && st.files.isEmpty() ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            st.files.isEmpty() && st.filesError ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EmptyState(
+                        AppIcons.Warning, "اتصال برقرار نشد",
+                        "اینترنت خود را بررسی کنید و دوباره تلاش کنید.",
+                        "تلاش دوباره", { vm.loadFiles() },
+                    )
+                }
             st.files.isEmpty() ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     EmptyState(

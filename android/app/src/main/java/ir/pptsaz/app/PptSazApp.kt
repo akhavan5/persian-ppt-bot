@@ -6,5 +6,6 @@ class PptSazApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashReporter.install(this)
+        Notifier.ensureChannel(this)
     }
 }
