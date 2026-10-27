@@ -549,7 +549,7 @@ address{font-style:normal}
       </div>
       <div class="ft-seal">
         <div class="t"><b>اعتماد و پرداخت امن</b><small>برای بررسی اعتبار، روی نمادها کلیک کن.</small></div>
-        <div class="seals"><div class="seal"><a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8023522&Code=1TrYIskseCN8cpO19zZ0yVlXOspM46Qc'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8023522&Code=1TrYIskseCN8cpO19zZ0yVlXOspM46Qc' alt='' style='cursor:pointer' code='1TrYIskseCN8cpO19zZ0yVlXOspM46Qc'></a></div><div class="seal seal-aq"><a onclick="window.open('https://panel.aqayepardakht.ir/trustGateway/104502',null,'width=400, height=600, scrollbars=no, resizable=no')" href="javascript:void(0)" referrerpolicy="strict-origin-when-cross-origin" title="پرداخت امن آقای پرداخت"><img style="border-radius: 0px;margin-right: 10px;" src="https://cdn.aqayepardakht.ir/trustlogo/1.svg" alt="پرداخت امن آقای پرداخت"></a></div></div>
+        <div class="seals"><div class="seal"><a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8023522&Code=1TrYIskseCN8cpO19zZ0yVlXOspM46Qc'><img loading='lazy' decoding='async' referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8023522&Code=1TrYIskseCN8cpO19zZ0yVlXOspM46Qc' alt='' style='cursor:pointer' code='1TrYIskseCN8cpO19zZ0yVlXOspM46Qc'></a></div><div class="seal seal-aq"><a onclick="window.open('https://panel.aqayepardakht.ir/trustGateway/104502',null,'width=400, height=600, scrollbars=no, resizable=no')" href="javascript:void(0)" referrerpolicy="strict-origin-when-cross-origin" title="پرداخت امن آقای پرداخت"><img style="border-radius: 0px;margin-right: 10px;" src="https://cdn.aqayepardakht.ir/trustlogo/1.svg" alt="پرداخت امن آقای پرداخت"></a></div></div>
       </div>
     </div>
     <div class="copy"><span>© پاورپوینت‌ساز فارسی (pptsaz.ir) — همه‌ی حقوق محفوظ است.</span><a href="#top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false">↑ بازگشت به بالا</a></div>
@@ -975,7 +975,9 @@ $("#mode").onchange = (e) => saveSetting({ mode: e.target.value });
 for (const k of ["digits", "sources", "questions"]) $("#" + k).onchange = (e) => saveSetting({ [k]: e.target.checked });
 
 // ---------- مدل‌های هوش مصنوعی (روی صفحه‌ی اصلی) ----------
-// لوگوی اختیاری: فایل /models/<brand>.svg را در public/models بگذار (qwen, deepseek, openai, zai)؛ بدون آن نشان رنگی با حرف اول نمایش داده می‌شود.
+// لوگوی اختیاری: فایل /models/<brand>.svg را در public/models بگذار و نام برند را به LOGO_FILES اضافه کن (مثلاً ["qwen", "openai"])؛
+// برای برندهایی که در این فهرست نیستند هیچ درخواستی به سرور زده نمی‌شود (جلوگیری از خطای 404 در کنسول) و نشان رنگی با حرف اول نمایش داده می‌شود.
+const LOGO_FILES = [];
 const BRANDS = {
   qwen: { label: "Qwen", c: ["#7c3aed", "#4f46e5"], g: "Q" },
   deepseek: { label: "DeepSeek", c: ["#2f6bff", "#1d3fbf"], g: "D" },
@@ -989,7 +991,7 @@ const BRANDS = {
 function modelLogo(brand) {
   const b = BRANDS[brand] || BRANDS.other;
   const el = h("span", { class: "logo", style: `background:linear-gradient(135deg,${b.c[0]},${b.c[1]})`, "aria-hidden": "true" }, b.g);
-  if (BRANDS[brand]) el.append(h("img", { src: `/models/${brand}.svg`, alt: "", onerror: (e) => e.target.remove() }));
+  if (LOGO_FILES.includes(brand)) el.append(h("img", { src: `/models/${brand}.svg`, alt: "", onerror: (e) => e.target.remove() }));
   return el;
 }
 function renderModels() {
