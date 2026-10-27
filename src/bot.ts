@@ -93,7 +93,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
     opts = FONTS.map((f) => ({ text: mark(s.font === f, f), callback_data: `v:font:${f}` }));
   } else if (kind === "model") {
     title = "🤖 مدل هوش مصنوعی";
-    opts = modelList(env).map((m, i) => ({ text: lock(!!m.extra && !caps.premium, mark(s.model === m.id, m.name)), callback_data: `v:model:${i}` }));
+    opts = modelList(env).map((m, i) => ({ text: lock(!m.free && !caps.premium, mark(s.model === m.id, m.name)), callback_data: `v:model:${i}` }));
   } else {
     title = `📄 تعداد اسلاید پیش‌فرض\n<i>سقف حساب تو: ${toFa(String(caps.maxSlides))} اسلاید. گزینه‌های 🔒 با پلن پلاس/پرو باز می‌شوند. در متن پیام هم می‌توانی بنویسی «۱۲ اسلاید».</i>`;
     opts = WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(s.slides === n, toFa(String(n)))), callback_data: `v:slides:${n}` }));
@@ -136,7 +136,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   let ask = "", opts: Btn[][] = [];
   if (p.step === "model") {
     ask = "🤖 <b>مدل هوش مصنوعی</b> را انتخاب کن:";
-    opts = chunk(models.map((m, i) => ({ text: lock(!!m.extra && !caps.premium, mark(p.model === m.id, m.name)), callback_data: `p:model:${i}` })), 2);
+    opts = chunk(models.map((m, i) => ({ text: lock(!m.free && !caps.premium, mark(p.model === m.id, m.name)), callback_data: `p:model:${i}` })), 2);
   } else if (p.step === "slides") {
     ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (MODES[p.mode ?? s.mode].minSlides ? `\n<i>${MODES[p.mode ?? s.mode].emoji} حالت ${MODES[p.mode ?? s.mode].name} حداقل ${toFa(String(MODES[p.mode ?? s.mode].minSlides))} اسلاید می‌سازد.</i>` : "");
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
@@ -258,7 +258,7 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
   if (a === "model") {
     const m = modelList(env)[Number(b)];
     if (!m) return await answer();
-    if (m.extra && !caps.premium) return await answer(EXTRA_MODEL_MSG, true);
+    if (!m.free && !caps.premium) return await answer(EXTRA_MODEL_MSG, true);
     p.model = m.id; s.model = m.id;
   } else if (a === "slides") {
     if (!(Number(b) >= 3)) return await answer();
@@ -395,7 +395,7 @@ async function handleCallback(env: Env, cq: any) {
     if (a === "imgs" && Number.isInteger(Number(b)) && Number(b) >= 0) s.images = Number(b) > 0; // دکمه‌های قدیمی
     if (a === "model") {
       const m = modelList(env)[Number(b)];
-      if (m?.extra && !caps.premium) return await alertLimit(EXTRA_MODEL_MSG);
+      if (m && !m.free && !caps.premium) return await alertLimit(EXTRA_MODEL_MSG);
       if (m) s.model = m.id;
     }
     await saveSettings(env, uid, s);

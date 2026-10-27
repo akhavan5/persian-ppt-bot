@@ -21,7 +21,7 @@ const SYSTEM =
   "Return ONLY one valid JSON object, no markdown fences, no commentary.";
 
 /** مدل‌هایی که پیش‌فرض «فکر» می‌کنند و باید برای خروجی JSON خاموش شوند */
-const THINKERS = /qwen3|qwen-3|glm|gemma-?4/i;
+const THINKERS = /qwen3|qwen-3|glm|gemma-?4|nemotron/i;
 /** مدل‌هایی که فکر کردنشان خاموش نمی‌شود (فقط توکن بیشتر می‌خواهند): DeepSeek-R1 با تگ <think>، gpt-oss با reasoning_effort */
 const ALWAYS_THINK = /deepseek-r1|deepseek-reasoner|deepseek-v[4-9]|gpt-oss|\bo\d/i;
 /** مدل‌هایی که فکر کردنشان با پارامتر reasoning (سبک OpenRouter) کم می‌شود؛ اگر سرویس نپذیرد (۴۰۰) حذف و دوباره تلاش می‌شود */
@@ -34,7 +34,15 @@ function useOpenAI(env: Env): boolean {
   return p === "openai" || (!!env.OPENAI_API_KEY && p !== "anthropic");
 }
 
-export interface ModelOption { id: string; name: string; model: string; brand: string; /** مدل ارائه‌دهنده‌ی دوم (EXTRA_LLM_*)، نه کلودفلر */ extra?: boolean }
+export interface ModelOption {
+  id: string; name: string; model: string; brand: string;
+  /** مدل ارائه‌دهنده‌ی دیگر (EXTRA_LLM_* یا CUSTOM_LLM_MODELS)، نه کلودفلر؛ با base و key خودش مستقیم صدا زده می‌شود */
+  extra?: boolean;
+  /** آدرس و کلید همین مدل (فقط وقتی extra است) */
+  base?: string; key?: string;
+  /** برای کاربران رایگان هم باز است؟ مدل‌های کلودفلر همیشه true؛ مدل‌های EXTRA_LLM_* همیشه false (فقط پلن)؛ مدل‌های CUSTOM_LLM_MODELS فقط اگر «free: true» داشته باشند */
+  free: boolean;
+}
 /** برند مدل (برای نمایش لوگو در وب)؛ از روی نام مدل تشخیص داده می‌شود. ترتیب مهم است: «deepseek-…-qwen» باید deepseek حساب شود. */
 export function brandOf(id: string): string {
   if (/deepseek/i.test(id)) return "deepseek";
@@ -44,6 +52,7 @@ export function brandOf(id: string): string {
   if (/claude|anthropic/i.test(id)) return "anthropic";
   if (/gemma|gemini|google/i.test(id)) return "google";
   if (/mistral|mixtral|codestral|ministral/i.test(id)) return "mistral";
+  if (/nvidia|nemotron/i.test(id)) return "nvidia";
   return "other";
 }
 const shortName = (id: string) => id.split("/").pop() || id;
@@ -60,11 +69,17 @@ function parseModels(raw: string, add: (model: unknown, name?: unknown) => void)
 }
 /** آیا ارائه‌دهنده‌ی دوم (فقط متنی) کامل تنظیم شده است؟ */
 const extraReady = (env: Env) => !!(env.EXTRA_LLM_BASE_URL?.trim() && env.EXTRA_LLM_API_KEY?.trim() && env.EXTRA_LLM_MODELS?.trim());
+/** مدل‌های JSON مستقل (CUSTOM_LLM_MODELS) */
+const truthy = (v: unknown) => v === true || v === 1 || /^(true|1|yes)$/i.test(String(v ?? "").trim());
 /**
  * فهرست مدل‌های قابل انتخاب. متغیر OPENAI_MODELS (در کلودفلر) یکی از این دو شکل را می‌پذیرد:
  *   ۱) متن ساده: هر مدل با کاما یا خط جدید جدا شود؛ نام نمایشی اختیاری با «|»:   gpt-4o-mini|سریع, gpt-4o|دقیق
  *   ۲) JSON: ["gpt-4o-mini", {"model":"gpt-4o","name":"دقیق"}]
- * مدل‌های EXTRA_LLM_MODELS (ارائه‌دهنده‌ی دوم، فقط متنی) «قبل از» مدل‌های کلودفلر قرار می‌گیرند؛ پس مدل اول فهرست (پیش‌فرض/رایگان) از همین‌ها می‌آید.
+ * مدل‌های EXTRA_LLM_MODELS (ارائه‌دهنده‌ی دوم، فقط متنی؛ فقط پلن/مدیر) «قبل از» مدل‌های کلودفلر قرار می‌گیرند؛ روال قبلی بدون تغییر.
+ * مدل‌های CUSTOM_LLM_MODELS (JSON، یک شیء برای هر مدل، هرکدام با آدرس و کلید خودش) بعد از آن‌ها می‌آیند:
+ *   CUSTOM_LLM_MODELS=[{"model":"nvidia/nemotron-3-ultra-550b-a55b:free","base":"https://ai.chabokan.net/v1","key":"sk-...","free":true,"name":"Nemotron 3 Ultra"}]
+ *   free: true ⇒ برای کاربران رایگان هم باز است (پیش‌فرض false)؛ name اختیاری است؛ شیء بدون model/base/key نادیده گرفته می‌شود.
+ *   مدل پیش‌فرض رایگان همچنان اولین مدل کلودفلر است (freeModelId).
  * اگر OPENAI_MODELS خالی باشد، از OPENAI_MODEL (و OPENAI_MODEL_2) استفاده می‌شود.
  */
 export function modelList(env: Env): ModelOption[] {
@@ -72,9 +87,22 @@ export function modelList(env: Env): ModelOption[] {
   const out: ModelOption[] = [];
   const adder = (extra: boolean) => (model: unknown, name?: unknown) => {
     const m = String(model ?? "").trim();
-    if (m && !out.some((o) => o.id === m)) out.push({ id: m, name: String(name ?? "").trim() || shortName(m), model: m, brand: brandOf(m), ...(extra ? { extra: true } : {}) });
+    if (m && !out.some((o) => o.id === m)) {
+      const o: ModelOption = { id: m, name: String(name ?? "").trim() || shortName(m), model: m, brand: brandOf(m), free: !extra };
+      if (extra) { o.extra = true; o.base = (env.EXTRA_LLM_BASE_URL ?? "").trim().replace(/\/+$/, ""); o.key = (env.EXTRA_LLM_API_KEY ?? "").trim(); }
+      out.push(o);
+    }
   };
-  if (extraReady(env)) parseModels(env.EXTRA_LLM_MODELS ?? "", adder(true)); // اول: ارائه‌دهنده‌ی دوم
+  if (extraReady(env)) parseModels(env.EXTRA_LLM_MODELS ?? "", adder(true)); // اول: ارائه‌دهنده‌ی دوم (روال قبلی)
+  // مدل‌های JSON مستقل: هرکدام با base/key/free خودش
+  try {
+    const raw = (env.CUSTOM_LLM_MODELS ?? "").trim();
+    for (const x of raw.startsWith("[") ? JSON.parse(raw) : []) {
+      const m = String(x?.model ?? "").trim(), base = String(x?.base ?? "").trim().replace(/\/+$/, ""), key = String(x?.key ?? "").trim();
+      if (!m || !base || !key || out.some((o) => o.id === m)) continue;
+      out.push({ id: m, name: String(x?.name ?? "").trim() || shortName(m), model: m, brand: brandOf(m), extra: true, base, key, free: truthy(x?.free) });
+    }
+  } catch { /* JSON نامعتبر: نادیده گرفته می‌شود */ }
   const add = adder(false);
   parseModels(env.OPENAI_MODELS ?? "", add);
   if (!out.some((o) => !o.extra)) { add(env.OPENAI_MODEL || "gpt-4o-mini"); add(env.OPENAI_MODEL_2); }
@@ -112,15 +140,13 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     if (REASONING_LOW.test(String(body.model))) body.reasoning = { effort: "low" };
     if (CLAUDE.test(String(body.model))) body.thinking = { type: "disabled" }; // برای JSON لازم نیست؛ اگر گیت‌وی نپذیرد (۴۰۰) پایین‌تر حذف و دوباره تلاش می‌شود
     const picked = resolveModel(env, modelId);
-    // مدل ارائه‌دهنده‌ی دوم: مستقیم به گیت‌وی و کلید خودش (بدون چرخش حساب‌های کلودفلر)
-    const extraBase = (env.EXTRA_LLM_BASE_URL ?? "").trim().replace(/\/+$/, "");
-    const extraKey = (env.EXTRA_LLM_API_KEY ?? "").trim();
+    // مدل ارائه‌دهنده‌ی دیگر: مستقیم به آدرس و کلید خودش (بدون چرخش حساب‌های کلودفلر)
     // OPENAI_API_KEY می‌تواند فهرستی از حساب‌ها باشد: از آخرین حساب سالم شروع می‌شود و با ۴۲۹ (سقف نورون) به حساب بعدی می‌رود
     const call = async () => {
       if (picked.extra) {
-        return fetch(`${extraBase}/chat/completions`, {
+        return fetch(`${picked.base}/chat/completions`, {
           method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${extraKey}` },
+          headers: { "content-type": "application/json", authorization: `Bearer ${picked.key}` },
           body: JSON.stringify(body), signal: AbortSignal.timeout(180_000),
         });
       }
@@ -223,11 +249,9 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
   if (/gpt-oss/i.test(picked.model)) body.reasoning_effort = "low";
   if (REASONING_LOW.test(picked.model)) body.reasoning = { effort: "low" };
   if (CLAUDE.test(picked.model)) body.thinking = { type: "disabled" };
-  const extraBase = (env.EXTRA_LLM_BASE_URL ?? "").trim().replace(/\/+$/, "");
-  const extraKey = (env.EXTRA_LLM_API_KEY ?? "").trim();
   const call = async () => {
     if (picked.extra) {
-      return fetch(`${extraBase}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${extraKey}` }, body: JSON.stringify(body), signal });
+      return fetch(`${picked.base}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${picked.key}` }, body: JSON.stringify(body), signal });
     }
     return fetchWithAccounts(env, (a) => fetch(`${a.base}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${a.token}` }, body: JSON.stringify(body), signal }));
   };

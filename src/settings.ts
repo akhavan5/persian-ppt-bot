@@ -44,8 +44,9 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   s.questions = !!s.questions;
   const models = modelList(env);
   s.model = models.some((m) => m.id === s.model) ? s.model : models[0].id;
-  // مدل‌های ارائه‌دهنده‌ی دوم (EXTRA_LLM_*) فقط برای مدیر و دارندگان پلن فعال؛ بقیه به مدل رایگان برمی‌گردند
-  if (models.find((m) => m.id === s.model)?.extra && !(await hasPlanAccess(env, userId))) s.model = freeModelId(env);
+  // مدل‌هایی که پرچم free ندارند (ارائه‌دهنده‌ی دیگر، EXTRA_LLM_MODELS) فقط برای مدیر و دارندگان پلن فعال؛ بقیه به مدل رایگان برمی‌گردند
+  const cur = models.find((m) => m.id === s.model);
+  if (cur && !cur.free && !(await hasPlanAccess(env, userId))) s.model = freeModelId(env);
   return s;
 }
 
@@ -130,18 +131,18 @@ export async function putSub(env: Env, userId: Uid, s: Sub) {
 }
 
 // ---------- دسترسی به مدل‌ها ----------
-/** مدل پیش‌فرضِ رایگان = اولین مدل فهرست که از ارائه‌دهنده‌ی دوم (EXTRA_LLM_*) نباشد */
-export const freeModelId = (env: Env) => { const l = modelList(env); return (l.find((m) => !m.extra) ?? l[0]).id; };
-/** دسترسی به مدل‌های ویژه (ارائه‌دهنده‌ی دوم): مدیر یا دارنده‌ی پلن فعال */
+/** مدل پیش‌فرضِ رایگان = اولین مدل کلودفلر (نه extra)؛ اگر نبود، اولین مدل با پرچم free */
+export const freeModelId = (env: Env) => { const l = modelList(env); return (l.find((m) => !m.extra) ?? l.find((m) => m.free) ?? l[0]).id; };
+/** دسترسی به مدل‌های ویژه (بدون پرچم free): مدیر یا دارنده‌ی پلن فعال */
 export async function hasPlanAccess(env: Env, userId: Uid): Promise<boolean> {
   return isAdmin(env, userId) || !!(await getActiveSub(env, userId));
 }
 export const EXTRA_MODEL_MSG = "🔒 این مدل فقط برای کاربران دارای پلن پلاس/پرو فعال است.";
-/** مدل باید در فهرست باشد؛ مدل‌های ویژه فقط برای مدیر و دارندگان پلن فعال مجازند. */
+/** مدل باید در فهرست باشد؛ مدل‌های ویژه (free نیست) فقط برای مدیر و دارندگان پلن فعال مجازند. */
 export async function canUseModel(env: Env, userId: Uid, modelId: string): Promise<boolean> {
   const m = modelList(env).find((x) => x.id === modelId);
   if (!m) return false;
-  return !m.extra || (await hasPlanAccess(env, userId));
+  return m.free || (await hasPlanAccess(env, userId));
 }
 
 /** سقف تعداد اسلاید هر ارائه: مدیر ۳۵؛ عضو پلن فعال طبق پلن (پلاس ۲۰، پرو ۳۵)؛ بقیه ۸ */

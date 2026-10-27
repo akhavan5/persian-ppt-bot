@@ -106,8 +106,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       pdf: hasBrowser(env),
       // ساخت ارائه از روی لینک (Tavily Extract)؛ بدون TAVILY_API_KEY دکمه‌اش در سایت نمایش داده نمی‌شود
       link: linkEnabled(env),
-      // مدل‌های ارائه‌دهنده‌ی دوم (extra) فقط برای دارندگان پلن‌اند: free=false
-      models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: !m.extra })),
+      // مدل‌های بدون پرچم free فقط برای دارندگان پلن‌اند: free=false
+      models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: m.free })),
       plans: PLANS,
     });
   }
