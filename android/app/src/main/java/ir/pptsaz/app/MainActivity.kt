@@ -148,6 +148,29 @@ class MainActivity : ComponentActivity() {
         (if (Build.VERSION.SDK_INT >= 33) i.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java) else i.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM))
             ?.filterNotNull().orEmpty()
 
+    /**
+     * لینک برنامه: https://pptsaz.ir/open?topic=<موضوع>&tab=files|settings|account
+     * موضوع فقط در فرم «ساخت» گذاشته می‌شود و شروع ساخت با خود کاربر است. مسیرهای دیگر (مثلاً گالری عمومی) را بعداً همین‌جا اضافه کن.
+     */
+    private fun handleWebLink(d: Uri) {
+        if (d.path?.trimEnd('/') != "/open") return
+        val tab = when (d.getQueryParameter("tab")) {
+            "files" -> 1
+            "settings" -> 2
+            "account" -> 3
+            else -> 0
+        }
+        vm.openFromLink(d.getQueryParameter("topic"), tab)
+    }
+
+    /** صفحه‌ی ثبت امتیاز و نظر همین اپ در فروشگاه (بازار یا مایکت)؛ اگر فروشگاه نصب نبود false. */
+    private fun openStoreRating(): Boolean = try {
+        startActivity(StoreRating.intent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    } catch (e: ActivityNotFoundException) {
+        false
+    }
+
     /** اشتراک‌گذاری از برنامه‌های دیگر، باز شدن از روی اعلان (tab / job_action) و دکمه‌های اعلان. */
     private fun handleIntent(i: Intent?) {
         if (i == null) return
@@ -195,10 +218,11 @@ class MainActivity : ComponentActivity() {
                 if (text.isNotEmpty()) vm.onShare(Share.TextShare(text))
                 i.action = null
             }
-            // بازگشت از ورود گوگل در مرورگر: pptsaz://login?c=<کد>
+            // بازگشت از ورود گوگل در مرورگر: pptsaz://login?c=<کد>  |  لینک برنامه (App Link): https://pptsaz.ir/open?...
             Intent.ACTION_VIEW -> {
                 val d = i.data
                 if (d != null && d.scheme == "pptsaz" && d.host == "login") vm.googleReturn(d.getQueryParameter("c"), d.getQueryParameter("e"))
+                else if (d != null && d.scheme == "https" && d.host == "pptsaz.ir") handleWebLink(d)
                 i.action = null
             }
             Intent.ACTION_SEND -> {
@@ -339,6 +363,22 @@ class MainActivity : ComponentActivity() {
                                     if (!openFile(f)) say("برنامه‌ای برای باز کردن این فایل نصب نیست؛ می‌توانید «ذخیره در گوشی» را بزنید.")
                                 }) { Text("باز کردن") }
                             },
+                        )
+                    }
+
+                    // درخواست امتیاز: بعد از چند بار گرفتن خروجی، حداکثر دو بار با فاصله؛ هم‌زمان با پنجره‌ی دیگری نشان داده نمی‌شود
+                    if (st.rateAsk && saveDialog == null && !st.updateDialog) {
+                        AlertDialog(
+                            onDismissRequest = { vm.rateLater() },
+                            title = { Text("نظرتان درباره‌ی پاورپوینت‌ساز؟") },
+                            text = { Text("اگر این اپ به کارتان آمده، ثبت امتیاز و نظر در " + Store.NAME_FA + " چند ثانیه بیشتر وقت نمی‌گیرد و کمک بزرگی به ماست.") },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    vm.rateDone()
+                                    if (!openStoreRating()) vm.openUrl(StoreRating.WEB_URL)
+                                }) { Text("ثبت نظر") }
+                            },
+                            dismissButton = { TextButton(onClick = { vm.rateLater() }) { Text("بعداً") } },
                         )
                     }
 

@@ -7,4 +7,7 @@
     <string name="shortcut_new_long">ساخت ارائه‌ی جدید</string>
     <string name="shortcut_files_short">فایل‌ها</string>
     <string name="shortcut_files_long">فایل‌های من</string>
+    <!-- ویجت صفحه‌ی اصلی -->
+    <string name="widget_label">پاورپوینت‌ساز</string>
+    <string name="widget_desc">ساخت سریع ارائه و نمایش اعتبار باقی‌مانده</string>
 </resources>

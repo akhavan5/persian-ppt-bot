@@ -19,8 +19,8 @@ android {
         applicationId = "ir.pptsaz.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
         // اعلان FCM: از متغیرهای محیطی (GitHub Secrets) می‌آید؛ خالی = اعلان خاموش. فایل google-services.json لازم نیست.
         for (k in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {
             buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim().replace("\"", "") + "\"")
@@ -109,6 +109,8 @@ dependencies {
     // اعلان تبلیغاتی (FCM)؛ بدون Google Play Services بی‌اثر است و اپ مثل قبل کار می‌کند
     implementation("com.google.firebase:firebase-messaging:24.1.2")
     implementation("androidx.browser:browser:1.9.0")
+    // ویجت صفحه‌ی اصلی (Jetpack Glance)
+    implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)
     "bazaarImplementation"("com.github.cafebazaar.Poolakey:poolakey:2.2.0")

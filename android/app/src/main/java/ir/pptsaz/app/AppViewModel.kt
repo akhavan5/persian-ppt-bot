@@ -18,6 +18,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -59,6 +62,7 @@ data class UiState(
     val viewer: Viewer? = null,
     val bazaarReady: Boolean = false,
     val updateDialog: Boolean = false,
+    val rateAsk: Boolean = false, // پنجره‌ی «ثبت امتیاز» (RatePrompt)
     val filesError: Boolean = false, // آخرین بارگیری فهرست فایل‌ها به خاطر شبکه ناموفق بود (فهرست ذخیره‌شده نمایش داده می‌شود)
     val smsCode: String? = null, // کدی که از پیامک خوانده شد (SMS User Consent)؛ صفحه‌ی ورود آن را برمی‌دارد
     val otpTick: Int = 0, // با هر ارسال موفق کد یکی زیاد می‌شود (برای شروع دوباره‌ی تایمر و گوش‌دادن به پیامک)
@@ -126,6 +130,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         Api.init(app)
         _state.update { it.copy(files = FileCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app), promo = Push.promoEnabled(app)) }
         viewModelScope.launch { CrashReporter.sendPending(app) }
+        // ویجت صفحه‌ی اصلی: آخرین اعتبار (یا «خارج از حساب» = null) را برای ویجت نگه می‌دارد؛ حالت‌های Loading/Error نادیده گرفته می‌شوند
+        viewModelScope.launch {
+            _state
+                .filter { it.screen == Screen.Main || it.screen == Screen.Login }
+                .map { s -> s.me?.takeIf { s.screen == Screen.Main }?.let { it.credits to it.unlimited } }
+                .distinctUntilChanged()
+                .collect { WidgetSync.push(app, it) }
+        }
         try {
             app.getSystemService(ConnectivityManager::class.java)?.registerNetworkCallback(
                 NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), netCallback,
@@ -472,6 +484,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (saved != null) {
                     _events.trySend(Event.FileReady(saved, share))
+                    if (!share) askRateMaybe()
                     return@launch
                 }
             } catch (_: Exception) {
@@ -483,6 +496,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val listed = _state.value.files.any { it.id == fileId }
                 val r = Api.downloadFile(getApplication(), fileId, maxRetries = if (listed) 2 else 20)
                 _events.trySend(Event.FileReady(r, share))
+                if (!share) askRateMaybe()
             } catch (e: ApiException) {
                 toast(e.message ?: "دانلود انجام نشد")
             } catch (e: Exception) {
@@ -497,6 +511,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             toast("در حال ساخت PDF؛ ممکن است تا یک دقیقه طول بکشد…")
             try {
                 _events.trySend(Event.FileReady(Api.downloadPdf(getApplication(), fileId), share))
+                if (!share) askRateMaybe()
             } catch (e: ApiException) {
                 toast(e.message ?: "ساخت PDF انجام نشد")
             } catch (e: Exception) {
@@ -529,6 +544,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+    }
+
+    /** App Link https://pptsaz.ir/open?topic=...: موضوع را در فرم «ساخت» می‌گذارد و تب خواسته‌شده را باز می‌کند (ساخت را خود کاربر شروع می‌کند). */
+    fun openFromLink(topic: String?, tab: Int) {
+        val t = topic.orEmpty().replace(Regex("\\s+"), " ").trim().take(300)
+        if (t.length >= 3) {
+            form.topic = t
+            Draft.save(getApplication(), form)
+        }
+        setTab(tab)
+    }
+
+    // ------------------------------------------------------------ درخواست امتیاز
+
+    private fun askRateMaybe() {
+        if (RatePrompt.onExport(getApplication())) _state.update { it.copy(rateAsk = true) }
+    }
+
+    /** «بعداً» یا بستن پنجره؛ شمارش دفعه‌ها و فاصله‌ی بین آن‌ها در RatePrompt نگه داشته شده است. */
+    fun rateLater() {
+        _state.update { it.copy(rateAsk = false) }
+    }
+
+    /** کاربر «ثبت نظر» را زد؛ دیگر پرسیده نمی‌شود. */
+    fun rateDone() {
+        RatePrompt.done(getApplication())
+        _state.update { it.copy(rateAsk = false) }
     }
 
     fun consumeExtracted() {

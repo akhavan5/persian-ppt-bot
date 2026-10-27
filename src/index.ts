@@ -128,6 +128,12 @@ export default {
       const body = [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: env.ANDROID_PACKAGE || "ir.pptsaz.app", sha256_cert_fingerprints: prints } }];
       return new Response(JSON.stringify(body, null, 2), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" } });
     }
+    // لینک اشتراک‌گذاری: اگر اپ اندروید نصب باشد (App Links) مستقیم در اپ باز می‌شود؛ وگرنه کاربر به صفحه‌ی ساخت وب می‌رود.
+    // نمونه: /open?topic=هوش مصنوعی در آموزش  (پارامتر tab فقط برای اپ است)
+    if (url.pathname === "/open" && (req.method === "GET" || req.method === "HEAD")) {
+      const t = (url.searchParams.get("topic") || "").replace(/\s+/g, " ").trim().slice(0, 300);
+      return noindex(Response.redirect(`${SITE}/${t.length >= 3 ? `?topic=${encodeURIComponent(t)}` : ""}`, 302));
+    }
     // تأیید مالکیت در وب‌مستر یاندکس (مستقیم از Worker تا ریدایرکت .html کلودفلر مانعش نشود)
     if (url.pathname === "/yandex_85baee77d3c502ea.html") {
       return new Response(`<html>\n    <head>\n        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">\n    </head>\n    <body>Verification: 85baee77d3c502ea</body>\n</html>\n`, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "public, max-age=3600" } });
