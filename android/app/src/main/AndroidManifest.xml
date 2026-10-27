@@ -86,6 +86,18 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- اعلان‌های FCM (فقط وقتی FIREBASE_* در بیلد تنظیم شده باشد فعال می‌شود) -->
+        <service
+            android:name=".PptFcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <!-- شروع خودکار فایربیس را خاموش می‌کنیم؛ Push.init با مقدارهای بیلد آن را دستی راه می‌اندازد -->
+        <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -11,6 +11,7 @@ import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, han
 import { listFiles, loadFile } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
+import { appPushCommand } from "./push";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
@@ -448,6 +449,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (cmd === "/id") return await sendMessage(env, chatId, `شناسه‌ی عددی شما: <code>${userId}</code>`);
 
   const admin = isAdmin(env, userId);
+  if (admin && (cmd === "/apppush" || cmd === "/apppush_send")) return await appPushCommand(env, chatId, text); // اعلان به اپ اندروید (FCM)
   // شناسه‌ی اصلی: اگر تلگرام به حساب سایت وصل باشد شناسه‌ی حساب سایت (اعتبار/پلن/تنظیمات/فایل مشترک)؛ وگرنه خود شناسه‌ی تلگرام
   let uid = await resolveUid(env, userId);
   if (await banned(env, userId, uid)) {

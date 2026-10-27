@@ -110,4 +110,6 @@ export interface Env {
   /** اختیاری: اپ اندروید (کافه بازار). ANDROID_PACKAGE: شناسه‌ی بسته (پیش‌فرض ir.pptsaz.app)؛ ANDROID_CERT_SHA256: اثر انگشت SHA-256 کلید امضای APK (چند مقدار با کاما)؛ برای /.well-known/assetlinks.json */
   ANDROID_PACKAGE?: string;
   ANDROID_CERT_SHA256?: string;
+  /** اختیاری: اعلان اپ اندروید با FCM؛ کل JSON «حساب سرویس» فایربیس (Project settings ← Service accounts ← Generate new private key) به‌صورت secret */
+  FCM_SERVICE_ACCOUNT?: string;
 }

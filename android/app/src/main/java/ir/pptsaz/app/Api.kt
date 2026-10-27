@@ -139,6 +139,11 @@ object Api {
         call("POST", "/api/auth/google/exchange", JSONObject().put("code", code))
     }
 
+    /** ثبت/حذف توکن FCM دستگاه؛ promo = اعلان‌های اخبار و تخفیف روشن است. */
+    suspend fun pushRegister(token: String, promo: Boolean, remove: Boolean = false) {
+        call("POST", "/api/app/push", JSONObject().put("token", token).put("promo", promo).put("remove", remove))
+    }
+
     suspend fun logout() {
         try { call("POST", "/api/auth/logout") } catch (e: ApiException) { /* مهم نیست */ }
         clearSession()

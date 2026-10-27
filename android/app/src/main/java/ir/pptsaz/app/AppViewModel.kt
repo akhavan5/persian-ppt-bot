@@ -46,6 +46,7 @@ data class UiState(
     val me: Me? = null,
     val files: List<FileItem> = emptyList(),
     val localFiles: List<LocalFile> = emptyList(), // نسخه‌های ذخیره‌شده روی گوشی (بعد از ۲۴ ساعت سرور هم می‌مانند)
+    val promo: Boolean = true, // اعلان‌های اخبار و تخفیف (FCM)
     val autoSave: Boolean = true, // ذخیره‌ی خودکار روی گوشی بعد از ساخت
     val filesLoading: Boolean = false,
     val tab: Int = 0,
@@ -123,7 +124,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Api.init(app)
-        _state.update { it.copy(files = FileCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app)) }
+        _state.update { it.copy(files = FileCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app), promo = Push.promoEnabled(app)) }
         viewModelScope.launch { CrashReporter.sendPending(app) }
         try {
             app.getSystemService(ConnectivityManager::class.java)?.registerNetworkCallback(
@@ -165,6 +166,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     lastMeRefresh = SystemClock.elapsedRealtime() // اولین onResume بعد از شروع، درخواست تکراری نمی‌فرستد
                     if (me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.")
                     loadFiles()
+                    viewModelScope.launch { Push.sync(getApplication()) } // توکن FCM (اگر پیکربندی شده باشد)
                     if (me.activeJob != null && _state.value.job == null) watch(me.activeJob)
                     flushShare()
                 }
@@ -288,6 +290,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun logout() {
         viewModelScope.launch {
             pollJob?.cancel()
+            Push.sync(getApplication(), remove = true) // دستگاه بعد از خروج اعلان تبلیغاتی نگیرد (قبل از پاک‌شدن نشست)
             Api.logout()
             Draft.clear(getApplication())
             FileCache.clear(getApplication())
@@ -436,6 +439,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val list = withContext(Dispatchers.IO) { LocalFiles.list(app) }
             _state.update { it.copy(localFiles = list) }
         }
+    }
+
+    fun setPromo(on: Boolean) {
+        val app = getApplication<Application>()
+        Push.setPromo(app, on)
+        _state.update { it.copy(promo = on) }
+        viewModelScope.launch { Push.sync(app) }
     }
 
     fun setAutoSave(on: Boolean) {

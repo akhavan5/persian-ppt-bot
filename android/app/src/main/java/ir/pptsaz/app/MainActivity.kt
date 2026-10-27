@@ -151,6 +151,11 @@ class MainActivity : ComponentActivity() {
     /** اشتراک‌گذاری از برنامه‌های دیگر، باز شدن از روی اعلان (tab / job_action) و دکمه‌های اعلان. */
     private fun handleIntent(i: Intent?) {
         if (i == null) return
+        // اعلان تبلیغاتی با لینک: https را در مرورگر باز می‌کند
+        i.getStringExtra("push_url")?.let { u ->
+            i.removeExtra("push_url")
+            if (u.startsWith("https://")) vm.openUrl(u)
+        }
         val tab = i.getIntExtra("tab", -1)
         if (tab in 0..3) {
             vm.setTab(tab)

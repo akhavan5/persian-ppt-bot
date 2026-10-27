@@ -14,6 +14,7 @@ import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./file
 import { renderPreview } from "./preview";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hasBrowser } from "./browser-api";
+import { putPushToken } from "./push";
 import {
   authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, getUserByMobile, googleCallback,
   googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
@@ -147,6 +148,12 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   const pd = method === "GET" ? path.match(/^\/api\/files\/([\w-]{1,100})\/pdf$/) : null;
   if (pd) return deckPdf(env, user, pd[1]);
 
+  if (path === "/api/app/push" && method === "POST") {
+    // ثبت/تمدید/حذف توکن FCM دستگاه (اپ اندروید)؛ promo = اعلان تبلیغاتی/خبری روشن است
+    const b = await readBody(req, 2_000);
+    const bad = await putPushToken(env, b?.token, b?.promo !== false, b?.remove === true);
+    return bad ? err(bad, 400) : json({ ok: true });
+  }
   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
   if (path === "/api/miniapp/dl" && method === "POST") return miniappDlLink(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);

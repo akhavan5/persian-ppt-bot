@@ -7,5 +7,6 @@ class PptSazApp : Application() {
         super.onCreate()
         CrashReporter.install(this)
         Notifier.ensureChannel(this)
+        Push.init(this)
     }
 }
