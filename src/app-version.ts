@@ -2,7 +2,7 @@
  * نسخه‌ی اپ اندروید (versionCode) که /api/config به اپ می‌دهد.
  *  - latest: آخرین نسخه‌ی منتشرشده ⇒ کاربرانِ پایین‌تر «نسخه‌ی جدید موجود است» می‌بینند (قابل رد کردن)
  *  - min: حداقل نسخه‌ی مجاز ⇒ کاربرانِ پایین‌تر فقط صفحه‌ی «به‌روزرسانی لازم است» را می‌بینند (۰ = بدون بررسی)
- * مدیر با /appver در ربات مقدار را (بدون دیپلوی) عوض می‌کند؛ بدون آن، از ANDROID_LATEST_VERSION و ANDROID_MIN_VERSION خوانده می‌شود.
+ * مدیر از پنل ربات (/admin ← 📱 اپ اندروید؛ یا دستور /appver) مقدار را (بدون دیپلوی) عوض می‌کند؛ بدون آن، از ANDROID_LATEST_VERSION و ANDROID_MIN_VERSION خوانده می‌شود.
  */
 import type { Env } from "./env";
 import { esc, sendMessage } from "./telegram";
@@ -30,34 +30,41 @@ export async function getAppVersions(env: Env): Promise<AppVersions> {
   };
 }
 
-const HELP = "<code>/appver 5</code> — آخرین نسخه ۵ (حداقل مجاز همان قبلی)\n<code>/appver 5 3</code> — آخرین ۵، و نسخه‌های زیر ۳ اجباری به‌روزرسانی شوند\n<code>/appver 5 0</code> — بدون به‌روزرسانی اجباری\n<code>/appver clear</code> — برگشت به متغیرهای محیطی";
+export const APPVER_HELP = "<code>5</code> — آخرین نسخه ۵ (حداقل مجاز همان قبلی)\n<code>5 3</code> — آخرین ۵، و نسخه‌های زیر ۳ اجباری به‌روزرسانی شوند\n<code>5 0</code> — بدون به‌روزرسانی اجباری";
 
-async function status(env: Env, chatId: number, head: string) {
+/** متن وضعیت نسخه‌ی اپ (برای پنل و دستور /appver) */
+export async function appVerText(env: Env): Promise<string> {
   const v = await getAppVersions(env);
   const n = (x: number) => toFa(String(x));
-  await sendMessage(env, chatId,
-    `${head}📱 <b>نسخه‌ی اپ اندروید</b> (${v.manual ? "تنظیم دستی با /appver" : "از متغیرهای محیطی"})\n` +
+  return `📱 <b>نسخه‌ی اپ اندروید</b> (${v.manual ? "تنظیم دستی از پنل" : "از متغیرهای محیطی"})\n` +
     `آخرین نسخه: ${v.latest ? n(v.latest) : "اعلام نشده"}${v.latest ? " — پایین‌تر از آن پیشنهاد به‌روزرسانی می‌بیند" : ""}\n` +
     `حداقل مجاز: ${v.min ? n(v.min) : "بدون بررسی"}${v.min ? ` — پایین‌تر از آن به‌روزرسانی اجباری می‌بیند` : ""}\n` +
-    `بازار: ${esc(v.urls.bazaar)}\nمایکت: ${esc(v.urls.myket)}\n\n${HELP}`);
+    `بازار: ${esc(v.urls.bazaar)}\nمایکت: ${esc(v.urls.myket)}`;
 }
 
-/** /appver  |  /appver <آخرین> [<حداقل>]  |  /appver clear */
-export async function appVerCommand(env: Env, chatId: number, text: string): Promise<void> {
-  const a = text.trim().split(/\s+/).slice(1).map((x) => x.toLowerCase());
+/** تنظیم نسخه: [آخرین] یا [آخرین، حداقل] یا ["clear"]. ok=false یعنی ورودی نامعتبر بوده و چیزی ذخیره نشده */
+export async function applyAppVer(env: Env, a: string[]): Promise<{ ok: boolean; msg: string }> {
   if (a[0] === "clear") {
     await env.KV.delete(KEY);
-    return void (await status(env, chatId, "✅ تنظیم دستی پاک شد.\n\n"));
+    return { ok: true, msg: "✅ تنظیم دستی پاک شد؛ از متغیرهای محیطی خوانده می‌شود." };
   }
-  if (a.length) {
-    const cur = await getAppVersions(env);
-    const latest = Number(a[0]);
-    const min = a.length > 1 ? Number(a[1]) : cur.min;
-    if (!Number.isInteger(latest) || !Number.isInteger(min) || latest < 0 || min < 0) return void (await sendMessage(env, chatId, `عدد نامعتبر است.\n\n${HELP}`));
-    // حداقل مجاز بالاتر از آخرین نسخه‌ی منتشرشده یعنی قفل شدن همه‌ی کاربران؛ اجازه نمی‌دهیم
-    if (min > latest) return void (await sendMessage(env, chatId, `⛔️ حداقل مجاز (${toFa(String(min))}) نباید از آخرین نسخه (${toFa(String(latest))}) بیشتر باشد؛ همه‌ی کاربران قفل می‌شدند.\n\n${HELP}`));
-    await env.KV.put(KEY, JSON.stringify({ latest, min }));
-    return void (await status(env, chatId, "✅ ذخیره شد.\n\n"));
-  }
-  await status(env, chatId, "");
+  if (!a.length) return { ok: false, msg: `عددی وارد نشد.\n\n${APPVER_HELP}` };
+  const cur = await getAppVersions(env);
+  const latest = Number(a[0]);
+  const min = a.length > 1 ? Number(a[1]) : cur.min;
+  if (!Number.isInteger(latest) || !Number.isInteger(min) || latest < 0 || min < 0) return { ok: false, msg: `عدد نامعتبر است.\n\n${APPVER_HELP}` };
+  // حداقل مجاز بالاتر از آخرین نسخه‌ی منتشرشده یعنی قفل شدن همه‌ی کاربران؛ اجازه نمی‌دهیم
+  if (min > latest) return { ok: false, msg: `⛔️ حداقل مجاز (${toFa(String(min))}) نباید از آخرین نسخه (${toFa(String(latest))}) بیشتر باشد؛ همه‌ی کاربران قفل می‌شدند.\n\n${APPVER_HELP}` };
+  await env.KV.put(KEY, JSON.stringify({ latest, min }));
+  return { ok: true, msg: "✅ ذخیره شد." };
+}
+
+const PANEL_KB = { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن در پنل (دکمه‌ای)", callback_data: "ad:ap" }]] } };
+
+/** /appver  |  /appver <آخرین> [<حداقل>]  |  /appver clear — نسخه‌ی دکمه‌ای در پنل مدیر: /admin ← 📱 اپ اندروید */
+export async function appVerCommand(env: Env, chatId: number, text: string): Promise<void> {
+  const a = text.trim().split(/\s+/).slice(1).map((x) => x.toLowerCase());
+  const r = a.length ? await applyAppVer(env, a) : null;
+  if (r && !r.ok) return void (await sendMessage(env, chatId, r.msg, PANEL_KB));
+  await sendMessage(env, chatId, `${r ? r.msg + "\n\n" : ""}${await appVerText(env)}`, PANEL_KB);
 }

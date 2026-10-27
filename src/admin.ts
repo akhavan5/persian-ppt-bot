@@ -13,8 +13,14 @@ import { runningJob } from "./deck-service";
 import { hasBrowser } from "./browser-api";
 import { toEn, toFa } from "./util";
 import { AUDIENCES, isAudience, listAudience, type Audience } from "./broadcast";
+import {
+  PUSH_BODY_MAX, PUSH_SEGMENTS, PUSH_TITLE_MAX, clearPushDraft, getPushDraft, getPushSegment, isPushSegment, launchAppPush, parsePushDraft, pushDeviceCounts,
+  pushEnabled, pushPreviewText, savePushDraft, setPushSegment,
+} from "./push";
+import { APPVER_HELP, appVerText, applyAppVer, getAppVersions } from "./app-version";
 
-/** دستورهای متنی مدیر: فقط ورود به پنل و لغو ورودی در انتظار؛ بقیه‌ی کارها با دکمه‌های پنل انجام می‌شود */
+/** دستورهای متنی مدیر: ورود به پنل و لغو ورودی در انتظار؛ بقیه‌ی کارها (از جمله نسخه‌ی اپ و اعلان به اپ) با دکمه‌های پنل انجام می‌شود.
+ *  دستورهای قدیمی /appver و /apppush هم هنوز کار می‌کنند ولی زیرشان دکمه‌ی «باز کردن در پنل» هست. */
 export const ADMIN_CMDS = new Set(["/admin", "/panel", "/cancel"]);
 
 type Btn = { text: string; callback_data?: string; url?: string };
@@ -93,7 +99,7 @@ async function identify(env: Env, id: Uid): Promise<Ident> {
 const cardId = (i: Ident): Uid => i.tgId ?? (i.webId as string);
 
 // ---------- ورودی متنی منتظر (جستجو، اعتبار دلخواه، پیام به کاربر، پیام همگانی) ----------
-type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid };
+type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "ver" } | { k: "pushw" };
 const inKey = (adminId: number) => `adm:in:${adminId}`;
 const setInput = (env: Env, adminId: number, p: Pending) => env.KV.put(inKey(adminId), JSON.stringify(p), { expirationTtl: 600 });
 const clearInput = (env: Env, adminId: number) => env.KV.delete(inKey(adminId));
@@ -128,6 +134,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       [cb("📣 پیام همگانی", "ad:bc"), cb("👑 پلن‌های فعال", "ad:sb:0")],
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
       [cb(`💰 پرداخت‌ها${payIssues ? ` 🚨${fa(payIssues)}` : ""}`, "ad:pm:s:0"), cb("🔻 قیف کاربران", "ad:fn:30"), cb("🎁 دعوت‌ها", "ad:iv:t:0")],
+      [cb("📱 اپ اندروید (نسخه و اعلان)", "ad:ap")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
     ],
   };
@@ -616,6 +623,38 @@ async function decksScreen(env: Env): Promise<Screen> {
   return { text: `🗂 <b>${fa(list.length)} ارائه‌ی اخیر</b> (به وقت ایران)\n\n${lines.join("\n")}\n\n<i>دکمه‌ی 📥 فقط برای فایل‌های ۲۴ ساعت اخیر است.</i>`, kb };
 }
 
+// ---------- اپ اندروید: نسخه و اعلان (جایگزین دستورهای /appver و /apppush) ----------
+async function appScreen(env: Env, head = ""): Promise<Screen> {
+  const [ver, dev, v] = await Promise.all([appVerText(env), pushDeviceCounts(env).catch(() => null), getAppVersions(env)]);
+  const push = pushEnabled(env)
+    ? `✅ فعال${dev ? ` · دستگاه با اعلان روشن: <b>${fa(dev.on)}</b> · خاموش: ${fa(dev.off)}` : ""}`
+    : "❌ غیرفعال (رمز <code>FCM_SERVICE_ACCOUNT</code> تنظیم نشده)";
+  const kb: Btn[][] = [[cb("✏️ تنظیم نسخه", "ad:av:e")]];
+  if (v.manual) kb[0].push(cb("🧹 برگشت به متغیرهای محیطی", "ad:av:c"));
+  kb.push([cb("📲 ارسال اعلان به اپ", "ad:pu")]);
+  kb.push([cb("🔄 تازه‌سازی", "ad:ap"), ...backHome]);
+  return { text: `${head ? head + "\n\n" : ""}${ver}\n\n📲 <b>اعلان به اپ</b>: ${push}`, kb };
+}
+
+async function pushScreen(env: Env, chatId: number, head = ""): Promise<Screen> {
+  const back = [cb("🔙 اپ اندروید", "ad:ap"), ...backHome];
+  const top = head ? head + "\n\n" : "";
+  if (!pushEnabled(env)) return { text: `${top}⚠️ اعلان اپ فعال نیست: رمز <code>FCM_SERVICE_ACCOUNT</code> تنظیم نشده است.`, kb: [back] };
+  const draft = await getPushDraft(env, chatId);
+  if (!draft) {
+    return {
+      text: `${top}📲 <b>اعلان به اپ اندروید</b>\n\nپیش‌نویسی نیست. با «✍️ نوشتن اعلان» متن را بنویس؛ بعد پیش‌نمایش را می‌بینی، گروه مخاطب را انتخاب می‌کنی و با دکمه تایید می‌کنی.`,
+      kb: [[cb("✍️ نوشتن اعلان", "ad:pw")], back],
+    };
+  }
+  const seg = await getPushSegment(env, chatId);
+  const chip = (x: keyof typeof PUSH_SEGMENTS) => cb(`${x === seg ? "• " : ""}${PUSH_SEGMENTS[x]}`.slice(0, 60), `ad:pa:${x}`);
+  return {
+    text: `${top}📲 <b>پیش‌نمایش اعلان</b>\n\n${pushPreviewText(draft)}\n\n— — —\n🎯 مخاطبان: <b>${esc(PUSH_SEGMENTS[seg])}</b>\n<i>فقط دستگاه‌هایی که اعلان تبلیغاتی را روشن دارند.</i>`,
+    kb: [[chip("all")], [chip("nocredit")], [chip("expiring")], [chip("inactive")], [cb("✅ ارسال", "ad:ps"), cb("✍️ نوشتن دوباره", "ad:pw")], [cb("🗑 حذف پیش‌نویس", "ad:pc")], back],
+  };
+}
+
 async function userFilesScreen(env: Env, id: Uid): Promise<Screen> {
   const { acct } = await identify(env, id);
   const files = await listFiles(env, acct).catch(() => []);
@@ -808,6 +847,26 @@ export async function handleAdminInput(env: Env, chatId: number, adminId: number
     return true;
   }
 
+  if (p.k === "ver") {
+    const r = await applyAppVer(env, toEn(text).trim().toLowerCase().split(/\s+/).filter(Boolean));
+    if (!r.ok) { await setInput(env, adminId, p); await sendMessage(env, chatId, `${r.msg}\n\nدوباره بفرست، یا /cancel.`); return true; }
+    await logAction(env, adminId, `نسخه‌ی اپ: ${text.trim().slice(0, 40)}`);
+    await sendScreen(env, chatId, await appScreen(env, r.msg));
+    return true;
+  }
+
+  if (p.k === "pushw") {
+    const msg = parsePushDraft(text);
+    const again = async (why: string) => { await setInput(env, adminId, p); await sendMessage(env, chatId, `${why}\n\nدوباره بفرست، یا /cancel.`); return true; };
+    if (!msg) return await again("قالب درست نیست. به این شکل بفرست:\n<code>عنوان | متن | لینک https (اختیاری)</code>");
+    if (msg.title.length > PUSH_TITLE_MAX) return await again(`عنوان بلند است (${fa(msg.title.length)} نویسه؛ حداکثر ${fa(PUSH_TITLE_MAX)}).`);
+    if (msg.body.length > PUSH_BODY_MAX) return await again(`متن بلند است (${fa(msg.body.length)} نویسه؛ حداکثر ${fa(PUSH_BODY_MAX)}).`);
+    await savePushDraft(env, chatId, msg);
+    await setPushSegment(env, chatId, "all");
+    await sendScreen(env, chatId, await pushScreen(env, chatId));
+    return true;
+  }
+
   if (p.k === "cr") {
     const n = Math.trunc(Number(toEn(text).replace(/[+\s]/g, "")));
     if (!Number.isFinite(n) || n === 0 || Math.abs(n) > 1000) {
@@ -899,6 +958,39 @@ export async function handlePanelCallback(env: Env, cq: any) {
       }
       case "se": return await prompt({ k: "search" }, "🔎 <b>جستجوی کاربر</b>\nشناسه‌ی عددی، شناسه‌ی w_…، @نام‌کاربری، یا بخشی از نام/ایمیل/موبایل را بفرست.", "ad:h");
       case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.", "ad:h");
+      case "ap": return await show(await appScreen(env));
+      case "av": {
+        if (b === "c") {
+          await applyAppVer(env, ["clear"]);
+          await logAction(env, adminId, "نسخه‌ی اپ: برگشت به متغیرهای محیطی");
+          return await show(await appScreen(env, "✅ تنظیم دستی پاک شد؛ از متغیرهای محیطی خوانده می‌شود."));
+        }
+        return await prompt({ k: "ver" }, `✏️ <b>تنظیم نسخه‌ی اپ</b>\nشماره‌ی نسخه (versionCode) را بفرست:\n\n${APPVER_HELP}`, "ad:ap");
+      }
+      case "pu": return await show(await pushScreen(env, chatId));
+      case "pw": return await prompt({ k: "pushw" },
+        `✍️ <b>نوشتن اعلان به اپ</b>\nدر یک پیام و به این شکل بفرست:\n<code>عنوان | متن | لینک https (اختیاری)</code>\n\nعنوان حداکثر ${fa(PUSH_TITLE_MAX)} و متن حداکثر ${fa(PUSH_BODY_MAX)} نویسه.`, "ad:pu");
+      case "pa": {
+        if (!(await getPushDraft(env, chatId))) return await show(await pushScreen(env, chatId, "⌛️ پیش‌نویس منقضی شده است؛ دوباره بنویس."));
+        if (isPushSegment(b)) await setPushSegment(env, chatId, b);
+        return await show(await pushScreen(env, chatId));
+      }
+      case "pc": await clearPushDraft(env, chatId); return await show(await pushScreen(env, chatId, "🗑 پیش‌نویس حذف شد."));
+      case "ps": {
+        if (!pushEnabled(env)) return await show(await pushScreen(env, chatId));
+        const draft = await getPushDraft(env, chatId);
+        if (!draft) return await show(await pushScreen(env, chatId, "⌛️ پیش‌نویس منقضی شده است؛ دوباره بنویس."));
+        const seg = await getPushSegment(env, chatId);
+        await clearPushDraft(env, chatId); // جلوگیری از ارسال دوباره با دو بار زدن دکمه
+        try { await launchAppPush(env, chatId, draft, seg); }
+        catch (e) {
+          console.error("app push create failed", e);
+          await savePushDraft(env, chatId, draft); await setPushSegment(env, chatId, seg);
+          return await show(await pushScreen(env, chatId, "❌ شروع ارسال ممکن نشد؛ دوباره امتحان کن."));
+        }
+        await logAction(env, adminId, `اعلان به اپ (${PUSH_SEGMENTS[seg]}): ${draft.title.slice(0, 40)}`);
+        return await show({ text: `📲 ارسال اعلان به اپ شروع شد (${esc(PUSH_SEGMENTS[seg])}).\nوقتی تمام شد، گزارش را همین‌جا می‌فرستم.`, kb: [[cb("🔙 اپ اندروید", "ad:ap"), ...backHome]] });
+      }
     }
 
     if (id === null) return await answer();

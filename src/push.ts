@@ -5,8 +5,8 @@
  *   pt1:<توکن> = دستگاهی که اعلان تبلیغاتی/خبری را روشن دارد   |   pt0:<توکن> = خاموش دارد (فقط برای ثبت وضعیت)
  * ارسال: متغیر رمز FCM_SERVICE_ACCOUNT (کل JSON حساب سرویس فایربیس) لازم است. پیام «data-only» است؛ خود اپ اعلان را می‌سازد
  * (و اگر کاربر اعلان تبلیغاتی را خاموش کرده باشد نشان نمی‌دهد).
- * ارسال همگانی: از دستور مدیر /apppush در ربات تلگرام (BroadcastWorkflow با appPush).
- * اعلان هدفمند: /apppush_send <گروه> (all | nocredit | expiring | inactive). مقدار هر کلید pt1:/pt0: به‌شکل JSON {u: شناسه‌ی کاربر, t: آخرین بار باز شدن اپ}
+ * ارسال همگانی: از پنل مدیر در ربات (/admin ← 📱 اپ اندروید ← 📲 اعلان) یا دستور /apppush (BroadcastWorkflow با appPush).
+ * اعلان هدفمند: انتخاب گروه با دکمه در پنل، یا /apppush_send <گروه> (all | nocredit | expiring | inactive). مقدار هر کلید pt1:/pt0: به‌شکل JSON {u: شناسه‌ی کاربر, t: آخرین بار باز شدن اپ}
  * است؛ شرط هر گروه هنگام ارسال از داده‌ی زنده‌ی سرور (اعتبار، پلن) خوانده می‌شود، نه از چیزی که اپ گفته است.
  */
 import type { Env } from "./env";
@@ -150,7 +150,12 @@ export async function sendPush(env: Env, token: string, m: PushMsg): Promise<"ok
   }
 }
 
-// ---------- دستور مدیر در ربات: /apppush عنوان | متن | لینک(اختیاری) ← /apppush_send ----------
+// ---------- اعلان به اپ از پنل مدیر (/admin ← 📱 اپ اندروید ← 📲 اعلان) و دستورهای متنی /apppush و /apppush_send ----------
+export const pushDraftKey = (chatId: number) => `apppush:draft:${chatId}`;
+export const pushSegKey = (chatId: number) => `apppush:seg:${chatId}`;
+export const PUSH_TITLE_MAX = 80; // همان سقفی که sendPush اعمال می‌کند
+export const PUSH_BODY_MAX = 300;
+
 export const parsePushDraft = (raw: string): PushMsg | null => {
   const [title, body, url] = raw.split("|").map((x) => x.trim());
   if (!title || !body) return null;
@@ -158,22 +163,52 @@ export const parsePushDraft = (raw: string): PushMsg | null => {
   return { title, body, url: url || undefined };
 };
 
+export async function getPushDraft(env: Env, chatId: number): Promise<PushMsg | null> {
+  try { const d = await env.KV.get(pushDraftKey(chatId)); return d ? (JSON.parse(d) as PushMsg) : null; } catch { return null; }
+}
+export const savePushDraft = (env: Env, chatId: number, msg: PushMsg) => env.KV.put(pushDraftKey(chatId), JSON.stringify(msg), { expirationTtl: 3600 });
+export async function getPushSegment(env: Env, chatId: number): Promise<PushSegment> {
+  const raw = await env.KV.get(pushSegKey(chatId));
+  return isPushSegment(raw) ? raw : "all";
+}
+export const setPushSegment = (env: Env, chatId: number, seg: PushSegment) => env.KV.put(pushSegKey(chatId), seg, { expirationTtl: 3600 });
+export async function clearPushDraft(env: Env, chatId: number) {
+  await Promise.all([env.KV.delete(pushDraftKey(chatId)), env.KV.delete(pushSegKey(chatId))]);
+}
+
+export const pushPreviewText = (msg: PushMsg) => `<b>${esc(msg.title)}</b>\n${esc(msg.body)}${msg.url ? `\n🔗 ${esc(msg.url)}` : ""}`;
+
+/** شروع ارسال اعلان (BroadcastWorkflow)؛ گزارش پایانی را خود Workflow برای مدیر می‌فرستد */
+export async function launchAppPush(env: Env, chatId: number, msg: PushMsg, seg: PushSegment): Promise<void> {
+  await env.BROADCAST_WORKFLOW.create({ id: `ap-${Date.now()}`, params: { adminChatId: chatId, text: "", appPush: msg, appSegment: seg } });
+}
+
+/** تعداد دستگاه‌های ثبت‌شده: اعلان تبلیغاتی روشن / خاموش */
+export async function pushDeviceCounts(env: Env): Promise<{ on: number; off: number }> {
+  await env.KV.ready();
+  const now = Math.floor(Date.now() / 1000);
+  const c = async (pre: string) => Number((await env.DB.prepare("SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3)")
+    .bind(pre, pre + "\u{10FFFF}", now).first<{ c: number | null }>())?.c ?? 0);
+  const [on, off] = await Promise.all([c("pt1:"), c("pt0:")]);
+  return { on, off };
+}
+
+// دستور متنی (قدیمی، هنوز کار می‌کند): /apppush عنوان | متن | لینک(اختیاری) ← /apppush_send [گروه]
 export async function appPushCommand(env: Env, chatId: number, text: string): Promise<void> {
   const cmd = text.split(/[\s@]/)[0].toLowerCase();
-  const key = `apppush:draft:${chatId}`;
+  const panel = { reply_markup: { inline_keyboard: [[{ text: "📲 باز کردن در پنل (دکمه‌ای)", callback_data: "ad:pu" }]] } };
   if (!pushEnabled(env)) return void (await sendMessage(env, chatId, "⚠️ اعلان اپ فعال نیست: رمز <code>FCM_SERVICE_ACCOUNT</code> تنظیم نشده است."));
   if (cmd === "/apppush_send") {
     const seg = (text.trim().split(/\s+/)[1] ?? "all").toLowerCase();
-    if (!isPushSegment(seg)) return void (await sendMessage(env, chatId, `گروه نامعتبر است. گروه‌ها:\n${Object.entries(PUSH_SEGMENTS).map(([k, v]) => `<code>${k}</code> — ${v}`).join("\n")}`));
-    const d = await env.KV.get(key);
-    if (!d) return void (await sendMessage(env, chatId, "پیش‌نویسی نیست. اول /apppush عنوان | متن | لینک را بفرست."));
-    await env.KV.delete(key);
-    const msg = JSON.parse(d) as PushMsg;
-    await env.BROADCAST_WORKFLOW.create({ id: `ap-${Date.now()}`, params: { adminChatId: chatId, text: "", appPush: msg, appSegment: seg } });
+    if (!isPushSegment(seg)) return void (await sendMessage(env, chatId, `گروه نامعتبر است. گروه‌ها:\n${Object.entries(PUSH_SEGMENTS).map(([k, v]) => `<code>${k}</code> — ${v}`).join("\n")}`, panel));
+    const msg = await getPushDraft(env, chatId);
+    if (!msg) return void (await sendMessage(env, chatId, "پیش‌نویسی نیست. اول /apppush عنوان | متن | لینک را بفرست، یا از پنل اقدام کن.", panel));
+    await clearPushDraft(env, chatId);
+    await launchAppPush(env, chatId, msg, seg);
     return void (await sendMessage(env, chatId, `📲 ارسال اعلان به اپ شروع شد (${PUSH_SEGMENTS[seg]})؛ گزارش پایانی را همین‌جا می‌فرستم.`));
   }
   const msg = parsePushDraft(text.slice(text.search(/\s/) < 0 ? text.length : text.search(/\s/)));
-  if (!msg) return void (await sendMessage(env, chatId, "قالب: <code>/apppush عنوان | متن | لینک https (اختیاری)</code>"));
-  await env.KV.put(key, JSON.stringify(msg), { expirationTtl: 3600 });
-  await sendMessage(env, chatId, `📲 <b>پیش‌نمایش اعلان</b>\n\n<b>${esc(msg.title)}</b>\n${esc(msg.body)}${msg.url ? `\n🔗 ${esc(msg.url)}` : ""}\n\nبرای ارسال به همه‌ی دستگاه‌هایی که اعلان تبلیغاتی را روشن دارند: /apppush_send\nیا فقط به یک گروه: /apppush_send nocredit | expiring | inactive`);
+  if (!msg) return void (await sendMessage(env, chatId, "قالب: <code>/apppush عنوان | متن | لینک https (اختیاری)</code>\n\nیا از پنل با دکمه: /admin ← 📱 اپ اندروید ← 📲 اعلان", panel));
+  await savePushDraft(env, chatId, msg);
+  await sendMessage(env, chatId, `📲 <b>پیش‌نمایش اعلان</b>\n\n${pushPreviewText(msg)}\n\nگروه مخاطب را انتخاب کن و ارسال را بزن (دکمه‌ی زیر):`, panel);
 }
