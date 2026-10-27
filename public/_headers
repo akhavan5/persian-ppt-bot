@@ -26,6 +26,18 @@
 /favicon.ico
   Cache-Control: public, max-age=604800
 
+/sw.js
+  Content-Type: application/javascript; charset=utf-8
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
+/pwa.js
+  Cache-Control: public, max-age=3600
+
+/offline.html
+  X-Robots-Tag: noindex, nofollow
+  Cache-Control: public, max-age=3600
+
 /manifest.webmanifest
   Content-Type: application/manifest+json; charset=utf-8
   Cache-Control: public, max-age=86400

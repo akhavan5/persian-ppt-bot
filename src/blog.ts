@@ -135,6 +135,10 @@ ${o.article ? `<meta property="article:published_time" content="${o.article.publ
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="پاورپوینت‌ساز">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="alternate" type="application/rss+xml" title="وبلاگ پاورپوینت‌ساز فارسی" href="/feed.xml">
 <link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
@@ -156,6 +160,7 @@ function shell(site: string, current: string, main: string): string {
 </header>
 ${main}
 ${renderFooter()}
+<script src="/pwa.js" defer></script>
 </body>
 </html>
 `;

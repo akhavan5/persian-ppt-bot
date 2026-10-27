@@ -334,6 +334,10 @@ export function renderLanding(p: Page, SITE: string): string {
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="پاورپوینت‌ساز">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <script type="application/ld+json">${jsonLd(ld)}</script>
@@ -384,6 +388,7 @@ ${articles.length ? `    <section>
   </article>
 </main>
 ${renderFooter()}
+<script src="/pwa.js" defer></script>
 </body>
 </html>
 `;
