@@ -15,6 +15,7 @@ import { renderPreview } from "./preview";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hasBrowser } from "./browser-api";
 import { putPushToken } from "./push";
+import { getAppVersions } from "./app-version";
 import {
   authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, getUserByMobile, googleCallback,
   googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
@@ -75,6 +76,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (method !== "GET" && method !== "HEAD" && req.headers.get("origin") !== url.origin) return err("درخواست نامعتبر", 403);
 
   if (path === "/api/config" && method === "GET") {
+    const ver = await getAppVersions(env);
     return json({
       google: googleEnabled(env),
       // Web client ID برای ورود داخل اپ اندروید (Credential Manager)؛ عمومی است و محرمانه نیست
@@ -86,11 +88,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       // خرید درون‌برنامه‌ای مایکت (فقط نسخه‌ی مایکت اپ اندروید)
       myket: myketEnabled(env),
       // نسخه‌ی اپ اندروید: latest = آخرین نسخه‌ی منتشرشده، min = کمترین نسخه‌ی مجاز (۰ = بدون بررسی)
-      app: {
-        latest: Number(env.ANDROID_LATEST_VERSION) || 0,
-        min: Number(env.ANDROID_MIN_VERSION) || 0,
-        url: (env.ANDROID_UPDATE_URL ?? "").trim() || `https://cafebazaar.ir/app/${(env.ANDROID_PACKAGE || "ir.pptsaz.app").trim()}`,
-      },
+      // مقدار را مدیر با /appver در ربات می‌گذارد (بدون دیپلوی)؛ اگر نگذاشته باشد از متغیرهای ANDROID_* خوانده می‌شود.
+      // url برای نسخه‌های قدیمی اپ؛ urls لینک مستقیم صفحه‌ی اپ در هر فروشگاه (اپ کلید همان فروشگاه خودش را برمی‌دارد)
+      app: { latest: ver.latest, min: ver.min, url: ver.url, urls: ver.urls },
       templates: Object.entries(TEMPLATES).map(([key, v]) => ({ key, name: v.name, emoji: v.emoji, hint: v.hint })),
       themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent, bg: t.bg, surface: t.surface, dark: t.dark, text: t.text, muted: t.muted, onPrimary: t.onPrimary })),
       tones: TONES,
@@ -151,7 +151,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/app/push" && method === "POST") {
     // ثبت/تمدید/حذف توکن FCM دستگاه (اپ اندروید)؛ promo = اعلان تبلیغاتی/خبری روشن است
     const b = await readBody(req, 2_000);
-    const bad = await putPushToken(env, b?.token, b?.promo !== false, b?.remove === true);
+    const bad = await putPushToken(env, b?.token, b?.promo !== false, b?.remove === true, user.id);
     return bad ? err(bad, 400) : json({ ok: true });
   }
   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));

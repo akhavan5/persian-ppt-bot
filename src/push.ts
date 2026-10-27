@@ -6,6 +6,8 @@
  * ارسال: متغیر رمز FCM_SERVICE_ACCOUNT (کل JSON حساب سرویس فایربیس) لازم است. پیام «data-only» است؛ خود اپ اعلان را می‌سازد
  * (و اگر کاربر اعلان تبلیغاتی را خاموش کرده باشد نشان نمی‌دهد).
  * ارسال همگانی: از دستور مدیر /apppush در ربات تلگرام (BroadcastWorkflow با appPush).
+ * اعلان هدفمند: /apppush_send <گروه> (all | nocredit | expiring | inactive). مقدار هر کلید pt1:/pt0: به‌شکل JSON {u: شناسه‌ی کاربر, t: آخرین بار باز شدن اپ}
+ * است؛ شرط هر گروه هنگام ارسال از داده‌ی زنده‌ی سرور (اعتبار، پلن) خوانده می‌شود، نه از چیزی که اپ گفته است.
  */
 import type { Env } from "./env";
 import { esc, sendMessage } from "./telegram";
@@ -15,12 +17,70 @@ const TOKEN_TTL = 120 * 86400; // هر بار که اپ باز می‌شود ت�
 export const pushEnabled = (env: Env) => !!env.FCM_SERVICE_ACCOUNT;
 export type PushMsg = { title: string; body: string; url?: string };
 
+/** گروه‌های مخاطب اعلان اپ */
+export type PushSegment = "all" | "nocredit" | "expiring" | "inactive";
+export const PUSH_SEGMENTS: Record<PushSegment, string> = {
+  all: "همه‌ی دستگاه‌های دارای اعلان تبلیغاتی",
+  nocredit: "بدون اعتبار (نه پلن فعال، نه اعتبار هدیه)",
+  expiring: "پلن در حال انقضا (کمتر از ۳ روز)",
+  inactive: "برنگشته به اپ در ۷ روز اخیر",
+};
+export const isPushSegment = (x: unknown): x is PushSegment => typeof x === "string" && Object.prototype.hasOwnProperty.call(PUSH_SEGMENTS, x);
+const EXPIRING_MS = 3 * 86_400_000;
+const INACTIVE_MS = 7 * 86_400_000;
+
 // ---------- ثبت توکن ----------
-export async function putPushToken(env: Env, token: unknown, promo: boolean, remove: boolean): Promise<string | null> {
+// مقدار: JSON با شناسه‌ی کاربر و زمان آخرین باز شدن اپ (اپ در هر اجرا ثبت را تمدید می‌کند). مقدار قدیمی «1» یعنی کاربر نامشخص.
+export async function putPushToken(env: Env, token: unknown, promo: boolean, remove: boolean, userId?: string): Promise<string | null> {
   if (typeof token !== "string" || !TOKEN_RE.test(token)) return "توکن نامعتبر است.";
   await Promise.all([env.KV.delete(`pt1:${token}`), env.KV.delete(`pt0:${token}`)]);
-  if (!remove) await env.KV.put(`${promo ? "pt1" : "pt0"}:${token}`, "1", { expirationTtl: TOKEN_TTL });
+  if (!remove) await env.KV.put(`${promo ? "pt1" : "pt0"}:${token}`, JSON.stringify({ u: userId, t: Date.now() }), { expirationTtl: TOKEN_TTL });
   return null;
+}
+
+export type TokenRow = { token: string; u?: string; t?: number };
+
+/** یک صفحه از توکن‌های اعلان تبلیغاتی همراه با مقدارشان (یک پرس‌وجو). next = کلید آخرین ردیف برای صفحه‌ی بعد. */
+export async function pushTokenPage(env: Env, cursor: string | undefined, limit: number): Promise<{ rows: TokenRow[]; next: string | null }> {
+  await env.KV.ready();
+  const res = await env.DB.prepare("SELECT k, v FROM kv WHERE k > ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) ORDER BY k LIMIT ?4")
+    .bind(cursor ?? "pt1:", "pt1:\u{10FFFF}", Math.floor(Date.now() / 1000), limit + 1).all<{ k: string; v: string }>();
+  const all = (res.results ?? []) as { k: string; v: string }[];
+  const page = all.slice(0, limit);
+  const rows = page.map((r) => {
+    const row: TokenRow = { token: r.k.slice(4) };
+    try {
+      const j = JSON.parse(r.v);
+      if (j && typeof j === "object") {
+        if (typeof j.u === "string") row.u = j.u;
+        if (Number.isFinite(j.t)) row.t = Number(j.t);
+      }
+    } catch { /* مقدار قدیمی «1» */ }
+    return row;
+  });
+  return { rows, next: all.length > limit ? page[page.length - 1].k : null };
+}
+
+/** فقط ردیف‌هایی را نگه می‌دارد که در گروه مخاطب‌اند. nocredit و expiring با یک پرس‌وجو برای کل صفحه (حداکثر ۲۰ کاربر ⇒ ۴۱ پارامتر) از D1 خوانده می‌شوند. */
+export async function filterSegment(env: Env, rows: TokenRow[], seg: PushSegment): Promise<TokenRow[]> {
+  if (seg === "all") return rows;
+  const now = Date.now();
+  if (seg === "inactive") return rows.filter((r) => r.t !== undefined && now - r.t >= INACTIVE_MS);
+  const known = rows.filter((r) => r.u);
+  if (!known.length) return [];
+  const keys = [...new Set(known.map((r) => r.u!))].flatMap((u) => [`sub:${u}`, `bonus:${u}`]);
+  await env.KV.ready();
+  const q = await env.DB.prepare(`SELECT k, v FROM kv WHERE (exp IS NULL OR exp > ?1) AND k IN (${keys.map((_, n) => `?${n + 2}`).join(",")})`)
+    .bind(Math.floor(now / 1000), ...keys).all<{ k: string; v: string }>();
+  const map = new Map(((q.results ?? []) as { k: string; v: string }[]).map((r) => [r.k, r.v]));
+  return known.filter((r) => {
+    let exp = 0, credits = 0;
+    try { const sb = JSON.parse(map.get(`sub:${r.u}`) ?? "null"); exp = Number(sb?.exp) || 0; credits = Number(sb?.credits) || 0; } catch { /* بدون پلن */ }
+    const planOn = exp > now;
+    if (seg === "expiring") return planOn && exp - now <= EXPIRING_MS;
+    const bonus = Math.floor(Number(map.get(`bonus:${r.u}`)) || 0);
+    return !(planOn && credits > 0) && bonus <= 0; // nocredit؛ همان تعریف getActiveSub + getBonus
+  });
 }
 
 // ---------- احراز هویت FCM ----------
@@ -103,15 +163,17 @@ export async function appPushCommand(env: Env, chatId: number, text: string): Pr
   const key = `apppush:draft:${chatId}`;
   if (!pushEnabled(env)) return void (await sendMessage(env, chatId, "⚠️ اعلان اپ فعال نیست: رمز <code>FCM_SERVICE_ACCOUNT</code> تنظیم نشده است."));
   if (cmd === "/apppush_send") {
+    const seg = (text.trim().split(/\s+/)[1] ?? "all").toLowerCase();
+    if (!isPushSegment(seg)) return void (await sendMessage(env, chatId, `گروه نامعتبر است. گروه‌ها:\n${Object.entries(PUSH_SEGMENTS).map(([k, v]) => `<code>${k}</code> — ${v}`).join("\n")}`));
     const d = await env.KV.get(key);
     if (!d) return void (await sendMessage(env, chatId, "پیش‌نویسی نیست. اول /apppush عنوان | متن | لینک را بفرست."));
     await env.KV.delete(key);
     const msg = JSON.parse(d) as PushMsg;
-    await env.BROADCAST_WORKFLOW.create({ id: `ap-${Date.now()}`, params: { adminChatId: chatId, text: "", appPush: msg } });
-    return void (await sendMessage(env, chatId, "📲 ارسال اعلان به اپ شروع شد؛ گزارش پایانی را همین‌جا می‌فرستم."));
+    await env.BROADCAST_WORKFLOW.create({ id: `ap-${Date.now()}`, params: { adminChatId: chatId, text: "", appPush: msg, appSegment: seg } });
+    return void (await sendMessage(env, chatId, `📲 ارسال اعلان به اپ شروع شد (${PUSH_SEGMENTS[seg]})؛ گزارش پایانی را همین‌جا می‌فرستم.`));
   }
   const msg = parsePushDraft(text.slice(text.search(/\s/) < 0 ? text.length : text.search(/\s/)));
   if (!msg) return void (await sendMessage(env, chatId, "قالب: <code>/apppush عنوان | متن | لینک https (اختیاری)</code>"));
   await env.KV.put(key, JSON.stringify(msg), { expirationTtl: 3600 });
-  await sendMessage(env, chatId, `📲 <b>پیش‌نمایش اعلان</b>\n\n<b>${esc(msg.title)}</b>\n${esc(msg.body)}${msg.url ? `\n🔗 ${esc(msg.url)}` : ""}\n\nبرای ارسال به همه‌ی دستگاه‌هایی که اعلان تبلیغاتی را روشن دارند: /apppush_send`);
+  await sendMessage(env, chatId, `📲 <b>پیش‌نمایش اعلان</b>\n\n<b>${esc(msg.title)}</b>\n${esc(msg.body)}${msg.url ? `\n🔗 ${esc(msg.url)}` : ""}\n\nبرای ارسال به همه‌ی دستگاه‌هایی که اعلان تبلیغاتی را روشن دارند: /apppush_send\nیا فقط به یک گروه: /apppush_send nocredit | expiring | inactive`);
 }

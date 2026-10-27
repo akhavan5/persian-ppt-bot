@@ -12,6 +12,7 @@ import { listFiles, loadFile } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
+import { appVerCommand } from "./app-version";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
@@ -450,6 +451,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   const admin = isAdmin(env, userId);
   if (admin && (cmd === "/apppush" || cmd === "/apppush_send")) return await appPushCommand(env, chatId, text); // اعلان به اپ اندروید (FCM)
+  if (admin && cmd === "/appver") return await appVerCommand(env, chatId, text); // نسخه‌ی اپ اندروید: آخرین / حداقل مجاز
   // شناسه‌ی اصلی: اگر تلگرام به حساب سایت وصل باشد شناسه‌ی حساب سایت (اعتبار/پلن/تنظیمات/فایل مشترک)؛ وگرنه خود شناسه‌ی تلگرام
   let uid = await resolveUid(env, userId);
   if (await banned(env, userId, uid)) {

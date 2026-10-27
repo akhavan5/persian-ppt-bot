@@ -70,6 +70,9 @@ fun parseConfig(j: JSONObject): Config {
     val toneList = if (tones == null) emptyList() else tones.keys().asSequence().map { Opt(it, tones.optString(it)) }.toList()
     val fonts = j.optJSONArray("fonts")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
     val slides = j.optJSONArray("slideChoices")?.let { a -> (0 until a.length()).map { a.optInt(it) } } ?: listOf(5, 8, 10)
+    // لینک به‌روزرسانی: اول لینک مخصوص همین فروشگاه (app.urls.<bazaar|myket>)، وگرنه url عمومی قدیمی
+    val appObj = j.optJSONObject("app")
+    val storeUrl = appObj?.optJSONObject("urls")?.optString(Store.ID).orEmpty()
     return Config(
         templates = j.optJSONArray("templates").objects().map { Opt(it.str("key"), (it.str("emoji") + " " + it.str("name")).trim(), null, it.str("hint")) },
         themes = j.optJSONArray("themes").objects().map { Opt(it.str("key"), it.str("name"), it.str("primary").ifEmpty { null }) },
@@ -87,7 +90,7 @@ fun parseConfig(j: JSONObject): Config {
         bazaar = j.optBoolean(Store.ID), // «bazaar» در نسخه‌ی بازار، «myket» در نسخه‌ی مایکت
         latestVersion = j.optJSONObject("app")?.optInt("latest") ?: 0,
         minVersion = j.optJSONObject("app")?.optInt("min") ?: 0,
-        updateUrl = Store.updateUrl(j.optJSONObject("app")?.optString("url").orEmpty()),
+        updateUrl = storeUrl.ifEmpty { Store.updateUrl(appObj?.optString("url").orEmpty()) },
     )
 }
 

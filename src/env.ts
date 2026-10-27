@@ -77,6 +77,9 @@ export interface Env {
   ANDROID_LATEST_VERSION?: string;
   ANDROID_MIN_VERSION?: string;
   ANDROID_UPDATE_URL?: string;
+  /** اختیاری: لینک به‌روزرسانی مخصوص هر فروشگاه (پیش‌فرض: صفحه‌ی اپ در کافه‌بازار / مایکت با ANDROID_PACKAGE) */
+  ANDROID_UPDATE_URL_BAZAAR?: string;
+  ANDROID_UPDATE_URL_MYKET?: string;
   BAZAAR_CLIENT_ID?: string;
   BAZAAR_CLIENT_SECRET?: string;
   BAZAAR_REFRESH_TOKEN?: string;

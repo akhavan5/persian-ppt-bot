@@ -94,4 +94,5 @@ export const ADMIN_COMMANDS = [
   { command: "grant", description: "افزودن اعتبار: /grant شناسه تعداد" },
   { command: "ban", description: "مسدود کردن: /ban شناسه" },
   { command: "unban", description: "رفع انسداد: /unban شناسه" },
+  { command: "appver", description: "نسخه‌ی اپ اندروید: /appver آخرین [حداقل] | clear" },
 ];

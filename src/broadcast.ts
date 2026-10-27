@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import { esc, sendMessage } from "./telegram";
 import { toFa } from "./util";
 import { withStore } from "./store";
-import { sendPush, type PushMsg } from "./push";
+import { PUSH_SEGMENTS, filterSegment, pushTokenPage, sendPush, type PushMsg, type PushSegment } from "./push";
 import { DAILY_FREE_MSG, claimDailyFreeMany, isAdmin } from "./settings";
 
 /** مخاطبان: همه / دارندگان پلن فعال / بدون پلن فعال / بدون اعتبار (نه پلن و نه اعتبار هدیه‌ی باقی‌مانده) */
@@ -13,7 +13,7 @@ export const AUDIENCES: Record<Audience, string> = { all: "همه", plan: "👑 
 export const isAudience = (x: unknown): x is Audience => typeof x === "string" && x in AUDIENCES;
 
 /** daily: اعتبار رایگان روزانه (از cron) — به هر کاربر تلگرامِ بدون اعتبار ۱ اعتبار اضافه می‌کند و فقط به همان‌ها DAILY_FREE_MSG می‌فرستد؛ text/adminChatId نادیده گرفته می‌شود */
-export interface BroadcastParams { adminChatId: number; text: string; audience?: Audience; daily?: boolean; appPush?: PushMsg }
+export interface BroadcastParams { adminChatId: number; text: string; audience?: Audience; daily?: boolean; appPush?: PushMsg; appSegment?: PushSegment }
 
 const BATCH = 20;
 const MAX_USERS = 20_000;
@@ -101,9 +101,9 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
   constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
 
   async run(event: WorkflowEvent<BroadcastParams>, step: WorkflowStep) {
-    const { adminChatId, text, audience, daily, appPush } = event.payload;
+    const { adminChatId, text, audience, daily, appPush, appSegment } = event.payload;
     if (daily) return await this.runDaily(step);
-    if (appPush) return await this.runAppPush(step, adminChatId, appPush);
+    if (appPush) return await this.runAppPush(step, adminChatId, appPush, appSegment ?? "all");
     const ids = await step.do("collect", () => listAudience(this.env, isAudience(audience) ? audience : "all"));
 
     let ok = 0, failed = 0, skipped = 0;
@@ -132,16 +132,17 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
     }).catch(() => {});
   }
 
-  /** اعلان FCM به اپ اندروید: هر گام ۲۰ توکن (صفحه‌ی بعدی را همان گام با cursor می‌خواند تا خروجی گام بزرگ نشود) */
-  private async runAppPush(step: WorkflowStep, adminChatId: number, msg: PushMsg) {
+  /** اعلان FCM به اپ اندروید: هر گام ۲۰ توکن (صفحه‌ی بعدی را همان گام با cursor می‌خواند تا خروجی گام بزرگ نشود).
+   *  seg: گروه مخاطب؛ شرط گروه برای هر صفحه از داده‌ی زنده خوانده می‌شود (۲ پرس‌وجو + حداکثر ۲۰ ارسال ⇒ زیر سقف ۵۰ زیردرخواست). */
+  private async runAppPush(step: WorkflowStep, adminChatId: number, msg: PushMsg, seg: PushSegment) {
     let cursor: string | undefined;
-    let ok = 0, dead = 0, failed = 0;
+    let ok = 0, dead = 0, failed = 0, skipped = 0;
     for (let n = 0; n < 1000; n++) {
       const r = await step.do(`push-${n}`, { retries: { limit: 0, delay: "1 second" }, timeout: "3 minutes" }, async () => {
-        const l = await this.env.KV.list({ prefix: "pt1:", cursor, limit: 20 });
-        const out = { ok: 0, dead: 0, failed: 0, next: l.list_complete ? null : ((l as any).cursor as string) };
-        for (const k of l.keys) {
-          const token = k.name.slice(4);
+        const page = await pushTokenPage(this.env, cursor, 20);
+        const targets = await filterSegment(this.env, page.rows, seg);
+        const out = { ok: 0, dead: 0, failed: 0, skipped: page.rows.length - targets.length, next: page.next };
+        for (const { token } of targets) {
           const res = await sendPush(this.env, token, msg);
           if (res === "ok") out.ok++;
           else if (res === "dead") { out.dead++; await Promise.all([this.env.KV.delete(`pt1:${token}`), this.env.KV.delete(`pt0:${token}`)]).catch(() => {}); }
@@ -149,12 +150,12 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
         }
         return out;
       });
-      ok += r.ok; dead += r.dead; failed += r.failed;
+      ok += r.ok; dead += r.dead; failed += r.failed; skipped += r.skipped;
       if (!r.next) break;
       cursor = r.next;
     }
     await step.do("report", async () => {
-      await sendMessage(this.env, adminChatId, `📲 <b>اعلان اپ ارسال شد</b>\n✅ موفق: ${toFa(String(ok))}\n🗑 توکن نامعتبر (حذف شد): ${toFa(String(dead))}\n❌ ناموفق: ${toFa(String(failed))}`);
+      await sendMessage(this.env, adminChatId, `📲 <b>اعلان اپ ارسال شد</b> (${PUSH_SEGMENTS[seg]})\n✅ موفق: ${toFa(String(ok))}\n🗑 توکن نامعتبر (حذف شد): ${toFa(String(dead))}\n❌ ناموفق: ${toFa(String(failed))}` + (seg !== "all" ? `\n⏭ خارج از گروه (ارسال نشد): ${toFa(String(skipped))}` : ""));
     }).catch(() => {});
   }
 
