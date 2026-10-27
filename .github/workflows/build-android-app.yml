@@ -51,7 +51,7 @@ jobs:
       - name: Verify APKs
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          mkdir -p dist
+          mkdir -p dist mappings
           for S in bazaar myket; do
             APK=android/app/build/outputs/apk/$S/release/app-$S-release.apk
             "$BT/apksigner" verify --print-certs "$APK" | head -5
@@ -59,7 +59,8 @@ jobs:
             cp "$APK" dist/pptsaz-$S.apk
             cp android/app/build/outputs/bundle/${S}Release/app-$S-release.aab dist/pptsaz-$S.aab
             # نقشه‌ی R8 برای خواندن گزارش کرش‌ها؛ برای هر نسخه نگه دارید
-            cp android/app/build/outputs/mapping/${S}Release/mapping.txt dist/mapping-$S.txt
+            # (در artifact جدا آپلود می‌شود تا دانلود APK/AAB سنگین نشود)
+            cp android/app/build/outputs/mapping/${S}Release/mapping.txt mappings/mapping-$S.txt
           done
           # نسخه‌ی مایکت نباید هیچ نشانی از بازار داشته باشد
           if "$BT/aapt2" dump permissions dist/pptsaz-myket.apk | grep -qi bazaar; then
@@ -76,6 +77,12 @@ jobs:
         with:
           name: pptsaz-android
           path: dist/*
+
+      # نقشه‌های R8 (mapping-bazaar.txt و mapping-myket.txt) سنگین‌اند؛ جدا از APK/AAB آپلود می‌شوند تا دانلود اپ‌ها کند نشود
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pptsaz-mappings
+          path: mappings/*
 
   smoke:
     needs: build
