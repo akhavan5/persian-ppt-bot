@@ -719,6 +719,7 @@ async function bannedScreen(env: Env): Promise<Screen> {
 async function systemScreen(env: Env): Promise<Screen> {
   const ok = (b: unknown) => (b ? "✅" : "▫️");
   const models = modelList(env);
+  const customN = models.filter((m) => m.custom).length;
   const [info, rowsN, filesN] = await Promise.all([
     tg<any>(env, "getWebhookInfo").catch(() => null),
     count(env, "SELECT COUNT(*) c FROM kv"),
@@ -734,7 +735,7 @@ async function systemScreen(env: Env): Promise<Screen> {
     text:
       "⚙️ <b>وضعیت سیستم</b>\n\n" +
       `🤖 مدل‌ها (${fa(models.length)}): ${models.slice(0, 6).map((m) => esc(m.name) + (m.extra ? (m.free ? "🆓" : "⭐") : "")).join("، ")}${models.length > 6 ? "…" : ""}\n` +
-      `${ok(hasKey(env))} کلید مدل زبانی · ${ok(env.EXTRA_LLM_API_KEY && env.EXTRA_LLM_BASE_URL)} ارائه‌دهنده‌ی دوم · ${ok(models.some((m) => m.extra && m.base !== (env.EXTRA_LLM_BASE_URL ?? "").trim().replace(/\/+$/, "")))} مدل‌های CUSTOM\n` +
+      `${ok(hasKey(env))} کلید مدل زبانی · ${ok(env.EXTRA_LLM_API_KEY && env.EXTRA_LLM_BASE_URL)} ارائه‌دهنده‌ی دوم · ${ok(customN)} CUSTOM_LLM_MODELS (${fa(customN)} مدل${env.CUSTOM_LLM_MODELS && !customN ? "؛ ⚠️ JSON/مدل نامعتبر، لاگ را ببین" : ""})\n` +
       `${ok(env.AI)} تولید تصویر (Workers AI) · ${ok(env.PEXELS_API_KEY)} Pexels\n` +
       `${ok((env.WEB_SEARCH ?? "").toLowerCase() !== "off")} جستجوی وب · ${ok(env.TAVILY_API_KEY)} Tavily\n` +
       `${ok(env.OCR_SPACE_API_KEY)} OCR.space · ${ok(env.OCR_WORKFLOW)} OCR تلگرام · ${ok(env.WEB_OCR_WORKFLOW)} OCR وب\n` +

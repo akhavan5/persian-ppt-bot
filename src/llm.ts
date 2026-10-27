@@ -42,6 +42,8 @@ export interface ModelOption {
   base?: string; key?: string;
   /** برای کاربران رایگان هم باز است؟ مدل‌های کلودفلر همیشه true؛ مدل‌های EXTRA_LLM_* همیشه false (فقط پلن)؛ مدل‌های CUSTOM_LLM_MODELS فقط اگر «free: true» داشته باشند */
   free: boolean;
+  /** از CUSTOM_LLM_MODELS آمده است (نه EXTRA_LLM_*) */
+  custom?: boolean;
 }
 /** برند مدل (برای نمایش لوگو در وب)؛ از روی نام مدل تشخیص داده می‌شود. ترتیب مهم است: «deepseek-…-qwen» باید deepseek حساب شود. */
 export function brandOf(id: string): string {
@@ -69,6 +71,18 @@ function parseModels(raw: string, add: (model: unknown, name?: unknown) => void)
 }
 /** آیا ارائه‌دهنده‌ی دوم (فقط متنی) کامل تنظیم شده است؟ */
 const extraReady = (env: Env) => !!(env.EXTRA_LLM_BASE_URL?.trim() && env.EXTRA_LLM_API_KEY?.trim() && env.EXTRA_LLM_MODELS?.trim());
+/** تجزیه‌ی CUSTOM_LLM_MODELS: آرایه‌ی JSON، یک شیء تنها، یا چند شیء پشت‌سرهم (با کاما/خط جدید) */
+function parseCustom(raw?: unknown): any[] {
+  // متغیر نوع «JSON» در داشبورد کلودفلر از قبل به شیء/آرایه تبدیل می‌شود (نه رشته)
+  if (raw && typeof raw === "object") return (Array.isArray(raw) ? raw : [raw]).filter((x) => x && typeof x === "object");
+  const t = (typeof raw === "string" ? raw : "").trim().replace(/[\u201C\u201D]/g, '"'); // گیومه‌های هوشمند (کپی از چت/ورد) ⇒ گیومه‌ی معمولی
+  if (!t) return [];
+  for (const cand of [t, `[${t.replace(/}\s*{/g, "},{")}]`]) {
+    try { const j = JSON.parse(cand); return (Array.isArray(j) ? j : [j]).filter((x) => x && typeof x === "object"); } catch { /* شکل بعدی */ }
+  }
+  console.error("CUSTOM_LLM_MODELS: JSON نامعتبر است");
+  return [];
+}
 /** مدل‌های JSON مستقل (CUSTOM_LLM_MODELS) */
 const truthy = (v: unknown) => v === true || v === 1 || /^(true|1|yes)$/i.test(String(v ?? "").trim());
 /**
@@ -95,14 +109,12 @@ export function modelList(env: Env): ModelOption[] {
   };
   if (extraReady(env)) parseModels(env.EXTRA_LLM_MODELS ?? "", adder(true)); // اول: ارائه‌دهنده‌ی دوم (روال قبلی)
   // مدل‌های JSON مستقل: هرکدام با base/key/free خودش
-  try {
-    const raw = (env.CUSTOM_LLM_MODELS ?? "").trim();
-    for (const x of raw.startsWith("[") ? JSON.parse(raw) : []) {
-      const m = String(x?.model ?? "").trim(), base = String(x?.base ?? "").trim().replace(/\/+$/, ""), key = String(x?.key ?? "").trim();
-      if (!m || !base || !key || out.some((o) => o.id === m)) continue;
-      out.push({ id: m, name: String(x?.name ?? "").trim() || shortName(m), model: m, brand: brandOf(m), extra: true, base, key, free: truthy(x?.free) });
-    }
-  } catch { /* JSON نامعتبر: نادیده گرفته می‌شود */ }
+  for (const x of parseCustom(env.CUSTOM_LLM_MODELS)) {
+    const m = String(x?.model ?? "").trim(), base = String(x?.base ?? "").trim().replace(/\/+$/, ""), key = String(x?.key ?? "").trim();
+    if (!m || !base || !key) { console.error("CUSTOM_LLM_MODELS: مدل نادیده گرفته شد (model/base/key کامل نیست)", m || "?"); continue; }
+    if (out.some((o) => o.id === m)) { console.error("CUSTOM_LLM_MODELS: مدل تکراری نادیده گرفته شد", m); continue; }
+    out.push({ id: m, name: String(x?.name ?? "").trim() || shortName(m), model: m, brand: brandOf(m), extra: true, custom: true, base, key, free: truthy(x?.free) });
+  }
   const add = adder(false);
   parseModels(env.OPENAI_MODELS ?? "", add);
   if (!out.some((o) => !o.extra)) { add(env.OPENAI_MODEL || "gpt-4o-mini"); add(env.OPENAI_MODEL_2); }

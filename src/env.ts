@@ -45,7 +45,7 @@ export interface Env {
   EXTRA_LLM_MODELS?: string;
   /** اختیاری: مدل‌های متنیِ مستقل، JSON: یک شیء برای هر مدل با آدرس و کلید خودش. free: true ⇒ برای کاربران رایگان هم باز است (پیش‌فرض false = فقط پلن/مدیر)؛ name اختیاری.
    *  [{"model":"...","base":"https://host/v1","key":"...","free":true,"name":"نام نمایشی"}] */
-  CUSTOM_LLM_MODELS?: string;
+  CUSTOM_LLM_MODELS?: string | object; // نوع «Text» (رشته) یا «JSON» (شیء/آرایه) در داشبورد
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;
   LLM_PROVIDER?: string;
