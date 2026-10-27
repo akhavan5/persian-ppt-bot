@@ -640,7 +640,7 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     ...(o.orig?.trim() ? { orig: o.orig.replace(/\s+/g, " ").trim().slice(0, 300) } : {}),
     slides: Math.min(o.slides ?? s.slides, caps.maxSlides),
     imgs: wantsImgs(s),
-    model: models.some((m) => m.id === s.model) ? (s.model as string) : models[0].id,
+    model: models.some((m) => m.id === s.model) ? (s.model as string) : (models[0]?.id ?? ""),
     poster: "wide", // پیش‌فرض: با پوستر افقی
     handout: true, // جزوه‌ی Word: پیش‌فرض روشن
     step: "model",

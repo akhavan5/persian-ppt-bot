@@ -104,7 +104,7 @@ const truthy = (v: unknown) => v === true || v === 1 || /^(true|1|yes)$/i.test(S
  *   CUSTOM_LLM_MODELS=[{"model":"nvidia/nemotron-3-ultra-550b-a55b:free","base":"https://ai.chabokan.net/v1","key":"sk-...","free":true,"name":"Nemotron 3 Ultra"}]
  *   free: true ⇒ برای کاربران رایگان هم باز است (پیش‌فرض false)؛ name اختیاری است؛ شیء بدون model/base/key نادیده گرفته می‌شود.
  *   مدل پیش‌فرض = اولین مدل custom (defaultModelId)؛ برای کاربر بدون پلن، اولین custom با free:true وگرنه اولین مدل کلودفلر (freeModelId).
- * اگر OPENAI_MODELS خالی باشد، از OPENAI_MODEL (و OPENAI_MODEL_2) استفاده می‌شود.
+ * اگر OPENAI_MODELS خالی باشد، از OPENAI_MODEL (و OPENAI_MODEL_2) استفاده می‌شود؛ اگر هر سه خالی باشند مدلی نشان داده نمی‌شود (بدون مدل پیش‌فرض).
  */
 export function modelList(env: Env): ModelOption[] {
   if (!useOpenAI(env)) { const m = env.ANTHROPIC_MODEL || "claude-sonnet-5-5"; return [{ id: m, name: m, model: m, brand: "anthropic" }]; }
@@ -127,12 +127,14 @@ export function modelList(env: Env): ModelOption[] {
   }
   const add = adder(false);
   parseModels(env.OPENAI_MODELS ?? "", add);
-  if (!out.some((o) => !o.extra)) { add(env.OPENAI_MODEL || "gpt-4o-mini"); add(env.OPENAI_MODEL_2); }
+  if (!out.some((o) => !o.extra)) { add(env.OPENAI_MODEL); add(env.OPENAI_MODEL_2); } // هیچ مدل پیش‌فرضی اضافه نمی‌شود؛ اگر همه خالی باشند فهرست خالی است
   return out.slice(0, 20);
 }
 export const resolveModel = (env: Env, id?: string): ModelOption => {
   const l = modelList(env);
-  return l.find((m) => m.id === id) ?? l.find((m) => m.custom) ?? l[0];
+  const m = l.find((x) => x.id === id) ?? l.find((x) => x.custom) ?? l[0];
+  if (!m) throw new LlmError("هیچ مدلی تنظیم نشده است (OPENAI_MODELS / OPENAI_MODEL)", true);
+  return m;
 };
 
 export function hasKey(env: Env): boolean {

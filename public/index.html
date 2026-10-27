@@ -1012,7 +1012,7 @@ function renderModels() {
     }, ...(m.free === false ? [h("span", { class: "tag pro" }, "ویژه")] : []), modelLogo(m.brand), h("span", { class: "nm" }, h("b", {}, m.name), h("small", {}, b.label)));
   }));
 }
-const defModelId = () => (cfg.models.find((m) => m.free !== false) || cfg.models[0]).id;
+const defModelId = () => ((cfg.models || []).find((m) => m.free !== false) || (cfg.models || [])[0] || {}).id;
 function pickModel(m) {
   const special = m.free === false;
   if (!me) { if (m.id !== defModelId()) openAuth("register", special ? "برای استفاده از مدل‌های ویژه ثبت‌نام کن و پلن بگیر." : "برای انتخاب مدل ثبت‌نام کن؛ این مدل رایگان است."); return; }

@@ -734,7 +734,7 @@ async function systemScreen(env: Env): Promise<Screen> {
   return {
     text:
       "⚙️ <b>وضعیت سیستم</b>\n\n" +
-      `🤖 مدل‌ها (${fa(models.length)}): ${models.slice(0, 6).map((m) => esc(m.name) + (m.extra ? (m.free ? "🆓" : "⭐") : "")).join("، ")}${models.length > 6 ? "…" : ""}\n` +
+      `🤖 مدل‌ها (${fa(models.length)}): ${models.slice(0, 6).map((m) => esc(m.name) + (m.extra ? (m.free ? "🆓" : "⭐") : "")).join("، ") || "⚠️ هیچ مدلی تنظیم نشده"}${models.length > 6 ? "…" : ""}\n` +
       `${ok(hasKey(env))} کلید مدل زبانی · ${ok(env.EXTRA_LLM_API_KEY && env.EXTRA_LLM_BASE_URL)} ارائه‌دهنده‌ی دوم · ${ok(customN)} CUSTOM_LLM_MODELS (${fa(customN)} مدل${env.CUSTOM_LLM_MODELS && !customN ? "؛ ⚠️ JSON/مدل نامعتبر، لاگ را ببین" : ""})\n` +
       `${ok(env.AI)} تولید تصویر (Workers AI) · ${ok(env.PEXELS_API_KEY)} Pexels\n` +
       `${ok((env.WEB_SEARCH ?? "").toLowerCase() !== "off")} جستجوی وب · ${ok(env.TAVILY_API_KEY)} Tavily\n` +

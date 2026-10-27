@@ -132,9 +132,9 @@ export async function putSub(env: Env, userId: Uid, s: Sub) {
 
 // ---------- دسترسی به مدل‌ها ----------
 /** مدل پیش‌فرض برای کاربرانی که هنوز مدلی انتخاب نکرده‌اند = اولین مدل CUSTOM_LLM_MODELS؛ اگر نبود، اولین مدل فهرست */
-export const defaultModelId = (env: Env) => { const l = modelList(env); return (l.find((m) => m.custom) ?? l[0]).id; };
+export const defaultModelId = (env: Env) => { const l = modelList(env); return (l.find((m) => m.custom) ?? l[0])?.id ?? ""; };
 /** مدل پیش‌فرضِ رایگان (برای کاربر بدون پلن که مدل ویژه دارد) = اولین مدل custom با free:true؛ بعد اولین مدل کلودفلر (نه extra)؛ اگر نبود، اولین مدل با پرچم free */
-export const freeModelId = (env: Env) => { const l = modelList(env); return (l.find((m) => m.custom && m.free) ?? l.find((m) => !m.extra) ?? l.find((m) => m.free) ?? l[0]).id; };
+export const freeModelId = (env: Env) => { const l = modelList(env); return (l.find((m) => m.custom && m.free) ?? l.find((m) => !m.extra) ?? l.find((m) => m.free) ?? l[0])?.id ?? ""; };
 /** دسترسی به مدل‌های ویژه (بدون پرچم free): مدیر یا دارنده‌ی پلن فعال */
 export async function hasPlanAccess(env: Env, userId: Uid): Promise<boolean> {
   return isAdmin(env, userId) || !!(await getActiveSub(env, userId));
