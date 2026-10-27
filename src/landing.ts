@@ -162,7 +162,7 @@ export function renderFooter(): string {
       <div>
         <a class="brand" href="/"><i>📊</i><span>${BRAND}</span></a>
         <p style="margin-top:10px;color:var(--muted)">از یک موضوع ساده تا ارائه‌ای کامل و آماده‌ی نمایش؛ فارسی، راست‌به‌چپ و قابل‌ویرایش.</p>
-        <p style="margin-top:8px;color:var(--muted)">تماس: <a href="https://t.me/pptsaz_bot" rel="noopener" target="_blank">@pptsaz_bot</a> · <a href="mailto:info@pptsaz.ir">info@pptsaz.ir</a></p>
+        <p style="margin-top:8px;color:var(--muted)">تماس: <a href="https://t.me/pptsaz_bot" rel="noopener" target="_blank">@pptsaz_bot</a> · <a href="mailto:info@pptsaz.ir">info@pptsaz.ir</a> · <a href="tel:+989393704036" style="direction:ltr;unicode-bidi:isolate">09393704036</a></p>
       </div>
       <div><h4>برای چه کسانی؟</h4><ul>${audiences}</ul></div>
       <div><h4>پیوندهای سایت</h4><ul><li><a href="/#features">ویژگی‌ها</a></li><li><a href="/#how">نحوه‌ی کار</a></li><li><a href="/#usecases">مخاطبان</a></li><li><a href="/#pricing">تعرفه</a></li><li><a href="/#faq">پرسش‌های متداول</a></li><li><a href="/blog">وبلاگ</a></li><li><a href="/#contact">تماس با ما</a></li></ul></div>
