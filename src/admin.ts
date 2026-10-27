@@ -17,7 +17,7 @@ import {
   PUSH_BODY_MAX, PUSH_SEGMENTS, PUSH_TITLE_MAX, clearPushDraft, getPushDraft, getPushSegment, isPushSegment, launchAppPush, parsePushDraft, pushDeviceCounts,
   pushEnabled, pushPreviewText, savePushDraft, setPushSegment,
 } from "./push";
-import { APPVER_HELP, appVerText, applyAppVer, getAppVersions } from "./app-version";
+import { APPVER_HELP, STORES, STORE_NAMES, appVerText, applyAppVer, getAppVersions, isStoreId, type StoreId } from "./app-version";
 
 /** دستورهای متنی مدیر: ورود به پنل و لغو ورودی در انتظار؛ بقیه‌ی کارها (از جمله نسخه‌ی اپ و اعلان به اپ) با دکمه‌های پنل انجام می‌شود.
  *  دستورهای قدیمی /appver و /apppush هم هنوز کار می‌کنند ولی زیرشان دکمه‌ی «باز کردن در پنل» هست. */
@@ -99,7 +99,7 @@ async function identify(env: Env, id: Uid): Promise<Ident> {
 const cardId = (i: Ident): Uid => i.tgId ?? (i.webId as string);
 
 // ---------- ورودی متنی منتظر (جستجو، اعتبار دلخواه، پیام به کاربر، پیام همگانی) ----------
-type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "ver" } | { k: "pushw" };
+type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "ver"; s: StoreId | "all" } | { k: "pushw" };
 const inKey = (adminId: number) => `adm:in:${adminId}`;
 const setInput = (env: Env, adminId: number, p: Pending) => env.KV.put(inKey(adminId), JSON.stringify(p), { expirationTtl: 600 });
 const clearInput = (env: Env, adminId: number) => env.KV.delete(inKey(adminId));
@@ -629,8 +629,12 @@ async function appScreen(env: Env, head = ""): Promise<Screen> {
   const push = pushEnabled(env)
     ? `✅ فعال${dev ? ` · دستگاه با اعلان روشن: <b>${fa(dev.on)}</b> · خاموش: ${fa(dev.off)}` : ""}`
     : "❌ غیرفعال (رمز <code>FCM_SERVICE_ACCOUNT</code> تنظیم نشده)";
-  const kb: Btn[][] = [[cb("✏️ تنظیم نسخه", "ad:av:e")]];
-  if (v.manual) kb[0].push(cb("🧹 برگشت به متغیرهای محیطی", "ad:av:c"));
+  const kb: Btn[][] = [
+    STORES.map((s) => cb(`✏️ نسخه‌ی ${STORE_NAMES[s]}`, `ad:av:e:${s}`)),
+    [cb("✏️ نسخه‌ی هر دو فروشگاه", "ad:av:e:all")],
+  ];
+  const manual = STORES.filter((s) => v.stores[s].manual);
+  if (manual.length) kb.push(manual.map((s) => cb(`🧹 ${STORE_NAMES[s]}: برگشت به متغیر محیطی`, `ad:av:c:${s}`)));
   kb.push([cb("📲 ارسال اعلان به اپ", "ad:pu")]);
   kb.push([cb("🔄 تازه‌سازی", "ad:ap"), ...backHome]);
   return { text: `${head ? head + "\n\n" : ""}${ver}\n\n📲 <b>اعلان به اپ</b>: ${push}`, kb };
@@ -848,9 +852,9 @@ export async function handleAdminInput(env: Env, chatId: number, adminId: number
   }
 
   if (p.k === "ver") {
-    const r = await applyAppVer(env, toEn(text).trim().toLowerCase().split(/\s+/).filter(Boolean));
+    const r = await applyAppVer(env, p.s, toEn(text).trim().toLowerCase().split(/\s+/).filter(Boolean));
     if (!r.ok) { await setInput(env, adminId, p); await sendMessage(env, chatId, `${r.msg}\n\nدوباره بفرست، یا /cancel.`); return true; }
-    await logAction(env, adminId, `نسخه‌ی اپ: ${text.trim().slice(0, 40)}`);
+    await logAction(env, adminId, `نسخه‌ی اپ (${p.s === "all" ? "هر دو" : STORE_NAMES[p.s]}): ${text.trim().slice(0, 40)}`);
     await sendScreen(env, chatId, await appScreen(env, r.msg));
     return true;
   }
@@ -960,12 +964,15 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.", "ad:h");
       case "ap": return await show(await appScreen(env));
       case "av": {
+        const t = c === "all" ? "all" : isStoreId(c) ? c : null;
+        if (!t) return await answer();
+        const name = t === "all" ? "هر دو فروشگاه" : STORE_NAMES[t];
         if (b === "c") {
-          await applyAppVer(env, ["clear"]);
-          await logAction(env, adminId, "نسخه‌ی اپ: برگشت به متغیرهای محیطی");
-          return await show(await appScreen(env, "✅ تنظیم دستی پاک شد؛ از متغیرهای محیطی خوانده می‌شود."));
+          const r = await applyAppVer(env, t, ["clear"]);
+          await logAction(env, adminId, `نسخه‌ی اپ (${name}): برگشت به متغیرهای محیطی`);
+          return await show(await appScreen(env, r.msg));
         }
-        return await prompt({ k: "ver" }, `✏️ <b>تنظیم نسخه‌ی اپ</b>\nشماره‌ی نسخه (versionCode) را بفرست:\n\n${APPVER_HELP}`, "ad:ap");
+        return await prompt({ k: "ver", s: t }, `✏️ <b>تنظیم نسخه‌ی اپ — ${name}</b>\nشماره‌ی نسخه (versionCode) را بفرست:\n\n${APPVER_HELP}`, "ad:ap");
       }
       case "pu": return await show(await pushScreen(env, chatId));
       case "pw": return await prompt({ k: "pushw" },

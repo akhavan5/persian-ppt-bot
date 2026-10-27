@@ -87,10 +87,10 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       bazaar: bazaarEnabled(env),
       // خرید درون‌برنامه‌ای مایکت (فقط نسخه‌ی مایکت اپ اندروید)
       myket: myketEnabled(env),
-      // نسخه‌ی اپ اندروید: latest = آخرین نسخه‌ی منتشرشده، min = کمترین نسخه‌ی مجاز (۰ = بدون بررسی)
-      // مقدار را مدیر با /appver در ربات می‌گذارد (بدون دیپلوی)؛ اگر نگذاشته باشد از متغیرهای ANDROID_* خوانده می‌شود.
-      // url برای نسخه‌های قدیمی اپ؛ urls لینک مستقیم صفحه‌ی اپ در هر فروشگاه (اپ کلید همان فروشگاه خودش را برمی‌دارد)
-      app: { latest: ver.latest, min: ver.min, url: ver.url, urls: ver.urls },
+      // نسخه‌ی اپ اندروید برای هر فروشگاه جدا: app.stores.<bazaar|myket> = { latest: آخرین نسخه‌ی منتشرشده، min: کمترین نسخه‌ی مجاز (۰ = بدون بررسی) }
+      // مقدار را مدیر از پنل ربات (یا /appver) می‌گذارد (بدون دیپلوی)؛ اگر نگذاشته باشد از متغیرهای ANDROID_* خوانده می‌شود.
+      // app.latest/min (کمترین مقدار بین فروشگاه‌ها) و app.url فقط برای نسخه‌های قدیمی اپ‌اند؛ urls لینک مستقیم صفحه‌ی اپ در هر فروشگاه (اپ کلید همان فروشگاه خودش را برمی‌دارد)
+      app: { latest: ver.latest, min: ver.min, url: ver.url, urls: ver.urls, stores: { bazaar: { latest: ver.stores.bazaar.latest, min: ver.stores.bazaar.min }, myket: { latest: ver.stores.myket.latest, min: ver.stores.myket.min } } },
       templates: Object.entries(TEMPLATES).map(([key, v]) => ({ key, name: v.name, emoji: v.emoji, hint: v.hint })),
       themes: Object.entries(THEMES).map(([key, t]) => ({ key, name: t.name, primary: t.primary, accent: t.accent, bg: t.bg, surface: t.surface, dark: t.dark, text: t.text, muted: t.muted, onPrimary: t.onPrimary })),
       tones: TONES,
