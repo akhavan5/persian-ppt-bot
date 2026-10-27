@@ -64,5 +64,91 @@
         }
       ]
     }
+  ],
+  "launch_handler": {
+    "client_mode": [
+      "navigate-existing",
+      "auto"
+    ]
+  },
+  "handle_links": "preferred",
+  "share_target": {
+    "action": "/_share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": [
+            ".docx",
+            ".pptx",
+            ".xlsx",
+            ".pdf",
+            ".txt",
+            ".md",
+            ".csv",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            "application/pdf",
+            "text/plain",
+            "text/csv",
+            "image/png",
+            "image/jpeg",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ]
+        }
+      ]
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/?source=file",
+      "name": "ساخت پاورپوینت از این فایل",
+      "launch_type": "single-client",
+      "accept": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+          ".docx"
+        ],
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+          ".pptx"
+        ],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+          ".xlsx"
+        ],
+        "application/pdf": [
+          ".pdf"
+        ],
+        "text/plain": [
+          ".txt",
+          ".md"
+        ],
+        "text/csv": [
+          ".csv"
+        ],
+        "image/png": [
+          ".png"
+        ],
+        "image/jpeg": [
+          ".jpg",
+          ".jpeg"
+        ]
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "ساخت پاورپوینت فارسی با هوش مصنوعی"
+    }
   ]
 }

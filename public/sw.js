@@ -1,11 +1,14 @@
 /* Service Worker پاورپوینت‌ساز فارسی (PWA)
    - صفحه‌ها: اول شبکه، اگر آفلاین بود نسخه‌ی ذخیره‌شده، وگرنه /offline.html
    - فایل‌های استاتیک (فونت، آیکون، jszip): اول کش
-   - /api و تلگرام و درخواست‌های غیر GET هرگز کش نمی‌شوند */
-const VERSION = "v1";
+   - دریافت فایل/متن/لینک از منوی «اشتراک‌گذاری» گوشی و سیستم (Share Target)
+   - /api و تلگرام و درخواست‌های غیر GET (جز Share Target) هرگز کش نمی‌شوند */
+const VERSION = "v2";
 const STATIC = "pptsaz-static-" + VERSION;
 const PAGES = "pptsaz-pages-" + VERSION;
+const SHARE = "pptsaz-share";
 const PRECACHE = [
+  "/",
   "/offline.html",
   "/manifest.webmanifest",
   "/favicon.svg",
@@ -16,6 +19,7 @@ const PRECACHE = [
   "/fonts/Vazirmatn-Bold.woff2",
 ];
 const MAX_PAGES = 30;
+const URL_RE = /https?:\/\/[^\s]+/i;
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
@@ -26,7 +30,7 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     (async () => {
-      const keep = new Set([STATIC, PAGES]);
+      const keep = new Set([STATIC, PAGES, SHARE]);
       for (const k of await caches.keys()) if (k.startsWith("pptsaz-") && !keep.has(k)) await caches.delete(k);
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable().catch(() => {});
       await self.clients.claim();
@@ -44,10 +48,41 @@ async function trim(cacheName, max) {
   for (let i = 0; i < keys.length - max; i++) await c.delete(keys[i]);
 }
 
+// Share Target: فایل/متن/لینک اشتراک‌گذاری‌شده را نگه می‌دارد و کاربر را به صفحه‌ی ساخت می‌برد
+async function handleShare(req) {
+  const home = new URL("/", self.location.origin);
+  try {
+    const fd = await req.formData();
+    const c = await caches.open(SHARE);
+    await c.delete("/__shared_file__");
+    const file = fd.get("file");
+    let hasFile = false;
+    if (file && typeof file === "object" && file.size) {
+      await c.put("/__shared_file__", new Response(file, { headers: { "content-type": file.type || "application/octet-stream", "x-name": encodeURIComponent(file.name || "file") } }));
+      hasFile = true;
+    }
+    const s = (k) => (typeof fd.get(k) === "string" ? fd.get(k).trim() : "");
+    const title = s("title"), text = s("text"), urlField = s("url");
+    const found = (urlField.match(URL_RE) || text.match(URL_RE) || title.match(URL_RE) || [])[0] || "";
+    const topic = (text.replace(URL_RE, "").trim() || title.replace(URL_RE, "").trim()).slice(0, 600);
+    home.searchParams.set("shared", "1");
+    if (hasFile) home.searchParams.set("sf", "1");
+    if (found) home.searchParams.set("su", found.slice(0, 2000));
+    if (topic && !hasFile) home.searchParams.set("st", topic);
+  } catch {
+    /* بی‌اثر: فقط به صفحه‌ی اصلی می‌رود */
+  }
+  return Response.redirect(home.href, 303);
+}
+
 self.addEventListener("fetch", (e) => {
   const req = e.request;
-  if (req.method !== "GET") return;
   const url = new URL(req.url);
+  if (req.method === "POST" && url.origin === self.location.origin && url.pathname === "/_share-target") {
+    e.respondWith(handleShare(req));
+    return;
+  }
+  if (req.method !== "GET") return;
   if (url.origin !== self.location.origin) return;
   const p = url.pathname;
   if (p.startsWith("/api/") || p === "/telegram" || p === "/setup" || p === "/open" || p === "/sw.js" || p.startsWith("/.well-known/")) return;
@@ -76,7 +111,7 @@ self.addEventListener("fetch", (e) => {
   }
 
   // فایل‌های استاتیک: اول کش، پشتش به‌روزرسانی در پس‌زمینه
-  if (/^\/(fonts\/|icon-|apple-touch-icon|favicon|og-image|jszip\.min\.js|manifest\.webmanifest|digipay-banner)/.test(p)) {
+  if (/^\/(fonts\/|icon-|apple-touch-icon|favicon|og-image|jszip\.min\.js|pwa\.js|manifest\.webmanifest|digipay-banner)/.test(p)) {
     e.respondWith(
       (async () => {
         const c = await caches.open(STATIC);
