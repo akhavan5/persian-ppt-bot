@@ -146,6 +146,16 @@ async function failFrom(r: Response, who: string): Promise<never> {
   throw new LlmError(`${who} ${r.status}: ${body}`, fatal);
 }
 
+/** مدل‌های خانوادهٔ GPT-5/6 و o-سری: temperature غیرپیش‌فرض را نمی‌پذیرند (۴۰۰ «Unsupported value») ⇒ اصلاً فرستاده نمی‌شود */
+const NO_TEMP = /gpt-[5-9]|\bo\d/i;
+/** بدنه را بر اساس پیام خطای ۴۰۰ اصلاح می‌کند (temperature یا max_tokens که مدل نمی‌پذیرد)؛ اگر چیزی تغییر کرد true */
+function adaptBody(body: Record<string, unknown>, err: string): boolean {
+  let changed = false;
+  if (/temperature/i.test(err) && "temperature" in body) { delete body.temperature; changed = true; }
+  if (/max_tokens/i.test(err) && /max_completion_tokens/i.test(err) && "max_tokens" in body) { body.max_completion_tokens = body.max_tokens; delete body.max_tokens; changed = true; }
+  return changed;
+}
+
 async function complete(env: Env, prompt: string, maxTokens: number, modelId?: string): Promise<string> {
   if (useOpenAI(env)) {
     const body: Record<string, unknown> = {
@@ -162,6 +172,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     if (REASONING_LOW.test(String(body.model))) body.reasoning = { effort: "low" };
     if (CLAUDE.test(String(body.model))) body.thinking = { type: "disabled" }; // برای JSON لازم نیست؛ اگر گیت‌وی نپذیرد (۴۰۰) پایین‌تر حذف و دوباره تلاش می‌شود
     const picked = resolveModel(env, modelId);
+    if (NO_TEMP.test(picked.model)) delete body.temperature;
     // مدل ارائه‌دهنده‌ی دیگر: مستقیم به آدرس و کلید خودش (بدون چرخش حساب‌های کلودفلر)
     // OPENAI_API_KEY می‌تواند فهرستی از حساب‌ها باشد: از آخرین حساب سالم شروع می‌شود و با ۴۲۹ (سقف نورون) به حساب بعدی می‌رود
     const call = async () => {
@@ -184,12 +195,18 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
       }
     };
     let r = await call();
-    if (r.status === 400) { // برخی سرویس‌ها response_format را نمی‌پذیرند
-      delete body.response_format; // برخی سرویس‌ها response_format یا chat_template_kwargs را نمی‌پذیرند
-      delete body.chat_template_kwargs;
-      delete body.reasoning_effort;
-      delete body.reasoning;
-      delete body.thinking;
+    let stripped = false;
+    for (let i = 0; i < 3 && r.status === 400; i++) { // ۴۰۰: اول طبق متن خطا (temperature/max_tokens)، بعد فیلدهای اختیاری حذف می‌شوند
+      const err = await r.clone().text().catch(() => "");
+      if (!adaptBody(body, err)) {
+        if (stripped) break;
+        stripped = true;
+        delete body.response_format; // برخی سرویس‌ها response_format یا chat_template_kwargs را نمی‌پذیرند
+        delete body.chat_template_kwargs;
+        delete body.reasoning_effort;
+        delete body.reasoning;
+        delete body.thinking;
+      }
       r = await call();
     }
     if (!r.ok) await failFrom(r, "LLM");
@@ -271,6 +288,7 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
   if (/gpt-oss/i.test(picked.model)) body.reasoning_effort = "low";
   if (REASONING_LOW.test(picked.model)) body.reasoning = { effort: "low" };
   if (CLAUDE.test(picked.model)) body.thinking = { type: "disabled" };
+  if (NO_TEMP.test(picked.model)) delete body.temperature;
   const call = async () => {
     if (picked.extra) {
       return fetch(`${picked.base}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${picked.key}` }, body: JSON.stringify(body), signal });
@@ -278,8 +296,14 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
     return fetchWithAccounts(env, (a) => fetch(`${a.base}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${a.token}` }, body: JSON.stringify(body), signal }));
   };
   let r = await call();
-  if (r.status === 400) { // برخی سرویس‌ها فیلدهای اضافی را نمی‌پذیرند
-    delete body.chat_template_kwargs; delete body.reasoning_effort; delete body.reasoning; delete body.thinking;
+  let stripped = false;
+  for (let i = 0; i < 3 && r.status === 400; i++) { // برخی سرویس‌ها فیلدهای اضافی را نمی‌پذیرند
+    const err = await r.clone().text().catch(() => "");
+    if (!adaptBody(body, err)) {
+      if (stripped) break;
+      stripped = true;
+      delete body.chat_template_kwargs; delete body.reasoning_effort; delete body.reasoning; delete body.thinking;
+    }
     r = await call();
   }
   if (!r.ok) await failFrom(r, "LLM");
