@@ -103,7 +103,7 @@ const truthy = (v: unknown) => v === true || v === 1 || /^(true|1|yes)$/i.test(S
  * مدل‌های CUSTOM_LLM_MODELS (JSON، یک شیء برای هر مدل، هرکدام با آدرس و کلید خودش) بعد از آن‌ها می‌آیند:
  *   CUSTOM_LLM_MODELS=[{"model":"nvidia/nemotron-3-ultra-550b-a55b:free","base":"https://ai.chabokan.net/v1","key":"sk-...","free":true,"name":"Nemotron 3 Ultra"}]
  *   free: true ⇒ برای کاربران رایگان هم باز است (پیش‌فرض false)؛ name اختیاری است؛ شیء بدون model/base/key نادیده گرفته می‌شود.
- *   مدل پیش‌فرض رایگان همچنان اولین مدل کلودفلر است (freeModelId).
+ *   مدل پیش‌فرض = اولین مدل custom (defaultModelId)؛ برای کاربر بدون پلن، اولین custom با free:true وگرنه اولین مدل کلودفلر (freeModelId).
  * اگر OPENAI_MODELS خالی باشد، از OPENAI_MODEL (و OPENAI_MODEL_2) استفاده می‌شود.
  */
 export function modelList(env: Env): ModelOption[] {
@@ -132,7 +132,7 @@ export function modelList(env: Env): ModelOption[] {
 }
 export const resolveModel = (env: Env, id?: string): ModelOption => {
   const l = modelList(env);
-  return l.find((m) => m.id === id) ?? l[0];
+  return l.find((m) => m.id === id) ?? l.find((m) => m.custom) ?? l[0];
 };
 
 export function hasKey(env: Env): boolean {
