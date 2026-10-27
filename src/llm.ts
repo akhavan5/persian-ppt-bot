@@ -75,10 +75,20 @@ const extraReady = (env: Env) => !!(env.EXTRA_LLM_BASE_URL?.trim() && env.EXTRA_
 function parseCustom(raw?: unknown): any[] {
   // متغیر نوع «JSON» در داشبورد کلودفلر از قبل به شیء/آرایه تبدیل می‌شود (نه رشته)
   if (raw && typeof raw === "object") return (Array.isArray(raw) ? raw : [raw]).filter((x) => x && typeof x === "object");
-  const t = (typeof raw === "string" ? raw : "").trim().replace(/[\u201C\u201D]/g, '"'); // گیومه‌های هوشمند (کپی از چت/ورد) ⇒ گیومه‌ی معمولی
+  let t = (typeof raw === "string" ? raw : "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "") // نشانه‌های نامرئی (RTL/ZWNJ/BOM) هنگام کپی از چت
+    .replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ")        // فاصله‌های غیرمعمول (NBSP و …) ⇒ فاصله‌ی معمولی
+    .replace(/[\u201C\u201D\u201E\u00AB\u00BB]/g, '"')                // گیومه‌های هوشمند (کپی از چت/ورد) ⇒ گیومه‌ی معمولی
+    .trim();
   if (!t) return [];
+  // اگر کل متن را داخل یک جفت گیومه گذاشته باشند ("[{...}]")
+  if (t.startsWith('"') && t.endsWith('"')) { try { const u = JSON.parse(t); if (typeof u === "string") t = u.trim(); } catch { /* همان‌طور بماند */ } }
   for (const cand of [t, `[${t.replace(/}\s*{/g, "},{")}]`]) {
-    try { const j = JSON.parse(cand); return (Array.isArray(j) ? j : [j]).filter((x) => x && typeof x === "object"); } catch { /* شکل بعدی */ }
+    try {
+      let j = JSON.parse(cand);
+      if (typeof j === "string") j = JSON.parse(j); // رشته‌ی دوبار-کدشده
+      return (Array.isArray(j) ? j : [j]).filter((x) => x && typeof x === "object");
+    } catch { /* شکل بعدی */ }
   }
   console.error("CUSTOM_LLM_MODELS: JSON نامعتبر است");
   return [];
