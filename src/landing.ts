@@ -92,6 +92,7 @@ h1 em{font-style:normal;background:linear-gradient(135deg,var(--primary),var(--p
 .lead{font-size:1.07rem;color:var(--muted);margin:0 auto 22px;max-width:720px}
 .cta-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 .trust{display:flex;gap:8px 18px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:.86rem;margin:18px 0 6px}
+.trust span{unicode-bidi:isolate;direction:rtl}
 article section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px 24px;margin:18px 0}
 h2{font-size:1.28rem;margin:0 0 10px;font-weight:800;line-height:1.6}
 h3{font-size:1rem;margin:0 0 4px}
@@ -358,7 +359,7 @@ export function renderLanding(p: Page, SITE: string): string {
     <h1>${esc(p.h1[0])}<em>${esc(p.h1[1])}</em>${esc(p.h1[2])}</h1>
     <p class="lead">${esc(p.lead)}</p>
     <div class="cta-row"><a class="btn" href="/#topic">${esc(p.cta)}</a><a class="btn ghost" href="/#pricing">مشاهده‌ی تعرفه</a></div>
-    <div class="trust"><span>🆓 ۳ ارائه‌ی رایگانِ ثبت‌نام + روزی ۱ اعتبار رایگان</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
+    <div class="trust"><span dir="rtl">🆓&#8207; ۳ ارائه‌ی رایگانِ ثبت‌نام &#8207;+ روزی ۱ اعتبار رایگان</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
     <p class="upd">آخرین به‌روزرسانی: <time datetime="${p.updated}">${faDate(p.updated)}</time></p>
   </div>
   <article>

@@ -163,6 +163,7 @@ textarea{min-height:110px;resize:vertical}
 .upchip button{border:0;background:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;line-height:1;color:var(--muted)}
 .upchip button:hover{color:var(--danger)}
 .trust{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:.88rem;margin:10px 0 30px}
+.trust span{unicode-bidi:isolate;direction:rtl}
 @media(max-width:560px){.trust{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 8px;justify-items:start;padding:0 6px}.trust span{min-width:0;white-space:normal;overflow-wrap:anywhere}.trust span:first-child{grid-column:1/-1}}
 #upHint{text-wrap:pretty}
 #go{padding:14px 48px;font-size:1.12rem;min-width:300px;max-width:100%}
@@ -364,7 +365,7 @@ address{font-style:normal}
     <div id="genMsg" class="msg err" role="alert" hidden></div>
   </section>
 
-  <div class="trust"><span>🆓 ۳ ارائه‌ی رایگانِ ثبت‌نام + روزی ۱ اعتبار رایگان</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span><span>🔒 پرداخت امن دیجی‌پی</span></div>
+  <div class="trust"><span dir="rtl">🆓&#8207; ۳ ارائه‌ی رایگانِ ثبت‌نام &#8207;+ روزی ۱ اعتبار رایگان</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span><span>🔒 پرداخت امن دیجی‌پی</span></div>
 
   <section class="card" id="job" hidden aria-live="polite">
     <div id="jobRun">
