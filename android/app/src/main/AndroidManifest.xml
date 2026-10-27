@@ -32,6 +32,14 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
 
+            <!-- بازگشت از ورود گوگل در مرورگر (وقتی ورود داخلی ممکن نیست) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pptsaz" android:host="login" />
+            </intent-filter>
+
             <!-- دریافت PDF، عکس (هر قالبی: JPG/PNG/WebP/HEIC)، Word یا متن/لینک از «اشتراک‌گذاری» برنامه‌های دیگر -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -39,7 +47,13 @@
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                 <data android:mimeType="text/plain" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/html" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="application/json" />
             </intent-filter>
             <!-- چند فایل با هم -->
             <intent-filter>
@@ -48,7 +62,13 @@
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                 <data android:mimeType="text/plain" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/html" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="application/json" />
             </intent-filter>
         </activity>
 

@@ -12,9 +12,11 @@ import { appCrash } from "./app-crash";
 import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { renderPreview } from "./preview";
+import { buildDeckPdf, cachedPdf } from "./pdf";
+import { hasBrowser } from "./browser-api";
 import {
   authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, getUserByMobile, googleCallback,
-  googleEnabled, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
+  googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
   sessionCookie, type WebUser,
 } from "./auth";
 import { beginDeck, launchDeck, posterEnabled, runningJob, slidesLimitMsg } from "./deck-service";
@@ -74,6 +76,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/config" && method === "GET") {
     return json({
       google: googleEnabled(env),
+      // Web client ID برای ورود داخل اپ اندروید (Credential Manager)؛ عمومی است و محرمانه نیست
+      googleClientId: googleEnabled(env) ? env.GOOGLE_CLIENT_ID : undefined,
       otp: otpEnabled(env),
       payEnabled: payEnabled(env),
       // خرید درون‌برنامه‌ای کافه‌بازار (فقط اپ اندروید)
@@ -97,6 +101,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       dailyFree: DAILY_FREE_CREDITS,
       // پوستر (اینفوگرافیک) اختیاری همراه ارائه با ۱ اعتبار جدا؛ فقط وقتی Browser Rendering وصل است
       poster: posterEnabled(env),
+      // خروجی PDF ارائه (نیاز به Browser Rendering)
+      pdf: hasBrowser(env),
       // ساخت ارائه از روی لینک (Tavily Extract)؛ بدون TAVILY_API_KEY دکمه‌اش در سایت نمایش داده نمی‌شود
       link: linkEnabled(env),
       // مدل‌های ارائه‌دهنده‌ی دوم (extra) فقط برای دارندگان پلن‌اند: free=false
@@ -112,6 +118,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/auth/miniapp" && method === "POST") return miniappLogin(req, env, clientIp(req));
   if (path === "/api/auth/otp/send" && method === "POST") return otpSend(req, env);
   if (path === "/api/auth/otp/verify" && method === "POST") return otpVerify(req, env);
+  if (path === "/api/auth/google/token" && method === "POST") return googleToken(req, env);
+  if (path === "/api/auth/google/exchange" && method === "POST") return googleExchange(req, env);
   if (path === "/api/auth/logout" && method === "POST") {
     await destroySession(env, req);
     return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
@@ -134,6 +142,10 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     return pv[2] ? preview(env, user, pv[1]) : previewImage(env, user, pv[1], Number(pv[3]));
   }
   if (!user) return err("ابتدا وارد شو.", 401);
+
+  // خروجی PDF ارائه برای اپ اندروید (و هر کلاینت وب): فایل PDF ساخته/ذخیره‌شده را مستقیم برمی‌گرداند
+  const pd = method === "GET" ? path.match(/^\/api\/files\/([\w-]{1,100})\/pdf$/) : null;
+  if (pd) return deckPdf(env, user, pd[1]);
 
   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
   if (path === "/api/miniapp/dl" && method === "POST") return miniappDlLink(env, user, await readBody(req, 2_000));
@@ -171,6 +183,25 @@ async function otpSend(req: Request, env: Env): Promise<Response> {
   if (!mobile) return err("شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.");
   const e = await sendOtp(env, clientIp(req), mobile);
   return e ? err(e.error, e.status) : json({ ok: true });
+}
+
+/** اپ اندروید: کد یک‌بارمصرف بازگشت از ورود مرورگر ← نشست */
+async function googleExchange(req: Request, env: Env): Promise<Response> {
+  if (await hitLimit(env, `gx:${clientIp(req)}`, 20, 600)) return err("تعداد تلاش زیاد است؛ کمی بعد دوباره امتحان کن.", 429);
+  const b = await readBody(req, 2_000);
+  const r = await googleAppExchange(env, String(b?.code ?? ""));
+  if (!r) return err("لینک ورود منقضی شده است؛ دوباره امتحان کن.", 401);
+  if (fromApp(req) && !r.user.app) { r.user.app = true; await saveWebUser(env, r.user).catch(() => {}); }
+  return json({ user: publicUser(r.user), created: false }, 200, { "set-cookie": sessionCookie(r.token) });
+}
+
+async function googleToken(req: Request, env: Env): Promise<Response> {
+  if (await hitLimit(env, `gt:${clientIp(req)}`, 20, 600)) return err("تعداد تلاش زیاد است؛ کمی بعد دوباره امتحان کن.", 429);
+  const b = await readBody(req, 8_000);
+  const r = await googleLoginWithIdToken(env, String(b?.idToken ?? ""));
+  if ("error" in r) return err(r.error, r.status);
+  if (fromApp(req) && !r.user.app) { r.user.app = true; await saveWebUser(env, r.user).catch(() => {}); }
+  return json({ user: publicUser(r.user), created: Date.now() - r.user.created < 5000 }, 200, { "set-cookie": sessionCookie(r.token) });
 }
 
 /** ورود/ثبت‌نام یکپارچه: حساب موجود ⇒ ورود؛ وگرنه حساب جدید با همین شماره ساخته می‌شود */
@@ -448,6 +479,32 @@ async function download(env: Env, user: WebUser, id: string, inline = false): Pr
 }
 
 // ---------- پیش‌نمایش و PDF ----------
+const WEB_PDF_DAILY_LIMIT = 8;
+async function deckPdf(env: Env, user: WebUser, id: string): Promise<Response> {
+  const headers = (title: string) => ({
+    "content-type": "application/pdf",
+    "content-disposition": `attachment; filename="presentation.pdf"; filename*=UTF-8''${encodeURIComponent((title.replace(/[\\/:*?"<>|\n\r]+/g, " ").trim().slice(0, 80) || "presentation") + ".pdf")}`,
+    ...SEC_HEADERS,
+  });
+  try {
+    const hit = await cachedPdf(env, user.id, id).catch(() => null); // قبلاً ساخته شده: بدون مصرف مرورگر و سقف
+    if (hit) {
+      const f = (await listFiles(env, user.id).catch(() => [])).find((x) => x.id === id);
+      return new Response(hit, { headers: headers(f?.title ?? "presentation") });
+    }
+    if (!hasBrowser(env)) return err("ساخت PDF روی این سرویس فعال نیست.", 503);
+    const day = new Date().toISOString().slice(0, 10);
+    if (await hitLimit(env, `pdf:${user.id}:${day}`, WEB_PDF_DAILY_LIMIT, 172_800)) return err("سقف روزانه‌ی ساخت PDF تمام شد؛ فردا دوباره امتحان کن (فایل PPTX همیشه در دسترس است).", 429);
+    const r = await buildDeckPdf(env, user.id, id);
+    if (!r.ok) return err(r.error.replace(/^[^\p{L}\p{N}]+/u, ""), 404);
+    return new Response(r.data, { headers: headers(r.title) });
+  } catch (e) {
+    const msg = String(e instanceof Error ? e.message : e);
+    console.error("web pdf", msg.slice(0, 400));
+    return err(/time limit/i.test(msg) ? "سقف ساخت PDF برای امروز تمام شده است؛ فردا دوباره امتحان کن." : /429|rate|too many|concurrent/i.test(msg) ? "الان سرویس ساخت PDF شلوغ است؛ حدود یک دقیقه دیگر دوباره امتحان کن." : "ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن.", 502);
+  }
+}
+
 const page = (body: string, status: number) => new Response(
   `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:Tahoma,sans-serif;padding:32px;line-height:2">${body}<p><a href="/">بازگشت به سایت</a></p></body></html>`,
   { status, headers: { "content-type": "text/html; charset=utf-8", ...SEC_HEADERS } });

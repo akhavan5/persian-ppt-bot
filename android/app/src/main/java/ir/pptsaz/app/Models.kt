@@ -25,6 +25,8 @@ data class Config(
     val latestVersion: Int = 0, // آخرین versionCode منتشرشده (۰ = اعلام نشده)
     val minVersion: Int = 0, // کمترین versionCode مجاز؛ پایین‌تر از آن اپ باید حتماً به‌روز شود
     val updateUrl: String = "",
+    val pdf: Boolean = false, // خروجی PDF ارائه (سرور Browser Rendering دارد)
+    val googleClientId: String = "", // خالی = ورود با گوگل خاموش
 )
 
 data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "",
@@ -79,6 +81,8 @@ fun parseConfig(j: JSONObject): Config {
         link = j.optBoolean("link"),
         models = j.optJSONArray("models").objects().map { ModelOpt(it.str("id"), it.str("name"), it.str("brand"), it.optBoolean("free", true)) },
         poster = j.optBoolean("poster"),
+        pdf = j.optBoolean("pdf"),
+        googleClientId = if (j.optBoolean("google")) j.str("googleClientId") else "",
         dailyFree = j.optInt("dailyFree"),
         bazaar = j.optBoolean(Store.ID), // «bazaar» در نسخه‌ی بازار، «myket» در نسخه‌ی مایکت
         latestVersion = j.optJSONObject("app")?.optInt("latest") ?: 0,

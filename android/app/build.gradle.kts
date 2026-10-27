@@ -98,6 +98,10 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     // خواندن خودکار کد پیامکی (نیازمند Google Play Services؛ اگر نبود اپ بدون آن کار می‌کند)
     implementation("com.google.android.gms:play-services-auth-api-phone:18.2.0")
+    // ورود با گوگل داخل خود اپ (بدون مرورگر): Credential Manager + Sign in with Google
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
     implementation("androidx.browser:browser:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)

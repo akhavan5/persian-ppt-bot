@@ -129,6 +129,16 @@ object Api {
         call("POST", "/api/auth/otp/verify", JSONObject().put("mobile", mobile).put("code", code))
     }
 
+    /** ورود با ID token گوگل (گرفته‌شده داخل اپ)؛ سرور توکن را اعتبارسنجی و نشست می‌سازد. */
+    suspend fun googleLogin(idToken: String) {
+        call("POST", "/api/auth/google/token", JSONObject().put("idToken", idToken))
+    }
+
+    /** مرورگر پشتیبان: کد یک‌بارمصرفِ pptsaz://login?c=… را به نشست تبدیل می‌کند. */
+    suspend fun googleExchange(code: String) {
+        call("POST", "/api/auth/google/exchange", JSONObject().put("code", code))
+    }
+
     suspend fun logout() {
         try { call("POST", "/api/auth/logout") } catch (e: ApiException) { /* مهم نیست */ }
         clearSession()
@@ -266,6 +276,29 @@ object Api {
                 }
             }
         }
+    }
+
+    /** نسخه‌ی PDF ارائه؛ اگر قبلاً ساخته نشده باشد سرور همین‌جا می‌سازد (تا حدود یک دقیقه) و در Downloads ذخیره می‌شود. */
+    suspend fun downloadPdf(ctx: Context, id: String): Saved {
+        val raw = withContext(Dispatchers.IO) {
+            val req = Request.Builder().url(BASE + "/api/files/" + Uri.encode(id) + "/pdf")
+                .header("User-Agent", UA).header("Origin", BASE).build()
+            try {
+                client.newBuilder().readTimeout(150, TimeUnit.SECONDS).build().newCall(req).execute().use { r ->
+                    Raw(r.code, r.body?.bytes() ?: ByteArray(0), r.header("Content-Disposition"), r.header("Content-Type"))
+                }
+            } catch (e: IOException) {
+                throw ApiException(NO_NET)
+            }
+        }
+        if (raw.code !in 200..299) {
+            val msg = try { JSONObject(String(raw.bytes)).optString("error") } catch (e: Exception) { "" }
+            throw ApiException(msg.ifEmpty { "ساخت PDF انجام نشد (${raw.code})" }, raw.code)
+        }
+        val cd = raw.disposition.orEmpty()
+        val star = Regex("filename\\*=UTF-8''([^;]+)", RegexOption.IGNORE_CASE).find(cd)?.groupValues?.get(1)
+        val name = try { star?.let { URLDecoder.decode(it, "UTF-8") } } catch (e: Exception) { null } ?: "presentation.pdf"
+        return withContext(Dispatchers.IO) { Storage.save(ctx, name, "application/pdf", raw.bytes) }
     }
 
     /** فایل را می‌گیرد و در پوشه‌ی Downloads ذخیره می‌کند (جزئیات دریافت و تلاش دوباره در fetchFile). */

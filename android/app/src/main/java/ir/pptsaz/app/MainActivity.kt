@@ -190,6 +190,12 @@ class MainActivity : ComponentActivity() {
                 if (text.isNotEmpty()) vm.onShare(Share.TextShare(text))
                 i.action = null
             }
+            // بازگشت از ورود گوگل در مرورگر: pptsaz://login?c=<کد>
+            Intent.ACTION_VIEW -> {
+                val d = i.data
+                if (d != null && d.scheme == "pptsaz" && d.host == "login") vm.googleReturn(d.getQueryParameter("c"), d.getQueryParameter("e"))
+                i.action = null
+            }
             Intent.ACTION_SEND -> {
                 val uri = streamUri(i)
                 val text = i.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim().orEmpty()

@@ -218,7 +218,7 @@ const STATE_COOKIE = "gstate";
 export async function googleStart(env: Env, url: URL): Promise<Response> {
   if (!googleEnabled(env)) return Response.redirect(`${url.origin}/?login_error=google_off`, 302);
   const state = randomToken(24);
-  await env.KV.put(`wo:${state}`, "1", { expirationTtl: 600 });
+  await env.KV.put(`wo:${state}`, url.searchParams.get("app") === "1" ? "app" : "1", { expirationTtl: 600 }); // app: بعد از ورود به اپ اندروید برمی‌گردد
   const q = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID!, redirect_uri: redirectUri(url), response_type: "code",
     scope: "openid email profile", state, prompt: "select_account",
@@ -228,8 +228,83 @@ export async function googleStart(env: Env, url: URL): Promise<Response> {
   return new Response(null, { status: 302, headers: h });
 }
 
+type GoogleInfo = { sub: string; email: string; name?: string; picture?: string };
+
+/** حساب مربوط به یک هویت گوگل را پیدا یا می‌سازد (مشترک بین ورود مرورگر و ورود داخل اپ اندروید) */
+async function googleUser(env: Env, info: GoogleInfo): Promise<WebUser> {
+  const email = info.email;
+  let user: WebUser | null = null;
+  const gid = await env.KV.get(`wg:${info.sub}`);
+  if (gid) user = await getUserById(env, gid);
+  if (!user) {
+    user = await getUserByEmail(env, email);
+    if (user) {
+      // ایمیل را گوگل تایید کرده است ⇒ حساب موجود با همان ایمیل به گوگل وصل می‌شود
+      user.google = info.sub;
+      user.verified = true;
+      user.picture ||= info.picture;
+      await saveUser(env, user);
+      await env.KV.put(`wg:${info.sub}`, user.id);
+    } else {
+      user = await createUser(env, { email, name: info.name || email.split("@")[0], google: info.sub, picture: info.picture });
+    }
+  }
+  return user;
+}
+
+/**
+ * ورود داخل اپ اندروید (بدون مرورگر): اپ با Credential Manager یک ID token می‌گیرد و اینجا فرستاده می‌شود.
+ * توکن را خود گوگل (tokeninfo) اعتبارسنجی می‌کند و audience باید همان GOOGLE_CLIENT_ID (Web client) باشد.
+ * خروجی: { user } + کوکی نشست؛ یا { error } با کد وضعیت.
+ */
+export async function googleLoginWithIdToken(env: Env, idToken: string): Promise<{ user: WebUser; token: string } | { error: string; status: number }> {
+  if (!env.GOOGLE_CLIENT_ID) return { error: "ورود با گوگل فعال نیست.", status: 503 };
+  if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(idToken) || idToken.length > 4096) return { error: "توکن گوگل نامعتبر است.", status: 400 };
+  try {
+    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, { signal: AbortSignal.timeout(15_000) });
+    if (!r.ok) return { error: "توکن گوگل نامعتبر یا منقضی است.", status: 401 };
+    const t = (await r.json()) as { aud?: string; iss?: string; exp?: string; sub?: string; email?: string; email_verified?: string | boolean; name?: string; picture?: string };
+    const issOk = t.iss === "accounts.google.com" || t.iss === "https://accounts.google.com";
+    if (t.aud !== env.GOOGLE_CLIENT_ID || !issOk || !t.sub || Number(t.exp) * 1000 < Date.now()) return { error: "توکن گوگل نامعتبر است.", status: 401 };
+    const email = normEmail(t.email);
+    if (!validEmail(email) || String(t.email_verified) !== "true") return { error: "ایمیل حساب گوگل تایید نشده است.", status: 401 };
+    const user = await googleUser(env, { sub: t.sub, email, name: t.name, picture: t.picture });
+    return { user, token: await createSession(env, user.id) };
+  } catch (e) {
+    console.error("google id token", e);
+    return { error: "ورود با گوگل ناموفق بود؛ دوباره امتحان کن.", status: 502 };
+  }
+}
+
+/** صفحه‌ی بازگشت به اپ اندروید (پس از ورود با مرورگر): خودکار به pptsaz://login باز می‌شود و دکمه‌ی دستی هم دارد */
+function appReturn(url: URL, q: { c?: string; e?: string }): Response {
+  const target = "pptsaz://login?" + new URLSearchParams(q as Record<string, string>).toString();
+  const ok = !!q.c;
+  const html = `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>پاورپوینت‌ساز</title>
+<body style="font-family:Tahoma,sans-serif;text-align:center;padding:48px 24px;line-height:2">
+<h2>${ok ? "ورود انجام شد ✅" : "ورود با گوگل ناموفق بود"}</h2>
+<p>${ok ? "در حال بازگشت به اپ پاورپوینت‌ساز…" : "به اپ برگردید و با پیامک وارد شوید."}</p>
+<p><a href="${target}" style="display:inline-block;padding:12px 28px;border-radius:12px;background:#2563eb;color:#fff;text-decoration:none">بازگشت به اپ</a></p>
+<script>setTimeout(function(){location.href=${JSON.stringify(target)}},300)</script></body></html>`;
+  const h = new Headers({ "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" });
+  h.append("set-cookie", setCookie(STATE_COOKIE, "", 0, "/api/auth"));
+  return new Response(html, { status: 200, headers: h });
+}
+
+/** تبدیل کد یک‌بارمصرف (از appReturn) به نشست اپ */
+export async function googleAppExchange(env: Env, code: string): Promise<{ user: WebUser; token: string } | null> {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(code)) return null;
+  const uid = await env.KV.get(`ga:${code}`);
+  if (!uid) return null;
+  await env.KV.delete(`ga:${code}`).catch(() => {});
+  const user = await getUserById(env, uid);
+  return user ? { user, token: await createSession(env, user.id) } : null;
+}
+
 export async function googleCallback(env: Env, req: Request, url: URL): Promise<Response> {
+  let isApp = false; // ورود از اپ اندروید (مرورگر پشتیبان)؛ بعد از state معتبر مشخص می‌شود
   const fail = (code: string) => {
+    if (isApp) return appReturn(url, { e: code });
     const h = new Headers({ location: `${url.origin}/?login_error=${code}` });
     h.append("set-cookie", setCookie(STATE_COOKIE, "", 0, "/api/auth"));
     return new Response(null, { status: 302, headers: h });
@@ -239,8 +314,10 @@ export async function googleCallback(env: Env, req: Request, url: URL): Promise<
   const code = url.searchParams.get("code") ?? "";
   if (url.searchParams.get("error") || !code || !state) return fail("google_cancel");
   // state هم باید با کوکی مرورگر بخواند و هم در KV ساخته شده باشد (یک‌بار مصرف)
-  if (state !== getCookie(req, STATE_COOKIE) || (await env.KV.get(`wo:${state}`)) === null) return fail("google_state");
+  const stateVal = state === getCookie(req, STATE_COOKIE) ? await env.KV.get(`wo:${state}`) : null;
+  if (stateVal === null) return fail("google_state");
   await env.KV.delete(`wo:${state}`);
+  isApp = stateVal === "app";
 
   try {
     const tr = await fetch("https://oauth2.googleapis.com/token", {
@@ -264,23 +341,14 @@ export async function googleCallback(env: Env, req: Request, url: URL): Promise<
     const email = normEmail(info.email);
     if (!info.sub || !validEmail(email) || info.email_verified !== true) return fail("google_email");
 
-    let user: WebUser | null = null;
-    const gid = await env.KV.get(`wg:${info.sub}`);
-    if (gid) user = await getUserById(env, gid);
-    if (!user) {
-      user = await getUserByEmail(env, email);
-      if (user) {
-        // ایمیل را گوگل تایید کرده است ⇒ حساب موجود با همان ایمیل به گوگل وصل می‌شود
-        user.google = info.sub;
-        user.verified = true;
-        user.picture ||= info.picture;
-        await saveUser(env, user);
-        await env.KV.put(`wg:${info.sub}`, user.id);
-      } else {
-        user = await createUser(env, { email, name: info.name || email.split("@")[0], google: info.sub, picture: info.picture });
-      }
-    }
+    const user = await googleUser(env, { sub: info.sub, email, name: info.name, picture: info.picture });
 
+    if (isApp) {
+      // کد یک‌بارمصرف و کوتاه‌مدت؛ اپ آن را با /api/auth/google/exchange به نشست تبدیل می‌کند
+      const c = randomToken(24);
+      await env.KV.put(`ga:${c}`, user.id, { expirationTtl: 120 });
+      return appReturn(url, { c });
+    }
     const token = await createSession(env, user.id);
     const h = new Headers({ location: `${url.origin}/` });
     h.append("set-cookie", sessionCookie(token));

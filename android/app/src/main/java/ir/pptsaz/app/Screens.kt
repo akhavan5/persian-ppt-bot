@@ -90,6 +90,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
@@ -128,6 +129,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -314,14 +317,15 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
         }
 
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 28.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (!otpOn) {
+            val googleId = st.config?.googleClientId.orEmpty()
+            if (!otpOn && googleId.isEmpty()) {
                 SurfaceCard(color = cs.errorContainer, borderColor = null) {
                     Text(
                         "ورود با پیامک فعلاً در دسترس نیست. لطفاً از سایت pptsaz.ir استفاده کنید.",
                         color = cs.onErrorContainer, modifier = Modifier.padding(16.dp),
                     )
                 }
-            } else {
+            } else if (otpOn) {
                 val fieldStyle: TextStyle = MaterialTheme.typography.titleLarge.copy(textAlign = TextAlign.Center, textDirection = TextDirection.Ltr)
                 AnimatedContent(targetState = st.otpSent, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) }, label = "otp") { sent ->
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -389,6 +393,26 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                         }
                     }
                 }
+            }
+
+            if (googleId.isNotEmpty() && !(otpOn && st.otpSent)) {
+                val ctx = LocalContext.current
+                val scope = rememberCoroutineScope()
+                if (otpOn) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        HorizontalDivider(Modifier.weight(1f))
+                        Text("یا", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        HorizontalDivider(Modifier.weight(1f))
+                    }
+                } else {
+                    Text("ورود یا ثبت‌نام", style = MaterialTheme.typography.titleLarge)
+                }
+                OutlinedButton(
+                    onClick = { scope.launch { vm.googleResult(GoogleAuth.idToken(ctx, googleId)) } },
+                    enabled = !st.busy,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text("ورود با حساب گوگل", style = MaterialTheme.typography.titleSmall) }
             }
         }
     }
@@ -610,7 +634,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                 trailing = { CreditPill(me) { vm.setTab(3) } },
             )
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (job != null) JobCard(job, vm)
+                if (job != null) JobCard(job, vm, st.config?.pdf == true)
 
                 // موضوع
                 SurfaceCard {
@@ -673,7 +697,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SoftButton(
                                     "افزودن فایل",
-                                    { picker.launch(arrayOf("application/pdf", "image/*", DocReader.DOCX_MIME, "text/plain")) },
+                                    { picker.launch(arrayOf("application/pdf", "image/*", DocReader.DOCX_MIME, DocReader.PPTX_MIME, DocReader.XLSX_MIME, "text/*", "application/json", "application/octet-stream")) },
                                     Modifier.weight(1f), enabled = !running && st.extractBusy == null, icon = AppIcons.Attach,
                                 )
                                 SoftButton(
@@ -682,7 +706,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                                 )
                             }
                             Text(
-                                "PDF، عکس، Word (DOCX) یا متن ساده؛ چند فایل را می‌توانید با هم انتخاب کنید.",
+                                "PDF، عکس، Word، PowerPoint، Excel، HTML یا متن (txt, csv, json)؛ چند فایل را می‌توانید با هم انتخاب کنید.",
                                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                             )
                             if (cfg.link) {
@@ -827,7 +851,7 @@ private fun CreditPill(me: Me, onClick: () -> Unit) {
 }
 
 @Composable
-private fun JobCard(job: JobState, vm: AppViewModel) {
+private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false) {
     val cs = MaterialTheme.colorScheme
     val ex = LocalExtra.current
     when {
@@ -852,6 +876,7 @@ private fun JobCard(job: JobState, vm: AppViewModel) {
                 }
                 GradientButton("دانلود ارائه (PPTX)", { vm.download(job.id) }, Modifier.fillMaxWidth(), icon = AppIcons.Download)
                 SoftButton("پیش‌نمایش اسلایدها", { vm.openViewer(Viewer.Preview(job.id)) }, Modifier.fillMaxWidth(), icon = AppIcons.Eye)
+                if (pdf) SoftButton("دانلود نسخه‌ی PDF", { vm.downloadPdf(job.id) }, Modifier.fillMaxWidth(), icon = AppIcons.Doc)
                 job.handoutId?.let { hid -> SoftButton("دانلود جزوه (Word)", { vm.download(hid) }, Modifier.fillMaxWidth(), icon = AppIcons.Doc) }
                 job.posterId?.let { pid -> SoftButton("نمایش پوستر", { vm.openViewer(Viewer.Poster(pid)) }, Modifier.fillMaxWidth(), icon = AppIcons.Image) }
                 if (job.posterFailed) Text("ساخت پوستر ناموفق بود؛ ارائه‌ی شما سالم است.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -934,7 +959,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(st.files, key = { it.id }) { f -> FileRow(f, vm, f.id in localIds) }
+                    items(st.files, key = { it.id }) { f -> FileRow(f, vm, f.id in localIds, st.config?.pdf == true) }
                     if (localOnly.isNotEmpty()) {
                         item(key = "local-header") {
                             Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -954,7 +979,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
 }
 
 @Composable
-private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false) {
+private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf: Boolean = false) {
     val cs = MaterialTheme.colorScheme
     val (icon, brush) = when {
         f.poster -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
@@ -980,6 +1005,9 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false) {
                 IconButton(onClick = { vm.openViewer(Viewer.Poster(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "نمایش پوستر") }
             } else if (!f.handout) {
                 IconButton(onClick = { vm.openViewer(Viewer.Preview(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "پیش‌نمایش اسلایدها") }
+            }
+            if (pdf && !f.poster && !f.handout) {
+                TextButton(onClick = { vm.downloadPdf(f.id) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("PDF") }
             }
             IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "دانلود") }

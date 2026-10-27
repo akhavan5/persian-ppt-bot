@@ -242,6 +242,49 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** نتیجه‌ی برگه‌ی گوگل از LoginScreen؛ ورود مثل پیامک انجام می‌شود. */
+    fun googleResult(r: GoogleResult) {
+        when (r) {
+            is GoogleResult.Cancelled -> {}
+            // ورود داخلی ممکن نیست ⇒ همان ورود گوگل در مرورگر؛ در پایان با pptsaz://login به اپ برمی‌گردد
+            is GoogleResult.Unavailable -> {
+                toast("ورود با گوگل در مرورگر باز می‌شود…")
+                _events.trySend(Event.OpenUrl(Api.BASE + "/api/auth/google?app=1"))
+            }
+            is GoogleResult.Failed -> toast(r.message)
+            is GoogleResult.Token -> viewModelScope.launch {
+                _state.update { it.copy(busy = true) }
+                try {
+                    Api.googleLogin(r.idToken)
+                    load()
+                    _state.update { it.copy(busy = false, otpSent = false) }
+                } catch (e: ApiException) {
+                    _state.update { it.copy(busy = false) }
+                    toast(e.message ?: "ورود با گوگل ناموفق بود")
+                }
+            }
+        }
+    }
+
+    /** بازگشت از مرورگر: pptsaz://login?c=<کد> یا ?e=<خطا> */
+    fun googleReturn(code: String?, error: String?) {
+        if (code.isNullOrEmpty()) {
+            if (!error.isNullOrEmpty()) toast("ورود با گوگل ناموفق بود؛ با پیامک وارد شوید.")
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true) }
+            try {
+                Api.googleExchange(code)
+                load()
+                _state.update { it.copy(busy = false, otpSent = false) }
+            } catch (e: ApiException) {
+                _state.update { it.copy(busy = false) }
+                toast(e.message ?: "ورود با گوگل ناموفق بود")
+            }
+        }
+    }
+
     fun logout() {
         viewModelScope.launch {
             pollJob?.cancel()
@@ -438,6 +481,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** دانلود نسخه‌ی PDF ارائه (ساخت روی سرور ممکن است تا یک دقیقه طول بکشد). */
+    fun downloadPdf(fileId: String, share: Boolean = false) {
+        viewModelScope.launch {
+            toast("در حال ساخت PDF؛ ممکن است تا یک دقیقه طول بکشد…")
+            try {
+                _events.trySend(Event.FileReady(Api.downloadPdf(getApplication(), fileId), share))
+            } catch (e: ApiException) {
+                toast(e.message ?: "ساخت PDF انجام نشد")
+            } catch (e: Exception) {
+                toast("ذخیره‌ی PDF انجام نشد")
+            }
+        }
+    }
+
     // ------------------------------------------------------------ منبع: فایل و لینک
 
     /** از MainActivity صدا زده می‌شود. اگر هنوز وارد نشده‌ایم، بعد از ورود اجرا می‌شود. */
@@ -482,7 +539,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return when (name.substringAfterLast('.', "").lowercase()) {
             "pdf" -> "application/pdf"
             "docx" -> DocReader.DOCX_MIME
-            "txt" -> "text/plain"
+            "txt", "md", "csv", "json" -> "text/plain"
+            "html", "htm" -> "text/html"
+            "pptx" -> DocReader.PPTX_MIME
+            "xlsx" -> DocReader.XLSX_MIME
             "jpg", "jpeg" -> "image/jpeg"
             "png" -> "image/png"
             "webp" -> "image/webp"
@@ -494,8 +554,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** متن یک فایل (PDF/عکس با سرور؛ Word و txt روی خود گوشی) را برمی‌گرداند. */
     private suspend fun readSource(ctx: Context, uri: Uri, status: (String) -> Unit): String {
         val mime = detectMime(ctx, uri)
-        val supported = mime == "application/pdf" || mime.startsWith("image/") || mime == DocReader.DOCX_MIME || mime == "text/plain"
-        if (!supported) throw ApiException("فقط PDF، عکس، Word (DOCX) یا متن ساده پشتیبانی می‌شود.")
+        val supported = mime == "application/pdf" || mime.startsWith("image/") || mime == DocReader.DOCX_MIME ||
+            mime == DocReader.PPTX_MIME || mime == DocReader.XLSX_MIME ||
+            mime.startsWith("text/") || mime == "application/json"
+        if (!supported) throw ApiException("فقط PDF، عکس، Word، PowerPoint، Excel، HTML یا فایل متنی (txt, csv, json, md) پشتیبانی می‌شود.")
         val bytes = withContext(Dispatchers.IO) {
             ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
         } ?: throw ApiException("فایل خوانده نشد.")
@@ -521,6 +583,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 t.ifBlank { throw ApiException("متنی در فایل Word پیدا نشد.") }
             }
+            mime == DocReader.PPTX_MIME -> {
+                val t = withContext(Dispatchers.Default) {
+                    try { DocReader.pptxToText(bytes) } catch (e: Exception) { throw ApiException("فایل PowerPoint قابل خواندن نیست.") }
+                }
+                t.ifBlank { throw ApiException("متنی در فایل PowerPoint پیدا نشد.") }
+            }
+            mime == DocReader.XLSX_MIME -> {
+                val t = withContext(Dispatchers.Default) {
+                    try { DocReader.xlsxToText(bytes) } catch (e: Exception) { throw ApiException("فایل Excel قابل خواندن نیست.") }
+                }
+                t.ifBlank { throw ApiException("داده‌ای در فایل Excel پیدا نشد.") }
+            }
+            mime == "text/html" -> DocReader.htmlToText(DocReader.plainText(bytes)).ifBlank { throw ApiException("متنی در فایل HTML پیدا نشد.") }
             else -> DocReader.plainText(bytes).ifBlank { throw ApiException("فایل متنی خالی است.") }
         }
     }
