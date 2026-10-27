@@ -25,7 +25,24 @@ const THINKERS = /qwen3|qwen-3|glm|gemma-?4|nemotron/i;
 /** مدل‌هایی که فکر کردنشان خاموش نمی‌شود (فقط توکن بیشتر می‌خواهند): DeepSeek-R1 با تگ <think>، gpt-oss با reasoning_effort */
 const ALWAYS_THINK = /deepseek-r1|deepseek-reasoner|deepseek-v[4-9]|gpt-oss|\bo\d/i;
 /** مدل‌هایی که فکر کردنشان با پارامتر reasoning (سبک OpenRouter) کم می‌شود؛ اگر سرویس نپذیرد (۴۰۰) حذف و دوباره تلاش می‌شود */
-const REASONING_LOW = /deepseek-v[4-9]|deepseek-reasoner/i;
+const REASONING_LOW = /deepseek-reasoner|deepseek-r1/i;
+const GLM = /glm/i, QWEN = /qwen-?3/i, DEEPSEEK_V = /deepseek-v[4-9]/i, GPT_REASON = /gpt-[5-9]|\bo\d/i;
+/** خاموش‌کردن حالت «فکر کردن» برای هر خانواده (تحقیق‌شده از مستندات رسمی؛ هر سرویس پارامتر خودش را می‌خواند، پس چند شکل با هم فرستاده می‌شود):
+ *  GLM: thinking.type=disabled (GLM-5.3 خاموش‌شدنی نیست ⇒ reasoning_effort=low هم فرستاده می‌شود)
+ *  Qwen3.x: enable_thinking=false هم داخل chat_template_kwargs (vLLM/self-host) و هم بالا (Qwen Cloud/DashScope)
+ *  Gemma 4: chat_template_kwargs.enable_thinking=false
+ *  DeepSeek V4+: thinking.type=disabled   |   Claude: thinking.type=disabled   |   GPT-5/6 و o-سری: reasoning_effort=none
+ *  ارسال فیلد ناپذیرفته ⇒ ۴۰۰ ⇒ adaptBody فقط همان فیلد را حذف/تعدیل می‌کند */
+function noThinking(body: Record<string, unknown>): void {
+  const m = String(body.model);
+  if (THINKERS.test(m) || DEEPSEEK_V.test(m)) body.chat_template_kwargs = { enable_thinking: false, ...(DEEPSEEK_V.test(m) ? { thinking: false } : {}) };
+  if (QWEN.test(m)) body.enable_thinking = false;
+  if (GLM.test(m) || DEEPSEEK_V.test(m) || CLAUDE.test(m)) body.thinking = { type: "disabled" };
+  if (GLM.test(m)) body.reasoning_effort = "low";
+  if (GPT_REASON.test(m)) body.reasoning_effort = "none";
+  if (/gpt-oss/i.test(m)) body.reasoning_effort = "low"; // خاموش‌شدنی نیست؛ کم‌فکر
+  if (REASONING_LOW.test(m)) body.reasoning = { effort: "low" }; // DeepSeek-R1/Reasoner خاموش‌شدنی نیست
+}
 /** Claude از طریق گیت‌وی: ممکن است «فکر کردن» روشن باشد و کل سقف توکن را بخورد (finish=length با متن خالی) */
 const CLAUDE = /claude/i;
 
@@ -155,6 +172,13 @@ function adaptBody(body: Record<string, unknown>, err: string): boolean {
   let changed = false;
   if (/temperature/i.test(err) && "temperature" in body) { delete body.temperature; changed = true; }
   if (/max_tokens/i.test(err) && /max_completion_tokens/i.test(err) && "max_tokens" in body) { body.max_completion_tokens = body.max_tokens; delete body.max_tokens; changed = true; }
+  // فیلدهای «فکر کردن»: فقط همان فیلدی که در متن خطا آمده حذف/تعدیل می‌شود (بقیه می‌مانند تا مدل دوباره شروع به فکر نکند)
+  for (const k of ["thinking", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning"]) {
+    if (!(k in body) || !new RegExp(`\\b${k}\\b`, "i").test(err)) continue;
+    if (k === "reasoning_effort" && body.reasoning_effort === "none") { body.reasoning_effort = "low"; delete body.temperature; changed = true; continue; } // «none» پذیرفته نشد ⇒ کمترین سطح
+    delete body[k]; changed = true;
+    if (k === "thinking" && GLM.test(String(body.model)) && !("reasoning_effort" in body)) body.reasoning_effort = "low"; // GLM-5.3: خاموش نمی‌شود ⇒ فکر سبک
+  }
   return changed;
 }
 
@@ -169,10 +193,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
       response_format: { type: "json_object" },
     };
     // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
-    if (THINKERS.test(String(body.model))) body.chat_template_kwargs = { enable_thinking: false };
-    if (/gpt-oss/i.test(String(body.model))) body.reasoning_effort = "low"; // کم‌فکر ⇒ سریع‌تر و پاسخ کامل‌تر
-    if (REASONING_LOW.test(String(body.model))) body.reasoning = { effort: "low" };
-    if (CLAUDE.test(String(body.model))) body.thinking = { type: "disabled" }; // برای JSON لازم نیست؛ اگر گیت‌وی نپذیرد (۴۰۰) پایین‌تر حذف و دوباره تلاش می‌شود
+    noThinking(body); // برای JSON لازم نیست؛ اگر گیت‌وی فیلدی را نپذیرد (۴۰۰) فقط همان فیلد تعدیل و دوباره تلاش می‌شود
     const picked = resolveModel(env, modelId);
     if (NO_TEMP.test(picked.model)) delete body.temperature;
     // مدل ارائه‌دهنده‌ی دیگر: مستقیم به آدرس و کلید خودش (بدون چرخش حساب‌های کلودفلر)
@@ -198,13 +219,14 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     };
     let r = await call();
     let stripped = false;
-    for (let i = 0; i < 3 && r.status === 400; i++) { // ۴۰۰: اول طبق متن خطا (temperature/max_tokens)، بعد فیلدهای اختیاری حذف می‌شوند
+    for (let i = 0; i < 5 && r.status === 400; i++) { // ۴۰۰: اول طبق متن خطا (temperature/max_tokens)، بعد فیلدهای اختیاری حذف می‌شوند
       const err = await r.clone().text().catch(() => "");
       if (!adaptBody(body, err)) {
         if (stripped) break;
         stripped = true;
         delete body.response_format; // برخی سرویس‌ها response_format یا chat_template_kwargs را نمی‌پذیرند
         delete body.chat_template_kwargs;
+        delete body.enable_thinking;
         delete body.reasoning_effort;
         delete body.reasoning;
         delete body.thinking;
@@ -286,10 +308,7 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
     temperature: 0,
     messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
   };
-  if (THINKERS.test(picked.model)) body.chat_template_kwargs = { enable_thinking: false };
-  if (/gpt-oss/i.test(picked.model)) body.reasoning_effort = "low";
-  if (REASONING_LOW.test(picked.model)) body.reasoning = { effort: "low" };
-  if (CLAUDE.test(picked.model)) body.thinking = { type: "disabled" };
+  noThinking(body);
   if (NO_TEMP.test(picked.model)) delete body.temperature;
   const call = async () => {
     if (picked.extra) {
@@ -299,12 +318,12 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
   };
   let r = await call();
   let stripped = false;
-  for (let i = 0; i < 3 && r.status === 400; i++) { // برخی سرویس‌ها فیلدهای اضافی را نمی‌پذیرند
+  for (let i = 0; i < 5 && r.status === 400; i++) { // برخی سرویس‌ها فیلدهای اضافی را نمی‌پذیرند
     const err = await r.clone().text().catch(() => "");
     if (!adaptBody(body, err)) {
       if (stripped) break;
       stripped = true;
-      delete body.chat_template_kwargs; delete body.reasoning_effort; delete body.reasoning; delete body.thinking;
+      delete body.chat_template_kwargs; delete body.enable_thinking; delete body.reasoning_effort; delete body.reasoning; delete body.thinking;
     }
     r = await call();
   }
