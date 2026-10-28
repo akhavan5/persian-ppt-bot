@@ -186,12 +186,14 @@ function adaptBody(body: Record<string, unknown>, err: string): boolean {
   return changed;
 }
 
+/** سقف مطلق توکن خروجی هر فراخوانی (جزوه با فارسی بلند به ۸۰۰۰ نمی‌رسید و محتوای خالی برمی‌گشت) */
+const MAX_OUT = 14000;
 async function complete(env: Env, prompt: string, maxTokens: number, modelId?: string): Promise<string> {
   if (useOpenAI(env)) {
     const body: Record<string, unknown> = {
       model: resolveModel(env, modelId).model,
       // مدل‌های «استدلالی» (GLM، Gemma 4، Qwen3) بخشی از توکن‌ها را صرف فکر کردن می‌کنند؛ با سقف کم، پاسخ نیمه‌کاره/خالی می‌ماند
-      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) || CLAUDE.test(resolveModel(env, modelId).model) ? maxTokens * 2 : maxTokens, 8000),
+      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) || CLAUDE.test(resolveModel(env, modelId).model) ? maxTokens * 2 : maxTokens, MAX_OUT),
       temperature: 0.5,
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
@@ -281,7 +283,7 @@ async function ask(env: Env, prompt: string, maxTokens = 6000, modelId?: string)
   let last: unknown;
   for (let i = 0; i < 2; i++) { // یک بار تلاش مجدد در صورت JSON نامعتبر
     // تلاش دوم (بعد از خروجی خالی/ناقص، مثلاً finish=length) با سقف توکن بیشتر
-    const text = await complete(env, prompt, i ? Math.min(8000, Math.round(maxTokens * 1.6)) : maxTokens, modelId);
+    const text = await complete(env, prompt, i ? Math.min(MAX_OUT, Math.round(maxTokens * 1.6)) : maxTokens, modelId);
     try { return parseJson(text); } catch (e) { last = e; }
   }
   throw last instanceof Error ? last : new Error("invalid JSON");
