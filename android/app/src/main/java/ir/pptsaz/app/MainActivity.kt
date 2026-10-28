@@ -37,9 +37,12 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** ذخیره‌ی فایل با انتخاب مقصد توسط کاربر؛ ورودی: (نوع فایل، نام پیشنهادی). */
 private class CreateDocWithMime : ActivityResultContract<Pair<String, String>, Uri?>() {
@@ -300,13 +303,22 @@ class MainActivity : ComponentActivity() {
                                 Event.NotifHint -> sayAction(
                                     "اعلان‌ها خاموش است؛ برای خبردار شدن از آماده‌شدن ارائه، فعالشان کنید.", "فعال‌سازی",
                                 ) { openNotificationSettings() }
-                                is Event.BazaarBuy -> billing.purchase(
-                                    sku = e.sku,
-                                    onPurchase = { sku, token ->
-                                        vm.bazaarClaim(sku, token) { ok -> if (ok) billing.consume(token) }
-                                    },
-                                    onError = { if (it.isNotEmpty()) say(it) },
-                                )
+                                Event.BillingReconnect -> {
+                                    billing.disconnect()
+                                    billing.connect()
+                                }
+                                is Event.BazaarBuy -> billing.unconsumed { list ->
+                                    val owned = list.filter { it.first.startsWith("plan_") }
+                                    if (owned.isNotEmpty()) {
+                                        // پرداخت قبلی هنوز تایید/مصرف نشده؛ اول همان فعال می‌شود (بازار اجازه‌ی خرید دوباره‌ی محصول مصرف‌نشده را نمی‌دهد)
+                                        say("خرید قبلی شما هنوز فعال نشده بود؛ در حال فعال‌سازی…")
+                                        owned.forEach { (sku, token) ->
+                                            vm.bazaarClaim(sku, token) { ok -> if (ok) billing.consume(token) }
+                                        }
+                                    } else {
+                                        startPurchase(e.sku) { m -> say(m) }
+                                    }
+                                }
                                 is Event.OpenUrl -> try {
                                     CustomTabsIntent.Builder().build().launchUrl(ctx, Uri.parse(e.url))
                                 } catch (ex: ActivityNotFoundException) {
@@ -332,14 +344,24 @@ class MainActivity : ComponentActivity() {
                         if (st.otpSent) sms.start() else sms.stop()
                     }
 
-                    // خریدهای پرداخت‌شده ولی تایید/مصرف‌نشده (مثلاً قطع شدن اینترنت وسط کار) را دوباره به سرور می‌فرستد
-                    LaunchedEffect(st.bazaarReady, st.screen, st.config?.bazaar) {
-                        if (st.bazaarReady && st.screen == Screen.Main && st.config?.bazaar == true) {
+                    // خریدهای پرداخت‌شده ولی تایید/مصرف‌نشده (قطع اینترنت، بسته‌شدن اپ، خطای سرور…) را تا وقتی مانده‌اند هر ۴۵ ثانیه دوباره
+                    // به سرور می‌فرستد؛ با هر بازگشت به اپ یا خطای خرید هم از نو شروع می‌شود. تایید تکراری روی سرور بی‌خطر است.
+                    LaunchedEffect(st.bazaarReady, st.screen, st.billingTick) {
+                        if (!st.bazaarReady || st.screen != Screen.Main) return@LaunchedEffect
+                        var rounds = 0
+                        var left = true
+                        while (left && rounds < 20) {
+                            val got = CompletableDeferred<Boolean>()
                             billing.unconsumed { list ->
-                                list.filter { it.first.startsWith("plan_") }.forEach { (sku, token) ->
+                                val mine = list.filter { it.first.startsWith("plan_") }
+                                mine.forEach { (sku, token) ->
                                     vm.bazaarClaim(sku, token, silent = true) { ok -> if (ok) billing.consume(token) }
                                 }
+                                got.complete(mine.isNotEmpty())
                             }
+                            left = withTimeoutOrNull(20_000) { got.await() } ?: false
+                            rounds++
+                            if (left) delay(45_000)
                         }
                     }
 
@@ -392,6 +414,20 @@ class MainActivity : ComponentActivity() {
         sms.stop()
         billing.disconnect()
         super.onDestroy()
+    }
+
+    /** شروع خرید در فروشگاه؛ خطاها نشان داده می‌شوند و بررسی خریدهای تاییدنشده را دوباره راه می‌اندازند. */
+    private fun startPurchase(sku: String, say: (String) -> Unit) {
+        billing.purchase(
+            sku = sku,
+            onPurchase = { s, token -> vm.bazaarClaim(s, token) { ok -> if (ok) billing.consume(token) } },
+            onError = {
+                if (it.isNotEmpty()) {
+                    say(it)
+                    vm.recoverPurchases()
+                }
+            },
+        )
     }
 
     override fun onResume() {

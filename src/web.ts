@@ -9,7 +9,7 @@ import {
 } from "./settings";
 import { modelList } from "./llm";
 import { appCrash } from "./app-crash";
-import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, payEnabled, paymentCallback, paymentGo, startPayment } from "./payment";
+import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { renderPreview } from "./preview";
 import { buildDeckPdf, cachedPdf } from "./pdf";
@@ -128,6 +128,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   const user = await authUser(env, req);
   if (user && fromApp(req) && !user.app) { user.app = true; await saveWebUser(env, user).catch(() => {}); } // علامت «کاربر اپ» برای پنل مدیر (یک‌بار نوشته می‌شود)
+  if (path === "/api/app/pay-report" && method === "POST") return payReport(env, user, req, clientIp(req)); // خطای پرداخت سمت اپ (بدون ورود هم پذیرفته می‌شود)
   if (path === "/api/me" && method === "GET") {
     if (!user) return json({ user: null });
     const res = await me(env, user);

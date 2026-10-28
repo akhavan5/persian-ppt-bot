@@ -392,7 +392,9 @@ function pmonth(day: string): { key: string; label: string } {
 }
 const ISSUE_TXT = (i: string | null) =>
   !i ? "" : i === "amount" ? "مبلغ برگشتی از درگاه با سفارش نمی‌خواند" : i === "vamount" ? "مبلغ تاییدشده با سفارش نمی‌خواند" : i === "net" ? "خطای شبکه هنگام تایید"
-  : i.startsWith("verify:") ? `تایید پرداخت رد شد (کد ${esc(i.slice(7))})` : esc(i);
+  : i.startsWith("verify:") ? `تایید پرداخت رد شد (کد ${esc(i.slice(7))})`
+  : i.startsWith("bz:") ? `تایید خرید کافه‌بازار رد شد (${esc(i.slice(3))})` : i.startsWith("mk:") ? `تایید خرید مایکت رد شد (${esc(i.slice(3))})`
+  : i.startsWith("app:") ? `خطای سمت اپ (${esc(i.slice(4))})` : esc(i);
 
 async function issueCount(env: Env): Promise<number> {
   return count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND json_extract(v,'$.state')='pending' AND json_extract(v,'$.issue') IS NOT NULL", "pay:", "pay:" + MAXC, nowSec());
@@ -465,7 +467,7 @@ async function paymentScreen(env: Env, tab: "s" | "l" | "p", page: number): Prom
     return {
       uid: r.uid, label: who.label,
       text: `${kind ? ATTN_ICON[kind] + " " : "✅ "}<b>${esc(planLabel(r.plan))}</b> · ${money(tomanOf(r))} تومان · ${fmtTime(r.t)}\n` +
-        `    👤 ${esc(who.label)}${kind ? `\n    ↳ ${ATTN_TXT[kind]}${kind === "issue" ? ` — ${ISSUE_TXT(r.issue)}` : ""}` : ""}\n` +
+        `    👤 ${esc(who.label)}${kind ? `\n    ↳ ${ATTN_TXT[kind]}${(kind === "issue" || (kind === "failed" && r.issue)) ? ` — ${ISSUE_TXT(r.issue)}` : ""}` : ""}\n` +
         `    🧾 سفارش <code>${esc(r.order)}</code>${r.ref ? ` · رهگیری <code>${esc(r.ref)}</code>` : ""}`,
     };
   };

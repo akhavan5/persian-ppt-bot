@@ -14,11 +14,13 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -61,6 +63,7 @@ data class UiState(
     val extractedText: String? = null,
     val viewer: Viewer? = null,
     val bazaarReady: Boolean = false,
+    val billingTick: Int = 0, // با هر بازگشت به اپ یا خطای خرید یکی زیاد می‌شود تا خریدهای تاییدنشده دوباره بررسی شوند
     val updateDialog: Boolean = false,
     val rateAsk: Boolean = false, // پنجره‌ی «ثبت امتیاز» (RatePrompt)
     val filesError: Boolean = false, // آخرین بارگیری فهرست فایل‌ها به خاطر شبکه ناموفق بود (فهرست ذخیره‌شده نمایش داده می‌شود)
@@ -77,6 +80,8 @@ sealed interface Event {
     data object NotifHint : Event
     data class BazaarBuy(val sku: String) : Event
     data object AskNotify : Event
+    /** اتصال به فروشگاه را قطع و دوباره برقرار کن. */
+    data object BillingReconnect : Event
 }
 
 /** چیزی که برنامه‌ی دیگری از «اشتراک‌گذاری» به اپ فرستاده */
@@ -92,6 +97,9 @@ private const val MAX_WATCH_MS = 20L * 60 * 1000
 
 /** حداقل فاصله‌ی دو بار «تازه‌کردن حساب» هنگام برگشت به اپ (ثانیه‌های کم بین باز و بسته‌شدن‌های پشت‌سرهم درخواست اضافه نمی‌سازد). */
 private const val RESUME_REFRESH_MS = 15_000L
+
+/** فاصله‌ی تلاش‌های دوباره‌ی تایید خرید روی سرور (۲، ۴، ۸، ۱۵، ۳۰ ثانیه). */
+private val CLAIM_DELAYS_MS = longArrayOf(2_000, 4_000, 8_000, 15_000, 30_000)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(UiState())
@@ -190,6 +198,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** وقتی کاربر از مرورگر (بعد از پرداخت) برمی‌گردد اعتبار را به‌روز می‌کند. */
     fun onResume(force: Boolean = false) {
+        recoverPurchases()
         if (_state.value.screen != Screen.Main) return
         refreshLocal() // کار پس‌زمینه ممکن است وقتی اپ بسته بود فایلی ذخیره کرده باشد
         val now = SystemClock.elapsedRealtime()
@@ -818,41 +827,110 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(bazaarReady = ok) }
     }
 
-    /** خرید از طریق کافه‌بازار وقتی کلاینت بازار نصب/متصل است و سرور هم آن را فعال کرده؛ وگرنه درگاه وب. */
-    private fun viaBazaar(): Boolean {
-        val s = _state.value
-        return s.bazaarReady && s.config?.bazaar == true
+    /** بررسی دوباره‌ی خریدهای پرداخت‌شده ولی تاییدنشده (MainActivity با تغییر این شمارنده حلقه‌ی بازیابی را دوباره شروع می‌کند). */
+    fun recoverPurchases() {
+        _state.update { it.copy(billingTick = it.billingTick + 1) }
     }
 
-    /** خرید را روی سرور تایید می‌کند؛ اگر موفق بود onDone(true) تا خرید «مصرف» شود. silent برای بازیابی خریدهای قبلی. */
+    /** توکن‌هایی که همین الان در حال تایید روی سرورند، و توکن‌هایی که سرور قطعی رد کرده (در این نشست دوباره فرستاده نمی‌شوند). */
+    private val claiming = HashSet<String>()
+    private val rejected = HashSet<String>()
+
+    /** خطای شبکه/سرور/محدودیت موقت: خرید سالم است و باید دوباره امتحان شود. */
+    private fun retryable(e: ApiException) = e.status == 0 || e.status == 408 || e.status == 425 || e.status == 429 || e.status >= 500
+
+    /**
+     * خرید را روی سرور تایید می‌کند و در خطای موقت تا چند بار (با فاصله‌ی افزایشی) دوباره می‌فرستد.
+     * اگر موفق بود onDone(true) تا خرید «مصرف» شود؛ اگر نه، خرید مصرف‌نشده در بازار می‌ماند و حلقه‌ی بازیابی بعداً دوباره تایید می‌کند.
+     * silent برای بازیابی خریدهای قبلی.
+     */
     fun bazaarClaim(productId: String, token: String, silent: Boolean = false, onDone: (Boolean) -> Unit) {
+        if (token in rejected || !claiming.add(token)) return
         viewModelScope.launch {
-            if (!silent) toast("در حال تایید خرید…")
             try {
-                Api.bazaarVerify(productId, token)
-                reloadMe()
-                toast(if (silent) "خرید قبلی شما تایید و اشتراک فعال شد ✓" else "اشتراک فعال شد ✓")
-                onDone(true)
-            } catch (e: ApiException) {
-                if (!silent) toast(e.message ?: "")
+                if (!silent) toast("در حال تایید خرید…")
+                val tries = if (silent) 3 else 6
+                var last: ApiException? = null
+                for (i in 1..tries) {
+                    try {
+                        Api.bazaarVerify(productId, token)
+                        last = null
+                        break
+                    } catch (e: ApiException) {
+                        last = e
+                        if (!retryable(e)) break
+                        if (i < tries) delay(CLAIM_DELAYS_MS[(i - 1).coerceAtMost(CLAIM_DELAYS_MS.size - 1)])
+                    }
+                }
+                val err = last
+                if (err == null) {
+                    try { reloadMe() } catch (_: ApiException) { /* پلن فعال شده؛ تازه‌سازی حساب بعداً هم انجام می‌شود */ }
+                    toast(if (silent) "خرید قبلی شما تایید و اشتراک فعال شد ✓" else "اشتراک فعال شد ✓")
+                    onDone(true)
+                    return@launch
+                }
+                Api.reportPay("verify_" + err.status, err.message.orEmpty(), productId)
+                when {
+                    err.status == 401 -> if (!silent) toast("برای فعال‌سازی اشتراک وارد حساب شوید. پرداخت شما در " + Store.NAME_FA + " محفوظ است.")
+                    retryable(err) -> if (!silent) toast("پرداخت شما در " + Store.NAME_FA + " ثبت شده و از بین نمی‌رود؛ به‌محض برقراری ارتباط با سرور، اشتراک خودکار فعال می‌شود.")
+                    else -> {
+                        rejected.add(token)
+                        if (!silent) toast(err.message ?: "")
+                    }
+                }
                 onDone(false)
+            } finally {
+                claiming.remove(token)
             }
         }
     }
 
+    private var buyJob: Job? = null
+
+    /**
+     * خرید فقط از طریق فروشگاه (بازار/مایکت) انجام می‌شود؛ هیچ درگاه وبی (دیجی‌پی) در اپ نیست.
+     * اگر تنظیمات سرور نرسیده یا اتصال به فروشگاه هنوز برقرار نیست، چند بار دوباره وصل می‌شود و در نهایت خطای مشخص می‌دهد.
+     */
     fun buy(planId: String) {
-        if (viaBazaar()) {
-            _events.trySend(Event.BazaarBuy("plan_$planId"))
-            return
-        }
-        viewModelScope.launch {
-            try {
-                val url = Api.startPayment(planId)
-                refreshOnNextResume = true
-                _events.trySend(Event.OpenUrl(url))
-            } catch (e: ApiException) {
-                toast(e.message ?: "")
+        if (buyJob?.isActive == true) return
+        val sku = "plan_$planId"
+        buyJob = viewModelScope.launch {
+            if (_state.value.config?.bazaar != true) {
+                for (i in 1..3) {
+                    try {
+                        val c = Api.config()
+                        _state.update { it.copy(config = c) }
+                        break
+                    } catch (_: ApiException) {
+                        if (i < 3) delay(1_500)
+                    }
+                }
             }
+            if (_state.value.config?.bazaar != true) {
+                val noCfg = _state.value.config == null
+                Api.reportPay(if (noCfg) "no_config" else "server_disabled", "", sku)
+                toast(
+                    if (noCfg) "اتصال به سرور برقرار نشد. اینترنت خود را بررسی کنید و دوباره تلاش کنید."
+                    else "پرداخت درون‌برنامه‌ای موقتاً در دسترس نیست. چند دقیقه بعد دوباره تلاش کنید.",
+                )
+                return@launch
+            }
+            if (!_state.value.bazaarReady) {
+                toast("در حال اتصال به " + Store.NAME_FA + "…")
+                var ok = withTimeoutOrNull(4_000) { _state.first { it.bazaarReady } } != null
+                var n = 0
+                while (!ok && n < 2) {
+                    n++
+                    _events.trySend(Event.BillingReconnect)
+                    ok = withTimeoutOrNull(6_000) { _state.first { it.bazaarReady } } != null
+                }
+            }
+            if (!_state.value.bazaarReady) {
+                Api.reportPay("store_not_ready", "", sku)
+                toast("اتصال به " + Store.NAME_FA + " برقرار نشد. مطمئن شوید برنامه‌ی " + Store.NAME_FA + " نصب است و وارد حساب خود شده‌اید، سپس دوباره تلاش کنید.")
+                return@launch
+            }
+            _events.trySend(Event.BazaarBuy(sku))
         }
     }
 

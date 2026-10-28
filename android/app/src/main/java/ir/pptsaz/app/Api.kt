@@ -227,11 +227,17 @@ object Api {
             ?: throw ApiException("تصویر قابل نمایش نیست.")
     }
 
-    /** آدرس صفحه‌ی پرداخت را برمی‌گرداند تا در مرورگر باز شود. */
-    suspend fun startPayment(planId: String): String {
-        val url = call("POST", "/api/pay/start", JSONObject().put("plan", planId)).optString("url")
-        if (url.isEmpty()) throw ApiException("آدرس پرداخت دریافت نشد.")
-        return if (url.startsWith("/")) BASE + url else url
+    /** گزارش بی‌صدای خطای پرداخت به سرور تا در لاگ و پنل مدیر دیده شود؛ هیچ‌وقت خطا نمی‌دهد. */
+    suspend fun reportPay(code: String, msg: String = "", sku: String = "") {
+        try {
+            call(
+                "POST", "/api/app/pay-report",
+                JSONObject().put("store", Store.ID).put("code", code).put("msg", msg.take(60)).put("sku", sku).put("v", BuildConfig.VERSION_NAME),
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
     }
 
     /** تایید خرید کافه‌بازار روی سرور؛ بعد از موفقیت پلن فعال می‌شود (تکراری‌بودن مشکلی ندارد). */

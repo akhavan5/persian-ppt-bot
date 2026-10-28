@@ -1,7 +1,12 @@
 package ir.pptsaz.app
 
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
 import ir.myket.billingclient.IabHelper
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.UUID
 
@@ -29,6 +34,15 @@ class BazaarBilling(
     private var helper: IabHelper? = null
     private var ready = false
     private var buying = false
+    private var buyingSince = 0L
+    private var stopped = false // disconnect() صدا زده شده؛ دیگر خودکار وصل نشود
+    private var attempt = 0
+    private val handler = Handler(Looper.getMainLooper())
+    private val retry = Runnable { if (!stopped && !ready) connectNow() }
+
+    private fun report(code: String, sku: String, msg: String? = null) {
+        activity.lifecycleScope.launch { Api.reportPay(code, msg.orEmpty(), sku) }
+    }
 
     /** توکن (JSON) → اجرای «مصرف» همان خرید؛ شیء Purchase داخل lambda نگه داشته می‌شود. */
     private val consumers = HashMap<String, (IabHelper.OnConsumeFinishedListener) -> Unit>()
@@ -74,17 +88,27 @@ class BazaarBilling(
     }
 
     fun connect() {
+        stopped = false
+        if (helper != null) return
+        attempt = 0
+        connectNow()
+    }
+
+    private fun connectNow() {
         if (helper != null) return
         try {
             val h = IabHelper(activity, BuildConfig.IAB_PUBLIC_KEY)
             h.enableDebugLogging(false)
             helper = h
             h.startSetup(IabHelper.OnIabSetupFinishedListener { r ->
-                if (helper == null) return@OnIabSetupFinishedListener
+                if (helper !== h) return@OnIabSetupFinishedListener
                 ready = r.isSuccess
                 if (!ready) {
                     release(h)
                     helper = null
+                    scheduleRetry()
+                } else {
+                    attempt = 0
                 }
                 onReady(ready)
             })
@@ -92,13 +116,26 @@ class BazaarBilling(
             helper = null
             ready = false
             onReady(false)
+            scheduleRetry()
         }
     }
 
+    /** اتصال برقرار نشد: با فاصله‌ی افزایشی (۲، ۵، ۱۰، ۲۰، ۳۰ ثانیه، حداکثر ۸ بار) خودکار دوباره امتحان می‌شود. */
+    private fun scheduleRetry() {
+        if (stopped || attempt >= 8) return
+        val d = longArrayOf(2_000, 5_000, 10_000, 20_000, 30_000)[attempt.coerceAtMost(4)]
+        attempt++
+        handler.removeCallbacks(retry)
+        handler.postDelayed(retry, d)
+    }
+
     fun disconnect() {
+        stopped = true
+        handler.removeCallbacks(retry)
         helper?.let { release(it) }
         helper = null
         ready = false
+        buying = false
         queue.clear()
         busy = false
         consumers.clear()
@@ -107,8 +144,12 @@ class BazaarBilling(
     /** onError با متن خالی یعنی کاربر خودش انصراف داده و پیامی لازم نیست. */
     fun purchase(sku: String, onPurchase: (productId: String, token: String) -> Unit, onError: (String) -> Unit) {
         if (!ready) { onError("اتصال به مایکت برقرار نیست. مایکت را باز کنید و دوباره تلاش کنید."); return }
-        if (buying) return
+        if (buying && SystemClock.elapsedRealtime() - buyingSince < 120_000) {
+            onError("پرداخت قبلی هنوز در جریان است؛ چند لحظه صبر کنید.")
+            return
+        }
         buying = true
+        buyingSince = SystemClock.elapsedRealtime()
         enqueue { done ->
             val h = helper
             if (h == null) {
@@ -125,7 +166,8 @@ class BazaarBilling(
                             if (helper == null) return@OnIabPurchaseFinishedListener
                             if (r.isFailure || p == null) {
                                 val cancelled = r.message?.contains("cancel", ignoreCase = true) == true
-                                onError(if (cancelled) "" else "خرید انجام نشد. دوباره تلاش کنید.")
+                                if (!cancelled) report("purchase_failed", sku, r.message)
+                                onError(if (cancelled) "" else "خرید انجام نشد. اگر مبلغی کسر شده نگران نباشید؛ اشتراک خودکار فعال می‌شود، وگرنه دوباره تلاش کنید.")
                                 return@OnIabPurchaseFinishedListener
                             }
                             val json = p.originalJson.orEmpty()
@@ -135,9 +177,10 @@ class BazaarBilling(
                         },
                         "pptsaz-" + UUID.randomUUID().toString().take(8),
                     )
-                } catch (_: Exception) {
+                } catch (e: Exception) {
                     buying = false
                     done()
+                    report("begin_failed", sku, e.javaClass.simpleName + ":" + e.message.orEmpty())
                     onError("باز کردن صفحه‌ی پرداخت مایکت ممکن نشد. از نصب‌بودن مایکت مطمئن شوید.")
                 }
             }
@@ -146,6 +189,7 @@ class BazaarBilling(
 
     /** خرید را مصرف می‌کند تا دوباره قابل خرید شود. فقط بعد از تایید موفق سرور صدا زده شود. */
     fun consume(token: String, done: (Boolean) -> Unit = {}) {
+        if (!ready) { done(false); return }
         enqueue { fin ->
             val h = helper
             val c = consumers[token]

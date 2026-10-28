@@ -331,7 +331,7 @@ async function bzValidate(env: Env, sku: string, purchaseToken: string, retry = 
   if (!r) return { ok: false };
   if (r.status === 401 && retry) return bzValidate(env, sku, purchaseToken, false);
   const d = (await r.json().catch(() => null)) as any;
-  if (r.status === 404 || r.status === 400) return { ok: false, invalid: true };
+  if (r.status === 404 || r.status === 400) { console.error("bazaar validate invalid", r.status, sku, JSON.stringify(d).slice(0, 200)); return { ok: false, invalid: true }; }
   if (!r.ok) { console.error("bazaar validate failed", r.status, JSON.stringify(d).slice(0, 300)); return { ok: false }; }
   return { ok: true, data: d };
 }
@@ -340,7 +340,7 @@ const sha256hex = async (s: string) =>
   [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 /** POST /api/pay/bazaar  { productId, purchaseToken } → { ok, plan, already? }  (کاربر باید وارد شده باشد؛ تکراری‌بودن برای همان کاربر مشکلی ندارد) */
-export async function bazaarVerify(env: Env, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
+async function bazaarVerifyRaw(env: Env, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
   if (!bazaarEnabled(env)) return json({ error: "پرداخت از طریق کافه‌بازار هنوز فعال نشده است." }, 503);
   const productId = String(b?.productId ?? "");
   const purchaseToken = String(b?.purchaseToken ?? "");
@@ -414,8 +414,28 @@ async function mkVerifySignature(env: Env, data: string, signatureB64: string): 
   }
 }
 
+/**
+ * وضعیت خرید از API سرور-به-سرور مایکت (purchaseState: ۰ = موفق، ۱ = ناموفق). فقط وقتی MYKET_ACCESS_TOKEN تنظیم شده؛
+ * هر خطا/قطعی/پاسخ نامشخص → null (امضای خرید که قبلاً تایید شده کافی است و پرداخت به‌خاطر مشکل API مایکت گیر نمی‌کند).
+ */
+async function mkApiState(env: Env, sku: string, token: string): Promise<number | null> {
+  const at = (env.MYKET_ACCESS_TOKEN ?? "").trim();
+  if (!at) return null;
+  try {
+    const r = await fetch(`https://developer.myket.ir/api/partners/applications/${encodeURIComponent(bzCfg(env).pkg)}/purchases/products/${encodeURIComponent(sku)}/verify`, {
+      method: "POST",
+      headers: { "X-Access-Token": at, "content-type": "application/json" },
+      body: JSON.stringify({ tokenId: token }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const d = (await r.json().catch(() => null)) as { purchaseState?: unknown } | null;
+    if (!r.ok) { console.error("myket verify api", r.status, JSON.stringify(d).slice(0, 200)); return null; }
+    return d?.purchaseState === undefined ? null : Number(d.purchaseState);
+  } catch (e) { console.error("myket verify api", e); return null; }
+}
+
 /** POST /api/pay/myket  { productId, purchaseToken: '{"j":"<originalJson>","s":"<signature>"}' } → { ok, plan, already? } */
-export async function myketVerify(env: Env, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
+async function myketVerifyRaw(env: Env, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
   if (!myketEnabled(env)) return json({ error: "پرداخت از طریق مایکت هنوز فعال نشده است." }, 503);
   const productId = String(b?.productId ?? "");
   const plan = PLANS.find((p) => bzSku(p) === productId); // پلن فقط از شناسه‌ی محصول مشخص می‌شود، نه از ادعای کلاینت
@@ -444,5 +464,137 @@ export async function myketVerify(env: Env, user: WebUser, b: Record<string, unk
   };
   const dup = await seen();
   if (dup) return dup;
+  const apiState = await mkApiState(env, productId, token);
+  if (apiState !== null && apiState !== 0) return json({ error: "این خرید لغو یا برگشت خورده است." }, 400);
   return storeClaim(env, user, plan, productId, key, String(d?.orderId ?? ""), "myket", seen);
+}
+
+
+// ---------- ثبت و ردیابی همه‌ی تلاش‌های خرید فروشگاه‌ها (برای پنل مدیر و لاگ) ----------
+type StoreTag = "bz" | "mk";
+const STORE_NAME: Record<StoreTag, string> = { bz: "کافه‌بازار", mk: "مایکت" };
+
+/**
+ * رکورد pay:<سفارش> برای خرید فروشگاه‌ها تا در «💰 پرداخت‌ها» و «⚠️ مشکل‌دار» پنل مدیر دیده شود (قبلاً فقط درگاه دیجی‌پی رکورد داشت).
+ * رکورد «paid» هرگز به وضعیت دیگری برنمی‌گردد؛ هر تلاش دوباره‌ی همان خرید (همان توکن) همان رکورد را به‌روز می‌کند.
+ */
+async function putStoreRec(env: Env, order: string, rec: PayRecord): Promise<void> {
+  try {
+    const exp = Math.floor(Date.now() / 1000) + (rec.state === "paid" ? TTL * 6 : TTL);
+    await env.DB.prepare(
+      "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, ?3) ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp WHERE json_extract(kv.v,'$.state') <> 'paid'")
+      .bind(`pay:${order}`, JSON.stringify(rec), exp).run();
+  } catch (e) { console.error("putStoreRec", e); }
+}
+
+/** اجرای تاییدکننده‌ی فروشگاه + ثبت نتیجه (موفق یا هر دلیل رد). خطای غیرمنتظره هم به پاسخ 500 قابل‌تلاش‌مجدد تبدیل می‌شود تا اپ دوباره امتحان کند. */
+async function trackStore(env: Env, user: WebUser, tag: StoreTag, b: Record<string, unknown> | null, run: () => Promise<Response>): Promise<Response> {
+  const t0 = Date.now();
+  const productId = String(b?.productId ?? "");
+  console.log(`${STORE_NAME[tag]} verify request`, user.id, productId);
+  let res: Response;
+  try { res = await run(); }
+  catch (e) {
+    console.error(`${STORE_NAME[tag]} verify crash`, user.id, productId, e);
+    res = json({ error: "خطای موقت سرور؛ چند لحظه بعد دوباره امتحان کن (خرید شما از بین نمی‌رود)." }, 500);
+  }
+  try {
+    const token = String(b?.purchaseToken ?? "");
+    const plan = PLANS.find((p) => `plan_${p.id}` === productId);
+    const d = (await res.clone().json().catch(() => null)) as { error?: string } | null;
+    const order = `${tag}${(await sha256hex(token)).slice(0, 24)}`;
+    const base = { uid: user.id, plan: plan?.id, count: plan?.credits ?? 0, amount: plan ? plan.price * 10_000 : 0, order, t: Date.now() };
+    if (res.ok) {
+      await putStoreRec(env, order, { ...base, state: "paid" });
+    } else {
+      const msg = String(d?.error ?? "").replace(/\s+/g, " ").slice(0, 40);
+      console.error(`${STORE_NAME[tag]} verify rejected`, JSON.stringify({ uid: user.id, sku: productId, status: res.status, ms: Date.now() - t0, err: msg }));
+      await putStoreRec(env, order, { ...base, state: "pending", issue: `${tag}:${res.status}:${msg}`, it: Date.now() });
+    }
+  } catch (e) { console.error("trackStore", e); }
+  return res;
+}
+
+/**
+ * مصرف خرید از سمت سرور (API توسعه‌دهندگان بازار: POST consume/<package>/purchases/ با بدنه‌ی {"token"}).
+ * بعد از فعال‌سازی پلن صدا زده می‌شود تا حتی اگر اپ نتواند خرید را مصرف کند، خرید روی حساب بازار کاربر گیر نکند و دوباره قابل خرید باشد.
+ * خطا بی‌اثر است (اپ هم خودش مصرف می‌کند)؛ «قبلاً مصرف شده» موفق حساب می‌شود.
+ */
+async function bzConsume(env: Env, token: string, retry = true): Promise<boolean> {
+  try {
+    const at = await bzToken(env, !retry);
+    if (!at) return false;
+    const r = await fetch(`${BZ_API}/api/consume/${encodeURIComponent(bzCfg(env).pkg)}/purchases/?access_token=${encodeURIComponent(at)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (r.status === 401 && retry) return bzConsume(env, token, false);
+    if (r.ok) return true;
+    const d = (await r.json().catch(() => null)) as { error?: string } | null;
+    if (d?.error === "already_consumed") return true;
+    console.error("bazaar consume failed", r.status, JSON.stringify(d).slice(0, 200));
+  } catch (e) { console.error("bazaar consume", e); }
+  return false;
+}
+
+export const bazaarVerify = async (env: Env, user: WebUser, b: Record<string, unknown> | null) => {
+  const res = await trackStore(env, user, "bz", b, () => bazaarVerifyRaw(env, user, b));
+  if (res.ok) await bzConsume(env, String(b?.purchaseToken ?? ""));
+  return res;
+};
+/**
+ * مصرف خرید مایکت از سمت سرور (PUT .../purchases/products/<sku>/tokens/<token>/consume با هدر X-Access-Token)؛ فقط وقتی MYKET_ACCESS_TOKEN
+ * تنظیم شده و فقط بعد از فعال‌سازی پلن. «SkuAlreadyConsumed» موفق حساب می‌شود؛ هر خطای دیگر فقط لاگ می‌شود (اپ هم خودش مصرف می‌کند).
+ */
+async function mkConsume(env: Env, sku: string, packed: string): Promise<boolean> {
+  const at = (env.MYKET_ACCESS_TOKEN ?? "").trim();
+  if (!at) return false;
+  try {
+    const d = JSON.parse((JSON.parse(packed) as { j?: string }).j ?? "{}") as Record<string, unknown>;
+    const token = String(d.purchaseToken ?? d.token ?? d.orderId ?? "");
+    if (!token) return false;
+    const r = await fetch(`https://developer.myket.ir/api/partners/applications/${encodeURIComponent(bzCfg(env).pkg)}/purchases/products/${encodeURIComponent(sku)}/tokens/${encodeURIComponent(token)}/consume`, {
+      method: "PUT",
+      headers: { "X-Access-Token": at },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (r.ok) return true;
+    const e = (await r.json().catch(() => null)) as { messageCode?: string } | null;
+    if (e?.messageCode === "SkuAlreadyConsumed") return true;
+    console.error("myket consume failed", r.status, JSON.stringify(e).slice(0, 200));
+  } catch (e) { console.error("myket consume", e); }
+  return false;
+}
+
+export const myketVerify = async (env: Env, user: WebUser, b: Record<string, unknown> | null) => {
+  const res = await trackStore(env, user, "mk", b, () => myketVerifyRaw(env, user, b));
+  if (res.ok) await mkConsume(env, String(b?.productId ?? ""), String(b?.purchaseToken ?? ""));
+  return res;
+};
+
+/**
+ * POST /api/app/pay-report { store, code, msg?, sku?, v? } — خطای سمت اپ که هیچ‌وقت به سرور نمی‌رسید
+ * (نبودن اتصال به بازار، شروع‌نشدن صفحه‌ی پرداخت، رد شدن خرید توسط بازار، …). بدون ورود هم پذیرفته می‌شود و همیشه 200 برمی‌گرداند.
+ */
+export async function payReport(env: Env, user: WebUser | null, req: Request, ip: string): Promise<Response> {
+  try {
+    if (!/PptSazApp\//.test(req.headers.get("user-agent") ?? "")) return json({ ok: true });
+    if (Number(req.headers.get("content-length") ?? 0) > 4_000) return json({ ok: true });
+    if (await hitLimit(env, `payrep:${user?.id ?? ip}`, 40, 3600)) return json({ ok: true });
+    const b = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const s = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u001f]/g, " ").slice(0, n);
+    const tag: StoreTag = b?.store === "myket" ? "mk" : "bz";
+    const code = s(b?.code, 30), msg = s(b?.msg, 60), sku = s(b?.sku, 30);
+    if (!code) return json({ ok: true });
+    const plan = PLANS.find((p) => `plan_${p.id}` === sku);
+    const order = `${tag}app${Date.now()}${String(crypto.getRandomValues(new Uint32Array(1))[0] % 10_000).padStart(4, "0")}`;
+    console.error(`${STORE_NAME[tag]} app report`, JSON.stringify({ uid: user?.id ?? "-", code, sku, msg, v: s(b?.v, 20) }));
+    await putStoreRec(env, order, {
+      uid: user?.id ?? "unknown", plan: plan?.id, count: plan?.credits ?? 0, amount: plan ? plan.price * 10_000 : 0, order,
+      state: "failed", issue: `app:${code}${msg ? ":" + msg : ""}`.slice(0, 90), t: Date.now(),
+    });
+  } catch (e) { console.error("payReport", e); }
+  return json({ ok: true });
 }

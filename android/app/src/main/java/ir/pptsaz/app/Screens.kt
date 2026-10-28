@@ -1227,24 +1227,14 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                             }
                             GradientButton(
                                 if (active) "تمدید اشتراک" else "خرید اشتراک",
-                                {
-                                    when {
-                                        cfg?.payEnabled == true || (cfg?.bazaar == true && st.bazaarReady) -> vm.buy(p.id)
-                                        p.url.isNotEmpty() -> vm.openUrl(p.url)
-                                        else -> vm.openSite()
-                                    }
-                                },
+                                { vm.buy(p.id) },
                                 Modifier.fillMaxWidth(),
                             )
                         }
                     }
                 }
                 Text(
-                    when {
-                        cfg?.bazaar == true && st.bazaarReady -> "پرداخت امن از طریق " + Store.NAME_FA + " انجام می‌شود."
-                        cfg?.payEnabled == true -> "پرداخت در مرورگر انجام می‌شود و بعد از آن به اپ برمی‌گردید."
-                        else -> "پرداخت از طریق ربات تلگرام انجام می‌شود."
-                    },
+                    "پرداخت امن از طریق " + Store.NAME_FA + " انجام می‌شود.",
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
