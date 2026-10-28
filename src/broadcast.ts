@@ -13,7 +13,14 @@ export const AUDIENCES: Record<Audience, string> = { all: "همه", plan: "👑 
 export const isAudience = (x: unknown): x is Audience => typeof x === "string" && x in AUDIENCES;
 
 /** daily: اعتبار رایگان روزانه (از cron) — به هر کاربر تلگرامِ بدون اعتبار ۱ اعتبار اضافه می‌کند و فقط به همان‌ها DAILY_FREE_MSG می‌فرستد؛ text/adminChatId نادیده گرفته می‌شود */
-export interface BroadcastParams { adminChatId: number; text: string; audience?: Audience; daily?: boolean; appPush?: PushMsg; appSegment?: PushSegment }
+export interface BroadcastParams {
+  adminChatId: number; text: string; audience?: Audience; daily?: boolean; appPush?: PushMsg; appSegment?: PushSegment;
+  /** ارسال زنجیره‌ای: هر نمونه (instance) فقط تا سقف زیردرخواست خودش می‌فرستد و بقیه را به نمونه‌ی بعدی می‌سپارد */
+  ids?: number[]; offset?: number; acc?: { ok: number; failed: number; skipped: number }; rootId?: string;
+}
+/** سقف ۵۰ زیردرخواست (پلن رایگان) برای کل یک نمونه‌ی Workflow است، نه هر گام؛ پس هر نمونه با بودجه‌ی مشخص کار می‌کند */
+const SUB_BUDGET = 38; // ۱۲ تا برای ready/پرس‌وجوی مسدودی/ساخت نمونه‌ی بعدی یا گزارش و تلاش‌های اضافه
+const CHUNK = 45;      // حداکثر کاندیدای هر نمونه (پارامترهای پرس‌وجوی D1 زیر ۱۰۰)
 
 const BATCH = 20;
 const MAX_USERS = 20_000;
@@ -83,18 +90,24 @@ export async function listAudience(env: Env, aud: Audience = "all"): Promise<num
   return ids.filter((id) => !plan.has(id) && !bonus.has(id) && !isAdmin(env, id)); // مدیرها اعتبار نامحدود دارند
 }
 
-async function sendOne(env: Env, id: number, text: string): Promise<boolean> {
+/** ارسال به یک کاربر؛ تعداد درخواست‌های واقعی (برای بودجه‌ی زیردرخواست) هم برمی‌گردد */
+async function sendOneCounted(env: Env, id: number, text: string): Promise<{ ok: boolean; calls: number }> {
+  let calls = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      calls++;
       await sendMessage(env, id, esc(text));
-      return true;
+      return { ok: true, calls };
     } catch (e) {
       const wait = String(e).match(/retry after (\d+)/i);
       if (wait && attempt === 0) { await sleep(Math.min(Number(wait[1]), 20) * 1000 + 200); continue; }
-      return false; // مثلاً کاربر ربات را بلاک کرده است
+      return { ok: false, calls }; // مثلاً کاربر ربات را بلاک کرده است
     }
   }
-  return false;
+  return { ok: false, calls };
+}
+async function sendOne(env: Env, id: number, text: string): Promise<boolean> {
+  return (await sendOneCounted(env, id, text)).ok;
 }
 
 export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> {
@@ -104,31 +117,60 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
     const { adminChatId, text, audience, daily, appPush, appSegment } = event.payload;
     if (daily) return await this.runDaily(step);
     if (appPush) return await this.runAppPush(step, adminChatId, appPush, appSegment ?? "all");
-    const ids = await step.do("collect", () => listAudience(this.env, isAudience(audience) ? audience : "all"));
+    const aud: Audience = isAudience(audience) ? audience : "all";
+    const root = event.payload.rootId ?? event.instanceId;
+    const P = event.payload;
 
-    let ok = 0, failed = 0, skipped = 0;
-    for (let i = 0; i < ids.length; i += BATCH) {
-      const r = await step.do(`send-${i / BATCH}`, { retries: { limit: 0, delay: "1 second" }, timeout: "3 minutes" }, async () => {
-        const out = { ok: 0, failed: 0, skipped: 0 };
-        const chunk = ids.slice(i, i + BATCH);
-        await this.env.KV.ready();
-        const keys = chunk.map((id) => `ban:${id}`); // یک پرس‌وجو برای کل دسته (به‌جای یکی برای هر کاربر) تا از سقف ۵۰ زیردرخواست رد نشود
-        const rows = await this.env.DB.prepare(`SELECT k FROM kv WHERE (exp IS NULL OR exp > ${Math.floor(Date.now() / 1000)}) AND k IN (${keys.map((_, n) => `?${n + 1}`).join(",")})`).bind(...keys).all<{ k: string }>();
-        const banned = new Set(((rows.results ?? []) as { k: string }[]).map((r) => r.k));
-        for (const id of chunk) {
-          if (banned.has(`ban:${id}`)) { out.skipped++; continue; } // مسدودها پیام نمی‌گیرند
-          if (await sendOne(this.env, id, text)) out.ok++; else out.failed++;
-        }
-        await sleep(1000);
-        return out;
-      });
-      ok += r.ok; failed += r.failed; skipped += r.skipped;
+    // نمونه‌ی اول: فقط فهرست گیرندگان را می‌سازد و کار را به نمونه‌ی بعدی می‌سپارد
+    if (!P.ids) {
+      const all = await step.do("collect", () => listAudience(this.env, aud));
+      if (!all.length) return await this.report(step, adminChatId, aud, { ok: 0, failed: 0, skipped: 0 });
+      return await this.handoff(step, root, { adminChatId, text, audience: aud, rootId: root, ids: all, offset: 0, acc: { ok: 0, failed: 0, skipped: 0 } });
     }
 
+    const ids = P.ids, offset = P.offset ?? 0, acc = P.acc ?? { ok: 0, failed: 0, skipped: 0 };
+    const r = await step.do("send", { retries: { limit: 0, delay: "1 second" }, timeout: "5 minutes" }, async () => {
+      const out = { ok: 0, failed: 0, skipped: 0, next: offset };
+      const chunk = ids.slice(offset, offset + CHUNK);
+      let used = 0;
+      await this.env.KV.ready(); used += 2;
+      const keys = chunk.map((id) => `ban:${id}`);
+      const rows = await this.env.DB.prepare(`SELECT k FROM kv WHERE (exp IS NULL OR exp > ${Math.floor(Date.now() / 1000)}) AND k IN (${keys.map((_, n) => `?${n + 1}`).join(",")})`).bind(...keys).all<{ k: string }>();
+      used += 1;
+      const banned = new Set(((rows.results ?? []) as { k: string }[]).map((x) => x.k));
+      let i = 0;
+      for (; i < chunk.length; i++) {
+        const id = chunk[i];
+        if (banned.has(`ban:${id}`)) { out.skipped++; continue; } // مسدودها پیام نمی‌گیرند
+        if (used >= SUB_BUDGET) break; // بودجه‌ی این نمونه تمام شد؛ ادامه در نمونه‌ی بعدی
+        const res = await sendOneCounted(this.env, id, text);
+        used += res.calls;
+        if (res.ok) out.ok++; else out.failed++;
+      }
+      out.next = offset + i;
+      return out;
+    });
+    const total = { ok: acc.ok + r.ok, failed: acc.failed + r.failed, skipped: acc.skipped + r.skipped };
+    if (r.next >= ids.length) return await this.report(step, adminChatId, aud, total);
+    return await this.handoff(step, root, { adminChatId, text, audience: aud, rootId: root, ids, offset: r.next, acc: total });
+  }
+
+  /** ساخت نمونه‌ی بعدیِ زنجیره (شناسه‌ی ثابت ⇒ تلاش مجدد نمونه‌ی تکراری نمی‌سازد) */
+  private async handoff(step: WorkflowStep, root: string, params: BroadcastParams) {
+    await step.do("next", { retries: { limit: 3, delay: "5 seconds" } }, async () => {
+      try { await this.env.BROADCAST_WORKFLOW.create({ id: `${root}-${params.offset}`, params }); }
+      catch (e) { if (!/already|exist|duplicate/i.test(String(e))) throw e; }
+    }).catch(async (e) => {
+      console.error("broadcast handoff failed", params.offset, String(e).slice(0, 200));
+      await sendMessage(this.env, params.adminChatId, `⚠️ ارسال همگانی در کاربر شماره‌ی ${toFa(String(params.offset ?? 0))} متوقف شد. ✅ تا اینجا موفق: ${toFa(String(params.acc?.ok ?? 0))}`).catch(() => {});
+    });
+  }
+
+  private async report(step: WorkflowStep, adminChatId: number, aud: Audience, t: { ok: number; failed: number; skipped: number }) {
     await step.do("report", async () => {
       await sendMessage(this.env, adminChatId,
-        `📣 <b>ارسال همگانی تمام شد</b> (${AUDIENCES[isAudience(audience) ? audience : "all"]})\n✅ موفق: ${toFa(String(ok))}\n❌ ناموفق: ${toFa(String(failed))} (معمولاً کاربرانی که ربات را بلاک کرده‌اند)` +
-        (skipped ? `\n⛔️ مسدودشده (ارسال نشد): ${toFa(String(skipped))}` : ""));
+        `📣 <b>ارسال همگانی تمام شد</b> (${AUDIENCES[aud]})\n✅ موفق: ${toFa(String(t.ok))}\n❌ ناموفق: ${toFa(String(t.failed))} (معمولاً کاربرانی که ربات را بلاک کرده‌اند)` +
+        (t.skipped ? `\n⛔️ مسدودشده (ارسال نشد): ${toFa(String(t.skipped))}` : ""));
     }).catch(() => {});
   }
 
