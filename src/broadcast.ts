@@ -17,6 +17,8 @@ export interface BroadcastParams {
   adminChatId: number; text: string; audience?: Audience; daily?: boolean; appPush?: PushMsg; appSegment?: PushSegment;
   /** ارسال زنجیره‌ای: هر نمونه (instance) فقط تا سقف زیردرخواست خودش می‌فرستد و بقیه را به نمونه‌ی بعدی می‌سپارد */
   ids?: number[]; offset?: number; acc?: { ok: number; failed: number; skipped: number }; rootId?: string;
+  /** اعلان اپ (زنجیره‌ای): نشانگر صفحه‌ی بعد، شمارنده‌ی نمونه و جمع نتایج تا اینجا */
+  pcursor?: string; seq?: number; pacc?: { ok: number; dead: number; failed: number; skipped: number };
 }
 /** سقف ۵۰ زیردرخواست (پلن رایگان) برای کل یک نمونه‌ی Workflow است، نه هر گام؛ پس هر نمونه با بودجه‌ی مشخص کار می‌کند */
 const SUB_BUDGET = 38; // ۱۲ تا برای ready/پرس‌وجوی مسدودی/ساخت نمونه‌ی بعدی یا گزارش و تلاش‌های اضافه
@@ -26,7 +28,7 @@ const BATCH = 20;
 const MAX_USERS = 20_000;
 // حالت daily: هر دسته ۲۰ کاربر = ۱ پرس‌وجو + ۲ batch ثبت اعتبار + حداکثر ۲۰ ارسال تلگرام ≈ ۲۳ زیردرخواست (حتی با تلاش مجدد زیر سقف ۵۰ پلن رایگان).
 // ۱۰هزار کاربر = ۵۰۰ گام (سقف ۱۰۲۴).
-const DAILY_BATCH = 20;
+const DAILY_CHUNK = 25; // هر نمونه: ۵ زیردرخواست ثابت + حداکثر ۲۵ ارسال
 const DAILY_MAX_USERS = 10_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -115,11 +117,11 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
 
   async run(event: WorkflowEvent<BroadcastParams>, step: WorkflowStep) {
     const { adminChatId, text, audience, daily, appPush, appSegment } = event.payload;
-    if (daily) return await this.runDaily(step);
-    if (appPush) return await this.runAppPush(step, adminChatId, appPush, appSegment ?? "all");
-    const aud: Audience = isAudience(audience) ? audience : "all";
     const root = event.payload.rootId ?? event.instanceId;
     const P = event.payload;
+    if (daily) return await this.runDaily(step, root, P);
+    if (appPush) return await this.runAppPush(step, root, P, adminChatId, appPush, appSegment ?? "all");
+    const aud: Audience = isAudience(audience) ? audience : "all";
 
     // نمونه‌ی اول: فقط فهرست گیرندگان را می‌سازد و کار را به نمونه‌ی بعدی می‌سپارد
     if (!P.ids) {
@@ -156,9 +158,9 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
   }
 
   /** ساخت نمونه‌ی بعدیِ زنجیره (شناسه‌ی ثابت ⇒ تلاش مجدد نمونه‌ی تکراری نمی‌سازد) */
-  private async handoff(step: WorkflowStep, root: string, params: BroadcastParams) {
+  private async handoff(step: WorkflowStep, root: string, params: BroadcastParams, suffix: string | number = params.offset ?? 0) {
     await step.do("next", { retries: { limit: 3, delay: "5 seconds" } }, async () => {
-      try { await this.env.BROADCAST_WORKFLOW.create({ id: `${root}-${params.offset}`, params }); }
+      try { await this.env.BROADCAST_WORKFLOW.create({ id: `${root}-${suffix}`, params }); }
       catch (e) { if (!/already|exist|duplicate/i.test(String(e))) throw e; }
     }).catch(async (e) => {
       console.error("broadcast handoff failed", params.offset, String(e).slice(0, 200));
@@ -174,58 +176,76 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
     }).catch(() => {});
   }
 
-  /** اعلان FCM به اپ اندروید: هر گام ۲۰ توکن (صفحه‌ی بعدی را همان گام با cursor می‌خواند تا خروجی گام بزرگ نشود).
-   *  seg: گروه مخاطب؛ شرط گروه برای هر صفحه از داده‌ی زنده خوانده می‌شود (۲ پرس‌وجو + حداکثر ۲۰ ارسال ⇒ زیر سقف ۵۰ زیردرخواست). */
-  private async runAppPush(step: WorkflowStep, adminChatId: number, msg: PushMsg, seg: PushSegment) {
-    let cursor: string | undefined;
-    let ok = 0, dead = 0, failed = 0, skipped = 0;
-    for (let n = 0; n < 1000; n++) {
-      const r = await step.do(`push-${n}`, { retries: { limit: 0, delay: "1 second" }, timeout: "3 minutes" }, async () => {
-        const page = await pushTokenPage(this.env, cursor, 20);
-        const targets = await filterSegment(this.env, page.rows, seg);
-        const out = { ok: 0, dead: 0, failed: 0, skipped: page.rows.length - targets.length, next: page.next };
-        for (const { token } of targets) {
-          const res = await sendPush(this.env, token, msg);
+  /** اعلان FCM به اپ اندروید (زنجیره‌ای): هر نمونه با بودجه‌ی زیردرخواست خودش چند صفحه‌ی توکن را می‌فرستد و ادامه را به نمونه‌ی بعدی می‌سپارد.
+   *  هزینه‌ها (تخمینی و محافظه‌کارانه): هر صفحه ۶، هر ارسال ۳ (خواندن توکن دسترسی + FCM)، حذف توکن مرده ۲ */
+  private async runAppPush(step: WorkflowStep, root: string, P: BroadcastParams, adminChatId: number, msg: PushMsg, seg: PushSegment) {
+    const acc0 = P.pacc ?? { ok: 0, dead: 0, failed: 0, skipped: 0 };
+    const seq = P.seq ?? 0;
+    const r = await step.do("push", { retries: { limit: 0, delay: "1 second" }, timeout: "5 minutes" }, async () => {
+      const out = { ok: 0, dead: 0, failed: 0, skipped: 0, next: null as string | null };
+      let used = 0;
+      let cursor: string | undefined = P.pcursor;
+      for (;;) {
+        const page = await pushTokenPage(this.env, cursor, 15); used += 3;
+        const targets = await filterSegment(this.env, page.rows, seg); used += 3;
+        const ok = new Set(targets.map((t) => t.token));
+        let last: string | undefined, stopped = false;
+        for (const row of page.rows) {
+          if (!ok.has(row.token)) { out.skipped++; last = `pt1:${row.token}`; continue; }
+          if (used > SUB_BUDGET - 2) { stopped = true; break; } // بودجه‌ی این نمونه تمام شد
+          const res = await sendPush(this.env, row.token, msg); used += 3;
           if (res === "ok") out.ok++;
-          else if (res === "dead") { out.dead++; await Promise.all([this.env.KV.delete(`pt1:${token}`), this.env.KV.delete(`pt0:${token}`)]).catch(() => {}); }
+          else if (res === "dead") { out.dead++; used += 2; await Promise.all([this.env.KV.delete(`pt1:${row.token}`), this.env.KV.delete(`pt0:${row.token}`)]).catch(() => {}); }
           else out.failed++;
+          last = `pt1:${row.token}`;
         }
-        return out;
-      });
-      ok += r.ok; dead += r.dead; failed += r.failed; skipped += r.skipped;
-      if (!r.next) break;
-      cursor = r.next;
-    }
+        if (stopped) { out.next = last ?? cursor ?? null; break; }
+        if (!page.next) { out.next = null; break; }
+        cursor = page.next; out.next = cursor;
+        if (used > SUB_BUDGET - 14) break; // جا برای یک صفحه‌ی دیگر نیست
+      }
+      return out;
+    });
+    const total = { ok: acc0.ok + r.ok, dead: acc0.dead + r.dead, failed: acc0.failed + r.failed, skipped: acc0.skipped + r.skipped };
+    if (r.next) return await this.handoff(step, root, { adminChatId, text: "", appPush: msg, appSegment: seg, rootId: root, pcursor: r.next, seq: seq + 1, pacc: total }, `p${seq + 1}`);
     await step.do("report", async () => {
-      await sendMessage(this.env, adminChatId, `📲 <b>اعلان اپ ارسال شد</b> (${PUSH_SEGMENTS[seg]})\n✅ موفق: ${toFa(String(ok))}\n🗑 توکن نامعتبر (حذف شد): ${toFa(String(dead))}\n❌ ناموفق: ${toFa(String(failed))}` + (seg !== "all" ? `\n⏭ خارج از گروه (ارسال نشد): ${toFa(String(skipped))}` : ""));
+      await sendMessage(this.env, adminChatId, `📲 <b>اعلان اپ ارسال شد</b> (${PUSH_SEGMENTS[seg]})\n✅ موفق: ${toFa(String(total.ok))}\n🗑 توکن نامعتبر (حذف شد): ${toFa(String(total.dead))}\n❌ ناموفق: ${toFa(String(total.failed))}` + (seg !== "all" ? `\n⏭ خارج از گروه (ارسال نشد): ${toFa(String(total.skipped))}` : ""));
     }).catch(() => {});
   }
 
-  /** اعتبار رایگان روزانه برای کاربران تلگرامِ بدون اعتبار + پیام ربات (فقط به کسانی که امروز اعتبار گرفتند) */
-  private async runDaily(step: WorkflowStep) {
-    const ids = (await step.do("collect", () => listAudience(this.env, "nocredit"))).slice(0, DAILY_MAX_USERS);
-    for (let i = 0; i < ids.length; i += DAILY_BATCH) {
-      await step.do(`daily-${i / DAILY_BATCH}`, { retries: { limit: 0, delay: "1 second" }, timeout: "3 minutes" }, async () => {
-        const chunk = ids.slice(i, i + DAILY_BATCH);
-        try {
-          await this.env.KV.ready();
-          // ۱ زیردرخواست: پروفایل وب و مسدودی کل دسته (۴۰ پارامتر؛ سقف D1 برای هر پرس‌وجو ۱۰۰ است)
-          const keys = chunk.flatMap((id) => [`tg2w:${id}`, `ban:${id}`]);
-          const rows = await this.env.DB.prepare(`SELECT k, v FROM kv WHERE (exp IS NULL OR exp > ${Math.floor(Date.now() / 1000)}) AND k IN (${keys.map((_, n) => `?${n + 1}`).join(",")})`)
-            .bind(...keys).all<{ k: string; v: string }>();
-          const map = new Map(((rows.results ?? []) as { k: string; v: string }[]).map((r) => [r.k, r.v]));
-          const byUid = new Map<string, number>(); // پروفایل وب (یا شناسه‌ی عددی کاربران قدیمی) → شناسه‌ی تلگرام
-          for (const id of chunk) {
-            if (map.has(`ban:${id}`)) continue;
-            const w = map.get(`tg2w:${id}`);
-            byUid.set(w && /^w_[0-9a-f]{16}$/.test(w) ? w : String(id), id);
-          }
-          // ۲ زیردرخواست: ثبت اعتبار کل دسته؛ سپس حداکثر ۲۰ ارسال تلگرام (جمعاً زیر سقف ۵۰)
-          const won = await claimDailyFreeMany(this.env, [...byUid.keys()]);
-          for (const u of won) await sendOne(this.env, byUid.get(String(u))!, DAILY_FREE_MSG);
-        } catch (e) { console.error("daily free batch", i, String(e).slice(0, 160)); }
-        await sleep(1000);
-      });
+  /** اعتبار رایگان روزانه (زنجیره‌ای): هر نمونه ۲۵ کاربر. ثبت اعتبار روزی یک‌بار برای هر کاربر است، پس اجرای دوباره اعتبار تکراری نمی‌دهد. */
+  private async runDaily(step: WorkflowStep, root: string, P: BroadcastParams) {
+    if (!P.ids) {
+      const all = (await step.do("collect", () => listAudience(this.env, "nocredit"))).slice(0, DAILY_MAX_USERS);
+      if (!all.length) return;
+      return await this.handoff(step, root, { adminChatId: 0, text: "", daily: true, rootId: root, ids: all, offset: 0 });
     }
+    const ids = P.ids, offset = P.offset ?? 0;
+    await step.do("daily", { retries: { limit: 0, delay: "1 second" }, timeout: "5 minutes" }, async () => {
+      const chunk = ids.slice(offset, offset + DAILY_CHUNK);
+      let used = 0;
+      try {
+        await this.env.KV.ready(); used += 2;
+        // ۱ زیردرخواست: پروفایل وب و مسدودی کل دسته (۵۰ پارامتر؛ سقف D1 برای هر پرس‌وجو ۱۰۰ است)
+        const keys = chunk.flatMap((id) => [`tg2w:${id}`, `ban:${id}`]);
+        const rows = await this.env.DB.prepare(`SELECT k, v FROM kv WHERE (exp IS NULL OR exp > ${Math.floor(Date.now() / 1000)}) AND k IN (${keys.map((_, n) => `?${n + 1}`).join(",")})`)
+          .bind(...keys).all<{ k: string; v: string }>();
+        used += 1;
+        const map = new Map(((rows.results ?? []) as { k: string; v: string }[]).map((r) => [r.k, r.v]));
+        const byUid = new Map<string, number>(); // پروفایل وب (یا شناسه‌ی عددی کاربران قدیمی) → شناسه‌ی تلگرام
+        for (const id of chunk) {
+          if (map.has(`ban:${id}`)) continue;
+          const w = map.get(`tg2w:${id}`);
+          byUid.set(w && /^w_[0-9a-f]{16}$/.test(w) ? w : String(id), id);
+        }
+        const won = await claimDailyFreeMany(this.env, [...byUid.keys()]); used += 2;
+        for (const u of won) {
+          if (used >= SUB_BUDGET + 6) break; // فقط در حالت نادر تلاش‌های مجدد ۴۲۹؛ اعتبار ثبت شده و فقط پیام جا می‌ماند
+          used += (await sendOneCounted(this.env, byUid.get(String(u))!, DAILY_FREE_MSG)).calls;
+        }
+      } catch (e) { console.error("daily free batch", offset, String(e).slice(0, 160)); }
+    });
+    const next = offset + DAILY_CHUNK;
+    if (next < ids.length) await this.handoff(step, root, { adminChatId: 0, text: "", daily: true, rootId: root, ids, offset: next });
   }
 }
