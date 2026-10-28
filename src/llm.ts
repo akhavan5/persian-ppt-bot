@@ -21,7 +21,7 @@ const SYSTEM =
   "Return ONLY one valid JSON object, no markdown fences, no commentary.";
 
 /** مدل‌هایی که پیش‌فرض «فکر» می‌کنند و باید برای خروجی JSON خاموش شوند */
-const THINKERS = /qwen3|qwen-3|glm|gemma-?4|nemotron/i;
+const THINKERS = /qwen3|qwen-3|glm|nemotron/i; // Gemma 4 عمداً نیست: پیش‌فرضش بدون فکر است و گیت‌وی‌های مبتنی بر Google فیلد chat_template_kwargs را با ۴۰۰ رد می‌کنند
 /** مدل‌هایی که فکر کردنشان خاموش نمی‌شود (فقط توکن بیشتر می‌خواهند): DeepSeek-R1 با تگ <think>، gpt-oss با reasoning_effort */
 const ALWAYS_THINK = /deepseek-r1|deepseek-reasoner|deepseek-v[4-9]|gpt-oss|\bo\d/i;
 /** مدل‌هایی که فکر کردنشان با پارامتر reasoning (سبک OpenRouter) کم می‌شود؛ اگر سرویس نپذیرد (۴۰۰) حذف و دوباره تلاش می‌شود */
@@ -30,18 +30,22 @@ const GLM = /glm/i, QWEN = /qwen-?3/i, DEEPSEEK_V = /deepseek-v[4-9]/i, GPT_REAS
 /** خاموش‌کردن حالت «فکر کردن» برای هر خانواده (تحقیق‌شده از مستندات رسمی؛ هر سرویس پارامتر خودش را می‌خواند، پس چند شکل با هم فرستاده می‌شود):
  *  GLM: thinking.type=disabled (GLM-5.3 خاموش‌شدنی نیست ⇒ reasoning_effort=low هم فرستاده می‌شود)
  *  Qwen3.x: enable_thinking=false هم داخل chat_template_kwargs (vLLM/self-host) و هم بالا (Qwen Cloud/DashScope)
- *  Gemma 4: chat_template_kwargs.enable_thinking=false
+ *  Gemma 4: چیزی فرستاده نمی‌شود (به‌طور پیش‌فرض فکر نمی‌کند؛ فقط enable_thinking=true آن را روشن می‌کند)
  *  DeepSeek V4+: thinking.type=disabled   |   Claude: thinking.type=disabled   |   GPT-5/6 و o-سری: reasoning_effort=none
  *  ارسال فیلد ناپذیرفته ⇒ ۴۰۰ ⇒ adaptBody فقط همان فیلد را حذف/تعدیل می‌کند */
+/** فیلدهایی که گیت‌وی برای یک مدل با ۴۰۰ رد کرده (در حافظه‌ی همین ایزوله)؛ دفعه‌ی بعد از اول فرستاده نمی‌شوند ⇒ بدون یک رفت‌وبرگشت اضافه (مهم برای askQuick با تایم‌اوت ۸ ثانیه) */
+const REJECTED = new Map<string, Set<string>>();
+const reject = (model: unknown, k: string) => { const m = String(model); (REJECTED.get(m) ?? REJECTED.set(m, new Set()).get(m)!).add(k); };
 function noThinking(body: Record<string, unknown>): void {
   const m = String(body.model);
   if (THINKERS.test(m) || DEEPSEEK_V.test(m)) body.chat_template_kwargs = { enable_thinking: false, ...(DEEPSEEK_V.test(m) ? { thinking: false } : {}) };
   if (QWEN.test(m)) body.enable_thinking = false;
   if (GLM.test(m) || DEEPSEEK_V.test(m) || CLAUDE.test(m)) body.thinking = { type: "disabled" };
   if (GLM.test(m)) body.reasoning_effort = "low";
-  if (GPT_REASON.test(m)) body.reasoning_effort = "none";
+  if (GPT_REASON.test(m)) body.reasoning_effort = REJECTED.get(m)?.has("effort=none") ? "low" : "none";
   if (/gpt-oss/i.test(m)) body.reasoning_effort = "low"; // خاموش‌شدنی نیست؛ کم‌فکر
   if (REASONING_LOW.test(m)) body.reasoning = { effort: "low" }; // DeepSeek-R1/Reasoner خاموش‌شدنی نیست
+  for (const k of REJECTED.get(m) ?? []) if (!k.includes("=")) delete body[k];
 }
 /** Claude از طریق گیت‌وی: ممکن است «فکر کردن» روشن باشد و کل سقف توکن را بخورد (finish=length با متن خالی) */
 const CLAUDE = /claude/i;
@@ -175,8 +179,8 @@ function adaptBody(body: Record<string, unknown>, err: string): boolean {
   // فیلدهای «فکر کردن»: فقط همان فیلدی که در متن خطا آمده حذف/تعدیل می‌شود (بقیه می‌مانند تا مدل دوباره شروع به فکر نکند)
   for (const k of ["thinking", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning"]) {
     if (!(k in body) || !new RegExp(`\\b${k}\\b`, "i").test(err)) continue;
-    if (k === "reasoning_effort" && body.reasoning_effort === "none") { body.reasoning_effort = "low"; delete body.temperature; changed = true; continue; } // «none» پذیرفته نشد ⇒ کمترین سطح
-    delete body[k]; changed = true;
+    if (k === "reasoning_effort" && body.reasoning_effort === "none") { body.reasoning_effort = "low"; delete body.temperature; reject(body.model, "effort=none"); changed = true; continue; } // «none» پذیرفته نشد ⇒ کمترین سطح
+    delete body[k]; reject(body.model, k); changed = true;
     if (k === "thinking" && GLM.test(String(body.model)) && !("reasoning_effort" in body)) body.reasoning_effort = "low"; // GLM-5.3: خاموش نمی‌شود ⇒ فکر سبک
   }
   return changed;
