@@ -410,6 +410,17 @@ function finalizeLayout(sl: Slide): Slide {
       if (!sl.bullets.length) { const xs = joined(sl.items?.length ? sl.items : sl.steps ?? []); if (xs.length) sl.bullets = xs; else if (sl.columns.length) sl.bullets = sl.columns.flatMap((c) => c.bullets); } break;
     case "three_column": if (sl.columns.length < 3) sl.layout = sl.columns.length === 2 ? "two_column" : "bullets"; break;
     case "two_column": if (!sl.columns.length) sl.layout = "bullets"; break;
+    case "bullets": case "image_text": case "closing": case "title": {
+      // مدل گاهی layout را bullets می‌گذارد ولی محتوا را در columns می‌ریزد (و bullets خالی می‌ماند) → اسلاید خالی می‌شد
+      if (sl.bullets.length || !sl.columns.length) break;
+      if (sl.layout === "bullets" && sl.columns.length === 2) sl.layout = "two_column";
+      else if (sl.layout === "bullets" && sl.columns.length === 3) sl.layout = "three_column";
+      else {
+        sl.bullets = sl.columns.flatMap((c) => c.bullets.map((b) => (c.heading ? `${c.heading}: ${b}` : b))).slice(0, 8);
+        if (sl.layout === "bullets") sl.columns = [];
+      }
+      break;
+    }
   }
   return sl;
 }
