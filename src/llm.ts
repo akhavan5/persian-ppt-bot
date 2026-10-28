@@ -26,6 +26,7 @@ const THINKERS = /qwen3|qwen-3|glm|nemotron/i; // Gemma 4 عمداً نیست: �
 const ALWAYS_THINK = /deepseek-r1|deepseek-reasoner|deepseek-v[4-9]|gpt-oss|\bo\d/i;
 /** مدل‌هایی که فکر کردنشان با پارامتر reasoning (سبک OpenRouter) کم می‌شود؛ اگر سرویس نپذیرد (۴۰۰) حذف و دوباره تلاش می‌شود */
 const REASONING_LOW = /deepseek-reasoner|deepseek-r1/i;
+const GEMMA = /gemma-?4/i; // روی گیت‌وی گوگل پیش‌فرض «فکر» می‌کند (<thought>) و سقف کم را کامل می‌خورد
 const GLM = /glm/i, QWEN = /qwen-?3/i, DEEPSEEK_V = /deepseek-v[4-9]/i, GPT_REASON = /gpt-[5-9]|\bo\d/i;
 /** خاموش‌کردن حالت «فکر کردن» برای هر خانواده (تحقیق‌شده از مستندات رسمی؛ هر سرویس پارامتر خودش را می‌خواند، پس چند شکل با هم فرستاده می‌شود):
  *  GLM: thinking.type=disabled (GLM-5.3 خاموش‌شدنی نیست ⇒ reasoning_effort=low هم فرستاده می‌شود)
@@ -43,6 +44,7 @@ function noThinking(body: Record<string, unknown>): void {
   if (GLM.test(m) || DEEPSEEK_V.test(m) || CLAUDE.test(m)) body.thinking = { type: "disabled" };
   if (GLM.test(m)) body.reasoning_effort = "low";
   if (GPT_REASON.test(m)) body.reasoning_effort = REJECTED.get(m)?.has("effort=none") ? "low" : "none";
+  if (GEMMA.test(m)) body.reasoning_effort = REJECTED.get(m)?.has("effort=none") ? "low" : "none"; // اگر ۴۰۰ بدهد adaptBody تعدیل/حذف می‌کند
   if (/gpt-oss/i.test(m)) body.reasoning_effort = "low"; // خاموش‌شدنی نیست؛ کم‌فکر
   if (REASONING_LOW.test(m)) body.reasoning = { effort: "low" }; // DeepSeek-R1/Reasoner خاموش‌شدنی نیست
   for (const k of REJECTED.get(m) ?? []) if (!k.includes("=")) delete body[k];
@@ -193,7 +195,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     const body: Record<string, unknown> = {
       model: resolveModel(env, modelId).model,
       // مدل‌های «استدلالی» (GLM، Gemma 4، Qwen3) بخشی از توکن‌ها را صرف فکر کردن می‌کنند؛ با سقف کم، پاسخ نیمه‌کاره/خالی می‌ماند
-      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) || CLAUDE.test(resolveModel(env, modelId).model) ? maxTokens * 2 : maxTokens, MAX_OUT),
+      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) || CLAUDE.test(resolveModel(env, modelId).model) ? maxTokens * 2 : GEMMA.test(resolveModel(env, modelId).model) ? maxTokens * 3 : maxTokens, MAX_OUT),
       temperature: 0.5,
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
@@ -273,7 +275,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
 }
 
 export function parseJson(text: string): any {
-  const t = text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^[\s\S]*<\/think>/i, "").replace(/```(?:json)?/g, "").trim();
+  const t = text.replace(/<thought>[\s\S]*?<\/thought>/gi, "").replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^[\s\S]*<\/think>/i, "").replace(/```(?:json)?/g, "").trim();
   const a = t.indexOf("{"), b = t.lastIndexOf("}");
   if (a < 0 || b < 0) throw new Error(`no JSON in model output (${t ? "«" + t.slice(0, 120).replace(/\s+/g, " ") + "»" : "خروجی خالی"})`);
   return JSON.parse(t.slice(a, b + 1));
