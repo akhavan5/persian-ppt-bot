@@ -65,6 +65,7 @@ export function cleanSource(raw: unknown): string {
   return String(raw ?? "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
     .replace(/<<<DOCUMENT|DOCUMENT>>>/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // نشانگر تصویر مارک‌داون (بی‌متن) منبع حساب نشود
     .replace(/\r\n?/g, "\n").replace(/[ \t\u00A0]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n")
     .trim().slice(0, MAX_SOURCE_CHARS);
 }

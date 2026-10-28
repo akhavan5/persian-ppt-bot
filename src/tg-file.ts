@@ -113,7 +113,8 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: strin
   } catch (e) {
     console.error("toMarkdown failed", e instanceof Error ? e.message : e);
   }
-  text = tidy(text);
+  // toMarkdown برای هر تصویرِ PDF یک نشانگر ![Image of Fig. 1]() می‌گذارد؛ اینها متن نیستند و اگر نماند، PDFِ بدون لایه‌ی متن «متنی» حساب می‌شود و OCR نمی‌شود
+  text = tidy(text.replace(/!\[[^\]]*\]\([^)]*\)/g, " "));
   const pages = stripWatermarks(splitPages(text));
   // طول متن واقعی (بدون عنوان/Metadata/سرتیتر صفحه)؛ وگرنه اسکن به‌اشتباه «متنی» تشخیص داده می‌شود.
   const realLen = pages.reduce((n, p) => n + p.text.replace(/\s+/g, "").length, 0);
