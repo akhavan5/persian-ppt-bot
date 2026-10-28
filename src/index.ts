@@ -113,7 +113,8 @@ export default {
       });
       await tg(env, "setMyCommands", { commands: BOT_COMMANDS });
       // دکمه‌ی منوی ربات (کنار کادر پیام) Mini App را باز می‌کند؛ آدرس مستقیم Worker است (بدون واسطه)
-      await tg(env, "setChatMenuButton", { menu_button: { type: "web_app", text: "ساخت ارائه", web_app: { url: `${miniappUrl(env)}/app` } } }).catch((e) => console.error("menu button", e));
+      // \u200E (LRM) اول متن: در تلگرامِ اندروید با رابط انگلیسی، برچسب فارسی (راست‌به‌چپ) بیرون از دکمه و روی کادر پیام کشیده می‌شد؛ با LRM جهت پاراگراف چپ‌به‌راست می‌شود و متن داخل دکمه می‌ماند
+      await tg(env, "setChatMenuButton", { menu_button: { type: "web_app", text: "\u200Eساخت ارائه", web_app: { url: `${miniappUrl(env)}/app` } } }).catch((e) => console.error("menu button", e));
       // منوی کامل‌تر فقط برای چت خود مدیرها
       for (const id of adminIds(env)) {
         await tg(env, "setMyCommands", { commands: ADMIN_COMMANDS, scope: { type: "chat", chat_id: Number(id) } }).catch((e) => console.error("admin commands", e));
