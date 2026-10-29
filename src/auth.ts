@@ -7,6 +7,7 @@
  */
 import type { Env } from "./env";
 import { bumpStat, grantSignupCredit } from "./settings";
+import { sendWelcomeEmail } from "./email-welcome";
 
 export interface WebUser {
   id: string; // w_ + ۱۶ نویسه‌ی هگز
@@ -70,6 +71,7 @@ export async function createUser(env: Env, p: { email?: string; mobile?: string;
   await bumpStat(env, "newusers").catch(() => {});
   if (p.via === "app") await bumpStat(env, "newapp").catch(() => {});
   await grantSignupCredit(env, u.id).catch((e) => console.error("signupCredit", e)); // ۳ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
+  if (u.email) await sendWelcomeEmail(env, u).catch((e) => console.error("welcomeEmail", e)); // ایمیل خوش‌آمد (فقط حساب‌های دارای ایمیل؛ بدون RESEND_API_KEY بی‌اثر است)
   return u;
 }
 
