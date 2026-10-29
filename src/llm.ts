@@ -180,6 +180,8 @@ const NO_TEMP = /gpt-[5-9]|\bo\d/i;
 /** بدنه را بر اساس پیام خطای ۴۰۰ اصلاح می‌کند (temperature یا max_tokens که مدل نمی‌پذیرد)؛ اگر چیزی تغییر کرد true */
 function adaptBody(body: Record<string, unknown>, err: string): boolean {
   let changed = false;
+  // گیت‌وی (مثلاً برای Claude) json_object را نمی‌پذیرد («response_format.type: Input should be 'json_schema'») ⇒ فقط همین فیلد حذف شود، نه «thinking»
+  if (/response_format/i.test(err) && "response_format" in body) { delete body.response_format; reject(body.model, "response_format"); changed = true; }
   if (/temperature/i.test(err) && "temperature" in body) { delete body.temperature; changed = true; }
   if (/max_tokens/i.test(err) && /max_completion_tokens/i.test(err) && "max_tokens" in body) { body.max_completion_tokens = body.max_tokens; delete body.max_tokens; changed = true; }
   // فیلدهای «فکر کردن»: فقط همان فیلدی که در متن خطا آمده حذف/تعدیل می‌شود (بقیه می‌مانند تا مدل دوباره شروع به فکر نکند)
@@ -207,6 +209,8 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
     noThinking(body); // برای JSON لازم نیست؛ اگر گیت‌وی فیلدی را نپذیرد (۴۰۰) فقط همان فیلد تعدیل و دوباره تلاش می‌شود
     const picked = resolveModel(env, modelId);
+    // Claude از طریق گیت‌وی json_object را رد می‌کند؛ بدون رفت‌وبرگشت اضافه از اول فرستاده نمی‌شود (JSON با پرامپت گرفته می‌شود)
+    if (CLAUDE.test(picked.model) || REJECTED.get(picked.model)?.has("response_format")) delete body.response_format;
     if (NO_TEMP.test(picked.model)) delete body.temperature;
     // مدل ارائه‌دهنده‌ی دیگر: مستقیم به آدرس و کلید خودش (بدون چرخش حساب‌های کلودفلر)
     // OPENAI_API_KEY می‌تواند فهرستی از حساب‌ها باشد: از آخرین حساب سالم شروع می‌شود و با ۴۲۹ (سقف نورون) به حساب بعدی می‌رود
@@ -241,7 +245,8 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
         delete body.enable_thinking;
         delete body.reasoning_effort;
         delete body.reasoning;
-        delete body.thinking;
+        // Claude: «thinking: disabled» هرگز بی‌دلیل حذف نمی‌شود؛ وگرنه مدل فکر می‌کند و کل سقف توکن (۷۶۰۰ تا ۱۴۰۰۰) را با متن خالی می‌خورد
+        if (!CLAUDE.test(String(body.model))) delete body.thinking;
       }
       r = await call();
     }
@@ -335,7 +340,8 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
     if (!adaptBody(body, err)) {
       if (stripped) break;
       stripped = true;
-      delete body.chat_template_kwargs; delete body.enable_thinking; delete body.reasoning_effort; delete body.reasoning; delete body.thinking;
+      delete body.chat_template_kwargs; delete body.enable_thinking; delete body.reasoning_effort; delete body.reasoning;
+      if (!CLAUDE.test(String(body.model))) delete body.thinking;
     }
     r = await call();
   }
