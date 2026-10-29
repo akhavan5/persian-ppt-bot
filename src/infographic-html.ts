@@ -132,14 +132,22 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
     : "";
 
   // توازن ستون‌ها با ارتفاع واقعی: بعد از بارگذاری فونت، ارتفاع هر پنل اندازه گرفته می‌شود و بهترین چیدمان (کمترین ارتفاع بلندترین ستون) انتخاب می‌شود.
-  // اگر اجرای اسکریپت ممکن نشد، همان چیدمان تخمینی بالا می‌ماند.
-  const balance = `<script>(function(){function go(){try{var cols=[].slice.call(document.querySelectorAll(".col")),n=cols.length;if(n<2)return;
+  // عرض ستون‌ها داینامیک است: پنلی که جدول چندستونه، مقایسه، کارت یا فلو افقی دارد ستونش را پهن‌تر می‌خواهد (وزن ۱ تا ۱.۴)؛ عرض ستون‌ها به نسبت این وزن‌ها پخش می‌شود
+  // و ارتفاع هر پنل در انتخاب چیدمان بر اساس عرض جدیدش تقریب زده می‌شود. اگر اجرای اسکریپت ممکن نشد، همان چیدمان تخمینی بالا با ستون‌های هم‌عرض می‌ماند.
+  const balance = `<script>(function(){function pw(p){var w=1;[].slice.call(p.querySelectorAll(".bk")).forEach(function(b){var k=1,c=b.classList;
+if(c.contains("tb")){var n=b.querySelectorAll("th").length;k=n>=4?1.4:n==3?1.2:1}
+else if(c.contains("cmp"))k=1.25;else if(c.contains("cd"))k=1.15;else if(c.contains("fl")&&c.contains("h"))k=1.15;else if(c.contains("st")&&b.children.length>=3)k=1.15;
+if(k>w)w=k});return w}
+function go(){try{var cols=[].slice.call(document.querySelectorAll(".col")),n=cols.length;if(n<2)return;
 var ps=[].slice.call(document.querySelectorAll(".pn"));ps.sort(function(a,b){return a.getAttribute("data-i")-b.getAttribute("data-i")});
-var m=ps.length,h=ps.map(function(p){return p.offsetHeight}),total=Math.pow(n,m);if(total>70000)return;
-var best=0,bs=1e12;for(var k=0;k<total;k++){var x=k,s=[],i,top=-1,ok=true;for(i=0;i<n;i++)s.push(0);
-for(i=0;i<m;i++){var c=x%n;x=Math.floor(x/n);if(c>top+1){ok=false;break}if(c>top)top=c;s[c]+=h[i]}
-if(!ok)continue;var mx=Math.max.apply(null,s),mn=Math.min.apply(null,s),sc=mx*1000+(mx-mn);if(sc<bs){bs=sc;best=k}}
-var x2=best;ps.forEach(function(p,i){cols[x2%n].appendChild(p);x2=Math.floor(x2/n)})}catch(e){}}
+var m=ps.length,h=ps.map(function(p){return p.offsetHeight}),wt=ps.map(pw),total=Math.pow(n,m);if(total>70000)return;
+var best=0,bs=1e12,bw=null;for(var k=0;k<total;k++){var x=k,a=[],cw=[],i,top=-1,ok=true;for(i=0;i<n;i++)cw.push(1);
+for(i=0;i<m;i++){var c=x%n;x=Math.floor(x/n);if(c>top+1){ok=false;break}if(c>top)top=c;a.push(c);if(wt[i]>cw[c])cw[c]=wt[i]}
+if(!ok)continue;var sw=0,s=[];for(i=0;i<n;i++){sw+=cw[i];s.push(0)}
+for(i=0;i<m;i++){s[a[i]]+=h[i]*(0.3+0.7*(cw[a[i]]?(1/n)/(cw[a[i]]/sw):1))}
+var mx=Math.max.apply(null,s),mn=Math.min.apply(null,s),sc=mx*1000+(mx-mn);if(sc<bs){bs=sc;best=k;bw=cw}}
+var x2=best;ps.forEach(function(p,i){cols[x2%n].appendChild(p);x2=Math.floor(x2/n)});
+if(bw)cols.forEach(function(c,i){c.style.flex=bw[i]+" 1 0"})}catch(e){}}
 window.addEventListener("load",function(){(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(go)})})()</script>`;
 
   let host = "", origin = "https://pptsaz.ir";
