@@ -3,6 +3,7 @@ import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { DEFAULT_TEMPLATE, isTemplate } from "./template";
 import { modelList } from "./llm";
+import { toFa } from "./util";
 
 /** شناسه‌ی کاربر: عددی برای تلگرام، رشته‌ی «w_…» برای کاربران وب */
 export type Uid = number | string;
@@ -377,23 +378,65 @@ export async function noteActive(env: Env, userId: Uid, username?: string, name?
 }
 
 // ---------- دعوت دوستان ----------
-/** حداکثر تعداد دعوت‌هایی که پاداش دارند (جلوگیری از سوءاستفاده با حساب‌های ساختگی) */
-export const REF_MAX = 20;
+// قانون: به ازای هر REF_EVERY (۱۰) دوستِ جدید که با لینک دعوت وارد شوند، ۱ اعتبار «پلن پلاس» به دعوت‌کننده داده می‌شود؛ حداکثر تا REF_MAX (۱۰۰) دعوت (= ۱۰ اعتبار پلاس).
+/** حداکثر تعداد دعوت‌هایی که شمرده می‌شوند (جلوگیری از سوءاستفاده با حساب‌های ساختگی) */
+export const REF_MAX = 100;
+/** هر چند دعوتِ موفق یک اعتبار پلن پلاس می‌دهد */
+export const REF_EVERY = 10;
+/** پلن و مدت پلنِ جدید وقتی دعوت‌کننده پلن فعال ندارد (با PLANS در payment.ts هم‌خوان؛ این‌جا تکرار شده تا وابستگی دایره‌ای نشود) */
+const REF_PLAN = "plus";
+const REF_PLAN_DAYS = 30;
 
-/** به دعوت‌کننده ۱ ارائه‌ی رایگان می‌دهد. هر کاربر جدید فقط یک بار حساب می‌شود. */
-export async function rewardReferral(env: Env, inviterId: number, newUserId: number, creditTo: Uid = inviterId): Promise<boolean> {
-  if (!Number.isSafeInteger(inviterId) || inviterId <= 0 || inviterId === newUserId) return false;
-  if ((await env.KV.get(`ref:${newUserId}`)) !== null) return false;
-  if ((await env.KV.get(`seen:${inviterId}`)) === null) return false; // دعوت‌کننده باید کاربر واقعی ربات باشد
-  if (await isBanned(env, inviterId)) return false;
-  const ck = `refc:${inviterId}`;
-  const n = Number(await env.KV.get(ck)) || 0;
-  if (n >= REF_MAX) return false;
-  await env.KV.put(`ref:${newUserId}`, String(inviterId));
-  await env.KV.put(ck, String(n + 1));
-  await setBonus(env, creditTo, (await getBonus(env, creditTo)) + 1); // creditTo: اگر دعوت‌کننده حسابش را به وب وصل کرده، شناسه‌ی حساب وب
-  return true;
+/** n اعتبار به پلنِ فعالِ کاربر اضافه می‌کند (انقضای پلن دست‌نخورده)؛ اگر پلن فعال ندارد، پلنِ planId را از همین الان برای days روز با n اعتبار می‌سازد.
+ *  افزودن اعتبار به پلن فعال یک دستور SQL اتمی است (مثل کسر اعتبار). */
+export async function grantPlanCredit(env: Env, userId: Uid, planId: string, days: number, n = 1): Promise<"added" | "new"> {
+  n = Math.max(1, Math.floor(n));
+  const db = await rawDb(env);
+  const r = await db.prepare(
+    `UPDATE kv SET v = json_set(v, '$.credits', json_extract(v, '$.credits') + ${n}) ` +
+    "WHERE k = ?1 AND (exp IS NULL OR exp > ?2) AND json_extract(v, '$.credits') > 0 AND json_extract(v, '$.exp') > ?3")
+    .bind(subKey(userId), nowSec(), Date.now()).run();
+  if (changed(r)) return "added";
+  await putSub(env, userId, { plan: planId, exp: Date.now() + days * 86_400_000, credits: n });
+  return "new";
 }
+
+export interface RefResult { /** تعداد کل دعوت‌های موفق (بعد از این دعوت) */ count: number; /** با همین دعوت به مضرب REF_EVERY رسید و اعتبار پلاس داده شد */ plusGranted: boolean }
+
+/** ثبت یک دعوتِ جدید؛ هر کاربر جدید فقط یک بار حساب می‌شود. null = دعوت شمرده نشد (نامعتبر، تکراری یا رسیدن به سقف).
+ *  شمارنده‌ی دعوت‌کننده (refc:) با یک دستور SQL اتمی بالا می‌رود تا دعوت‌های هم‌زمان مضرب ۱۰ را جا نیندازند یا دوبار حساب نکنند.
+ *  creditTo: اگر دعوت‌کننده حسابش را به وب وصل کرده، شناسه‌ی حساب وب (پلن و اعتبار روی حساب اصلی ثبت می‌شود). */
+export async function rewardReferral(env: Env, inviterId: number, newUserId: number, creditTo: Uid = inviterId): Promise<RefResult | null> {
+  if (!Number.isSafeInteger(inviterId) || inviterId <= 0 || inviterId === newUserId) return null;
+  if ((await env.KV.get(`ref:${newUserId}`)) !== null) return null;
+  if ((await env.KV.get(`seen:${inviterId}`)) === null) return null; // دعوت‌کننده باید کاربر واقعی ربات باشد
+  if (await isBanned(env, inviterId)) return null;
+  const db = await rawDb(env);
+  const row = await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, '1', NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT), exp = NULL WHERE CAST(v AS INTEGER) < ?2 RETURNING v")
+    .bind(`refc:${inviterId}`, REF_MAX).first<{ v: string }>();
+  if (!row) return null; // به سقف رسیده
+  await env.KV.put(`ref:${newUserId}`, String(inviterId));
+  const count = Number(row.v) || 1;
+  let plusGranted = false;
+  if (count % REF_EVERY === 0) {
+    try { await grantPlanCredit(env, creditTo, REF_PLAN, REF_PLAN_DAYS, 1); plusGranted = true; }
+    catch (e) { console.error("referralPlusCredit", inviterId, count, e); }
+  }
+  return { count, plusGranted };
+}
+
+/** پیام تلگرام به دعوت‌کننده بعد از هر دعوتِ موفق */
+export function referralMsg(r: RefResult): string {
+  const c = toFa(String(r.count)), max = toFa(String(REF_MAX)), every = toFa(String(REF_EVERY));
+  if (r.plusGranted) {
+    return `🎉 یکی از دوستانت با لینک تو وارد ربات شد و دعوت‌هایت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa("1")} اعتبار پلن پلاس</b> به‌خاطر هر ${every} دعوت به حسابت اضافه شد؛ با آن تا ${toFa(String(PLAN_MAX_SLIDES.plus))} اسلاید و مدل‌های ویژه را هم داری. برای دیدن اعتبار: /credit` +
+      (r.count >= REF_MAX ? `\n\n✅ به سقف ${max} دعوت رسیدی و تمام پاداش‌ها را گرفتی. ممنون که ربات را معرفی کردی! 🙏` : "");
+  }
+  const left = REF_EVERY - (r.count % REF_EVERY);
+  return `🎉 یکی از دوستانت با لینک تو وارد ربات شد. دعوت‌های تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(left))} دعوت دیگر تا ${toFa("1")} اعتبار پلن پلاس.`;
+}
+
 export async function getUserSeen(env: Env, userId: Uid): Promise<SeenUser | null> {
   return (await env.KV.get(`seen:${userId}`, "json")) as any;
 }

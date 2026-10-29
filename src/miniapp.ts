@@ -8,7 +8,7 @@
  */
 import type { Env } from "./env";
 import { createSession, getUserById, hitLimit, publicUser, randomToken, reuseSession, type WebUser } from "./auth";
-import { REF_MAX, displayName, isAdmin, isAllowed, isBanned, noteActive, rewardReferral, touchUser } from "./settings";
+import { REF_MAX, REF_EVERY, displayName, referralMsg, isAdmin, isAllowed, isBanned, noteActive, rewardReferral, touchUser } from "./settings";
 import { ensureUid, getLinkedTg, resolveUid } from "./link";
 import { listFiles, loadFileDirect } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
@@ -66,8 +66,8 @@ async function dailyTouch(env: Env, u: TgUser, uid: string, name: string, startP
   const m = isNew ? /^ref_(\d{1,15})$/.exec(startParam) : null;
   if (m) {
     const inviter = Number(m[1]);
-    const ok = await rewardReferral(env, inviter, u.id, await resolveUid(env, inviter)).catch(() => false);
-    if (ok) await sendMessage(env, inviter, "🎉 یکی از دوستانت با لینک تو وارد ربات شد؛ <b>۱ ارائه‌ی رایگان</b> به اعتبارت اضافه شد. برای دیدن اعتبار: /credit").catch(() => {});
+    const r = await rewardReferral(env, inviter, u.id, await resolveUid(env, inviter)).catch(() => null);
+    if (r) await sendMessage(env, inviter, referralMsg(r)).catch(() => {});
   }
 }
 
@@ -170,13 +170,13 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
   }
 }
 
-/** POST /api/miniapp/invite — لینک دعوت اختصاصی (هر دوست جدید = ۱ ارائه‌ی رایگان؛ مثل /invite ربات) */
+/** POST /api/miniapp/invite — لینک دعوت اختصاصی (هر ۱۰ دوست جدید = ۱ اعتبار پلن پلاس تا ۱۰۰ دعوت؛ مثل /invite ربات) */
 export async function miniappInvite(env: Env, user: WebUser): Promise<Response> {
   const tgId = await getLinkedTg(env, user.id);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
   const me = await tg<{ username?: string }>(env, "getMe").catch(() => null);
   if (!me?.username) return err("ساخت لینک دعوت ممکن نشد؛ کمی بعد دوباره امتحان کن.", 502);
-  return json({ link: `https://t.me/${me.username}?start=ref_${tgId}`, max: REF_MAX });
+  return json({ link: `https://t.me/${me.username}?start=ref_${tgId}`, max: REF_MAX, every: REF_EVERY });
 }
 
 /** POST /api/miniapp/dl {id} ← {path, name} — لینک ۵ دقیقه‌ای برای web_app_request_file_download.

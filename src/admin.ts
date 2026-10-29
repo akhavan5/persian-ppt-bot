@@ -330,7 +330,7 @@ async function referralScreen(env: Env, tab: "t" | "r", page: number): Promise<S
   const avg = inviters ? Math.round((total / inviters) * 10) / 10 : 0;
   const summary =
     "🎁 <b>گزارش دعوت دوستان</b>\n\n" +
-    `✅ دعوت موفق: <b>${fa(total)}</b> (هر دعوت = ۱ ارائه‌ی رایگان برای دعوت‌کننده)\n` +
+    `✅ دعوت موفق: <b>${fa(total)}</b> (هر ۱۰ دعوت = ۱ اعتبار پلن پلاس برای دعوت‌کننده)\n` +
     `🙋 دعوت‌کننده: <b>${fa(inviters)}</b> نفر · میانگین ${fa(avg)} دعوت برای هر نفر\n` +
     `🚧 رسیده به سقف (${fa(REF_MAX)} دعوت): ${fa(capped)} نفر\n` +
     `🕒 ۲۴ ساعت اخیر: ${fa(last24)} · ۷ روز اخیر: ${fa(last7)}\n\n`;

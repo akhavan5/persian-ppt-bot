@@ -70,7 +70,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         const warn = c.total === 0 ? "⚠️ اعتبارت تمام شد." : "⚠️ فقط ۱ ارائه‌ی دیگر اعتبار داری.";
         const buyKb = await buyKbFor(this.env, userId, event.payload.tgId).catch(() => undefined);
         await editMessage(this.env, chatId, mid,
-          `${done}\n\n${warn}\n${BUY_SITE_NOTE}\n🎁 یا با /invite دوستانت را دعوت کن و ارائه‌ی رایگان بگیر.`, buyKb).catch(() => {});
+          `${done}\n\n${warn}\n${BUY_SITE_NOTE}\n🎁 یا با /invite دوستانت را دعوت کن؛ هر ۱۰ دعوت = ۱ اعتبار پلن پلاس.`, buyKb).catch(() => {});
       } else {
         await status(done);
       }

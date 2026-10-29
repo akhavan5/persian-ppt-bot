@@ -4,7 +4,7 @@ import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
-  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
+  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_EVERY, REF_MAX, referralMsg, rewardReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
@@ -39,7 +39,7 @@ const HELP =
   "💳 /credit ← اعتبار، پلن و سقف‌های حساب (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)\n" +
   "📱 /app ← اپ ساخت ارائه داخل تلگرام (Mini App)\n" +
   "🌐 /site ← ورود خودکار به سایت pptsaz.ir (پلن‌ها و پرداخت آنلاین)\n" +
-  "🎁 /invite ← دعوت دوستان و دریافت ارائه‌ی رایگان\n" +
+  "🎁 /invite ← دعوت دوستان (هر ۱۰ دعوت = ۱ اعتبار پلن پلاس)\n" +
   "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX، PDF، پوستر و جزوه) تا ۲۴ ساعت\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
@@ -493,12 +493,11 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     return await sendMessage(env, chatId, "🌐 با دکمه‌ی زیر بدون ثبت‌نام و رمز، با همین حساب تلگرامت وارد سایت می‌شوی (پلن‌ها، پرداخت آنلاین، پروفایل).",
       kb([[{ text: "🌐 ورود به سایت", url: await siteLoginUrl(env, userId, "home") }]]));
   }
-  // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده، به دعوت‌کننده ۱ ارائه‌ی رایگان می‌دهد
+  // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده، شمارنده‌ی دعوت‌کننده را بالا می‌برد؛ هر ۱۰ دعوت = ۱ اعتبار پلن پلاس (تا ۱۰۰ دعوت)
   if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
     const inviter = Number(args[0].slice(4));
-    if (await rewardReferral(env, inviter, userId, await resolveUid(env, inviter)).catch(() => false)) {
-      await sendMessage(env, inviter, "🎉 یکی از دوستانت با لینک تو وارد ربات شد؛ <b>۱ ارائه‌ی رایگان</b> به اعتبارت اضافه شد. برای دیدن اعتبار: /credit").catch(() => {});
-    }
+    const r = await rewardReferral(env, inviter, userId, await resolveUid(env, inviter)).catch((e) => { console.error("referral", e); return null; });
+    if (r) await sendMessage(env, inviter, referralMsg(r)).catch(() => {});
   }
   if (cmd === "/files") {
     const list = await listFiles(env, uid);
@@ -517,8 +516,10 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     const me = await tg<{ username?: string }>(env, "getMe");
     const link = `https://t.me/${me.username}?start=ref_${userId}`;
     const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
+    const done = Math.min(REF_MAX, Number(await env.KV.get(`refc:${userId}`).catch(() => null)) || 0);
     return await sendMessage(env, chatId,
-      `🎁 <b>دعوت دوستان</b>\nبه ازای هر دوستی که با لینک تو وارد ربات شود، <b>۱ ارائه‌ی رایگان</b> می‌گیری (حداکثر ${toFa(String(REF_MAX))} دعوت).\n\n🔗 لینک اختصاصی تو:\n${link}`,
+      `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد ربات شوند، <b>۱ اعتبار پلن پلاس</b> می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(REF_MAX / REF_EVERY))} اعتبار پلاس).\n\n` +
+      `📊 دعوت‌های تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`,
       kb([[{ text: "📤 ارسال به دوستان", url: share }]]));
   }
 
