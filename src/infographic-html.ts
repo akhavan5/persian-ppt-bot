@@ -58,7 +58,16 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
       case "cards": return `<div class="bk cd">${b.items.map((i) => `<div class="c"><b>${tx(i.title)}</b><span>${tx(i.text)}</span></div>`).join("")}</div>`;
       case "glossary": return `<div class="bk gl">${b.items.map((i) => `<div class="g"><b>${tx(i.term)}</b><span>${tx(i.text)}</span></div>`).join("")}</div>`;
       case "bullets": return `<div class="bk">${b.label ? label(b.label, "") : ""}<ul>${b.items.map((i) => `<li>${tx(i)}</li>`).join("")}</ul></div>`;
-      case "stats": return `<div class="bk st">${b.items.map((s) => `<div class="s"><b>${tx(s.value)}</b><span>${tx(s.label)}</span></div>`).join("")}</div>`;
+      case "stats": return `<div class="bk st">${b.items.map((s) => {
+        // مقدارهایی مثل «۲۱۳ (۲۰٫۴٪)»: عدد اصلی بزرگ، بخش داخل پرانتز در خط دوم و کوچک‌تر (برای جلوگیری از بیرون‌زدگی کارت)
+        const raw = String(s.value).trim();
+        const m = raw.match(/^(.+?)\s*([(（][^)）]*[)）])$/);
+        const main = m ? m[1] : raw;
+        const sub = m ? m[2] : "";
+        const len = [...main].length;
+        const sz = len > 9 ? " z3" : len > 6 ? " z2" : "";
+        return `<div class="s${sz}"><b>${tx(main)}${sub ? `<small dir="ltr">${tx(sub)}</small>` : ""}</b><span>${tx(s.label)}</span></div>`;
+      }).join("")}</div>`;
       case "table": return `<div class="bk tb"><table><thead><tr>${b.headers.map((h) => `<th>${tx(h)}</th>`).join("")}</tr></thead><tbody>${
         b.rows.map((r) => `<tr>${r.map((c) => `<td>${tx(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
       case "steps": return `<div class="bk sp">${b.label ? label(b.label, "") : ""}<ol>${b.items.map((s, i) =>
@@ -93,7 +102,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
       case "cards": return Math.ceil(b.items.length / 2) * (base * 2.3 + lines(String(" ").repeat(Math.max(...b.items.map((i) => i.text.length))), Math.max(10, Math.floor(cpl / 2) - 3)) * base * 1.25 + base * 0.5);
       case "glossary": return b.items.reduce((a, i) => a + lines(i.term + " " + i.text, cpl) * base * 1.3 + base * 0.6, 0);
       case "bullets": return (b.label ? base * 1.4 : 0) + b.items.reduce((a, i) => a + lines(i, cpl - 3) * lh + base * 0.4, 0);
-      case "stats": return base * 4.6;
+      case "stats": return base * (b.items.some((i) => /[(（]/.test(String(i.value))) ? 6.2 : 4.6);
       case "table": return base * 2 + b.rows.reduce((a, r) => a + Math.max(...r.map((c) => lines(c, Math.floor(cpl / b.headers.length) - 1))) * base * 1.25 + base * 0.8, 0);
       case "steps": return (b.label ? base * 1.4 : 0) + b.items.reduce((a, i) => a + base * 1.4 + lines(i.text, cpl - 5) * base * 1.2 + base * 0.4, 0);
       case "compare": return base * 2.4 + Math.max(b.left.items.length, b.right.items.length) * base * 2.4;
@@ -175,9 +184,12 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 .fm{background:var(--dk);color:var(--on);padding:${base * 0.7}px ${base * 0.75}px;text-align:center;font-size:${base * 1.02}px;font-weight:700}
 .fm .lb{background:var(--ac);color:var(--dk)}
 .st{display:flex;gap:${base * 0.5}px}
-.st .s{flex:1;background:var(--sf);border:1.5px solid var(--line);border-radius:${base * 0.45}px;padding:${base * 0.55}px ${base * 0.4}px;text-align:center}
-.st b{display:block;font-size:${base * 1.7}px;line-height:1.2;color:var(--hl);font-weight:800}
-.st span{display:block;font-size:${base * 0.78}px;color:var(--mt);margin-top:${base * 0.12}px}
+.st .s{flex:1 1 0;min-width:0;background:var(--sf);border:1.5px solid var(--line);border-radius:${base * 0.45}px;padding:${base * 0.55}px ${base * 0.4}px;text-align:center}
+.st b{display:block;font-size:${base * 1.7}px;line-height:1.2;color:var(--hl);font-weight:800;overflow-wrap:anywhere}
+.st .z2 b{font-size:${base * 1.4}px}
+.st .z3 b{font-size:${base * 1.15}px}
+.st b small{display:block;font-size:.6em;font-weight:700;line-height:1.3;unicode-bidi:plaintext;overflow-wrap:anywhere}
+.st span{display:block;font-size:${base * 0.78}px;color:var(--mt);margin-top:${base * 0.12}px;overflow-wrap:anywhere}
 .tb table{width:100%;border-collapse:collapse;font-size:${base * 0.84}px;overflow:hidden;border-radius:${base * 0.4}px}
 .tb th{background:var(--pr);color:var(--on);padding:${base * 0.3}px ${base * 0.4}px;text-align:center;font-weight:700}
 .tb td{padding:${base * 0.3}px ${base * 0.4}px;text-align:center;border-bottom:1px solid var(--line)}
