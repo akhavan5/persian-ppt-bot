@@ -27,6 +27,7 @@ const ALWAYS_THINK = /deepseek-r1|deepseek-reasoner|deepseek-v[4-9]|gpt-oss|\bo\
 /** مدل‌هایی که فکر کردنشان با پارامتر reasoning (سبک OpenRouter) کم می‌شود؛ اگر سرویس نپذیرد (۴۰۰) حذف و دوباره تلاش می‌شود */
 const REASONING_LOW = /deepseek-reasoner|deepseek-r1/i;
 const GEMMA = /gemma-?4/i; // روی گیت‌وی گوگل پیش‌فرض «فکر» می‌کند (<thought>) و سقف کم را کامل می‌خورد
+const HY = /hy3|hunyuan/i; // Hunyuan (hy3): فقط thinking.type=disabled خاموشش می‌کند (تست روی 1xai: ۲۸۶→۴ توکن)؛ enable_thinking و chat_template_kwargs اثری ندارند
 const GLM = /glm/i, QWEN = /qwen-?3/i, DEEPSEEK_V = /deepseek-v[4-9]/i, GPT_REASON = /gpt-[5-9]|\bo\d/i;
 /** خاموش‌کردن حالت «فکر کردن» برای هر خانواده (تحقیق‌شده از مستندات رسمی؛ هر سرویس پارامتر خودش را می‌خواند، پس چند شکل با هم فرستاده می‌شود):
  *  GLM: thinking.type=disabled (GLM-5.3 خاموش‌شدنی نیست ⇒ reasoning_effort=low هم فرستاده می‌شود)
@@ -42,6 +43,7 @@ function noThinking(body: Record<string, unknown>): void {
   if (THINKERS.test(m) || DEEPSEEK_V.test(m)) body.chat_template_kwargs = { enable_thinking: false, ...(DEEPSEEK_V.test(m) ? { thinking: false } : {}) };
   if (QWEN.test(m)) body.enable_thinking = false;
   if (GLM.test(m) || DEEPSEEK_V.test(m) || CLAUDE.test(m)) body.thinking = { type: "disabled" };
+  if (HY.test(m)) body.thinking = { type: "disabled" };
   if (GLM.test(m)) body.reasoning_effort = "low";
   if (GPT_REASON.test(m)) body.reasoning_effort = REJECTED.get(m)?.has("effort=none") ? "low" : "none";
   if (GEMMA.test(m)) body.reasoning_effort = REJECTED.get(m)?.has("effort=none") ? "low" : "none"; // اگر ۴۰۰ بدهد adaptBody تعدیل/حذف می‌کند
