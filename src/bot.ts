@@ -4,7 +4,7 @@ import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
-  DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
+  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_MAX, rewardReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
@@ -420,17 +420,29 @@ const fmtDate = (ms: number) => {
 // ---------- نظر کاربر (دکمه‌ی «ارسال نظر» بعد از ساخت ارائه) ----------
 const fbKey = (tgId: number) => `fb:${tgId}`;
 /** پیام بعدیِ کاربری که دکمه‌ی نظر را زده؛ فقط برای مدیرها فرستاده می‌شود و ذخیره نمی‌شود. true = پیام مصرف شد */
-async function handleFeedback(env: Env, msg: any, userId: number, chatId: number, text: string, isCmd: boolean): Promise<boolean> {
+async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chatId: number, text: string, isCmd: boolean): Promise<boolean> {
   const title = await env.KV.get(fbKey(userId));
   if (title === null) return false;
+  if (isCmd || !text) { // دستور یا پیام غیرمتنی: حالت نظر لغو می‌شود و پیام عادی پردازش می‌شود
+    await env.KV.delete(fbKey(userId)).catch(() => {});
+    return false;
+  }
+  const canReward = !isAdmin(env, userId) && FEEDBACK_CREDITS > 0 && !(await hasFeedbackReward(env, uid));
+  if (canReward && text.length < FEEDBACK_MIN_CHARS) { // نظر خیلی کوتاه: حالت نظر می‌ماند تا کاربر کامل‌تر بنویسد
+    await env.KV.put(fbKey(userId), title, { expirationTtl: 600 }).catch(() => {});
+    await sendMessage(env, chatId, "✍️ نظرت خیلی کوتاه بود! لطفاً کمی کامل‌تر (حداقل یکی-دو جمله) بنویس و بفرست.");
+    return true;
+  }
   await env.KV.delete(fbKey(userId)).catch(() => {});
-  if (isCmd || !text) return false; // دستور یا پیام غیرمتنی: حالت نظر لغو می‌شود و پیام عادی پردازش می‌شود
+  const rewarded = canReward && (await claimFeedbackReward(env, uid).catch((e) => { console.error("feedbackReward", e); return false; }));
   const from = msg.from;
   const who = `<a href="tg://user?id=${userId}">${esc(displayName(from) || String(userId))}</a>${from.username ? ` (@${esc(from.username)})` : ""}`;
-  const out = `💬 <b>نظر کاربر</b>\n👤 ${who}\n🆔 <code>${userId}</code>\n📄 ارائه: ${esc(title)}\n\n${esc(text.slice(0, 2000))}`;
+  const out = `💬 <b>نظر کاربر</b>\n👤 ${who}\n🆔 <code>${userId}</code>\n📄 ارائه: ${esc(title)}${rewarded ? `\n🎁 ${toFa(String(FEEDBACK_CREDITS))} اعتبار هدیه داده شد` : ""}\n\n${esc(text.slice(0, 2000))}`;
   const adminKb = kb([[{ text: "👤 کارت کاربر", callback_data: `ad:nu:${userId}` }, { text: "🗂 فایل‌ها", callback_data: `ad:nd:${userId}` }]]);
   for (const id of adminIds(env)) await sendMessage(env, Number(id), out, adminKb).catch(() => {});
-  await sendMessage(env, chatId, "🙏 ممنون از نظرت! پیامت به دست ما رسید.");
+  await sendMessage(env, chatId, rewarded
+    ? `🙏 ممنون از نظرت! پیامت به دست ما رسید.\n\n🎁 به‌خاطر ثبت نظرت، <b>${toFa(String(FEEDBACK_CREDITS))} اعتبار رایگان</b> (یک ارائه‌ی دیگر) به حسابت اضافه شد. موجودی: /credit`
+    : "🙏 ممنون از نظرت! پیامت به دست ما رسید.");
   return true;
 }
 
@@ -471,7 +483,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   // ورودی در انتظار پنل مدیر (جستجو، مقدار اعتبار، متن پیام…): پیام متنی بعدی مدیر همان است
   if (admin && !cmd && text && !msg.document && !msg.photo && (await handleAdminInput(env, chatId, userId, text).catch((e) => { console.error("admin input", e); return false; }))) return;
 
-  if (!msg.document && !msg.photo && (await handleFeedback(env, msg, userId, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
+  if (!msg.document && !msg.photo && (await handleFeedback(env, msg, userId, uid, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
 
   if (cmd === "/app") {
     return await sendMessage(env, chatId, "📱 با دکمه‌ی زیر اپ ساخت ارائه باز می‌شود (ساخت، فایل‌ها، تنظیمات و اعتبار، همه با همین حساب).",

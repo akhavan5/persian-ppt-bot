@@ -270,6 +270,31 @@ export async function grantDailyFree(env: Env, userId: Uid, known?: CreditInfo):
   return claimDailyFree(env, userId);
 }
 
+// ---------- اعتبار هدیه‌ی ثبت نظر در تلگرام ----------
+/** اعتبار هدیه برای ثبت نظر (دکمه‌ی «ارسال نظر» زیر ارائه)؛ برای هر حساب فقط یک‌بار. ۰ = خاموش */
+export const FEEDBACK_CREDITS = 1;
+/** حداقل طول نظر (نویسه) برای دریافت اعتبار */
+export const FEEDBACK_MIN_CHARS = 1;
+const feedbackKey = (userId: Uid) => `fbr:${userId}`;
+
+/** آیا این حساب قبلاً اعتبار هدیه‌ی نظر را گرفته؟ */
+export async function hasFeedbackReward(env: Env, userId: Uid): Promise<boolean> {
+  return (await env.KV.get(feedbackKey(userId))) !== null;
+}
+
+/** اعتبار هدیه‌ی نظر: اتمی و فقط یک‌بار برای هر حساب (INSERT OR IGNORE روی ردیف fbr:). true = همین حالا اضافه شد.
+ *  userId باید شناسه‌ی اصلیِ حساب باشد (uid) تا تلگرام و وبِ یک حساب دوبار پاداش نگیرند. */
+export async function claimFeedbackReward(env: Env, userId: Uid): Promise<boolean> {
+  if (FEEDBACK_CREDITS <= 0) return false;
+  const db = await rawDb(env);
+  const r = await db.prepare("INSERT OR IGNORE INTO kv (k, v, exp) VALUES (?1, ?2, NULL)").bind(feedbackKey(userId), today()).run();
+  if (!changed(r)) return false; // قبلاً گرفته
+  await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + ?2 AS TEXT), exp = NULL")
+    .bind(bonusKey(userId), String(FEEDBACK_CREDITS)).run();
+  return true;
+}
+
 // ---------- قفل: هر کاربر در هر لحظه یک ارائه ----------
 // TTL فقط شبکه‌ی ایمنی است تا اگر Workflow اصلاً به پایان نرسید، کاربر برای همیشه قفل نماند.
 const lockKey = (userId: Uid) => `lock:${userId}`;
