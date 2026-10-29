@@ -5,7 +5,7 @@ import { esc, sendMessage } from "./telegram";
 import { toFa } from "./util";
 import { withStore } from "./store";
 import { PUSH_SEGMENTS, filterSegment, pushTokenPage, sendPush, type PushMsg, type PushSegment } from "./push";
-import { DAILY_FREE_MSG, claimDailyFreeMany, isAdmin } from "./settings";
+import { DAILY_FREE_CREDITS, DAILY_FREE_MSG, adminIds, claimDailyFreeMany, isAdmin, today } from "./settings";
 
 /** مخاطبان: همه / دارندگان پلن فعال / بدون پلن فعال / بدون اعتبار (نه پلن و نه اعتبار هدیه‌ی باقی‌مانده) */
 export type Audience = "all" | "plan" | "free" | "nocredit";
@@ -19,7 +19,11 @@ export interface BroadcastParams {
   ids?: number[]; offset?: number; acc?: { ok: number; failed: number; skipped: number }; rootId?: string;
   /** اعلان اپ (زنجیره‌ای): نشانگر صفحه‌ی بعد، شمارنده‌ی نمونه و جمع نتایج تا اینجا */
   pcursor?: string; seq?: number; pacc?: { ok: number; dead: number; failed: number; skipped: number };
+  /** اعتبار رایگان روزانه: شمارنده‌ی تجمعی برای گزارش پایانی به مدیرها */
+  dacc?: DailyAcc;
 }
+/** users: کاربران بدون اعتبار امروز؛ credited: اعتبار گرفتند؛ sent: پیام رسید؛ failed: پیام نرسید (معمولاً ربات را بلاک کرده‌اند)؛ err: خطای دسته (اعتبار ثبت نشد) */
+export interface DailyAcc { users: number; credited: number; sent: number; failed: number; err: number }
 /** سقف ۵۰ زیردرخواست (پلن رایگان) برای کل یک نمونه‌ی Workflow است، نه هر گام؛ پس هر نمونه با بودجه‌ی مشخص کار می‌کند */
 const SUB_BUDGET = 38; // ۱۲ تا برای ready/پرس‌وجوی مسدودی/ساخت نمونه‌ی بعدی یا گزارش و تلاش‌های اضافه
 const CHUNK = 45;      // حداکثر کاندیدای هر نمونه (پارامترهای پرس‌وجوی D1 زیر ۱۰۰)
@@ -164,7 +168,12 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
       catch (e) { if (!/already|exist|duplicate/i.test(String(e))) throw e; }
     }).catch(async (e) => {
       console.error("broadcast handoff failed", params.offset, String(e).slice(0, 200));
-      await sendMessage(this.env, params.adminChatId, `⚠️ ارسال همگانی در کاربر شماره‌ی ${toFa(String(params.offset ?? 0))} متوقف شد. ✅ تا اینجا موفق: ${toFa(String(params.acc?.ok ?? 0))}`).catch(() => {});
+      if (params.daily) {
+        const d = params.dacc;
+        await this.toAdmins(`⚠️ <b>اعتبار رایگان روزانه</b> در کاربر شماره‌ی ${toFa(String(params.offset ?? 0))} متوقف شد.` + (d ? `\n🎁 تا اینجا اعتبار گرفتند: ${toFa(String(d.credited))} از ${toFa(String(d.users))}` : ""));
+      } else {
+        await sendMessage(this.env, params.adminChatId, `⚠️ ارسال همگانی در کاربر شماره‌ی ${toFa(String(params.offset ?? 0))} متوقف شد. ✅ تا اینجا موفق: ${toFa(String(params.acc?.ok ?? 0))}`).catch(() => {});
+      }
     });
   }
 
@@ -213,15 +222,37 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
     }).catch(() => {});
   }
 
-  /** اعتبار رایگان روزانه (زنجیره‌ای): هر نمونه ۲۵ کاربر. ثبت اعتبار روزی یک‌بار برای هر کاربر است، پس اجرای دوباره اعتبار تکراری نمی‌دهد. */
+  /** پیام به همه‌ی مدیرها (ADMIN_IDS)؛ خطای یکی بقیه را متوقف نمی‌کند */
+  private async toAdmins(text: string) {
+    for (const id of adminIds(this.env)) await sendMessage(this.env, Number(id), text).catch(() => {});
+  }
+
+  private async reportDaily(step: WorkflowStep, d: DailyAcc) {
+    await step.do("report", async () => {
+      const unsent = Math.max(0, d.credited - d.sent - d.failed); // اعتبار ثبت شد ولی به‌خاطر سقف زیردرخواست پیام نرفت
+      const skipped = Math.max(0, d.users - d.credited - d.err);   // مسدود یا امروز قبلاً سهمش را گرفته
+      await this.toAdmins(
+        `🎁 <b>اعتبار رایگان روزانه</b> (${toFa(today())})\n` +
+        `👥 کاربران بدون اعتبار: ${toFa(String(d.users))}\n` +
+        `✅ اعتبار ${toFa(String(DAILY_FREE_CREDITS))}تایی گرفتند: ${toFa(String(d.credited))}\n` +
+        `📨 پیام رسید: ${toFa(String(d.sent))}\n` +
+        (d.failed + unsent ? `🚫 پیام نرسید: ${toFa(String(d.failed + unsent))} (اعتبار ثبت شده؛ معمولاً ربات را بلاک کرده‌اند)\n` : "") +
+        (skipped ? `⏭ رد شدند (مسدود یا امروز قبلاً گرفته): ${toFa(String(skipped))}\n` : "") +
+        (d.err ? `⚠️ خطا در ثبت اعتبار: ${toFa(String(d.err))} کاربر` : ""));
+    }).catch(() => {});
+  }
+
+  /** اعتبار رایگان روزانه (زنجیره‌ای): هر نمونه ۲۵ کاربر. ثبت اعتبار روزی یک‌بار برای هر کاربر است، پس اجرای دوباره اعتبار تکراری نمی‌دهد.
+   *  آخرین نمونه‌ی زنجیره گزارش را برای مدیرها می‌فرستد. */
   private async runDaily(step: WorkflowStep, root: string, P: BroadcastParams) {
     if (!P.ids) {
       const all = (await step.do("collect", () => listAudience(this.env, "nocredit"))).slice(0, DAILY_MAX_USERS);
-      if (!all.length) return;
-      return await this.handoff(step, root, { adminChatId: 0, text: "", daily: true, rootId: root, ids: all, offset: 0 });
+      if (!all.length) return await this.reportDaily(step, { users: 0, credited: 0, sent: 0, failed: 0, err: 0 });
+      return await this.handoff(step, root, { adminChatId: 0, text: "", daily: true, rootId: root, ids: all, offset: 0, dacc: { users: all.length, credited: 0, sent: 0, failed: 0, err: 0 } });
     }
     const ids = P.ids, offset = P.offset ?? 0;
-    await step.do("daily", { retries: { limit: 0, delay: "1 second" }, timeout: "5 minutes" }, async () => {
+    const r = await step.do("daily", { retries: { limit: 0, delay: "1 second" }, timeout: "5 minutes" }, async () => {
+      const out = { credited: 0, sent: 0, failed: 0, err: 0 };
       const chunk = ids.slice(offset, offset + DAILY_CHUNK);
       let used = 0;
       try {
@@ -239,13 +270,20 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
           byUid.set(w && /^w_[0-9a-f]{16}$/.test(w) ? w : String(id), id);
         }
         const won = await claimDailyFreeMany(this.env, [...byUid.keys()]); used += 2;
+        out.credited = won.length;
         for (const u of won) {
           if (used >= SUB_BUDGET + 6) break; // فقط در حالت نادر تلاش‌های مجدد ۴۲۹؛ اعتبار ثبت شده و فقط پیام جا می‌ماند
-          used += (await sendOneCounted(this.env, byUid.get(String(u))!, DAILY_FREE_MSG)).calls;
+          const s = await sendOneCounted(this.env, byUid.get(String(u))!, DAILY_FREE_MSG);
+          used += s.calls;
+          if (s.ok) out.sent++; else out.failed++;
         }
-      } catch (e) { console.error("daily free batch", offset, String(e).slice(0, 160)); }
+      } catch (e) { console.error("daily free batch", offset, String(e).slice(0, 160)); out.err = chunk.length - out.credited; }
+      return out;
     });
+    const p = P.dacc ?? { users: ids.length, credited: 0, sent: 0, failed: 0, err: 0 };
+    const dacc: DailyAcc = { users: p.users, credited: p.credited + r.credited, sent: p.sent + r.sent, failed: p.failed + r.failed, err: p.err + r.err };
     const next = offset + DAILY_CHUNK;
-    if (next < ids.length) await this.handoff(step, root, { adminChatId: 0, text: "", daily: true, rootId: root, ids, offset: next });
+    if (next < ids.length) return await this.handoff(step, root, { adminChatId: 0, text: "", daily: true, rootId: root, ids, offset: next, dacc });
+    await this.reportDaily(step, dacc);
   }
 }
