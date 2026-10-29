@@ -33,6 +33,8 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const label = (l: string, fallback: string) => `<div class="lb">${tx(l || fallback)}</div>`;
   const maxBar = (items: { value: number }[]) => Math.max(...items.map((i) => i.value), 1);
 
+  // KaTeX حروف فارسی را در یک خط بدون شکستن می‌چیند و از کادر بیرون می‌زند؛ پس برای فرمول‌هایی که «tex» آن حرف فارسی دارد فقط متن ساده نشان داده می‌شود
+  const texOk = (b: { tex?: string }) => !!b.tex && !/[\u0600-\u06FF]/.test(b.tex);
   const block = (b: IgBlock): string => {
     switch (b.type) {
       case "definition": return `<div class="bk def">${label(b.label, "تعریف")}<p>${tx(b.text)}</p></div>`;
@@ -40,7 +42,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
       case "example": return `<div class="bk ex">${label(b.label, "مثال")}<p>${tx(b.text)}</p></div>`;
       case "warning": return `<div class="bk wn">${label(b.label, "هشدار")}<p>${tx(b.text)}</p></div>`;
       case "tip": return `<div class="bk tp">${label(b.label, "نکته‌ی طلایی")}<p>${tx(b.text)}</p></div>`;
-      case "formula": return `<div class="bk fm">${b.label ? label(b.label, "") : ""}<p dir="ltr"${b.tex ? ` data-tex="${esc(b.tex)}"` : ""}>${esc(b.text)}</p></div>`;
+      case "formula": return `<div class="bk fm">${b.label ? label(b.label, "") : ""}<p dir="${texOk(b) ? "ltr" : "auto"}"${texOk(b) ? ` data-tex="${esc(b.tex!)}"` : ""}>${esc(b.text)}</p></div>`;
       case "flow": {
         const horiz = b.items.length <= 3;
         const node = (s: { label: string; text: string }) => `<div class="nd">${s.label ? `<b>${tx(s.label)}</b>` : ""}${s.text ? `<span>${tx(s.text)}</span>` : ""}</div>`;
@@ -90,7 +92,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const estimate = (b: IgBlock): number => {
     switch (b.type) {
       case "definition": case "keyfact": case "example": case "warning": case "tip": return base * 2.4 + lines(b.text) * lh;
-      case "formula": return base * 2.2 + lines(b.text, cpl - 6) * lh + (b.tex ? base * 1.2 : 0);
+      case "formula": return base * 2.2 + lines(b.text, cpl - 6) * lh + (texOk(b) ? base * 1.2 : 0);
       case "flow": {
         const n = b.items.length, mx = Math.max(...b.items.map((i) => i.text.length));
         return (b.label ? base * 1.4 : 0) + (n <= 3
@@ -122,13 +124,15 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
     ? `<div class="hls">${ig.highlights.map((h) => `<div class="h"><b>${tx(h.value)}</b><span>${tx(h.label)}</span></div>`).join("")}</div>`
     : "";
   // KaTeX فقط وقتی فرمول LaTeX دارد از CDN بارگذاری می‌شود؛ اگر بارگذاری نشد، همان متن ساده‌ی فرمول می‌ماند
-  const hasTex = ig.sections.some((sec) => sec.blocks.some((bl) => bl.type === "formula" && bl.tex));
+  const hasTex = ig.sections.some((sec) => sec.blocks.some((bl) => bl.type === "formula" && texOk(bl)));
   const katex = hasTex
     ? `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>`
     : "";
   const katexRun = hasTex
-    ? `<script>try{document.querySelectorAll("[data-tex]").forEach(function(e){try{window.katex.render(e.getAttribute("data-tex"),e,{throwOnError:true,displayMode:true})}catch(x){}})}catch(x){}</script>`
+    ? `<script>try{document.querySelectorAll("[data-tex]").forEach(function(e){try{window.katex.render(e.getAttribute("data-tex"),e,{throwOnError:true,displayMode:true})}catch(x){}})}catch(x){}
+function fit(){try{[].slice.call(document.querySelectorAll(".fm p[data-tex]")).forEach(function(p){var s=parseFloat(getComputedStyle(p).fontSize),n=0;while(p.scrollWidth>p.clientWidth+1&&s>${Math.round(base * 0.6)}&&n<25){s*=0.93;p.style.fontSize=s+"px";n++}})}catch(x){}}
+window.addEventListener("load",function(){(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(fit)})</script>`
     : "";
 
   // توازن ستون‌ها با ارتفاع واقعی: بعد از بارگذاری فونت، ارتفاع هر پنل اندازه گرفته می‌شود و بهترین چیدمان (کمترین ارتفاع بلندترین ستون) انتخاب می‌شود.
@@ -191,6 +195,7 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 .ex .lb{background:var(--dk)}
 .fm{background:var(--dk);color:var(--on);padding:${base * 0.7}px ${base * 0.75}px;text-align:center;font-size:${base * 1.02}px;font-weight:700}
 .fm .lb{background:var(--ac);color:var(--dk)}
+.fm p{overflow-wrap:anywhere}
 .st{display:flex;gap:${base * 0.5}px}
 .st .s{flex:1 1 0;min-width:0;background:var(--sf);border:1.5px solid var(--line);border-radius:${base * 0.45}px;padding:${base * 0.55}px ${base * 0.4}px;text-align:center}
 .st b{display:block;font-size:${base * 1.7}px;line-height:1.2;color:var(--hl);font-weight:800;overflow-wrap:anywhere}
