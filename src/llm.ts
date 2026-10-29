@@ -27,6 +27,7 @@ const ALWAYS_THINK = /deepseek-r1|deepseek-reasoner|deepseek-v[4-9]|gpt-oss|\bo\
 /** مدل‌هایی که فکر کردنشان با پارامتر reasoning (سبک OpenRouter) کم می‌شود؛ اگر سرویس نپذیرد (۴۰۰) حذف و دوباره تلاش می‌شود */
 const REASONING_LOW = /deepseek-reasoner|deepseek-r1/i;
 const GEMMA = /gemma-?4/i; // روی گیت‌وی گوگل پیش‌فرض «فکر» می‌کند (<thought>) و سقف کم را کامل می‌خورد
+const GEMINI = /gemini-[3-9]/i; // Gemini 3.x (مثل gemini-3.8-flash): فکر کردن کاملاً خاموش نمی‌شود (سطح‌ها low/medium/high؛ «minimal» نادیده گرفته یا به low تبدیل می‌شود) ⇒ reasoning_effort=low و سقف توکن بیشتر (توکن فکر از سقف خروجی کم می‌شود)
 const HY = /hy3|hunyuan/i; // Hunyuan (hy3): فقط thinking.type=disabled خاموشش می‌کند (تست روی 1xai: ۲۸۶→۴ توکن)؛ enable_thinking و chat_template_kwargs اثری ندارند
 const GLM = /glm/i, QWEN = /qwen-?3/i, DEEPSEEK_V = /deepseek-v[4-9]/i, GPT_REASON = /gpt-[5-9]|\bo\d/i;
 /** خاموش‌کردن حالت «فکر کردن» برای هر خانواده (تحقیق‌شده از مستندات رسمی؛ هر سرویس پارامتر خودش را می‌خواند، پس چند شکل با هم فرستاده می‌شود):
@@ -47,6 +48,7 @@ function noThinking(body: Record<string, unknown>): void {
   if (GLM.test(m)) body.reasoning_effort = "low";
   if (GPT_REASON.test(m)) body.reasoning_effort = REJECTED.get(m)?.has("effort=none") ? "low" : "none";
   if (GEMMA.test(m)) body.reasoning_effort = REJECTED.get(m)?.has("effort=none") ? "low" : "none"; // اگر ۴۰۰ بدهد adaptBody تعدیل/حذف می‌کند
+  if (GEMINI.test(m)) body.reasoning_effort = "low"; // کمترین سطحِ مطمئن؛ اگر سرویس ۴۰۰ بدهد adaptBody فیلد را حذف می‌کند
   if (/gpt-oss/i.test(m)) body.reasoning_effort = "low"; // خاموش‌شدنی نیست؛ کم‌فکر
   if (REASONING_LOW.test(m)) body.reasoning = { effort: "low" }; // DeepSeek-R1/Reasoner خاموش‌شدنی نیست
   for (const k of REJECTED.get(m) ?? []) if (!k.includes("=")) delete body[k];
@@ -197,7 +199,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     const body: Record<string, unknown> = {
       model: resolveModel(env, modelId).model,
       // مدل‌های «استدلالی» (GLM، Gemma 4، Qwen3) بخشی از توکن‌ها را صرف فکر کردن می‌کنند؛ با سقف کم، پاسخ نیمه‌کاره/خالی می‌ماند
-      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) || CLAUDE.test(resolveModel(env, modelId).model) ? maxTokens * 2 : GEMMA.test(resolveModel(env, modelId).model) ? maxTokens * 3 : maxTokens, MAX_OUT),
+      max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) || CLAUDE.test(resolveModel(env, modelId).model) || GEMINI.test(resolveModel(env, modelId).model) ? maxTokens * 2 : GEMMA.test(resolveModel(env, modelId).model) ? maxTokens * 3 : maxTokens, MAX_OUT),
       temperature: 0.5,
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
@@ -311,7 +313,7 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
     return (j?.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
   }
   const picked = resolveModel(env, o.modelId);
-  const thinker = THINKERS.test(picked.model) || ALWAYS_THINK.test(picked.model) || CLAUDE.test(picked.model);
+  const thinker = THINKERS.test(picked.model) || ALWAYS_THINK.test(picked.model) || CLAUDE.test(picked.model) || GEMINI.test(picked.model);
   const body: Record<string, unknown> = {
     model: picked.model,
     max_tokens: Math.min(maxTokens * (thinker ? 4 : 1), 800), // مدل‌های استدلالی بخشی از توکن را صرف فکر می‌کنند
