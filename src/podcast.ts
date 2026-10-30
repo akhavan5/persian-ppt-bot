@@ -7,7 +7,7 @@ import type { Turn } from "./gemini-tts";
 
 export interface PodcastScript { title: string; turns: Turn[] }
 
-const MAX_TURN_CHARS = 450;
+const MAX_TURN_CHARS = 320; // نوبت‌های کوتاه‌تر = حرف‌زدن طبیعی‌تر (قبلاً ۴۵۰)
 const MAX_TOTAL_CHARS = 7000; // ≈ ۶ تا ۷ دقیقه گفتار؛ فایل WAV حدود ۱۸ مگابایت می‌شود (سقف تلگرام ۵۰)
 const MIN_TURNS = 6;
 
@@ -23,23 +23,37 @@ function material(deck: Deck): string {
   return parts.join("\n").slice(0, 14000);
 }
 
-export async function makePodcastScript(env: Env, deck: Deck, o: { model?: string } = {}): Promise<PodcastScript> {
-  const prompt = `Write the script of a short podcast episode in natural spoken Persian (Farsi) in which two hosts talk about the presentation below.
+/** شبکه‌ی اطمینان: اگر مدل باز هم چند واژه‌ی کتابی نوشت، رایج‌ترین‌ها به شکل گفتاری درمی‌آید (تلفظ TTS هم طبیعی‌تر می‌شود). فقط کل واژه جایگزین می‌شود. */
+const word = (w: string) => new RegExp(`(?<![\\u0600-\\u06FF\\u200c])${w}(?![\\u0600-\\u06FF\\u200c])`, "g");
+const SPOKEN: [RegExp, string][] = [
+  [word("را"), "رو"], [word("نمی‌باشد"), "نیست"], [word("می‌باشد"), "هست"], [word("می‌باشند"), "هستن"],
+  [word("بنابراین"), "برای همین"], [word("لذا"), "برای همین"], [word("زیرا"), "چون"], [word("اما"), "ولی"],
+  [word("اگر"), "اگه"], [word("چنانچه"), "اگه"], [word("همچنین"), "همین‌طور"],
+];
+export const spoken = (t: string) => SPOKEN.reduce((s, [re, to]) => s.replace(re, to), t);
 
-Hosts:
-- "A" = علی: the host. Curious, friendly; opens and closes the episode, asks the questions a listener would ask, reacts, and sums up.
-- "B" = سارا: the guest expert. Clear, calm and confident; explains the ideas with simple words and one concrete example or analogy.
+export async function makePodcastScript(env: Env, deck: Deck, o: { model?: string } = {}): Promise<PodcastScript> {
+  const prompt = `Write the script of a short, relaxed podcast episode in SPOKEN, COLLOQUIAL Persian (Farsi) in which two hosts chat about the presentation below. It must sound like two friends talking, not like someone reading a text aloud.
+
+Hosts (equals, relaxed, a bit playful):
+- "A" = علی: the host. Curious and friendly; opens and closes the episode, asks the questions a listener would ask, reacts, jokes lightly, sums up.
+- "B" = سارا: the guest who knows the topic well. She explains like a friend would, with simple words and one concrete everyday example or analogy; she never lectures.
 
 Content rules:
 - Use ONLY the material below. Do not invent statistics, dates, names, quotes or sources. If something is not in the material, keep it general.
 - Follow the order of the presentation, grouping related slides. Never say "slide", "اسلاید" or slide numbers: they are talking about the topic, not reading a deck.
-- Open with a short warm greeting and the question that makes the topic worth listening to. Close with 2-3 key takeaways and a friendly goodbye.
-- Length: 18-28 turns in total, about 4-6 minutes of speech (3500-6000 Persian characters overall). Every turn is 1-3 short sentences (max ${MAX_TURN_CHARS} characters). Alternate speakers naturally (a speaker may take two turns in a row only rarely). Include a few natural reactions («آره»، «دقیقاً»، «جالبه») but no filler monologues.
+- Open with a short, casual greeting and the question that makes the topic worth listening to. Close with 2-3 key takeaways and a friendly goodbye.
+- Length: 22-34 turns in total, about 4-6 minutes of speech (3500-6000 Persian characters overall). Every turn is 1-2 SHORT sentences (max ${MAX_TURN_CHARS} characters). If one host explains for two sentences, the other jumps in with a question, a reaction or a re-phrasing. Alternate speakers naturally; a speaker may take two turns in a row only rarely.
 
-Style rules (the text is read aloud by a TTS engine):
-- Light conversational Persian: polite, warm, NOT slangy and NOT stiff bookish prose. Correct half-spaces (نیم‌فاصله) e.g. «می‌شود», «کتاب‌خانه».
+Spoken-Persian style rules (the text is read aloud by a TTS engine, so spell words exactly as they are pronounced):
+- Write the way Tehrani Persians actually talk, NOT the way books are written. Use spoken verb forms and contractions: «می‌شه، می‌گه، می‌خواد، می‌تونه، نمی‌دونم، بگیم، بریم، می‌دونی، اینه که، چیه، کجاست، چطوره، اون، اونا، باهاش، براش»; «رو» instead of «را»; «هست/نیست/ـه» instead of «می‌باشد»; «اگه» instead of «اگر»; «ولی» instead of «اما»; «چون» instead of «زیرا».
+- Avoid bookish words and sentence shapes: «بنابراین، همچنین، لذا، از این رو، در نتیجه، به منظور، جهت، در خصوص، چنانچه، می‌گردد، قرار می‌گیرد، نماییم، مورد استفاده، به‌طور کلی»; no long sentences with several clauses. Say it the way you would say it to a friend over tea.
+- Sprinkle natural filler and reactions, but not in every turn: «خب، راستش، ببین، یعنی، آخه، دیگه، مثلاً، آها، آره، دقیقاً، جدی؟، نه بابا، وای، جالبه، خیلی خوبه».
+- Friendly and warm but never rude: no swear words, no street slang, no mocking.
+- Style demo only (NOT content to reuse): bookish «در این بخش به بررسی مزایای این روش می‌پردازیم و مشاهده می‌کنیم که چگونه می‌توان از آن بهره برد.» → spoken «خب، بیا ببینیم این روش دقیقاً به چه دردی می‌خوره. یعنی کجاها می‌شه ازش استفاده کرد؟»
+- Correct half-spaces (نیم‌فاصله), e.g. «می‌شه», «کتاب‌خونه».
 - Write ALL numbers in words (e.g. «بیست و دو درصد»); never digits.
-- No emojis, markdown, parentheses, quotation marks, English words (except unavoidable acronyms), stage directions, sound tags or speaker names inside the text.
+- No emojis, markdown, parentheses, quotation marks, English words (except unavoidable acronyms), stage directions, sound tags (like laughs) or speaker names inside the text.
 
 Return ONLY JSON: {"title": "<short Persian episode title>", "turns": [{"s": "A", "t": "..."}, {"s": "B", "t": "..."}]}
 
@@ -52,7 +66,7 @@ ${material(deck)}`;
   let total = 0;
   let last: "A" | "B" = "B";
   for (const t of rawTurns) {
-    const text = prepareSpeech(String(t?.t ?? t?.text ?? "")).slice(0, MAX_TURN_CHARS + 80);
+    const text = spoken(prepareSpeech(String(t?.t ?? t?.text ?? ""))).slice(0, MAX_TURN_CHARS + 80);
     if (text.length < 2) continue;
     const s = String(t?.s ?? t?.speaker ?? "").trim().toUpperCase();
     const speaker: "A" | "B" = s === "A" || s === "B" ? s : last === "A" ? "B" : "A";

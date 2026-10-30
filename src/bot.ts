@@ -336,7 +336,7 @@ async function startAudioJob(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
   // جلوگیری از دوبار زدن پشت‌سرهم (هر بار چند درخواست از سهمیه‌ی Gemini مصرف می‌کند)
   if (await hitLimit(env, `aud:${uid}:${id}:${kind}`, 1, 120)) return await answer("همین کار چند لحظه پیش شروع شده است؛ کمی صبر کن.", true);
   await answer("⏳ شروع شد…");
-  const st = await sendMessage(env, chatId, kind === "podcast" ? "🎙 پادکست در صف است… (چند دقیقه طول می‌کشد)" : "🔊 اسلاید صوتی در صف است… (هر اسلاید جدا فرستاده می‌شود)");
+  const st = await sendMessage(env, chatId, kind === "podcast" ? "🎙 پادکست در صف است… (چند دقیقه طول می‌کشد)" : "🔊 اسلاید صوتی در صف است… (صدای هر اسلاید داخل خود فایل پاورپوینت گذاشته می‌شود)");
   try {
     const model = (await getSettings(env, uid).catch(() => null))?.model;
     await env.AUDIO_WORKFLOW.create({

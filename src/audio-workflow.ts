@@ -1,6 +1,7 @@
 /**
  * اسلاید صوتی و پادکست دو‌گوینده (فعلاً فقط تلگرام و فقط مدیر).
- *  • slides: متن سخنرانی (notes) هر اسلاید با یک صدا خوانده و جدا برای هر اسلاید فرستاده می‌شود (مثل یک پلی‌لیست).
+ *  • slides: متن سخنرانی (notes) هر اسلاید با یک صدا خوانده می‌شود و صدا «داخل خود اسلاید» در همان فایل PPTX جاسازی می‌شود (pptx-audio.ts)؛
+ *    در نمایش، هر اسلاید صدایش را خودکار پخش می‌کند و بعد از پایان صدا به اسلاید بعد می‌رود. اگر حجم از سقف نشست، اسلایدهای باقی‌مانده جدا فرستاده می‌شوند.
  *  • podcast: LLM یک گفت‌وگوی دو‌نفره می‌نویسد؛ Gemini با دو صدا می‌خواند؛ تکه‌ها به یک فایل می‌چسبند.
  * هر تکه‌ی صدا در گام جدا ساخته می‌شود تا خطا/سقف کلید فقط همان گام را دوباره امتحان کند (کلیدها در gemini-tts.ts می‌چرخند).
  * بایت‌های صدا از گام‌ها برنمی‌گردند (سقف ۱ مگابایت)؛ یا همان‌جا فرستاده می‌شوند یا موقت در KV فایل‌ها می‌مانند.
@@ -10,7 +11,7 @@ import { NonRetryableError } from "cloudflare:workflows";
 import type { Env } from "./env";
 import type { Uid } from "./settings";
 import { LlmError } from "./llm";
-import { loadPreview } from "./files";
+import { loadFileDirect, loadPreview } from "./files";
 import { editMessage, esc, sendAudio, sendDocument } from "./telegram";
 import { withStore } from "./store";
 import { fileNameWithSite } from "./deck-service";
@@ -19,6 +20,7 @@ import { GeminiError, ttsDialogue, ttsSpeak } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript, transcript } from "./podcast";
 import { mergeWav, wavSeconds } from "./wav";
+import { embedAudio, pptxSlideNo, type SlideAudio } from "./pptx-audio";
 
 export interface AudioParams {
   kind: "slides" | "podcast";
@@ -35,8 +37,11 @@ const TTS_STEP = { retries: { limit: 4, delay: "30 seconds", backoff: "exponenti
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
 const TG_LIMIT = 45 * 1024 * 1024; // سقف آپلود ربات ۵۰ مگابایت؛ کمی حاشیه
 const SPEECH_STYLE = "calm, clear, natural, like a confident lecturer";
-const STYLE_A = "friendly, curious, conversational";
-const STYLE_B = "warm, calm, confident, conversational";
+// پادکست: لحن دوستانه و خودمانی (نه خواندن متن)؛ با متن محاوره‌ای podcast.ts هماهنگ است
+const STYLE_A = "casual, relaxed, cheerful and curious, like chatting with a close friend, natural informal Tehrani Persian speech, not reading a script";
+const STYLE_B = "warm, easygoing and confident, like explaining something to a friend over tea, natural informal Tehrani Persian speech, not reading a script";
+// حجم PPTX + صدا در حافظه‌ی Worker (۱۲۸ مگابایت) چند نسخه می‌شود؛ بیشتر از این مقدار صدا داخل فایل نمی‌رود و بقیه‌ی اسلایدها جدا فرستاده می‌شوند
+const EMBED_BUDGET = 30 * 1024 * 1024;
 
 const tmpKey = (id: string, i: number) => `tmp:aud:${id}:${i}`;
 
@@ -66,39 +71,72 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     }
   }
 
-  // ---------- اسلاید صوتی ----------
+  // ---------- اسلاید صوتی (صدا داخل خود اسلاید) ----------
   private async slides(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: (t: string) => Promise<unknown>) {
     const { chatId, uid, deckId } = event.payload;
+    const id = event.instanceId;
     const plan = await step.do("load-deck", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
       const p = await loadPreview(this.env, uid, deckId);
       if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-      const items = p.deck.slides.map((s, i) => ({ i, title: s.title, text: narrationFor(s) })).filter((x) => x.text);
+      // صدا باید داخل همان فایل PPTX برود؛ پیش از خرج‌کردن سهمیه‌ی TTS مطمئن می‌شویم فایل هنوز هست
+      if (!(await loadFileDirect(this.env, uid, deckId))) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
+      const items = p.deck.slides.map((s, i) => ({ i, no: pptxSlideNo(p.template, i), title: s.title, text: narrationFor(s) })).filter((x) => x.text);
       if (!items.length) throw new NonRetryableError("هیچ اسلایدی متن قابل‌خواندن ندارد");
       return { title: p.deck.title, total: p.deck.slides.length, items };
     });
 
+    // هر اسلاید در گام جدا ساخته و موقت در KV نگه داشته می‌شود (بایت‌های صدا از گام‌ها برنمی‌گردند)
     const failed: string[] = [];
-    let sent = 0;
+    const made: { i: number; no: number; title: string; bytes: number }[] = [];
     for (const it of plan.items) {
       try {
-        await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
+        const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
           await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`);
           const wav = await ttsSpeak(this.env, splitSpeech(it.text, 1200), { style: SPEECH_STYLE });
-          const name = fileNameWithSite(this.env, plan.title, "wav", `اسلاید ${it.i + 1}`, 40);
-          await sendAudio(this.env, chatId, wav, name, `🔊 <b>اسلاید ${toFa(String(it.i + 1))}</b> · ${esc(it.title.slice(0, 80))}`, {
-            title: `اسلاید ${toFa(String(it.i + 1))}: ${it.title}`, performer: plan.title, duration: wavSeconds(wav),
-          });
-          return true;
+          await this.env.FILES.put(tmpKey(id, it.i), wav, { expirationTtl: 3600 }); // فقط تا لحظه‌ی جاسازی؛ یک ساعته پاک می‌شود
+          return wav.length;
         }));
-        sent++;
+        made.push({ i: it.i, no: it.no, title: it.title, bytes });
       } catch (e) {
         failed.push(`${toFa(String(it.i + 1))}`);
         console.error("slide audio failed", it.i, String(e).slice(0, 300));
       }
     }
+    if (!made.length) await step.do("fail", async () => { throw new NonRetryableError("هیچ صدایی ساخته نشد (کلیدها یا سهمیه را بررسی کن)"); });
+
+    const summary = await step.do("embed-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
+      await status("🔊 جاسازی صدا داخل اسلایدها و ارسال فایل…");
+      const f = await loadFileDirect(this.env, uid, deckId);
+      if (!f) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
+      let budget = EMBED_BUDGET - f.data.byteLength;
+      const items: SlideAudio[] = [];
+      const inFile: number[] = [], apart: typeof made = [];
+      for (const m of made) {
+        if (m.bytes > budget) { apart.push(m); continue; }
+        const b = await this.env.FILES.get(tmpKey(id, m.i), "arrayBuffer");
+        if (!b) throw new Error(`audio of slide ${m.i} missing`);
+        items.push({ slide: m.no, wav: new Uint8Array(b) });
+        inFile.push(m.i);
+        budget -= m.bytes;
+      }
+      if (items.length) {
+        const out = await embedAudio(f.data, items, { autoPlay: true, autoAdvance: true });
+        await sendDocument(this.env, chatId, out.bytes, fileNameWithSite(this.env, plan.title, "pptx", "صوتی", 40),
+          `🔊 <b>${esc(plan.title)}</b>\nصدای ${toFa(String(items.length))} اسلاید داخل خود اسلایدها گذاشته شده است؛ در حالت نمایش (Slide Show) خودکار پخش می‌شود و بعد از پایان صدا اسلاید عوض می‌شود.`);
+      }
+      // اسلایدهایی که در فایل جا نشدند مثل قبل جدا فرستاده می‌شوند
+      for (const m of apart) {
+        const b = await this.env.FILES.get(tmpKey(id, m.i), "arrayBuffer");
+        if (!b) continue;
+        const wav = new Uint8Array(b);
+        await sendAudio(this.env, chatId, wav, fileNameWithSite(this.env, plan.title, "wav", `اسلاید ${m.i + 1}`, 40),
+          `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: wavSeconds(wav) });
+      }
+      for (const m of made) await this.env.FILES.delete(tmpKey(id, m.i)).catch(() => {});
+      return { inFile: inFile.length, apart: apart.map((m) => toFa(String(m.i + 1))) };
+    });
     await step.do("finish", async () => {
-      if (!sent) throw new NonRetryableError("هیچ صدایی ساخته نشد (کلیدها یا سهمیه را بررسی کن)");
-      await status(`✅ اسلاید صوتی آماده شد: ${toFa(String(sent))} فایل${failed.length ? `\n⚠️ ناموفق: اسلاید ${failed.join("، ")} (دوباره دکمه را بزن)` : ""}`);
+      await status(`✅ اسلاید صوتی آماده شد: صدا داخل ${toFa(String(summary.inFile))} اسلاید گذاشته شد${summary.apart.length ? `\n📎 اسلاید ${summary.apart.join("، ")} به‌خاطر حجم جدا فرستاده شد` : ""}${failed.length ? `\n⚠️ ناموفق: اسلاید ${failed.join("، ")} (دوباره دکمه را بزن)` : ""}`);
     });
   }
 
