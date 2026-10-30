@@ -199,7 +199,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               const info = bytes ? imageInfo(bytes) : null;
               if (bytes && info) image = { data: bytes, ...info };
             }
-            const data = await buildDocx(hd, { theme: settings.theme, font: settings.font, digits: settings.digits, image });
+            const data = await buildDocx(hd, { theme: settings.theme, font: settings.font, digits: settings.digits, image, site: this.env.SITE_URL || "https://pptsaz.ir" });
             const hname = `${safeFilename(hd.title).replace(/\.pptx$/, "")} - جزوه.docx`;
             const hid = `${event.instanceId}-handout`;
             if (web) {
