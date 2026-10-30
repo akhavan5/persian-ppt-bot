@@ -35,12 +35,7 @@ const HELP =
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "🖼 چند عکس (مثلاً صفحه‌های یک جزوه) را <b>یک‌جا و به‌صورت آلبوم</b> انتخاب و بفرست (حداکثر ۱۰ عدد)؛ همه با هم خوانده می‌شوند و فقط <b>یک ارائه</b> ساخته می‌شود. عکس‌هایی که جدا از هم بفرستی هر کدام ارائه‌ی جداگانه حساب می‌شوند.\n\n" +
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
-  "⚙️ /settings ← تغییر تم، لحن، فونت، حالت (عادی، دانشجویی، کسب‌وکار، معلم، دفاع پایان‌نامه)، منابع و تعداد اسلاید\n" +
-  "💳 /credit ← اعتبار، پلن و سقف‌های حساب (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)\n" +
-  "📱 /app ← اپ ساخت ارائه داخل تلگرام (Mini App)\n" +
-  "🌐 /site ← ورود خودکار به سایت pptsaz.ir (پلن‌ها و پرداخت آنلاین)\n" +
-  "🎁 /invite ← دعوت دوستان (هر ۱۰ دعوت = ۱ اعتبار پلن پلاس)\n" +
-  "📁 /files ← دریافت دوباره‌ی فایل‌ها (PPTX، PDF، پوستر و جزوه) تا ۲۴ ساعت\n\n" +
+  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دعوت = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
 type Btn = { text: string; callback_data?: string; url?: string };
@@ -339,6 +334,16 @@ async function handleCallback(env: Env, cq: any) {
 
   const [act, a, b] = String(cq.data ?? "").split(":");
   if (act === "ad") return await handlePanelCallback(env, cq);
+  if (act === "h") { // دکمه‌های منوی اصلی (homeKb)
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+    if (a === "credit") return await showCredit(env, chatId, uid, userId);
+    if (a === "set") return await showSettings(env, chatId, uid);
+    if (a === "files") return await showFiles(env, chatId, uid);
+    if (a === "inv") return await showInvite(env, chatId, userId);
+    if (a === "site") return await showSite(env, chatId, userId);
+    if (a === "admin" && isAdmin(env, userId)) return await handleAdmin(env, chatId, "/admin", [], "/admin", userId);
+    return;
+  }
   if (act === "bc") return await handleBroadcastCallback(env, cq);
   if (act === "af") return await handleAdminFileCallback(env, cq);
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
@@ -346,11 +351,17 @@ async function handleCallback(env: Env, cq: any) {
   if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
   if (act === "fb") { // دکمه‌ی «ارسال نظر» زیر ارائه: پیام متنی بعدی کاربر برای مدیر فرستاده می‌شود
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
-    const title = String(cq.message?.caption ?? "").split("\n")[0].replace(/^✅\s*/, "").slice(0, 120);
+    const survey = a === "p"; // fb:p = دکمه‌ی نظرسنجی پایان پلن (plan-feedback.ts)؛ پیامش کپشن ارائه ندارد
+    const title = survey ? "نظرسنجی پایان پلن" : String(cq.message?.caption ?? "").split("\n")[0].replace(/^✅\s*/, "").slice(0, 120);
     await env.KV.put(fbKey(userId), title || "-", { expirationTtl: 600 });
     // دکمه‌ی نظر فقط یک بار: بعد از زدن حذف می‌شود (دکمه‌ی PDF، اگر هست، می‌ماند)
     const rows = ((cq.message?.reply_markup?.inline_keyboard ?? []) as { callback_data?: string }[][]).filter((r) => !r.some((x) => x.callback_data?.startsWith("fb:")));
     await tg(env, "editMessageReplyMarkup", { chat_id: chatId, message_id: mid, reply_markup: { inline_keyboard: rows } }).catch(() => {});
+    if (survey) return await sendMessage(env, chatId,
+      "💬 ممنون که پلنت را امتحان کردی! 😊\n\n" +
+      "از چه چیزی راضی بودی؟ چه چیزی کم بود یا اذیتت کرد؟ و چرا (یا چرا نه) پلن را تمدید می‌کنی؟ راحت و خودمونی همین‌جا در <b>یک پیام</b> بنویس و بفرست.\n\n" +
+      "نظرت مستقیم به دست خود ما می‌رسه و تک‌تکشون را می‌خونیم. 🙏\n\n" +
+      "<i>اگر پشیمون شدی، کافیه یک دستور (مثل /start) بفرستی تا لغو بشه.</i>");
     return await sendMessage(env, chatId,
       "💬 خیلی خوشحال می‌شیم نظرت را بشنویم! 😊\n\n" +
       "ارائه چطور شد؟ از چه چیزش راضی بودی و چه چیزی می‌تونست بهتر باشه؟ اگر مشکلی دیدی، ایده‌ای برای بهتر شدن ربات داری یا هر حرف دیگه‌ای هست، راحت و خودمونی همین‌جا در <b>یک پیام</b> بنویس و بفرست.\n\n" +
@@ -446,6 +457,71 @@ async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chat
   return true;
 }
 
+// ---------- منوی اصلی دکمه‌ای (/start، /help، /menu) ----------
+// هر دکمه همان کار دستور هم‌نامش را انجام می‌دهد؛ دستورها همچنان کار می‌کنند. callback: h:<کار>
+const HOME_TEXT = "🏠 <b>منوی اصلی</b>\nیکی از گزینه‌ها را بزن، یا همین‌جا <b>موضوع ارائه</b> را بنویس و بفرست.";
+function homeKb(env: Env, tgId: number, admin: boolean) {
+  const rows: Btn[][] = [
+    [{ text: "📱 ساخت ارائه (اپ)", web_app: { url: `${miniappUrl(env)}/app` } } as Btn],
+    [{ text: "💳 اعتبار و پلن", callback_data: "h:credit" }, { text: "⚙️ تنظیمات", callback_data: "h:set" }],
+    [{ text: "📁 فایل‌های من", callback_data: "h:files" }, { text: "🎁 دعوت دوستان", callback_data: "h:inv" }],
+    [{ text: "🌐 سایت و خرید پلن", callback_data: "h:site" }, { text: "💬 پشتیبانی", url: supportLink(tgId) }],
+  ];
+  if (admin) rows.push([{ text: "🛠 پنل مدیریت", callback_data: "h:admin" }]);
+  return kb(rows);
+}
+
+async function showApp(env: Env, chatId: number) {
+  return await sendMessage(env, chatId, "📱 با دکمه‌ی زیر اپ ساخت ارائه باز می‌شود (ساخت، فایل‌ها، تنظیمات و اعتبار، همه با همین حساب).",
+    { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(env)}/app` } }]] } });
+}
+async function showSite(env: Env, chatId: number, userId: number) {
+  return await sendMessage(env, chatId, "🌐 با دکمه‌ی زیر بدون ثبت‌نام و رمز، با همین حساب تلگرامت وارد سایت می‌شوی (پلن‌ها، پرداخت آنلاین، پروفایل).",
+    kb([[{ text: "🌐 ورود به سایت", url: await siteLoginUrl(env, userId, "home") }]]));
+}
+async function showSettings(env: Env, chatId: number, uid: Uid) {
+  const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);
+  const { text: t, ...extra } = mainMenu(env, s, caps);
+  return await sendMessage(env, chatId, t, extra);
+}
+async function showFiles(env: Env, chatId: number, uid: Uid) {
+  const list = await listFiles(env, uid);
+  if (!list.length) return await sendMessage(env, chatId, "📁 فایلی برای ۲۴ ساعت اخیر نداری. فایل هر ارائه بعد از ساخته شدن تا ۲۴ ساعت اینجا می‌ماند.");
+  return await sendMessage(env, chatId, "📁 <b>فایل‌های ۲۴ ساعت اخیر</b>\nبرای دریافت دوباره، یکی را بزن:",
+    kb(list.map((f) => /\.(png|jpe?g)$/i.test(f.name)
+      ? [{ text: `🖼 ${f.title.slice(0, 32)} (پوستر)`, callback_data: `f:${f.id}` }]
+      : /\.docx$/i.test(f.name)
+      ? [{ text: `📝 ${f.title.slice(0, 32)} (جزوه)`, callback_data: `f:${f.id}` }]
+      : [
+        { text: `📥 ${f.title.slice(0, 32)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` },
+        ...(hasBrowser(env) ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),
+      ])));
+}
+async function showInvite(env: Env, chatId: number, userId: number) {
+  const me = await tg<{ username?: string }>(env, "getMe");
+  const link = `https://t.me/${me.username}?start=ref_${userId}`;
+  const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
+  const done = Math.min(REF_MAX, Number(await env.KV.get(`refc:${userId}`).catch(() => null)) || 0);
+  return await sendMessage(env, chatId,
+    `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد ربات شوند، <b>۱ اعتبار پلن پلاس</b> می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(REF_MAX / REF_EVERY))} اعتبار پلاس).\n\n` +
+    `📊 دعوت‌های تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`,
+    kb([[{ text: "📤 ارسال به دوستان", url: share }]]));
+}
+async function showCredit(env: Env, chatId: number, uid: Uid, userId: number) {
+  const granted = await grantDailyFree(env, uid).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز
+  const [c, sub, caps] = await Promise.all([getCredit(env, uid), getActiveSub(env, uid), getCaps(env, uid)]);
+  const planName = sub ? (PLANS.find((p) => p.id === sub.plan)?.name ?? sub.plan) : "";
+  const head = c.unlimited ? "💳 اعتبار شما <b>نامحدود</b> است.\n"
+    : (granted ? "🎁 اعتبار رایگان امروزت اضافه شد.\n" : "") + `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
+      (sub ? `• اعتبار پلن: ${toFa(String(sub.credits))}\n` : "") +
+      (c.bonus > 0 ? `• اعتبار هدیه و شارژ: ${toFa(String(c.bonus))}\n` : "");
+  const out = head +
+    `👑 ${sub ? `پلن ${planName} تا ${fmtDate(sub.exp)}` : "پلن رایگان"}\n` +
+    `📄 حداکثر ${toFa(String(caps.maxSlides))} اسلاید و 🖼 ${toFa(String(caps.maxImg))} تصویر در هر ارائه\n` +
+    (c.unlimited ? "" : `\n<b>📋 پلن‌ها</b> (ماهانه)\n${plansText(sub?.plan)}\n\n${BUY_SITE_NOTE}`);
+  return await sendMessage(env, chatId, out, c.unlimited ? undefined : await buyKbFor(env, uid, userId));
+}
+
 // ---------- ورودی اصلی ----------
 export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (update.callback_query) return handleCallback(env, update.callback_query);
@@ -485,67 +561,22 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (!msg.document && !msg.photo && (await handleFeedback(env, msg, userId, uid, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
 
-  if (cmd === "/app") {
-    return await sendMessage(env, chatId, "📱 با دکمه‌ی زیر اپ ساخت ارائه باز می‌شود (ساخت، فایل‌ها، تنظیمات و اعتبار، همه با همین حساب).",
-      { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(env)}/app` } }]] } });
-  }
-  if (cmd === "/site") {
-    return await sendMessage(env, chatId, "🌐 با دکمه‌ی زیر بدون ثبت‌نام و رمز، با همین حساب تلگرامت وارد سایت می‌شوی (پلن‌ها، پرداخت آنلاین، پروفایل).",
-      kb([[{ text: "🌐 ورود به سایت", url: await siteLoginUrl(env, userId, "home") }]]));
-  }
+  if (cmd === "/app") return await showApp(env, chatId);
+  if (cmd === "/site") return await showSite(env, chatId, userId);
   // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده، شمارنده‌ی دعوت‌کننده را بالا می‌برد؛ هر ۱۰ دعوت = ۱ اعتبار پلن پلاس (تا ۱۰۰ دعوت)
   if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
     const inviter = Number(args[0].slice(4));
     const r = await rewardReferral(env, inviter, userId, await resolveUid(env, inviter)).catch((e) => { console.error("referral", e); return null; });
     if (r) await sendMessage(env, inviter, referralMsg(r)).catch(() => {});
   }
-  if (cmd === "/files") {
-    const list = await listFiles(env, uid);
-    if (!list.length) return await sendMessage(env, chatId, "📁 فایلی برای ۲۴ ساعت اخیر نداری. فایل هر ارائه بعد از ساخته شدن تا ۲۴ ساعت اینجا می‌ماند.");
-    return await sendMessage(env, chatId, "📁 <b>فایل‌های ۲۴ ساعت اخیر</b>\nبرای دریافت دوباره، یکی را بزن:",
-      kb(list.map((f) => /\.(png|jpe?g)$/i.test(f.name)
-        ? [{ text: `🖼 ${f.title.slice(0, 32)} (پوستر)`, callback_data: `f:${f.id}` }]
-        : /\.docx$/i.test(f.name)
-        ? [{ text: `📝 ${f.title.slice(0, 32)} (جزوه)`, callback_data: `f:${f.id}` }]
-        : [
-          { text: `📥 ${f.title.slice(0, 32)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` },
-          ...(hasBrowser(env) ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),
-        ])));
-  }
-  if (cmd === "/invite") {
-    const me = await tg<{ username?: string }>(env, "getMe");
-    const link = `https://t.me/${me.username}?start=ref_${userId}`;
-    const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
-    const done = Math.min(REF_MAX, Number(await env.KV.get(`refc:${userId}`).catch(() => null)) || 0);
-    return await sendMessage(env, chatId,
-      `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد ربات شوند، <b>۱ اعتبار پلن پلاس</b> می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(REF_MAX / REF_EVERY))} اعتبار پلاس).\n\n` +
-      `📊 دعوت‌های تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`,
-      kb([[{ text: "📤 ارسال به دوستان", url: share }]]));
-  }
+  if (cmd === "/files") return await showFiles(env, chatId, uid);
+  if (cmd === "/invite") return await showInvite(env, chatId, userId);
 
-  if (cmd === "/credit" || cmd === "/balance") {
-    const granted = await grantDailyFree(env, uid).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز
-    const [c, sub, caps] = await Promise.all([getCredit(env, uid), getActiveSub(env, uid), getCaps(env, uid)]);
-    const planName = sub ? (PLANS.find((p) => p.id === sub.plan)?.name ?? sub.plan) : "";
-    const head = c.unlimited ? "💳 اعتبار شما <b>نامحدود</b> است.\n"
-      : (granted ? "🎁 اعتبار رایگان امروزت اضافه شد.\n" : "") + `💳 اعتبار باقی‌مانده: <b>${toFa(String(c.total))}</b> ارائه\n` +
-        (sub ? `• اعتبار پلن: ${toFa(String(sub.credits))}\n` : "") +
-        (c.bonus > 0 ? `• اعتبار هدیه و شارژ: ${toFa(String(c.bonus))}\n` : "");
-    const out = head +
-      `👑 ${sub ? `پلن ${planName} تا ${fmtDate(sub.exp)}` : "پلن رایگان"}\n` +
-      `📄 حداکثر ${toFa(String(caps.maxSlides))} اسلاید و 🖼 ${toFa(String(caps.maxImg))} تصویر در هر ارائه\n` +
-      (c.unlimited ? "" : `\n<b>📋 پلن‌ها</b> (ماهانه)\n${plansText(sub?.plan)}\n\n${BUY_SITE_NOTE}`);
-    return await sendMessage(env, chatId, out, c.unlimited ? undefined : await buyKbFor(env, uid, userId));
-  }
-  if (cmd === "/start" || cmd === "/help") {
-    return await sendMessage(env, chatId, admin ? HELP + "\n\n🛠 شما مدیر هستید؛ دستورهای مدیریتی: /admin" : HELP);
-  }
-  if (cmd === "/settings") {
-    const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);
-    const { text: t, ...extra } = mainMenu(env, s, caps);
-    return await sendMessage(env, chatId, t, extra);
-  }
-  if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. /start را بزن.");
+  if (cmd === "/credit" || cmd === "/balance") return await showCredit(env, chatId, uid, userId);
+  if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, HELP, homeKb(env, userId, admin));
+  if (cmd === "/menu") return await sendMessage(env, chatId, HOME_TEXT, homeKb(env, userId, admin));
+  if (cmd === "/settings") return await showSettings(env, chatId, uid);
+  if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. منوی دکمه‌ای:", homeKb(env, userId, admin));
 
   // آپلود فایل (سند یا عکس): متن فایل منبع ارائه می‌شود؛ کپشن (اگر باشد) موضوع است، وگرنه نام فایل
   const ref = fileRefOf(msg);

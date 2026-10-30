@@ -72,6 +72,7 @@ export async function sendPhoto(env: Env, chatId: number, data: Uint8Array, file
 
 export const BOT_COMMANDS = [
   { command: "start", description: "شروع و راهنما" },
+  { command: "menu", description: "منوی دکمه‌ای (اعتبار، تنظیمات، فایل‌ها و …)" },
   { command: "settings", description: "تنظیمات (تم، لحن، فونت، تعداد اسلاید)" },
   { command: "credit", description: "اعتبار باقی‌مانده و شارژ" },
   { command: "files", description: "فایل‌های ۲۴ ساعت اخیر من" },
