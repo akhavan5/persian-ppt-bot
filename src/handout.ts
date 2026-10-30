@@ -98,7 +98,7 @@ export function imageInfo(b: Uint8Array): { mime: "image/png" | "image/jpeg"; w:
 // ---------- ساخت DOCX ----------
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** site: آدرس سایت؛ اگر باشد، نام دامنه (مثل pptsaz.ir) مثل پوستر به‌صورت واترمارک کوچک در پایین هر صفحه‌ی جزوه می‌آید */
+/** site: آدرس سایت؛ اگر باشد، فوتر هر صفحه: نام دامنه (مثل پوستر، چپ‌چین) + شماره‌ی صفحه (وسط)، و بالای صفحه‌ی اول «به نام خدا» */
 export interface DocxOpts { theme: string; font: string; digits: boolean; image?: DocImage; site?: string }
 
 export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
@@ -115,7 +115,7 @@ export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
   const heading = (t: string) => para(run(t, 28, `<w:b/><w:bCs/><w:color w:val="${th.primary}"/>`),
     `<w:keepNext/><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="${th.accent}"/></w:pBdr><w:spacing w:before="200" w:after="100"/><w:outlineLvl w:val="0"/>`);
 
-  // واترمارک پایین صفحه (مثل پوستر): فقط نام دامنه، چپ‌چین و لاتین، با رنگ کم‌رنگ
+  // فوتر: نام دامنه (مثل پوستر، چپ‌چین و لاتین، کم‌رنگ) + شماره‌ی صفحه‌ی وسط؛ هدر فقط صفحه‌ی اول: «به نام خدا»
   let host = "";
   try { if (o.site) host = new URL(o.site).hostname.replace(/^www\./, ""); } catch { /* نشانی نامعتبر */ }
 
@@ -161,14 +161,25 @@ export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
 
   const NS = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"`;
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${parts.join("")}` +
-    `<w:sectPr>${host ? `<w:footerReference w:type="default" r:id="rIdFt"/>` : ""}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1000" w:right="1134" w:bottom="1000" w:left="1134" w:header="500" w:footer="500" w:gutter="0"/><w:bidi/></w:sectPr></w:body></w:document>`;
+    `<w:sectPr>${host ? `<w:headerReference w:type="first" r:id="rIdHd"/><w:footerReference w:type="default" r:id="rIdFt"/><w:footerReference w:type="first" r:id="rIdFt2"/>` : ""}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1000" w:right="1134" w:bottom="1000" w:left="1134" w:header="450" w:footer="450" w:gutter="0"/>${host ? "<w:titlePg/>" : ""}<w:bidi/></w:sectPr></w:body></w:document>`;
 
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
     `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="fa-IR" w:bidi="fa-IR"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:bidi/></w:pPr></w:pPrDefault></w:docDefaults>` +
     `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style></w:styles>`;
+  // فوتر (LTR): نام دامنه چپ، شماره‌ی صفحه وسط (تب وسط در ۴۸۱۹ از ۹۶۳۸). صفحه‌ی اول هم همین فوتر را دارد (titlePg فوتر پیش‌فرض را روی آن نمی‌آورد).
+  const fr = (inner: string, sz = 16) => `<w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:color w:val="${th.muted}"/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr>${inner}</w:r>`;
   const footerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${NS}>` +
-    `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="left"/></w:pPr>` +
-    `<w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:color w:val="${th.muted}"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">${esc(host)}</w:t></w:r></w:p></w:ftr>`;
+    `<w:p><w:pPr><w:bidi w:val="0"/><w:tabs><w:tab w:val="center" w:pos="4819"/></w:tabs><w:spacing w:before="0" w:after="0"/><w:jc w:val="left"/></w:pPr>` +
+    fr(`<w:t xml:space="preserve">${esc(host)}</w:t>`) + fr("<w:tab/>") +
+    `<w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:color w:val="${th.muted}"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>` +
+    fr(`<w:instrText xml:space="preserve"> PAGE </w:instrText>`, 18) +
+    `<w:r><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>` +
+    fr(`<w:t>1</w:t>`, 18) +
+    `<w:r><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`;
+  // هدر فقط صفحه‌ی اول: «به نام خدا» وسط‌چین
+  const headerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ${NS}>` +
+    para(`<w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:b/><w:bCs/><w:color w:val="${th.primary}"/><w:rtl/><w:sz w:val="26"/><w:szCs w:val="26"/><w:lang w:val="fa-IR" w:bidi="fa-IR"/></w:rPr><w:t>به نام خدا</w:t></w:r>`,
+      `<w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/>`) + `</w:hdr>`;
   const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
     `<w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="hybridMultilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/>` +
     `<w:pPr><w:ind w:left="360" w:hanging="260"/></w:pPr><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:color w:val="${th.accent}"/></w:rPr></w:lvl></w:abstractNum>` +
@@ -179,7 +190,9 @@ export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
     `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
     `<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>` +
     `<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>` +
-    (host ? `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>` : "") +
+    (host ? `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>` +
+      `<Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>` +
+      `<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>` : "") +
     `<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`;
   const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
     `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>` +
@@ -187,7 +200,9 @@ export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
   const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
     `<Relationship Id="rIdSt" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
     `<Relationship Id="rIdNum" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>${relImage}` +
-    (host ? `<Relationship Id="rIdFt" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>` : "") + `</Relationships>`;
+    (host ? `<Relationship Id="rIdFt" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>` +
+      `<Relationship Id="rIdFt2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>` +
+      `<Relationship Id="rIdHd" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>` : "") + `</Relationships>`;
   const core = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
     `<dc:title>${esc(h.title)}</dc:title><dc:language>fa-IR</dc:language><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString().replace(/\.\d+Z$/, "Z")}</dcterms:created></cp:coreProperties>`;
 
@@ -198,7 +213,7 @@ export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
   zip.file("word/document.xml", documentXml);
   zip.file("word/styles.xml", stylesXml);
   zip.file("word/numbering.xml", numberingXml);
-  if (host) zip.file("word/footer1.xml", footerXml);
+  if (host) { zip.file("word/footer1.xml", footerXml); zip.file("word/footer2.xml", footerXml); zip.file("word/header1.xml", headerXml); }
   zip.file("word/_rels/document.xml.rels", docRels);
   if (o.image && relImage) zip.file(`word/media/image1.${o.image.mime === "image/png" ? "png" : "jpg"}`, o.image.data);
   return await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
