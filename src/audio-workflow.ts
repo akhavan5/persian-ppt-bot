@@ -19,6 +19,7 @@ import { toFa } from "./util";
 import { GeminiError, ttsDialogue, ttsSpeak } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript, transcript } from "./podcast";
+import { NARRATION_BATCH, makeNarration } from "./narration";
 import { mergeWav, wavSeconds } from "./wav";
 import { embedAudio, pptxSlideNo, type SlideAudio } from "./pptx-audio";
 
@@ -36,7 +37,8 @@ export interface AudioParams {
 const TTS_STEP = { retries: { limit: 4, delay: "30 seconds", backoff: "exponential" }, timeout: "6 minutes" } as const;
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
 const TG_LIMIT = 45 * 1024 * 1024; // سقف آپلود ربات ۵۰ مگابایت؛ کمی حاشیه
-const SPEECH_STYLE = "calm, clear, natural, like a confident lecturer";
+// اسلاید صوتی هم‌لحن پادکست: گفتاری و خودمانی، نه سخنرانی رسمی
+const SPEECH_STYLE = "warm, relaxed and friendly, like a person explaining something to a friend, natural informal Tehrani Persian speech, not reading a script";
 // پادکست: لحن دوستانه و خودمانی (نه خواندن متن)؛ با متن محاوره‌ای podcast.ts هماهنگ است
 const STYLE_A = "casual, relaxed, cheerful and curious, like chatting with a close friend, natural informal Tehrani Persian speech, not reading a script";
 const STYLE_B = "warm, easygoing and confident, like explaining something to a friend over tea, natural informal Tehrani Persian speech, not reading a script";
@@ -85,6 +87,23 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       return { title: p.deck.title, total: p.deck.slides.length, items };
     });
 
+    // متن گفتاریِ مناسبِ صدا برای اسلایدها (دسته‌های ۸تایی)؛ اگر LLM جواب نداد همان متن قبلی (یادداشت/نکته‌ها) خوانده می‌شود
+    const spoken: Record<number, string> = {};
+    for (let k = 0; k < plan.items.length; k += NARRATION_BATCH) {
+      const idxs = plan.items.slice(k, k + NARRATION_BATCH).map((x) => x.i);
+      try {
+        const part = await step.do(`narration-${k / NARRATION_BATCH}`, LLM_STEP, () => guard(async () => {
+          await status("✍️ در حال نوشتن متن گفتاری اسلایدها…");
+          const p = await loadPreview(this.env, uid, deckId);
+          if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
+          return makeNarration(this.env, p.deck, idxs, { model: event.payload.model });
+        }));
+        Object.assign(spoken, part);
+      } catch (e) {
+        console.error("narration failed", idxs[0], String(e).slice(0, 300));
+      }
+    }
+
     // هر اسلاید در گام جدا ساخته و موقت در KV نگه داشته می‌شود (بایت‌های صدا از گام‌ها برنمی‌گردند)
     const failed: string[] = [];
     const made: { i: number; no: number; title: string; bytes: number }[] = [];
@@ -92,7 +111,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       try {
         const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
           await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`);
-          const wav = await ttsSpeak(this.env, splitSpeech(it.text, 1200), { style: SPEECH_STYLE });
+          const wav = await ttsSpeak(this.env, splitSpeech(spoken[it.i] ?? it.text, 1200), { style: SPEECH_STYLE });
           await this.env.FILES.put(tmpKey(id, it.i), wav, { expirationTtl: 3600 }); // فقط تا لحظه‌ی جاسازی؛ یک ساعته پاک می‌شود
           return wav.length;
         }));
