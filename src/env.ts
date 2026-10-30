@@ -39,6 +39,8 @@ export interface Env {
   GEMINI_TTS_VOICE?: string;
   GEMINI_TTS_VOICE_A?: string;
   GEMINI_TTS_VOICE_B?: string;
+  /** اختیاری: سرعت گفتار اسلاید صوتی؛ normal | brisk (پیش‌فرض، کمی تندتر) | fast (تند) */
+  GEMINI_TTS_PACE?: string;
   /** اختیاری: آدرس پایه‌ی Gemini (پیش‌فرض https://generativelanguage.googleapis.com)؛ اگر منطقه‌ی اجرای Worker پشتیبانی نشد، آدرس پروکسی را بگذارید */
   GEMINI_BASE_URL?: string;
   /** اختیاری: نرخ نمونه‌برداری صدا (۸۰۰۰، ۱۶۰۰۰ یا ۲۴۰۰۰؛ پیش‌فرض ۲۴۰۰۰). ۱۶۰۰۰ حجم فایل را یک‌سوم کم می‌کند */

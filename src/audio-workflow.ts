@@ -39,6 +39,9 @@ const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponenti
 const TG_LIMIT = 45 * 1024 * 1024; // سقف آپلود ربات ۵۰ مگابایت؛ کمی حاشیه
 // اسلاید صوتی هم‌لحن پادکست: گفتاری و خودمانی، نه سخنرانی رسمی
 const SPEECH_STYLE = "warm, relaxed and friendly, like a person explaining something to a friend, natural informal Tehrani Persian speech, not reading a script";
+// سرعت گفتار از روی توضیح سبک تنظیم می‌شود (زیر‌و‌بمی صدا تغییر نمی‌کند)؛ GEMINI_TTS_PACE = normal | brisk | fast
+const PACE: Record<string, string> = { brisk: ", at a lively pace, a bit faster than normal speech, no long pauses", fast: ", at a quick, energetic pace, clearly faster than normal speech, short pauses" };
+const speechStyle = (env: Env) => SPEECH_STYLE + (PACE[(env.GEMINI_TTS_PACE || "brisk").trim().toLowerCase()] ?? "");
 // پادکست: لحن دوستانه و خودمانی (نه خواندن متن)؛ با متن محاوره‌ای podcast.ts هماهنگ است
 const STYLE_A = "casual, relaxed, cheerful and curious, like chatting with a close friend, natural informal Tehrani Persian speech, not reading a script";
 const STYLE_B = "warm, easygoing and confident, like explaining something to a friend over tea, natural informal Tehrani Persian speech, not reading a script";
@@ -111,7 +114,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       try {
         const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
           await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`);
-          const wav = await ttsSpeak(this.env, splitSpeech(spoken[it.i] ?? it.text, 1200), { style: SPEECH_STYLE });
+          const wav = await ttsSpeak(this.env, splitSpeech(spoken[it.i] ?? it.text, 1200), { style: speechStyle(this.env) });
           await this.env.FILES.put(tmpKey(id, it.i), wav, { expirationTtl: 3600 }); // فقط تا لحظه‌ی جاسازی؛ یک ساعته پاک می‌شود
           return wav.length;
         }));
