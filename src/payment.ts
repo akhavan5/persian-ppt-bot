@@ -22,10 +22,13 @@ export const PLANS: Plan[] = [
  * - خرید پلنِ دیگر (پلاس←پرو یا پرو←پلاس): پلن قبلی با روز و اعتبار باقی‌مانده‌اش منقضی می‌شود و پلن جدید مثل پلن رایگان از همین لحظه با ۳۰ روز و اعتبار جدید شروع می‌شود.
  */
 /** اشتراک جدید از روی اشتراک فعال فعلی (خالص؛ بدون نوشتن). cur: پلنِ منقضی یا بدون اعتبار = null */
-export function nextSub(cur: Sub | null, p: Plan): Sub {
+/** سورپرایز خرید: بعد از هر خرید موفق پلن (درگاه، بازار، مایکت) یک اعتبار اضافه به حساب کاربر اضافه می‌شود (۱۰ ← ۱۱، ۲۰ ← ۲۱).
+ *  عمداً در رسید، ایمیل، پیام‌ها و صفحه‌ی نتیجه‌ی پرداخت ذکر نمی‌شود؛ همه‌جا همان plan.credits نمایش داده می‌شود. */
+const PURCHASE_BONUS_CREDITS = 1;
+export function nextSub(cur: Sub | null, p: Plan, bonus = 0): Sub {
   // خرید پلنِ دیگر (پلاس ← پرو یا پرو ← پلاس): پلن قبلی منقضی می‌شود و پلنِ جدید مثل کاربر رایگان از همین لحظه شروع می‌شود
   if (cur && cur.plan !== p.id) cur = null;
-  return { plan: p.id, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits };
+  return { plan: p.id, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits + bonus };
 }
 export async function activatePlan(env: Env, uid: string, p: Plan) {
   await putSub(env, uid, nextSub(await getActiveSub(env, uid), p));
@@ -269,7 +272,7 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   let won: boolean;
   let subExpMs: number | undefined;
   if (plan) {
-    const sub = nextSub(await getActiveSub(env, rec.uid), plan);
+    const sub = nextSub(await getActiveSub(env, rec.uid), plan, PURCHASE_BONUS_CREDITS);
     subExpMs = sub.exp;
     const subExp = nowSec + Math.max(60, Math.ceil((sub.exp - Date.now()) / 1000) + 86_400); // مثل putSub
     const write = env.DB.prepare(
@@ -383,7 +386,7 @@ async function storeClaim(
   const nowSec = Math.floor(Date.now() / 1000);
   const claim = env.DB.prepare("INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO NOTHING")
     .bind(key, JSON.stringify({ uid: user.id, plan: plan.id, sku: productId, order: orderId, t: Date.now(), by }));
-  const sub = nextSub(await getActiveSub(env, user.id), plan);
+  const sub = nextSub(await getActiveSub(env, user.id), plan, PURCHASE_BONUS_CREDITS);
   const subExp = nowSec + Math.max(60, Math.ceil((sub.exp - Date.now()) / 1000) + 86_400); // مثل putSub
   const write = env.DB.prepare(
     "INSERT INTO kv (k, v, exp) SELECT ?1, ?2, ?3 WHERE EXISTS (SELECT 1 FROM kv WHERE k=?4 AND json_extract(v,'$.by')=?5) " +
