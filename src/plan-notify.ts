@@ -26,7 +26,7 @@ const planName = (s: Sub) => PLANS.find((p) => p.id === s.plan)?.name ?? s.plan;
 interface Mail { head: string; sub: string; paras: string[]; rows: [string, string][]; cta: string; color: string; foot: string; preview: string }
 
 /** قالب مشترک ایمیل‌ها (هم‌شکل رسید خرید) */
-function render(env: Env, subject: string, m: Mail): { subject: string; html: string; text: string } {
+export function render(env: Env, subject: string, m: Mail): { subject: string; html: string; text: string } {
   const site = siteOf(env);
   const tr = m.rows.map(([k, v]) => `
         <tr>
@@ -75,7 +75,7 @@ async function emailOf(env: Env, uid: Uid): Promise<{ to: string; name: string }
   const u = await getUserById(env, String(uid)).catch(() => null);
   return u?.email ? { to: u.email, name: u.name } : null;
 }
-const firstName = (n: string) => n.trim().split(/\s+/)[0]?.slice(0, 24) || "دوست عزیز";
+export const firstName = (n: string) => n.trim().split(/\s+/)[0]?.slice(0, 24) || "دوست عزیز";
 
 // ---------- ۱) یادآوری ۷ روز مانده به پایان پلن ----------
 export function expiryEmail(env: Env, name: string, s: Sub, now = Date.now()) {

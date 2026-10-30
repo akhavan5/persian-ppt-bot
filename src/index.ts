@@ -4,6 +4,7 @@ import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
 import { withStore } from "./store";
 import { remindExpiringPlans } from "./plan-notify";
+import { ACTIVATION_CRON, remindInactiveSignups } from "./activation-reminder";
 import { handleWeb } from "./web";
 import { miniappUrl } from "./deck-service";
 import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from "./landing";
@@ -58,6 +59,11 @@ const SITEMAP_LASTMOD = "2026-10-18";
 export default {
   // پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی D1 (cron در wrangler.jsonc)
   async scheduled(c: ScheduledController, rawEnv: Env, ctx: ExecutionContext): Promise<void> {
+    // cron ساعتی: یادآوری فعال‌سازی (ثبت‌نام کرده ولی ظرف ۲۴ ساعت ارائه نساخته) با ایمیل + ربات؛ جدا از کارهای سنگین روزانه تا سقف زیردرخواست هر اجرا رعایت شود
+    if (c.cron === ACTIVATION_CRON) {
+      ctx.waitUntil(remindInactiveSignups(withStore(rawEnv)).then((r) => { if (r.sent) console.log("activation reminders", JSON.stringify(r)); }).catch((e) => console.error("activation reminders", String(e).slice(0, 200))));
+      return;
+    }
     ctx.waitUntil(withStore(rawEnv).KV.purge().catch((e) => console.error("purge", e)));
     // یادآوری ۷ روز مانده به پایان پلن (ایمیل + ربات تلگرام)؛ برای هر دوره‌ی پلن فقط یک‌بار (نشانگر در KV)
     ctx.waitUntil(remindExpiringPlans(withStore(rawEnv)).then((r) => { if (r.sent) console.log("plan expiry reminders", JSON.stringify(r)); }).catch((e) => console.error("plan reminders", String(e).slice(0, 200))));
