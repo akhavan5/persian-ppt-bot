@@ -97,6 +97,8 @@ export interface BuildOptions {
   images?: Map<number, Uint8Array>;
   /** آدرس سایت؛ اگر باشد، نام دامنه (مثل pptsaz.ir) به‌صورت واترمارک کوچک و کم‌رنگ پایین وسط «اسلاید اول و آخر» می‌آید (مثل پوستر). خالی = بدون واترمارک */
   site?: string;
+  /** false = بدون واترمارک (کاربران دارای پلن)؛ پیش‌فرض true */
+  mark?: boolean;
 }
 
 export async function buildPptx(deck: Deck, opts: BuildOptions = {}): Promise<Uint8Array> {
@@ -115,8 +117,10 @@ class Builder {
   private digits: boolean;
   private images: Map<number, Uint8Array>;
   private host = "";
+  private showMark = true;
 
   constructor(o: BuildOptions) {
+    this.showMark = o.mark !== false;
     try { if (o.site) this.host = new URL(o.site).hostname.replace(/^www\./, ""); } catch { /* نشانی نامعتبر */ }
     this.t = THEMES[o.theme ?? "violet"] ?? THEMES.violet;
     this.ac = isTemplate(o.template) && o.template === "academic";
@@ -154,7 +158,7 @@ class Builder {
 
   /** واترمارک: نام دامنه، لاتین، پایین وسط (چپ پایین شماره‌ی اسلاید است)؛ روی پس‌زمینه‌ی تیره سفید و روی روشن خاکستری، هر دو کم‌رنگ. فقط برای اسلاید اول و آخر صدا زده می‌شود. */
   private mark(s: PptxGenJS.Slide) {
-    if (!this.host) return;
+    if (!this.host || !this.showMark) return;
     const bg = String((s.background as any)?.color ?? "FFFFFF").replace("#", "");
     const n = parseInt(bg, 16) || 0, lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
     s.addText(this.host, {

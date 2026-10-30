@@ -17,7 +17,7 @@ import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
-import { BUY_SITE_NOTE, beginDeck, buyKbFor, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
+import { BUY_SITE_NOTE, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
@@ -182,8 +182,8 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 
 /** فهرست پلن‌ها برای /credit: رایگان + پلاس/پرو با قیمت (هزار تومان)، اعتبار، سقف اسلاید و تصویر؛ پلن فعلی با ✅ */
 function plansText(curId?: string): string {
-  const free = `${!curId ? "✅ " : "▫️ "}<b>رایگان</b> — روزی ${toFa(String(DAILY_FREE_CREDITS))} ارائه • تا ${toFa(String(FREE_MAX_SLIDES))} اسلاید • ${toFa(String(FREE_MAX_IMAGES))} تصویر`;
-  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — ${toFa(String(p.price))} هزار تومان • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • تا ${toFa(String(p.maxImages))} تصویر`);
+  const free = `${!curId ? "✅ " : "▫️ "}<b>رایگان</b> — روزی ${toFa(String(DAILY_FREE_CREDITS))} ارائه • تا ${toFa(String(FREE_MAX_SLIDES))} اسلاید • ${toFa(String(FREE_MAX_IMAGES))} تصویر • با واترمارک`;
+  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — ${toFa(String(p.price))} هزار تومان • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • تا ${toFa(String(p.maxImages))} تصویر • بدون واترمارک`);
   return [free, ...rows].join("\n");
 }
 
@@ -295,7 +295,7 @@ async function sendDeckPdf(env: Env, cq: any, uid: Uid, chatId: number, id: stri
     tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
   if (!/^[\w-]{1,100}$/.test(id)) return await answer();
   const cap = (title: string) => `📄 <b>${esc(title)}</b>\nنسخه‌ی PDF`;
-  const name = (title: string) => `${title.replace(/[\\/:*?"<>|\n\r]+/g, " ").trim().slice(0, 80) || "presentation"}.pdf`;
+  const name = (title: string) => fileNameWithSite(env, title, "pdf", "", 80);
 
   // قبلاً ساخته شده؟ بدون مصرف مرورگر و بدون شمارش در سقف روزانه
   const hit = await cachedPdf(env, uid, id).catch(() => null);

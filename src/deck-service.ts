@@ -17,6 +17,13 @@ import { supportLink, type Uid } from "./settings";
 import { createLoginToken } from "./link";
 
 export const siteUrl = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
+/** نام دامنه‌ی سایت (مثل pptsaz.ir)؛ برای واترمارک فایل‌ها و افزودن آدرس سایت به نام فایل‌ها */
+export const siteHost = (env: Env) => { try { return new URL(siteUrl(env)).hostname.replace(/^www\./, "") || "pptsaz.ir"; } catch { return "pptsaz.ir"; } };
+/** نام فایل خروجی با آدرس سایت: «عنوان - pptsaz.ir.pptx»؛ part = بخش میانی اختیاری (مثل «جزوه»). عنوان از نویسه‌های ممنوعِ نام فایل پاک و کوتاه می‌شود. */
+export function fileNameWithSite(env: Env, title: string, ext: string, part = "", max = 50): string {
+  const base = title.replace(/[\\/:*?"<>|\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max) || "presentation";
+  return `${base}${part ? ` - ${part}` : ""} - ${siteHost(env)}.${ext}`;
+}
 /** آدرس Mini App تلگرام: مستقیم Worker (بدون پروکسی/دامنه‌ی میانی) تا اتصال کمترین واسطه را داشته باشد. API ها همان‌جا (هم‌مبدأ) صدا زده می‌شوند. */
 export const miniappUrl = (env: Env) => (env.MINIAPP_URL || "https://persian-ppt-bot.umz1.workers.dev").replace(/\/+$/, "");
 

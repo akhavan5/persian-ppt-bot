@@ -21,7 +21,7 @@ import {
   googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtp,
   sessionCookie, validEmail, type WebUser,
 } from "./auth";
-import { beginDeck, launchDeck, posterEnabled, runningJob, slidesLimitMsg } from "./deck-service";
+import { beginDeck, fileNameWithSite, launchDeck, posterEnabled, runningJob, siteHost, slidesLimitMsg } from "./deck-service";
 import { OCR_TYPES } from "./extract";
 import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { WEB_MAX_FILE, extractFileBytes } from "./tg-file";
@@ -514,7 +514,7 @@ async function download(env: Env, user: WebUser, id: string, inline = false): Pr
   const poster = isPosterFile(f.entry.name);
   const png = /\.png$/i.test(f.entry.name);
   const docx = isHandoutFile(f.entry.name);
-  const ascii = poster ? `poster.${png ? "png" : "jpg"}` : docx ? "handout.docx" : "presentation.pptx";
+  const ascii = poster ? `poster-${siteHost(env)}.${png ? "png" : "jpg"}` : docx ? `handout-${siteHost(env)}.docx` : `presentation-${siteHost(env)}.pptx`;
   return new Response(f.data, {
     headers: {
       "content-type": poster ? (png ? "image/png" : "image/jpeg") : docx ? DOCX_MIME : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -529,7 +529,7 @@ const WEB_PDF_DAILY_LIMIT = 8;
 async function deckPdf(env: Env, user: WebUser, id: string): Promise<Response> {
   const headers = (title: string) => ({
     "content-type": "application/pdf",
-    "content-disposition": `attachment; filename="presentation.pdf"; filename*=UTF-8''${encodeURIComponent((title.replace(/[\\/:*?"<>|\n\r]+/g, " ").trim().slice(0, 80) || "presentation") + ".pdf")}`,
+    "content-disposition": `attachment; filename="presentation-${siteHost(env)}.pdf"; filename*=UTF-8''${encodeURIComponent(fileNameWithSite(env, title, "pdf", "", 80))}`,
     ...SEC_HEADERS,
   });
   try {

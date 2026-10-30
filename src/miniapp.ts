@@ -13,7 +13,7 @@ import { ensureUid, getLinkedTg, resolveUid } from "./link";
 import { listFiles, loadFileDirect } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { esc, sendDocument, sendMessage, tg } from "./telegram";
-import { siteLoginUrl } from "./deck-service";
+import { fileNameWithSite, siteLoginUrl } from "./deck-service";
 
 const enc = new TextEncoder();
 const INIT_MAX_AGE = 86_400; // ثانیه؛ initData قدیمی‌تر از یک روز پذیرفته نمی‌شود
@@ -146,7 +146,7 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
   if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
   const tgId = await getLinkedTg(env, user.id);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
-  const name = (title: string) => `${title.replace(/[\\/:*?"<>|\n\r]+/g, " ").trim().slice(0, 80) || "presentation"}.pdf`;
+  const name = (title: string) => fileNameWithSite(env, title, "pdf", "", 80);
   const cap = (title: string) => `📄 <b>${esc(title)}</b>\nنسخه‌ی PDF`;
   try {
     const hit = await cachedPdf(env, user.id, id).catch(() => null); // قبلاً ساخته شده: بدون مصرف مرورگر و سقف

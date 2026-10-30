@@ -19,6 +19,8 @@ export interface IgRenderOpts {
   image?: string;
   /** نشانی سایت برای پانویس (فقط نام دامنه نشان داده می‌شود) */
   site?: string;
+  /** false = بدون واترمارک (نام دامنه‌ی پانویس)؛ نشانی سایت برای فونت‌ها همچنان استفاده می‌شود */
+  mark?: boolean;
 }
 
 export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string {
@@ -277,7 +279,7 @@ ${katex}
 <div class="top"><div class="tt"><h1>${tx(ig.title)}</h1>${ig.subtitle ? `<p>${tx(ig.subtitle)}</p>` : ""}</div>${o.image ? `<img src="${o.image}" alt="">` : ""}</div>
 <div class="wrap">${hls}<div class="cols">${panels}</div></div>
 ${ig.takeaway ? `<div class="take"><span class="lb">جمع‌بندی</span><p>${tx(ig.takeaway)}</p></div>` : ""}
-${host ? `<div class="ft">${esc(host)}</div>` : ""}
+${host && o.mark !== false ? `<div class="ft">${esc(host)}</div>` : ""}
 ${katexRun}
 ${balance}
 </body></html>`;

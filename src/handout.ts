@@ -99,7 +99,7 @@ export function imageInfo(b: Uint8Array): { mime: "image/png" | "image/jpeg"; w:
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** site: آدرس سایت؛ اگر باشد، فوتر هر صفحه: نام دامنه (مثل پوستر، چپ‌چین) + شماره‌ی صفحه (وسط)، و بالای صفحه‌ی اول «به نام خدا» */
-export interface DocxOpts { theme: string; font: string; digits: boolean; image?: DocImage; site?: string }
+export interface DocxOpts { theme: string; font: string; digits: boolean; image?: DocImage; site?: string; /** false = بدون واترمارک (نام دامنه در فوتر)؛ «به نام خدا» و شماره‌ی صفحه می‌مانند */ mark?: boolean }
 
 export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
   const th = THEMES[o.theme] ?? THEMES.ocean;
@@ -170,7 +170,7 @@ export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
   const fr = (inner: string, sz = 16) => `<w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:color w:val="${th.muted}"/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr>${inner}</w:r>`;
   const footerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${NS}>` +
     `<w:p><w:pPr><w:bidi w:val="0"/><w:tabs><w:tab w:val="center" w:pos="4819"/></w:tabs><w:spacing w:before="0" w:after="0"/><w:jc w:val="left"/></w:pPr>` +
-    fr(`<w:t xml:space="preserve">${esc(host)}</w:t>`) + fr("<w:tab/>") +
+    fr(`<w:t xml:space="preserve">${o.mark === false ? "" : esc(host)}</w:t>`) + fr("<w:tab/>") +
     `<w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:color w:val="${th.muted}"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>` +
     fr(`<w:instrText xml:space="preserve"> PAGE </w:instrText>`, 18) +
     `<w:r><w:rPr><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>` +

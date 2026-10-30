@@ -10,7 +10,7 @@ import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegr
 import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { adminIds, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
-import { BUY_SITE_NOTE, buyKbFor, miniappUrl } from "./deck-service";
+import { BUY_SITE_NOTE, buyKbFor, fileNameWithSite, miniappUrl } from "./deck-service";
 import { getLinkedTg } from "./link";
 import { hasBrowser } from "./browser-api";
 import { logDeck, saveFile, savePreview } from "./files";
@@ -40,11 +40,6 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-function safeFilename(title: string): string {
-  const base = title.replace(/[\\/:*?"<>|\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 50);
-  return `${base || "presentation"}.pptx`;
-}
-
 export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
 
@@ -53,6 +48,8 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     const maxImages = Math.max(1, event.payload.maxImages ?? 1); // تلگرام: ۱ تصویر؛ وب: طبق پلن
     const contentOpts: ContentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, maxImages: settings.images ? maxImages : 0, source: event.payload.source || undefined };
     const web = event.payload.channel === "web";
+    // کاربر دارای پلن (اعتبار این ارائه از پلن کم شده) ⇒ فایل‌ها بدون واترمارک؛ رایگان/هدیه ⇒ با نام سایت. نام فایل‌ها برای همه آدرس سایت دارد.
+    const mark = event.payload.credit !== "plan";
     const handout = event.payload.handout; // جزوه‌ی Word همراه ارائه (اختیاری، ۱ اعتبار جدا)
     const poster = event.payload.poster; // پوستر همراه ارائه (اختیاری): در همین Workflow و با همان ۱ اعتبار
     // تلگرام: ویرایش پیام وضعیت؛ وب: متن پیشرفت در KV (صفحه‌ی وب هر چند ثانیه می‌خواند)
@@ -103,9 +100,9 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
           const images = settings.images ? await fetchImages(this.env, deck.slides, maxImages, web, found.images) : new Map();
           const bytes = await buildPptx(deck, {
-            theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images, site: this.env.SITE_URL || "https://pptsaz.ir",
+            theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images, site: this.env.SITE_URL || "https://pptsaz.ir", mark,
           });
-          const filename = safeFilename(deck.title);
+          const filename = fileNameWithSite(this.env, deck.title, "pptx");
           // متن اسلایدها برای پیش‌نمایش و PDF؛ خطا در ذخیره نباید ساخت ارائه را خراب کند
           await savePreview(this.env, userId, event.instanceId, {
             deck, theme: settings.theme, template: settings.template, font: settings.font, digits: settings.digits, images: [...images.keys()],
@@ -156,9 +153,9 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               const bytes = await generateImage(this.env, ig.image_query).catch(() => null); // تزئینی است؛ نشد ⇒ بدون تصویر
               if (bytes) image = `data:${bytes[0] === 0x89 && bytes[1] === 0x50 ? "image/png" : "image/jpeg"};base64,${toBase64(bytes)}`;
             }
-            const html = renderInfographicHtml(ig, { theme: settings.theme, digits: settings.digits, layout: poster.layout, image, site: this.env.SITE_URL || "https://pptsaz.ir" });
+            const html = renderInfographicHtml(ig, { theme: settings.theme, digits: settings.digits, layout: poster.layout, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
             const img = await renderInfographicImage(this.env, html, IG_WIDTH[poster.layout]);
-            const pname = `${safeFilename(ig.title).replace(/\.pptx$/, "")} - پوستر.${img.ext}`;
+            const pname = fileNameWithSite(this.env, ig.title, img.ext, "پوستر");
             const pid = `${event.instanceId}-poster`;
             if (web) {
               if (!(await saveFile(this.env, userId, pid, img.data, pname, ig.title, 0))) throw new Error("poster too large to store");
@@ -199,8 +196,8 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               const info = bytes ? imageInfo(bytes) : null;
               if (bytes && info) image = { data: bytes, ...info };
             }
-            const data = await buildDocx(hd, { theme: settings.theme, font: settings.font, digits: settings.digits, image, site: this.env.SITE_URL || "https://pptsaz.ir" });
-            const hname = `${safeFilename(hd.title).replace(/\.pptx$/, "")} - جزوه.docx`;
+            const data = await buildDocx(hd, { theme: settings.theme, font: settings.font, digits: settings.digits, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
+            const hname = fileNameWithSite(this.env, hd.title, "docx", "جزوه");
             const hid = `${event.instanceId}-handout`;
             if (web) {
               if (!(await saveFile(this.env, userId, hid, data, hname, hd.title, 0))) throw new Error("handout too large to store");

@@ -943,7 +943,7 @@ function plansTable() {
       h("tbody", {},
         row(!me.plan, "رایگان", "۰", freeCredit, fa(cfg.freeMaxSlides), fa(cfg.freeMaxImages)),
         ...plans.map((p) => row(me.plan && me.plan.id === p.id, (me.plan && me.plan.id === p.id ? "✓ " : "") + p.name, `${fa(p.price)} هزار ت`, `${fa(p.credits)} ارائه`, `تا ${fa(p.maxSlides)}`, `تا ${fa(p.maxImages)}`)))),
-    h("div", { class: "muted", style: "margin-top:6px" }, `قیمت‌ها ماهانه (${fa((plans[0] && plans[0].days) || 30)} روزه) و به تومان است؛ پرداخت در سایت و با ورود خودکار انجام می‌شود.`));
+    h("div", { class: "muted", style: "margin-top:6px" }, `قیمت‌ها ماهانه (${fa((plans[0] && plans[0].days) || 30)} روزه) و به تومان است؛ پرداخت در سایت و با ورود خودکار انجام می‌شود. فایل‌های پلاس و پرو بدون واترمارک‌اند.`));
 }
 const plansModal = $("#plansModal");
 function openPlans() {
