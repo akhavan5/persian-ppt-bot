@@ -22,7 +22,8 @@ export const emailEnabled = (env: Env) => !!env.RESEND_API_KEY?.trim();
 /** فرستنده: EMAIL_FROM (مثل «پاورپوینت‌ساز فارسی <hello@pptsaz.ir>»)؛ پیش‌فرض hello@ روی دامنه‌ی سایت */
 function fromAddress(env: Env): string {
   const f = env.EMAIL_FROM?.trim();
-  if (f) return f;
+  // فقط نشانی خالی (مثل info@pptsaz.ir) ⇒ در صندوق کاربر «info» نشان داده می‌شود؛ نام برند را جلویش می‌گذاریم
+  if (f) return /^[^<>\s@]+@[^<>\s@]+$/.test(f) ? `${BRAND} <${f}>` : f;
   return `${BRAND} <hello@${new URL(siteOf(env)).hostname}>`;
 }
 
