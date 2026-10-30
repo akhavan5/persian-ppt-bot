@@ -95,6 +95,8 @@ export interface BuildOptions {
   font?: string;
   persianDigits?: boolean;
   images?: Map<number, Uint8Array>;
+  /** آدرس سایت؛ اگر باشد، نام دامنه (مثل pptsaz.ir) به‌صورت واترمارک کوچک و کم‌رنگ پایین وسط «اسلاید اول و آخر» می‌آید (مثل پوستر). خالی = بدون واترمارک */
+  site?: string;
 }
 
 export async function buildPptx(deck: Deck, opts: BuildOptions = {}): Promise<Uint8Array> {
@@ -112,8 +114,10 @@ class Builder {
   private fs: number;
   private digits: boolean;
   private images: Map<number, Uint8Array>;
+  private host = "";
 
   constructor(o: BuildOptions) {
+    try { if (o.site) this.host = new URL(o.site).hostname.replace(/^www\./, ""); } catch { /* نشانی نامعتبر */ }
     this.t = THEMES[o.theme ?? "violet"] ?? THEMES.violet;
     this.ac = isTemplate(o.template) && o.template === "academic";
     this.A = academicPalette(this.t);
@@ -146,6 +150,17 @@ class Builder {
     const s = this.p.addSlide();
     s.background = { color: bg };
     return s;
+  }
+
+  /** واترمارک: نام دامنه، لاتین، پایین وسط (چپ پایین شماره‌ی اسلاید است)؛ روی پس‌زمینه‌ی تیره سفید و روی روشن خاکستری، هر دو کم‌رنگ. فقط برای اسلاید اول و آخر صدا زده می‌شود. */
+  private mark(s: PptxGenJS.Slide) {
+    if (!this.host) return;
+    const bg = String((s.background as any)?.color ?? "FFFFFF").replace("#", "");
+    const n = parseInt(bg, 16) || 0, lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    s.addText(this.host, {
+      x: W / 2 - 1.5, y: 7.13, w: 3, h: 0.27, margin: 0, align: "center", valign: "middle", fontFace: "Tahoma", fontSize: 9,
+      color: lum < 0.5 ? "FFFFFF" : "6B7280", transparency: 45, fit: "none", wrap: false,
+    } as any);
   }
 
   private shape(s: PptxGenJS.Slide, x: number, y: number, w: number, h: number, fill: string,
@@ -537,6 +552,7 @@ class Builder {
       else s = this.bullets(sd);
       if (lay !== "title" && lay !== "closing" && lay !== "section") this.number(s, i + 1);
       if (this.ac && lay !== "title" && lay !== "closing" && lay !== "section" && !(lay === "quote" && sd.quote)) this.rail(s, i, deck.slides.length);
+      if (i === 0 || i === deck.slides.length - 1) this.mark(s); // واترمارک فقط اسلاید اول و آخر
       if (sd.notes) s.addNotes(this.txt(sd.notes));
     });
     this.p.title = deck.title;

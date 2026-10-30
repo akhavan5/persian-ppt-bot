@@ -103,7 +103,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
           const images = settings.images ? await fetchImages(this.env, deck.slides, maxImages, web, found.images) : new Map();
           const bytes = await buildPptx(deck, {
-            theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images,
+            theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images, site: this.env.SITE_URL || "https://pptsaz.ir",
           });
           const filename = safeFilename(deck.title);
           // متن اسلایدها برای پیش‌نمایش و PDF؛ خطا در ذخیره نباید ساخت ارائه را خراب کند
