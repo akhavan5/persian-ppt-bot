@@ -33,7 +33,7 @@ export interface Env {
   GEMINI_API_KEYS?: string;
   /** اختیاری: تعداد درخواست پشت‌سرهم هر کلید قبل از رفتن به کلید بعدی (پیش‌فرض ۳) */
   GEMINI_KEY_STEP?: string;
-  /** اختیاری: مدل صدا (پیش‌فرض gemini-3.8-flash-tts؛ ارزان‌تر: gemini-3.8-flash-lite-tts) */
+  /** اختیاری: مدل(های) صدا به ترتیب اولویت، با «,» جدا می‌شود. پیش‌فرض: gemini-3.8-flash-tts ← gemini-3.8-flash-lite-tts ← gemini-3.1-flash-tts-preview (اگر مدل اول شلوغ بود به بعدی می‌رود) */
   GEMINI_TTS_MODEL?: string;
   /** اختیاری: صدای خواندن اسلایدها (پیش‌فرض Kore) و صدای مجری/مهمان پادکست (پیش‌فرض Achird و Sulafat) */
   GEMINI_TTS_VOICE?: string;

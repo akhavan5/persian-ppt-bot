@@ -14,7 +14,6 @@ export class GeminiError extends Error {
   constructor(message: string, public fatal = false) { super(message); }
 }
 
-const DEFAULT_MODEL = "gemini-3.8-flash-tts"; // ارزان‌تر: gemini-3.8-flash-lite-tts
 const MAX_KEYS = 30;
 const CD_PREFIX = "gem:cd:";
 
@@ -66,6 +65,7 @@ function classify(status: number, body: string): Verdict {
   if (status === 401 || status === 403 || (status === 400 && /api[ _-]?key|API_KEY_INVALID|expired|credential/i.test(body))) return { cooldown: 3600, why: `${status} کلید نامعتبر/مسدود: ${msg}` };
   if (status === 0) return { cooldown: 20, why: `شبکه/تایم‌اوت: ${msg}` };
   if (status === 204) return { cooldown: 20, why: `پاسخ بدون صدا: ${msg}` };
+  if (status === 503) return { cooldown: 0, why: `503 مدل شلوغ است (مشکل کلید نیست): ${msg}` };
   if (status >= 500 || status === 408 || status === 409) return { cooldown: 20, why: `${status} خطای سرویس: ${msg}` };
   return { cooldown: 60, why: `${status}: ${msg}` };
 }
@@ -113,8 +113,16 @@ async function callOnce(env: Env, key: string, body: unknown): Promise<{ ok: tru
   return { ok: true, wav: isWav ? bytes : pcmToWav(bytes, { ...DEFAULT_FORMAT, sampleRate: sampleRate(env) || DEFAULT_FORMAT.sampleRate }) };
 }
 
-/** بدنه‌ی درخواست را با کلید چرخشی می‌فرستد و WAV برمی‌گرداند */
-async function generate(env: Env, body: unknown): Promise<Uint8Array> {
+/** مدل‌ها به ترتیب اولویت: GEMINI_TTS_MODEL (می‌تواند با «,» چند مدل باشد) یا پیش‌فرض‌ها. وقتی مدل اول شلوغ/پرسهمیه است (۵۰۳ برای همه‌ی کلیدها) به مدل بعدی می‌رود. */
+const DEFAULT_MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.1-flash-tts-preview"];
+const MODEL_CD = "gem:mcd:";
+export function ttsModels(env: Env): string[] {
+  const list = (env.GEMINI_TTS_MODEL ?? "").split(/[\s,;]+/).filter(Boolean);
+  return list.length ? list : DEFAULT_MODELS;
+}
+
+/** بدنه‌ی درخواست را با مدل و کلید چرخشی می‌فرستد و WAV برمی‌گرداند */
+async function generate(env: Env, body: Record<string, unknown>): Promise<Uint8Array> {
   const keys = parseGeminiKeys(env);
   if (!keys.length) throw new GeminiError("متغیر GEMINI_API_KEYS تنظیم نشده است.", true);
   const K = keys.length;
@@ -122,28 +130,41 @@ async function generate(env: Env, body: unknown): Promise<Uint8Array> {
   const start = Math.floor((ticket - 1) / stepSize(env)) % K;
 
   const prints = await Promise.all(keys.map(fingerprint));
-  const cooled = new Set((await env.KV.list({ prefix: CD_PREFIX }).catch(() => ({ keys: [] as { name: string }[] }))).keys.map((k) => k.name.slice(CD_PREFIX.length)));
+  const cdKeys = async (prefix: string) => new Set((await env.KV.list({ prefix }).catch(() => ({ keys: [] as { name: string }[] }))).keys.map((k) => k.name.slice(prefix.length)));
+  const cooled = await cdKeys(CD_PREFIX);
+  const modelCooled = await cdKeys(MODEL_CD);
   const order = keys.map((_, i) => (start + i) % K);
   const tryOrder = [...order.filter((i) => !cooled.has(prints[i])), ...order.filter((i) => cooled.has(prints[i]))]; // کلیدهای کولدان آخرین فرصت‌اند
+  const models = ttsModels(env);
+  const modelOrder = [...models.filter((m) => !modelCooled.has(m)), ...models.filter((m) => modelCooled.has(m))];
 
   const errors: string[] = [];
   const statuses: number[] = [];
-  for (const i of tryOrder) {
-    const res = await callOnce(env, keys[i], body);
-    if (res.ok) {
-      if (cooled.has(prints[i])) await env.KV.delete(CD_PREFIX + prints[i]).catch(() => {});
-      return res.wav;
+  for (const m of modelOrder) {
+    let failures = 0, overloaded = 0;
+    for (const i of tryOrder) {
+      const res = await callOnce(env, keys[i], { ...body, model: m });
+      if (res.ok) {
+        if (cooled.has(prints[i])) await env.KV.delete(CD_PREFIX + prints[i]).catch(() => {});
+        if (modelCooled.has(m)) await env.KV.delete(MODEL_CD + m).catch(() => {});
+        return res.wav;
+      }
+      failures++;
+      if (res.status === 503) overloaded++;
+      const v = classify(res.status, res.text);
+      statuses.push(res.status);
+      errors.push(`${m}#${i + 1}: ${v.why}`);
+      console.error("gemini key skipped", m, `#${i + 1}`, v.why.slice(0, 160));
+      if (v.cooldown > 0) await env.KV.put(CD_PREFIX + prints[i], "1", { expirationTtl: v.cooldown }).catch(() => {});
+      if (overloaded >= 2 && overloaded === failures) break; // دو کلید پشت‌سرهم ۵۰۳ ⇒ خود مدل شلوغ است؛ بقیه‌ی کلیدها را روی این مدل هدر نده
     }
-    const v = classify(res.status, res.text);
-    statuses.push(res.status);
-    errors.push(`#${i + 1}: ${v.why}`);
-    console.error("gemini key skipped", `#${i + 1}`, v.why.slice(0, 160));
-    await env.KV.put(CD_PREFIX + prints[i], "1", { expirationTtl: v.cooldown }).catch(() => {});
+    // همه‌ی کلیدها روی این مدل شکست خوردند ⇒ مدل برای یک دقیقه عقب می‌افتد و مدل بعدی امتحان می‌شود
+    if (failures === K || overloaded >= 2) await env.KV.put(MODEL_CD + m, "1", { expirationTtl: 60 }).catch(() => {});
   }
-  // اگر همه‌ی کلیدها فقط ۴۰۰/۴۰۴ دادند، مشکل از خود درخواست/مدل/منطقه است و تلاش مجدد بی‌فایده است
+  // اگر همه‌ی تلاش‌ها فقط ۴۰۰/۴۰۴ بودند، مشکل از خود درخواست/منطقه است و تلاش مجدد بی‌فایده است
   const fatal = statuses.length > 0 && statuses.every((s) => s === 400 || s === 404);
   const hint = /location is not supported|not available in your country/i.test(errors.join(" ")) ? " (منطقه‌ی اجرای Worker پشتیبانی نمی‌شود؛ GEMINI_BASE_URL را روی یک پروکسی بگذار)" : "";
-  throw new GeminiError(`همه‌ی ${K} کلید ناموفق بودند${hint} — ${errors.join(" | ").slice(0, 600)}`, fatal);
+  throw new GeminiError(`همه‌ی ${K} کلید روی ${models.length} مدل ناموفق بودند${hint} — ${errors.join(" | ").slice(0, 700)}`, fatal);
 }
 
 const ann = (o: { speaker?: string; style?: string }) => {
@@ -153,7 +174,6 @@ const ann = (o: { speaker?: string; style?: string }) => {
   return Object.keys(a).length > 1 ? [a] : undefined;
 };
 const responseFormat = (env: Env) => ({ type: "audio", ...(sampleRate(env) ? { sample_rate: sampleRate(env) } : {}) });
-const model = (env: Env) => (env.GEMINI_TTS_MODEL || DEFAULT_MODEL).trim();
 
 /** یک گوینده؛ متن بلند خودکار تکه می‌شود و تکه‌ها به هم می‌چسبند */
 export async function ttsSpeak(env: Env, texts: string[], o: { voice?: string; style?: string } = {}): Promise<Uint8Array> {
@@ -161,7 +181,6 @@ export async function ttsSpeak(env: Env, texts: string[], o: { voice?: string; s
   const wavs: Uint8Array[] = [];
   for (const text of texts) {
     wavs.push(await generate(env, {
-      model: model(env),
       input: [{ type: "user_input", content: [{ type: "text", text, annotations: ann({ style: o.style }) }] }],
       response_format: responseFormat(env),
       generation_config: { speech_config: [{ voice }] },
@@ -182,7 +201,6 @@ export async function ttsDialogue(env: Env, turns: Turn[], o: { styleA?: string;
     return ttsSpeak(env, [turns.map((t) => t.text).join(" ")], { voice: v[s], style: s === "A" ? o.styleA : o.styleB });
   }
   return generate(env, {
-    model: model(env),
     input: [{
       type: "user_input",
       content: turns.map((t) => ({ type: "text", text: t.text, annotations: ann({ speaker: LABEL[t.speaker], style: t.speaker === "A" ? o.styleA : o.styleB }) })),
