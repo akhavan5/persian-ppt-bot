@@ -17,9 +17,9 @@ import { hasBrowser } from "./browser-api";
 import { putPushToken } from "./push";
 import { getAppVersions } from "./app-version";
 import {
-  authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, getUserByMobile, googleCallback,
-  googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendOtp,
-  sessionCookie, type WebUser,
+  authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, emailOtpEnabled, getUserByEmail, getUserByMobile, googleCallback,
+  googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtp,
+  sessionCookie, validEmail, type WebUser,
 } from "./auth";
 import { beginDeck, launchDeck, posterEnabled, runningJob, slidesLimitMsg } from "./deck-service";
 import { OCR_TYPES } from "./extract";
@@ -82,6 +82,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       // Web client ID برای ورود داخل اپ اندروید (Credential Manager)؛ عمومی است و محرمانه نیست
       googleClientId: googleEnabled(env) ? env.GOOGLE_CLIENT_ID : undefined,
       otp: otpEnabled(env),
+      // ورود/ثبت‌نام با کد ایمیلی (برای ایمیل‌های غیر جیمیل)؛ در همان کادر شماره‌ی موبایل وارد می‌شود
+      emailOtp: emailOtpEnabled(env),
       payEnabled: payEnabled(env),
       // خرید درون‌برنامه‌ای کافه‌بازار (فقط اپ اندروید)
       bazaar: bazaarEnabled(env),
@@ -162,6 +164,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/miniapp/invite" && method === "POST") return miniappInvite(env, user);
   if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
+  if (path === "/api/profile/email" && method === "POST") return linkEmail(req, env, user);
   if (path === "/api/profile/telegram/send" && method === "POST") return tgLinkSend(req, env, user);
   if (path === "/api/profile/telegram/verify" && method === "POST") return tgLinkVerify(req, env, user);
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
@@ -185,8 +188,21 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 }
 
 // ---------- ورود و ثبت‌نام یکپارچه (پیامک یک‌بارمصرف / گوگل) ----------
+/** ایمیل داخل بدنه (فیلد email)؛ "" = ایمیلی نیامده (مسیر شماره‌ی موبایل)، null = نامعتبر */
+const bodyEmail = (b: Record<string, unknown> | null): string | null => {
+  if (b?.email == null || String(b.email).trim() === "") return "";
+  const e = normEmail(b.email);
+  return validEmail(e) ? e : null;
+};
+
 async function otpSend(req: Request, env: Env): Promise<Response> {
   const b = await readBody(req);
+  const email = bodyEmail(b);
+  if (email === null) return err("ایمیل معتبر نیست؛ مثل name@example.com وارد کن.");
+  if (email) {
+    const e = await sendEmailOtp(env, clientIp(req), email);
+    return e ? err(e.error, e.status) : json({ ok: true });
+  }
   const mobile = normMobile(b?.mobile);
   if (!mobile) return err("شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.");
   const e = await sendOtp(env, clientIp(req), mobile);
@@ -218,17 +234,22 @@ const fromApp = (req: Request) => /PptSazApp\//.test(req.headers.get("user-agent
 
 async function otpVerify(req: Request, env: Env): Promise<Response> {
   const b = await readBody(req);
-  const mobile = normMobile(b?.mobile), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
-  if (!mobile) return err("شماره‌ی موبایل معتبر نیست.");
-  const bad = await checkOtp(env, mobile, code);
+  const email = bodyEmail(b);
+  if (email === null) return err("ایمیل معتبر نیست.");
+  const mobile = email ? null : normMobile(b?.mobile), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
+  if (!email && !mobile) return err("شماره‌ی موبایل معتبر نیست.");
+  const bad = await checkOtp(env, (email || mobile)!, code);
   if (bad) return err(bad, 401);
 
-  let user = await getUserByMobile(env, mobile);
+  let user = email ? await getUserByEmail(env, email) : await getUserByMobile(env, mobile!);
+  if (user && email && !user.verified) { user.verified = true; await saveWebUser(env, user).catch(() => {}); } // مالکیت ایمیل با کد ثابت شد
   if (!user) {
     // جلوگیری از ساخت انبوه حساب برای گرفتن سهمیه‌ی رایگان
     const day = new Date().toISOString().slice(0, 10);
     if (await hitLimit(env, `rg:${clientIp(req)}:${day}`, 5, 172_800)) return err("تعداد ثبت‌نام از این شبکه امروز به سقف رسیده است.", 429);
-    user = await createUser(env, { mobile, name: `کاربر ${mobile.slice(-4)}`, via: fromApp(req) ? "app" : undefined });
+    user = email
+      ? await createUser(env, { email, emailVerified: true, name: email.split("@")[0], via: fromApp(req) ? "app" : undefined })
+      : await createUser(env, { mobile: mobile!, name: `کاربر ${mobile!.slice(-4)}`, via: fromApp(req) ? "app" : undefined });
   } else if (fromApp(req) && !user.app) {
     user.app = true;
     await saveWebUser(env, user).catch(() => {});
@@ -259,6 +280,23 @@ async function linkMobile(req: Request, env: Env, user: WebUser): Promise<Respon
   user.mobile = mobile;
   await saveWebUser(env, user);
   await env.KV.put(`wm:${mobile}`, user.id);
+  return json({ user: publicUser(user) });
+}
+
+/** افزودن ایمیل به حساب فعلی (مثلاً حسابی که با موبایل ساخته شده) با تایید کد ایمیلی؛ رسید خرید به همین ایمیل می‌رود */
+async function linkEmail(req: Request, env: Env, user: WebUser): Promise<Response> {
+  const b = await readBody(req);
+  const email = bodyEmail(b), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
+  if (!email) return err("ایمیل معتبر نیست؛ مثل name@example.com وارد کن.");
+  if (user.email) return err("برای حساب شما ایمیل ثبت شده است.", 409);
+  const other = await getUserByEmail(env, email);
+  if (other && other.id !== user.id) return err("این ایمیل برای حساب دیگری ثبت شده است.", 409);
+  const bad = await checkOtp(env, email, code);
+  if (bad) return err(bad, 401);
+  user.email = email;
+  user.verified = true;
+  await saveWebUser(env, user);
+  await env.KV.put(`we:${email}`, user.id);
   return json({ user: publicUser(user) });
 }
 

@@ -8,6 +8,8 @@
 import type { Env } from "./env";
 import { bumpStat, grantSignupCredit } from "./settings";
 import { sendWelcomeEmail } from "./email-welcome";
+import { sendOtpEmail } from "./email-otp";
+import { emailEnabled } from "./email";
 
 export interface WebUser {
   id: string; // w_ + ۱۶ نویسه‌ی هگز
@@ -16,7 +18,7 @@ export interface WebUser {
   name: string;
   picture?: string;
   google?: string; // شناسه‌ی sub گوگل
-  verified: boolean; // ایمیل تایید شده؟ (فقط با گوگل true می‌شود)
+  verified: boolean; // ایمیل تایید شده؟ (با گوگل یا کد ایمیلی true می‌شود)
   created: number;
   via?: "app"; // ثبت‌نام‌شده از اپ اندروید (بقیه: وب)
   app?: boolean; // حداقل یک بار از اپ اندروید وارد شده/استفاده کرده
@@ -57,11 +59,11 @@ export async function getUserByEmail(env: Env, email: string): Promise<WebUser |
 }
 const saveUser = (env: Env, u: WebUser) => env.KV.put(`wu:${u.id}`, JSON.stringify(u));
 
-export async function createUser(env: Env, p: { email?: string; mobile?: string; name: string; google?: string; picture?: string; via?: "app" }): Promise<WebUser> {
+export async function createUser(env: Env, p: { email?: string; mobile?: string; name: string; google?: string; picture?: string; via?: "app"; emailVerified?: boolean }): Promise<WebUser> {
   const u: WebUser = {
     id: "w_" + hex(crypto.getRandomValues(new Uint8Array(8))),
     email: p.email ?? "", mobile: p.mobile, name: p.name.slice(0, 64), picture: p.picture, google: p.google,
-    verified: !!p.google || !!p.mobile, created: Date.now(),
+    verified: !!p.google || !!p.mobile || !!p.emailVerified, created: Date.now(),
     ...(p.via === "app" ? { via: "app" as const, app: true } : {}),
   };
   await saveUser(env, u);
@@ -144,6 +146,8 @@ export async function hitLimit(env: Env, key: string, max: number, ttl: number):
 
 // ---------- ورود با پیامک یک‌بارمصرف (OTP) ----------
 export const otpEnabled = (env: Env) => !!(env.SMS_API_TOKEN ?? "").trim();
+/** ورود با کد ایمیلی: همان RESEND_API_KEY ایمیل‌های دیگر؛ بدون آن غیرفعال است */
+export const emailOtpEnabled = (env: Env) => emailEnabled(env);
 const OTP_TTL = 300; // ثانیه
 const OTP_MAX_TRIES = 5;
 
@@ -158,25 +162,39 @@ export function normMobile(v: unknown): string | null {
   return /^09\d{9}$/.test(m) ? m : null;
 }
 
-const otpHash = (code: string, mobile: string) => sha256hex(`otp:${mobile}:${code}`);
+/** id: شماره‌ی موبایل (09…) یا ایمیل (حروف کوچک)؛ هیچ‌کدام با دیگری هم‌پوشانی ندارد چون ایمیل «@» دارد */
+const otpHash = (code: string, id: string) => sha256hex(`otp:${id}:${code}`);
 
-/** ارسال کد ۶ رقمی. خروجی: null = موفق، وگرنه {error, status}. */
-export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ error: string; status: number } | null> {
-  if (!otpEnabled(env)) return { error: "ورود با پیامک فعال نیست.", status: 503 };
-  // محدودیت: ۶۰ ثانیه فاصله بین دو ارسال به یک شماره، ۵ پیامک در ساعت برای هر شماره، ۱۵ در ساعت برای هر شبکه
-  // فاصله‌ی ۶۰ ثانیه‌ای: ادعای اتمی (دو درخواست هم‌زمان نمی‌توانند هر دو پیامک بفرستند)
-  if (await hitLimit(env, `oc:${mobile}`, 1, 60)) return { error: "کد قبلاً ارسال شده است؛ تا یک دقیقه صبر کن و دوباره بخواه.", status: 429 };
-  if (await hitLimit(env, `os:m:${mobile}`, 5, 3600)) return { error: "تعداد درخواست کد برای این شماره زیاد بود؛ یک ساعت بعد دوباره امتحان کن.", status: 429 };
+/** ساخت و ذخیره‌ی کد ۶ رقمی برای یک شناسه (شماره‌ی موبایل یا ایمیل) با محدودیت تلاش. خروجی: {code} یا {error, status}. */
+async function issueCode(env: Env, ip: string, id: string, what: "sms" | "email"): Promise<{ code: string } | { error: string; status: number }> {
+  // محدودیت: ۶۰ ثانیه فاصله بین دو ارسال به یک شناسه، ۵ ارسال در ساعت برای هر شناسه، ۱۵ در ساعت برای هر شبکه
+  // فاصله‌ی ۶۰ ثانیه‌ای: ادعای اتمی (دو درخواست هم‌زمان نمی‌توانند هر دو کد بفرستند)
+  if (await hitLimit(env, `oc:${id}`, 1, 60)) return { error: "کد قبلاً ارسال شده است؛ تا یک دقیقه صبر کن و دوباره بخواه.", status: 429 };
+  if (await hitLimit(env, `os:m:${id}`, 5, 3600)) return { error: `تعداد درخواست کد برای این ${what === "sms" ? "شماره" : "ایمیل"} زیاد بود؛ یک ساعت بعد دوباره امتحان کن.`, status: 429 };
   if (await hitLimit(env, `os:ip:${ip}`, 15, 3600)) return { error: "تعداد درخواست کد از این شبکه زیاد بود؛ کمی بعد دوباره امتحان کن.", status: 429 };
 
   const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
   const code = String(n).padStart(6, "0");
   const exp = Math.floor(Date.now() / 1000) + OTP_TTL;
-  const oh = await otpHash(code, mobile);
+  const oh = await otpHash(code, id);
   await Promise.all([
-    env.KV.put(`ot:${mobile}`, JSON.stringify({ h: oh, exp }), { expiration: exp }),
-    env.KV.delete(`otf:${mobile}`), // کد تازه ⇒ شمارنده‌ی تلاش ناموفق از صفر
+    env.KV.put(`ot:${id}`, JSON.stringify({ h: oh, exp }), { expiration: exp }),
+    env.KV.delete(`otf:${id}`), // کد تازه ⇒ شمارنده‌ی تلاش ناموفق از صفر
   ]);
+  return { code };
+}
+/** ارسال ناموفق: کد و قفل ۶۰ ثانیه‌ای پاک می‌شود تا کاربر بتواند فوری دوباره امتحان کند */
+async function dropCode(env: Env, id: string) {
+  await env.KV.delete(`ot:${id}`);
+  await env.KV.delete(`oc:${id}`);
+}
+
+/** ارسال کد ۶ رقمی با پیامک. خروجی: null = موفق، وگرنه {error, status}. */
+export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ error: string; status: number } | null> {
+  if (!otpEnabled(env)) return { error: "ورود با پیامک فعال نیست.", status: 503 };
+  const c = await issueCode(env, ip, mobile, "sms");
+  if ("error" in c) return c;
+  const code = c.code;
 
   const token = (env.SMS_API_TOKEN ?? "").trim().replace(/^Bearer\s+/i, "");
   const template = Number.isFinite(Number(env.SMS_TEMPLATE)) && String(env.SMS_TEMPLATE ?? "").trim() !== "" ? Number(env.SMS_TEMPLATE) : 1;
@@ -193,12 +211,21 @@ export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ e
   } catch (e) {
     console.error("sms otp error", String(e).slice(0, 200));
   }
-  await env.KV.delete(`ot:${mobile}`);
-  await env.KV.delete(`oc:${mobile}`);
+  await dropCode(env, mobile);
   return { error: "ارسال پیامک ناموفق بود؛ چند دقیقه بعد دوباره امتحان کن.", status: 502 };
 }
 
-/** بررسی کد. موفق ⇒ کد مصرف می‌شود (یک‌بار مصرف). خروجی: null = درست، وگرنه پیام خطا. */
+/** ارسال کد ۶ رقمی به ایمیل (Resend). خروجی: null = موفق، وگرنه {error, status}. */
+export async function sendEmailOtp(env: Env, ip: string, email: string): Promise<{ error: string; status: number } | null> {
+  if (!emailOtpEnabled(env)) return { error: "ورود با ایمیل فعال نیست.", status: 503 };
+  const c = await issueCode(env, ip, email, "email");
+  if ("error" in c) return c;
+  if (await sendOtpEmail(env, email, c.code)) return null;
+  await dropCode(env, email);
+  return { error: "ارسال ایمیل ناموفق بود؛ نشانی را بررسی کن یا چند دقیقه بعد دوباره امتحان کن.", status: 502 };
+}
+
+/** بررسی کد (برای موبایل یا ایمیل). موفق ⇒ کد مصرف می‌شود (یک‌بار مصرف). خروجی: null = درست، وگرنه پیام خطا. */
 export async function checkOtp(env: Env, mobile: string, code: string): Promise<string | null> {
   if (!/^\d{6}$/.test(code)) return "کد باید ۶ رقم باشد.";
   const rec = (await env.KV.get(`ot:${mobile}`, "json")) as { h: string; exp: number } | null;

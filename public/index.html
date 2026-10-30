@@ -573,17 +573,18 @@ address{font-style:normal}
     <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 010-9.4l-7.9-6.1a24 24 0 000 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
     ادامه با حساب گوگل
   </a>
-  <div class="sep" id="sep" hidden>یا با شماره‌ی موبایل</div>
+  <div class="sep" id="sep" hidden>یا با شماره‌ی موبایل یا ایمیل</div>
   <form id="otpForm" novalidate hidden>
     <div id="otpStep1">
-      <label for="fMob">شماره‌ی موبایل</label>
-      <input class="ltr" type="text" id="fMob" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="09123456789">
+      <label for="fMob" id="fMobLbl">شماره‌ی موبایل یا ایمیل</label>
+      <input class="ltr" type="text" id="fMob" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="254" placeholder="09123456789 یا name@example.com">
+      <p class="muted" style="margin:6px 0 0;font-size:.82rem">ایمیل غیر جیمیل داری؟ ایمیلت را همین‌جا وارد کن؛ کد ورود به ایمیلت فرستاده می‌شود.</p>
     </div>
     <div id="otpStep2" hidden>
       <p class="muted" id="otpSent" style="margin:0 0 4px"></p>
-      <label for="fCode">کد ۶ رقمی پیامک‌شده</label>
+      <label for="fCode" id="fCodeLbl">کد ۶ رقمی ارسال‌شده</label>
       <input class="ltr" type="text" id="fCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="······">
-      <div class="row" style="justify-content:space-between;margin-top:8px"><button class="lnk" type="button" id="otpResend">ارسال دوباره</button><button class="lnk" type="button" id="otpEdit">تغییر شماره</button></div>
+      <div class="row" style="justify-content:space-between;margin-top:8px"><button class="lnk" type="button" id="otpResend">ارسال دوباره</button><button class="lnk" type="button" id="otpEdit">تغییر شماره / ایمیل</button></div>
     </div>
     <div id="authMsg" class="msg err" role="alert" hidden></div>
     <button class="btn block" id="authSubmit" type="submit" style="margin-top:16px">ارسال کد</button>
@@ -600,6 +601,11 @@ address{font-style:normal}
   <div class="row" style="gap:8px"><input type="text" id="pfName" maxlength="64" autocomplete="name" style="flex:1"><button class="btn sm" id="pfSave" type="button">ذخیره</button></div>
   <label>ایمیل</label>
   <div class="ltr muted" id="pfEmail" style="padding:6px 2px"></div>
+  <div id="pfEmAdd" hidden>
+    <p class="muted" style="margin:0 0 8px;font-size:.86rem">ایمیلت را اضافه کن تا رسید خرید به آن فرستاده شود.</p>
+    <div class="row" style="gap:8px"><input class="ltr" type="email" id="pfEm" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="254" placeholder="name@example.com" style="flex:1"><button class="btn ghost sm" id="pfEmSend" type="button">ارسال کد</button></div>
+    <div class="row" id="pfEmCodeRow" style="gap:8px;margin-top:8px" hidden><input class="ltr" type="text" id="pfEmCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد ۶ رقمی ایمیل" style="flex:1"><button class="btn sm" id="pfEmVerify" type="button">تایید</button></div>
+  </div>
   <label>شماره‌ی موبایل</label>
   <div class="ltr muted" id="pfMobSet" style="padding:6px 2px" hidden></div>
   <div id="pfMobAdd" hidden>
@@ -753,12 +759,30 @@ const normMob = (v) => {
   if (/^9\d{9}$/.test(m)) m = "0" + m;
   return /^09\d{9}$/.test(m) ? m : null;
 };
+const normEmail = (v) => {
+  const e = String(v || "").trim().toLowerCase();
+  return e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) ? e : null;
+};
+// یک کادر برای هر دو: اگر «@» داشت ایمیل است، وگرنه شماره‌ی موبایل. خروجی: { kind: "email"|"mobile", id } یا { error }
+function parseLoginId(raw) {
+  const v = String(raw || "").trim();
+  if (v.includes("@")) {
+    const e = normEmail(v);
+    if (!e) return { error: "ایمیل معتبر نیست؛ مثل name@example.com وارد کن." };
+    if (!cfg.emailOtp) return { error: "ورود با ایمیل فعال نیست؛ با شماره‌ی موبایل یا گوگل وارد شو." };
+    return { kind: "email", id: e };
+  }
+  const m = normMob(v);
+  if (!m) return { error: cfg.emailOtp ? "شماره‌ی موبایل یا ایمیل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ یا name@example.com وارد کن." : "شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن." };
+  if (!cfg.otp) return { error: "ورود با پیامک فعال نیست؛ با ایمیل یا گوگل وارد شو." };
+  return { kind: "mobile", id: m };
+}
 function countdown(btn, secs, label) {
   clearInterval(btn._t); let t = secs;
   const tick = () => { btn._cd = t > 0; btn.disabled = t > 0; btn.textContent = t > 0 ? `${label} (${fa(t)})` : label; if (t-- <= 0) clearInterval(btn._t); };
   tick(); btn._t = setInterval(tick, 1000);
 }
-let otpMobile = "";
+let otpMobile = "", otpKind = "mobile"; // otpMobile: شماره یا ایمیلی که کد برایش فرستاده شده
 function otpReset() {
   otpMobile = ""; $("#fCode").value = "";
   show($("#otpStep1"), true); show($("#otpStep2"), false);
@@ -771,8 +795,13 @@ function openAuth(m, note = "", err = "") {
   if (!$("#authDlg").open) $("#authDlg").showModal();
 }
 function renderAuthBtn() {
-  show($("#googleBtn"), cfg.google); show($("#otpForm"), cfg.otp);
-  show($("#sep"), cfg.google && (cfg.otp));
+  const anyOtp = !!(cfg.otp || cfg.emailOtp);
+  show($("#googleBtn"), cfg.google); show($("#otpForm"), anyOtp);
+  show($("#sep"), cfg.google && anyOtp);
+  $("#sep").textContent = cfg.otp && cfg.emailOtp ? "یا با شماره‌ی موبایل یا ایمیل" : cfg.emailOtp ? "یا با ایمیل" : "یا با شماره‌ی موبایل";
+  $("#fMobLbl").textContent = cfg.otp && cfg.emailOtp ? "شماره‌ی موبایل یا ایمیل" : cfg.emailOtp ? "ایمیل" : "شماره‌ی موبایل";
+  $("#fMob").placeholder = cfg.otp && cfg.emailOtp ? "09123456789 یا name@example.com" : cfg.emailOtp ? "name@example.com" : "09123456789";
+  $("#fMob").nextElementSibling.hidden = !(cfg.otp && cfg.emailOtp);
   const q = new URLSearchParams(location.search).get("login_error");
   if (q) { history.replaceState(null, "", "/"); openAuth("login", "", LOGIN_ERRORS[q] || "ورود ناموفق بود."); }
 }
@@ -787,24 +816,27 @@ for (const d of ["#authDlg", "#buy", "#profileDlg", "#tgBuy"]) $(d).addEventList
 document.querySelectorAll("[data-auth]").forEach((b) => b.onclick = () => openAuth("register", "ثبت‌نام کن؛ ۳ ارائه‌ی رایگان به حسابت اضافه می‌شود."));
 document.querySelectorAll("[data-plan]").forEach((b) => b.onclick = () => buyPlan(b.dataset.plan, b));
 
-async function sendCode(mobile) { await api("/api/auth/otp/send", { method: "POST", body: { mobile } }); }
+// id: شماره‌ی موبایل یا ایمیلِ نرمال‌شده؛ سرور از فیلد «email» یا «mobile» تشخیص می‌دهد
+const idBody = (id) => (id.includes("@") ? { email: id } : { mobile: id });
+async function sendCode(id) { await api("/api/auth/otp/send", { method: "POST", body: idBody(id) }); }
 $("#otpForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const btn = $("#authSubmit"), msg = $("#authMsg");
   show(msg, false);
-  const label = otpMobile ? "در حال بررسی کد…" : "در حال ارسال پیامک…";
+  const label = otpMobile ? "در حال بررسی کد…" : /@/.test($("#fMob").value) ? "در حال ارسال ایمیل…" : "در حال ارسال پیامک…";
   await busy(btn, label, async () => {
   try {
     if (!otpMobile) {
-      const m = normMob($("#fMob").value);
-      if (!m) throw new Error("شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.");
-      await sendCode(m);
-      otpMobile = m;
+      const p = parseLoginId($("#fMob").value);
+      if (p.error) throw new Error(p.error);
+      await sendCode(p.id);
+      otpMobile = p.id; otpKind = p.kind;
       show($("#otpStep1"), false); show($("#otpStep2"), true);
-      $("#otpSent").textContent = `کد ۶ رقمی به ${fa(m)} پیامک شد.`;
+      $("#otpSent").textContent = p.kind === "email" ? `کد ۶ رقمی به ایمیل ${p.id} فرستاده شد؛ پوشه‌ی هرزنامه (اسپم) را هم نگاه کن.` : `کد ۶ رقمی به ${fa(p.id)} پیامک شد.`;
+      $("#fCodeLbl").textContent = p.kind === "email" ? "کد ۶ رقمی ایمیل‌شده" : "کد ۶ رقمی پیامک‌شده";
       btn.textContent = "ورود"; countdown($("#otpResend"), 60, "ارسال دوباره"); $("#fCode").focus();
     } else {
-      const r = await api("/api/auth/otp/verify", { method: "POST", body: { mobile: otpMobile, code: $("#fCode").value } });
+      const r = await api("/api/auth/otp/verify", { method: "POST", body: { ...idBody(otpMobile), code: $("#fCode").value } });
       if (r.created) toast("حساب ساخته شد؛ خوش آمدی 🎉");
       await boot();
     }
@@ -821,6 +853,12 @@ $("#otpResend").onclick = (ev) => {
 $("#otpEdit").onclick = otpReset;
 
 // ---------- پروفایل ----------
+function renderPfEmail() {
+  const u = me.user;
+  $("#pfEmail").textContent = u.email || "—";
+  show($("#pfEmAdd"), !u.email && !!cfg.emailOtp);
+  show($("#pfEmCodeRow"), false); $("#pfEm").value = ""; $("#pfEmCode").value = ""; $("#pfEmSend").disabled = false; $("#pfEmSend").textContent = "ارسال کد";
+}
 function renderPfMobile() {
   const u = me.user;
   $("#pfMobSet").textContent = u.mobile || ""; show($("#pfMobSet"), !!u.mobile);
@@ -838,11 +876,10 @@ function openProfile(note = "") {
   const u = me.user;
   if (typeof note !== "string") note = ""; // onclick رویداد می‌فرستد
   $("#pfNote").textContent = note; show($("#pfNote"), !!note);
-  $("#pfName").value = u.name; $("#pfEmail").textContent = u.email || "—";
-  $("#pfAv").textContent = (u.name || "?").trim().charAt(0);
+  $("#pfName").value = u.name; $("#pfAv").textContent = (u.name || "?").trim().charAt(0);
   const pl = me.plan && (me.plans.find((x) => x.id === me.plan.id) || {}).name;
   $("#pfPlan").textContent = me.plan ? `👑 پلن ${pl || ""} تا ${new Date(me.plan.exp).toLocaleDateString("fa-IR", { year: "numeric", month: "long", day: "numeric" })}` : "پلن رایگان";
-  show($("#pfMsg"), false); renderPfMobile(); renderPfTg();
+  show($("#pfMsg"), false); renderPfEmail(); renderPfMobile(); renderPfTg();
   $("#profileDlg").showModal();
 }
 $("#userName").onclick = openProfile;
@@ -868,6 +905,22 @@ $("#pfMobVerify").onclick = (ev) => {
     try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); toast("شماره‌ی موبایل ثبت شد ✓");
       if (pendingPlan) { const id = pendingPlan; pendingPlan = null; $("#profileDlg").close(); buyPlan(id); } }
     catch (e) { msg.textContent = e.message; show(msg, true); }
+  });
+};
+$("#pfEmSend").onclick = (ev) => {
+  const msg = $("#pfMsg"); show(msg, false);
+  const e = normEmail($("#pfEm").value);
+  if (!e) { msg.textContent = "ایمیل معتبر نیست؛ مثل name@example.com وارد کن."; show(msg, true); return; }
+  return busy(ev.currentTarget, "در حال ارسال ایمیل…", async () => {
+    try { await sendCode(e); show($("#pfEmCodeRow"), true); $("#pfEmCode").focus(); countdown($("#pfEmSend"), 60, "ارسال دوباره"); toast("کد به ایمیلت فرستاده شد"); }
+    catch (er) { msg.textContent = er.message; show(msg, true); }
+  });
+};
+$("#pfEmVerify").onclick = (ev) => {
+  const msg = $("#pfMsg"); show(msg, false);
+  return busy(ev.currentTarget, "در حال بررسی…", async () => {
+    try { const r = await api("/api/profile/email", { method: "POST", body: { email: normEmail($("#pfEm").value), code: $("#pfEmCode").value } }); me.user = r.user; renderPfEmail(); toast("ایمیل ثبت شد ✓"); }
+    catch (er) { msg.textContent = er.message; show(msg, true); }
   });
 };
 const normTg = (v) => { const s = String(v || "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\s/g, ""); return /^\d{5,15}$/.test(s) ? s : null; };
