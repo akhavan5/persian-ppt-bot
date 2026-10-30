@@ -3,6 +3,7 @@ import type { BroadcastParams } from "./broadcast";
 import type { Store } from "./store";
 import type { OcrParams } from "./ocr-workflow";
 import type { WebOcrParams } from "./web-ocr-workflow";
+import type { AudioParams } from "./audio-workflow";
 
 export interface Env {
   /** پایگاه داده‌ی D1: همه‌ی داده‌های کوچک (کاربران، نشست‌ها، اعتبار، آمار، قفل‌ها) اینجا ذخیره می‌شود */
@@ -25,6 +26,23 @@ export interface Env {
   OCR_WORKFLOW?: Workflow<OcrParams>;
   /** همان کار برای نسخه‌ی وب (آپلود PDF/عکس از صفحه‌ی سایت)؛ اختیاری: اگر تعریف نشود، خواندن در همان درخواست انجام می‌شود */
   WEB_OCR_WORKFLOW?: Workflow<WebOcrParams>;
+
+  /** اسلاید صوتی و پادکست (فقط مدیر، فقط تلگرام): خواندن متن سخنرانی/گفت‌وگو با Gemini؛ اختیاری: اگر تعریف نشود، دکمه‌های صوتی نمایش داده نمی‌شوند */
+  AUDIO_WORKFLOW?: Workflow<AudioParams>;
+  /** کلیدهای Gemini (هر خط یا «;» یا «,» یک کلید). هر کلید ۳ درخواست می‌گیرد و بعد نوبت کلید بعدی است؛ با هر خطا (۴۲۹، ۴۰۱، ۴۰۳، ۴۰۰، ۵xx، تایم‌اوت) همان درخواست با کلید بعدی تکرار می‌شود. به‌صورت secret بگذارید */
+  GEMINI_API_KEYS?: string;
+  /** اختیاری: تعداد درخواست پشت‌سرهم هر کلید قبل از رفتن به کلید بعدی (پیش‌فرض ۳) */
+  GEMINI_KEY_STEP?: string;
+  /** اختیاری: مدل صدا (پیش‌فرض gemini-3.8-flash-tts؛ ارزان‌تر: gemini-3.8-flash-lite-tts) */
+  GEMINI_TTS_MODEL?: string;
+  /** اختیاری: صدای خواندن اسلایدها (پیش‌فرض Kore) و صدای مجری/مهمان پادکست (پیش‌فرض Achird و Sulafat) */
+  GEMINI_TTS_VOICE?: string;
+  GEMINI_TTS_VOICE_A?: string;
+  GEMINI_TTS_VOICE_B?: string;
+  /** اختیاری: آدرس پایه‌ی Gemini (پیش‌فرض https://generativelanguage.googleapis.com)؛ اگر منطقه‌ی اجرای Worker پشتیبانی نشد، آدرس پروکسی را بگذارید */
+  GEMINI_BASE_URL?: string;
+  /** اختیاری: نرخ نمونه‌برداری صدا (۸۰۰۰، ۱۶۰۰۰ یا ۲۴۰۰۰؛ پیش‌فرض ۲۴۰۰۰). ۱۶۰۰۰ حجم فایل را یک‌سوم کم می‌کند */
+  GEMINI_TTS_SAMPLE_RATE?: string;
 
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;

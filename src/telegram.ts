@@ -56,6 +56,28 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
   if (!j.ok) throw new Error(`Telegram sendDocument: ${j.description ?? r.status}`);
 }
 
+/** ارسال فایل صوتی (پخش‌کننده‌ی تلگرام با عنوان و مدت). تلگرام رسماً MP3/M4A می‌خواهد؛ اگر WAV را نپذیرفت، همان فایل به‌صورت سند فرستاده می‌شود (باز هم داخل تلگرام پخش می‌شود). */
+export async function sendAudio(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { title?: string; performer?: string; duration?: number; mime?: string } = {}) {
+  const mime = extra.mime ?? "audio/wav";
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("caption", caption);
+  form.append("parse_mode", "HTML");
+  if (extra.title) form.append("title", extra.title.slice(0, 200));
+  if (extra.performer) form.append("performer", extra.performer.slice(0, 100));
+  if (extra.duration) form.append("duration", String(extra.duration));
+  form.append("audio", new Blob([data], { type: mime }), filename);
+  try {
+    const r = await fetch(`${apiBase(env)}/bot${env.TELEGRAM_BOT_TOKEN}/sendAudio`, { method: "POST", body: form, signal: AbortSignal.timeout(180_000) });
+    const j = (await r.json()) as any;
+    if (j.ok) return;
+    console.error("telegram sendAudio", String(j.description ?? r.status).slice(0, 200));
+  } catch (e) {
+    console.error("telegram sendAudio", String(e).slice(0, 200));
+  }
+  await sendDocument(env, chatId, data, filename, caption, { mime });
+}
+
 /** ارسال عکس (پیش‌نمایش داخل چت). سقف تلگرام: ۱۰ مگابایت و مجموع عرض+ارتفاع ≤ ۱۰۰۰۰ پیکسل */
 export async function sendPhoto(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, mime = "image/png") {
   const form = new FormData();

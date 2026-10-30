@@ -8,7 +8,8 @@ import {
   type Uid,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
-import { listFiles, loadFile } from "./files";
+import { listFiles, loadFile, loadPreview } from "./files";
+import { ttsEnabled } from "./gemini-tts";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
@@ -324,6 +325,30 @@ async function sendDeckPdf(env: Env, cq: any, uid: Uid, chatId: number, id: stri
   }
 }
 
+/** دکمه‌های «🔊 اسلاید صوتی» (au:<شناسه‌ی ارائه>) و «🎙 پادکست» (pc:<شناسه‌ی ارائه>): فقط مدیر؛ کار سنگین در AudioWorkflow انجام می‌شود */
+async function startAudioJob(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, kind: "slides" | "podcast", id: string) {
+  const answer = (text?: string, alert = false) =>
+    tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
+  if (!isAdmin(env, tgId)) return await answer("این قابلیت فعلاً فقط برای مدیر فعال است.", true);
+  if (!/^[\w-]{1,100}$/.test(id)) return await answer();
+  if (!env.AUDIO_WORKFLOW || !ttsEnabled(env)) return await answer("صدا فعال نیست: GEMINI_API_KEYS و Workflow «persian-ppt-audio» را تنظیم کن.", true);
+  if (!(await loadPreview(env, uid, id).catch(() => null))) return await answer("⌛️ متن این ارائه منقضی شده است (متن‌ها ۲۴ ساعت نگه داشته می‌شوند).", true);
+  // جلوگیری از دوبار زدن پشت‌سرهم (هر بار چند درخواست از سهمیه‌ی Gemini مصرف می‌کند)
+  if (await hitLimit(env, `aud:${uid}:${id}:${kind}`, 1, 120)) return await answer("همین کار چند لحظه پیش شروع شده است؛ کمی صبر کن.", true);
+  await answer("⏳ شروع شد…");
+  const st = await sendMessage(env, chatId, kind === "podcast" ? "🎙 پادکست در صف است… (چند دقیقه طول می‌کشد)" : "🔊 اسلاید صوتی در صف است… (هر اسلاید جدا فرستاده می‌شود)");
+  try {
+    const model = (await getSettings(env, uid).catch(() => null))?.model;
+    await env.AUDIO_WORKFLOW.create({
+      id: `${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      params: { kind, chatId, statusMessageId: st.message_id, uid, deckId: id, ...(model ? { model } : {}) },
+    });
+  } catch (e) {
+    console.error("audio workflow create failed", e);
+    await editMessage(env, chatId, st.message_id, "❌ شروع کار ناموفق بود؛ دوباره امتحان کن.").catch(() => {});
+  }
+}
+
 async function handleCallback(env: Env, cq: any) {
   const userId: number = cq.from.id;
   const chatId: number = cq.message?.chat?.id;
@@ -349,6 +374,7 @@ async function handleCallback(env: Env, cq: any) {
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
   if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
   if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
+  if (act === "au" || act === "pc") return await startAudioJob(env, cq, uid, userId, chatId, act === "pc" ? "podcast" : "slides", a);
   if (act === "fb") { // دکمه‌ی «ارسال نظر» زیر ارائه: پیام متنی بعدی کاربر برای مدیر فرستاده می‌شود
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
     const survey = a === "p"; // fb:p = دکمه‌ی نظرسنجی پایان پلن (plan-feedback.ts)؛ پیامش کپشن ارائه ندارد

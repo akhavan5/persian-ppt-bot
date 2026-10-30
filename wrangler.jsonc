@@ -44,6 +44,8 @@
     { "name": "persian-ppt-deck", "binding": "DECK_WORKFLOW", "class_name": "DeckWorkflow" },
     { "name": "persian-ppt-broadcast", "binding": "BROADCAST_WORKFLOW", "class_name": "BroadcastWorkflow" },
     { "name": "persian-ppt-ocr", "binding": "OCR_WORKFLOW", "class_name": "OcrWorkflow" },
-    { "name": "persian-ppt-web-ocr", "binding": "WEB_OCR_WORKFLOW", "class_name": "WebOcrWorkflow" }
+    { "name": "persian-ppt-web-ocr", "binding": "WEB_OCR_WORKFLOW", "class_name": "WebOcrWorkflow" },
+    // اسلاید صوتی و پادکست دو‌گوینده (Gemini TTS؛ فقط مدیر در تلگرام)
+    { "name": "persian-ppt-audio", "binding": "AUDIO_WORKFLOW", "class_name": "AudioWorkflow" }
   ]
 }

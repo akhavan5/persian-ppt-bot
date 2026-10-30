@@ -9,7 +9,8 @@ import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
 import { getUserById } from "./auth";
 import { toFa } from "./util";
-import { adminIds, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
+import { adminIds, bumpStat, getCredit, getUserSeen, isAdmin, noteDeckDone, refundCredit, releaseLock } from "./settings";
+import { ttsEnabled } from "./gemini-tts";
 import { BUY_SITE_NOTE, buyKbFor, fileNameWithSite, miniappUrl } from "./deck-service";
 import { getLinkedTg } from "./link";
 import { hasBrowser } from "./browser-api";
@@ -119,6 +120,9 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               // دکمه‌ی دریافت نسخه‌ی PDF (فقط اگر پیش‌نمایش ذخیره شده و مرورگر کلودفلر وصل است)
               { reply_markup: { inline_keyboard: [
                 ...(hasBrowser(this.env) ? [[{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${event.instanceId}` }]] : []),
+                // اسلاید صوتی (خواندن متن سخنرانی) و پادکست دو‌گوینده: فعلاً فقط مدیر
+                ...(this.env.AUDIO_WORKFLOW && ttsEnabled(this.env) && isAdmin(this.env, event.payload.tgId ?? userId)
+                  ? [[{ text: "🔊 اسلاید صوتی", callback_data: `au:${event.instanceId}` }, { text: "🎙 پادکست", callback_data: `pc:${event.instanceId}` }]] : []),
                 [{ text: "💬 ارسال نظر", callback_data: "fb:s" }], // نظر کاربر فقط برای مدیر فرستاده می‌شود (ذخیره نمی‌شود)
               ] } });
             // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
