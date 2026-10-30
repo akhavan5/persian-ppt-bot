@@ -2,7 +2,7 @@
 import type { Env } from "./env";
 import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getActiveSub, getBonus, putSub, setBonus, type Sub } from "./settings";
 import { hitLimit, type WebUser } from "./auth";
-import { sendReceiptEmail } from "./email-receipt";
+import { sendReceipt } from "./email-receipt";
 
 /**
  * پلن‌های ماهانه (price: هزار تومان): پلاس ۳۹۹ و پرو ۵۴۹. هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
@@ -285,8 +285,8 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   if (won) {
     console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode);
     await noteSale(env, rec, plan);
-    // رسید خرید به ایمیل حساب (فقط پلن‌ها؛ بدون ایمیل یا بدون RESEND_API_KEY بی‌اثر است و هرگز پرداخت را خراب نمی‌کند)
-    if (plan) await sendReceiptEmail(env, { uid: rec.uid, planName: plan.name, credits: plan.credits, days: plan.days, toman: plan.price * 1000, order, idem: order, ref: trackingCode, method: "درگاه پرداخت", paidAt: Date.now(), expAt: subExpMs });
+    // رسید خرید به ایمیل حساب و ربات تلگرام (فقط پلن‌ها؛ ایمیل بدون ایمیل ثبت‌شده یا بدون RESEND_API_KEY بی‌اثر است و هرگز پرداخت را خراب نمی‌کند)
+    if (plan) await sendReceipt(env, { uid: rec.uid, planName: plan.name, credits: plan.credits, days: plan.days, toman: plan.price * 1000, order, idem: order, ref: trackingCode, method: "درگاه پرداخت", paidAt: Date.now(), expAt: subExpMs });
   }
   return go(okQ);
 }
@@ -394,8 +394,8 @@ async function storeClaim(
 
   console.log(`${tag} payment ok`, user.id, plan.id);
   await noteSale(env, { uid: user.id, plan: plan.id, count: plan.credits, amount: plan.price * 10_000, order: key, state: "paid", t: Date.now() }, plan);
-  // رسید خرید به ایمیل حساب (بدون ایمیل بی‌اثر است)
-  await sendReceiptEmail(env, { uid: user.id, planName: plan.name, credits: plan.credits, days: plan.days, toman: plan.price * 1000, order: orderId, idem: key, method: tag === "myket" ? "مایکت" : "کافه‌بازار", paidAt: Date.now(), expAt: sub.exp });
+  // رسید خرید به ایمیل حساب و ربات تلگرام (هرکدام که موجود باشد)
+  await sendReceipt(env, { uid: user.id, planName: plan.name, credits: plan.credits, days: plan.days, toman: plan.price * 1000, order: orderId, idem: key, method: tag === "myket" ? "مایکت" : "کافه‌بازار", paidAt: Date.now(), expAt: sub.exp });
   return json({ ok: true, plan: plan.id });
 }
 

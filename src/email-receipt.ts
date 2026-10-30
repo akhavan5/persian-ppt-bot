@@ -1,8 +1,10 @@
-/** رسید خرید پلن: بعد از هر خرید موفق (درگاه دیجی‌پی، کافه‌بازار، مایکت) برای حساب‌های دارای ایمیل فرستاده می‌شود.
- *  هرگز خطا پرتاب نمی‌کند و پرداخت را خراب نمی‌کند؛ اگر ایمیل ثبت نشده یا RESEND_API_KEY نیست، بی‌اثر است. */
+/** رسید خرید پلن: بعد از هر خرید موفق (درگاه دیجی‌پی، کافه‌بازار، مایکت) هم به ایمیل حساب (اگر دارد) و هم به ربات تلگرام (اگر تلگرام وصل است) فرستاده می‌شود.
+ *  هرگز خطا پرتاب نمی‌کند و پرداخت را خراب نمی‌کند؛ اگر ایمیل ثبت نشده یا RESEND_API_KEY نیست، ایمیل بی‌اثر است. */
 import type { Env } from "./env";
 import { getUserById } from "./auth";
 import { toFa } from "./util";
+import { getLinkedTg } from "./link";
+import { esc as tgEsc, sendMessage } from "./telegram";
 import { BRAND, sendEmail, siteOf } from "./email";
 
 const FONT = "Vazirmatn,Tahoma,'Segoe UI',Arial,sans-serif";
@@ -104,4 +106,39 @@ export async function sendReceiptEmail(env: Env, r: Receipt): Promise<boolean> {
     console.error("receipt email", e);
     return false;
   }
+}
+
+/** متن رسید برای ربات تلگرام (HTML) */
+export function receiptTelegram(r: Receipt): string {
+  const L = [
+    "✅ <b>پرداخت موفق بود</b>",
+    "",
+    `🧾 <b>رسید خرید</b>`,
+    `👑 پلن: <b>${tgEsc(r.planName)}</b>`,
+    `💰 مبلغ: <b>${tgEsc(money(r.toman))}</b>`,
+    `🎟 اعتبار: ${toFa(String(r.credits))} · مدت: ${toFa(String(r.days))} روز`,
+    ...(r.expAt ? [`⏳ اعتبار تا: ${tgEsc(faDate(r.expAt))}`] : []),
+    `📅 تاریخ خرید: ${tgEsc(faDate(r.paidAt))} — ${tgEsc(faTime(r.paidAt))}`,
+    `💳 روش پرداخت: ${tgEsc(r.method)}`,
+    ...(r.ref ? [`🔖 کد پیگیری: <code>${tgEsc(r.ref)}</code>`] : []),
+    ...(r.order ? [`🧷 شماره‌ی سفارش: <code>${tgEsc(r.order)}</code>`] : []),
+  ];
+  return L.join("\n");
+}
+
+export async function sendReceiptTelegram(env: Env, r: Receipt): Promise<boolean> {
+  try {
+    const tgId = await getLinkedTg(env, r.uid);
+    if (!tgId) return false;
+    await sendMessage(env, tgId, receiptTelegram(r));
+    return true;
+  } catch (e) {
+    console.error("receipt telegram", e);
+    return false;
+  }
+}
+
+/** رسید کامل: ایمیل + تلگرام (هر کدام که برای حساب موجود باشد) */
+export async function sendReceipt(env: Env, r: Receipt): Promise<void> {
+  await Promise.all([sendReceiptEmail(env, r), sendReceiptTelegram(env, r)]);
 }
