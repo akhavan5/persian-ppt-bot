@@ -20,6 +20,7 @@ import { IG_WIDTH, renderInfographicHtml } from "./infographic-html";
 import { makeInfographic, renderInfographicImage } from "./infographic";
 import { buildDocx, imageInfo, makeHandout, type DocImage } from "./handout";
 import { withStore } from "./store";
+import { notifyPlanCreditsOut } from "./plan-notify";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
@@ -247,6 +248,11 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       await bumpStat(this.env, "ok").catch(() => {});
       await noteDeckDone(this.env, userId).catch((e) => console.error("noteDeckDone", e)); // قیف کاربران پنل مدیر
     });
+    // اعلام تمام شدن اعتبار پلن (فقط ایمیل): اگر اعتبار این ارائه (یا پوستر/جزوه‌اش) از پلن کم شده و اکنون اعتبار پلن صفر است. بعد از «finish»، بدون تلاش مجدد؛ خطایش به اعتبار یا کار نمی‌رسد.
+    if (credit === "plan" || poster?.credit === "plan" || handout?.credit === "plan") {
+      await step.do("plan-credits-out", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, () => notifyPlanCreditsOut(this.env, userId))
+        .catch((e) => console.error("plan-credits-out", String(e).slice(0, 200)));
+    }
     // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ یک پیام کوتاه با دکمه‌ی باز کردن اپ (فایل‌ها داخل اپ‌اند).
     // بعد از «finish» (قفل قبلاً آزاد شده) و بدون تلاش مجدد: شکست یا کندی این پیام نباید به «برگشت اعتبار» یا شکست کار برسد.
     if (web && event.payload.notify) {
