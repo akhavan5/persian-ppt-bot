@@ -967,6 +967,7 @@ private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extra
                 if (job.audioFailed) Text("ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگشت.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 if (job.podcastWaiting) Text("🎙 پادکست در حال ساخت است (چند دقیقه)…", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 job.podcastIds.forEachIndexed { i, pid ->
+                    PodcastPlayerCard(pid, job.title.ifEmpty { "پادکست" } + (if (job.podcastIds.size > 1) " — قسمت " + (i + 1).fa() else ""))
                     SoftButton(if (i == 0) "دانلود پادکست" else "دانلود پادکست — قسمت " + (i + 1).fa(), { vm.download(pid) }, Modifier.fillMaxWidth(), icon = AppIcons.Mic)
                 }
                 if (job.podcastFailed) Text("ساخت پادکست ناموفق بود؛ اعتبارش برگشت.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -1087,6 +1088,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
 @Composable
 private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf: Boolean = false, extraJobs: Map<String, String> = emptyMap()) {
     val cs = MaterialTheme.colorScheme
+    var showPlayer by remember(f.id) { mutableStateOf(false) }
     val (icon, brush) = when {
         f.poster -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
         f.handout -> AppIcons.Doc to Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFF97316)))
@@ -1119,8 +1121,14 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             if (pdf && !f.poster && !f.handout && f.audio.isEmpty()) {
                 TextButton(onClick = { vm.downloadPdf(f.id) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("PDF") }
             }
+            if (f.audio == "podcast") {
+                IconButton(onClick = { showPlayer = !showPlayer }) { AppIcon(if (showPlayer) AppIcons.Close else PLAY_ICON, tint = cs.primary, description = if (showPlayer) "بستن پلیر" else "پخش پادکست") }
+            }
             IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "دانلود") }
+        }
+        if (f.audio == "podcast" && showPlayer) {
+            PodcastPlayerCard(f.id, f.title, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp), autoStart = true)
         }
         // فقط زیر خودِ ارائه (نه پوستر/جزوه/صدا)؛ همراه‌های ساخته‌شده یا در حال ساخت دکمه ندارند
         if (!f.poster && !f.handout && f.audio.isEmpty()) {
@@ -1134,6 +1142,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
 private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
     val cs = MaterialTheme.colorScheme
     var confirm by remember { mutableStateOf(false) }
+    var showPlayer by remember(f.id) { mutableStateOf(false) }
     val (icon, brush) = when (f.kind) {
         "poster" -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
         "handout" -> AppIcons.Doc to Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFF97316)))
@@ -1158,9 +1167,15 @@ private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                 )
             }
+            if (f.kind == "podcast") {
+                IconButton(onClick = { showPlayer = !showPlayer }) { AppIcon(if (showPlayer) AppIcons.Close else PLAY_ICON, tint = cs.primary, description = if (showPlayer) "بستن پلیر" else "پخش پادکست") }
+            }
             IconButton(onClick = { confirm = true }) { AppIcon(AppIcons.Delete, tint = cs.onSurfaceVariant, description = "حذف از گوشی") }
             IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "ذخیره در دانلودها") }
+        }
+        if (f.kind == "podcast" && showPlayer) {
+            PodcastPlayerCard(f.id, f.title.ifBlank { f.name }, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp), autoStart = true)
         }
     }
     if (confirm) {

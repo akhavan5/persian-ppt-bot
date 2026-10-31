@@ -211,6 +211,20 @@ details>summary::after{content:"▾";color:var(--muted)} details[open]>summary::
 #setBox[open]>summary{margin-bottom:14px}
 #setBox[open]>summary::after{content:"بستن ▴";background:#fff;color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
 .doneBtns{display:flex;flex-wrap:wrap;gap:8px}.fontNote{margin:12px 0 0;line-height:1.9}
+/* پلیر پادکست (تگ audio + کنترل‌های سفارشی؛ نوار زمان همیشه چپ‌به‌راست مثل پخش‌کننده‌های رایج) */
+.ppList{display:grid;gap:10px;margin:12px 0 0}.ppList:empty{display:none}
+.pp{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px}
+.pp-title{font-size:.9rem;font-weight:700;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-row{display:flex;align-items:center;gap:10px;direction:ltr}
+.pp-play{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--primary);color:#fff;font-size:1.1rem;cursor:pointer;display:grid;place-items:center}
+.pp-play:focus-visible,.pp-skip:focus-visible,.pp-speed:focus-visible,.pp-seek:focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:2px}
+.pp-skip,.pp-speed{flex:none;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:10px;min-width:40px;height:34px;padding:0 8px;font:inherit;font-size:.8rem;cursor:pointer}
+.pp-seek{flex:1 1 auto;min-width:0;accent-color:var(--primary);height:28px;cursor:pointer}
+.pp-time{flex:none;font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums;min-width:84px;text-align:center}
+.pp-msg{font-size:.8rem;color:var(--danger);margin:0}
+.file .pp-slot{flex:1 1 100%}.file .pp-slot:empty{display:none}
+@media(max-width:520px){.pp-row{flex-wrap:wrap;justify-content:center}.pp-seek{flex:1 1 100%;order:5}}
+
 .file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .file .fa{display:flex;gap:6px;flex:none}
 .file:last-child{border-bottom:0} .file>div:first-child{min-width:0;flex:1 1 180px} .file strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -414,6 +428,7 @@ address{font-style:normal}
         <button class="btn" id="donePodcastDl" type="button" hidden>🎙 دانلود پادکست</button>
       </div>
       <div class="doneBtns" id="doneAudioMore"></div>
+      <div class="ppList" id="donePodcastPlayers"></div>
       <p class="muted" id="doneAudioWait" hidden>🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</p>
       <p class="muted" id="donePodcastWait" hidden>🎙 پادکست در حال ساخت است (چند دقیقه)…</p>
       <p class="muted" id="doneAudioMsg" hidden></p>
@@ -1573,11 +1588,62 @@ async function track(jobId, resumed = false) {
   if (my === tracking) { jobTimer(false); $("#go").disabled = false; jobView(null); }
 }
 
+// پلیر پادکست: همان فایل ذخیره‌شده را با تگ audio پخش می‌کند (احراز با کوکی نشست؛ سرور Range را پشتیبانی می‌کند تا جلو/عقب‌کردن کار کند)
+const ppTime = (t) => { t = Math.max(0, Math.floor(t || 0)); return fa(Math.floor(t / 60)) + ":" + fa(String(t % 60).padStart(2, "0")); };
+const PP_SPEEDS = [1, 1.25, 1.5, 2, 0.75];
+function podcastPlayer(id, label, autoplay = false) {
+  const base = "/api/files/" + encodeURIComponent(id) + "?inline=1";
+  const audio = h("audio", { preload: "metadata" });
+  const play = h("button", { class: "pp-play", type: "button", "aria-label": "پخش" }, "▶");
+  const back = h("button", { class: "pp-skip", type: "button", "aria-label": "۱۵ ثانیه عقب" }, "⟲ ۱۵");
+  const fwd = h("button", { class: "pp-skip", type: "button", "aria-label": "۱۵ ثانیه جلو" }, "۱۵ ⟳");
+  const speed = h("button", { class: "pp-speed", type: "button", "aria-label": "سرعت پخش" }, "۱×");
+  const seek = h("input", { class: "pp-seek", type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": "موقعیت پخش" });
+  const time = h("span", { class: "pp-time" }, "۰:۰۰ / ۰:۰۰");
+  const msg = h("p", { class: "pp-msg", role: "alert", hidden: "" });
+  const root = h("div", { class: "pp" }, h("p", { class: "pp-title" }, "🎙 " + (label || "پادکست")), h("div", { class: "pp-row" }, play, back, seek, fwd, speed), h("div", { class: "pp-row", style: "justify-content:center" }, time), msg);
+  let tries = 0, dragging = false, si = 0;
+  const dur = () => (isFinite(audio.duration) ? audio.duration : 0);
+  const paint = () => {
+    seek.max = String(Math.floor(dur()) || 0);
+    if (!dragging) seek.value = String(Math.floor(audio.currentTime));
+    time.textContent = ppTime(audio.currentTime) + " / " + ppTime(dur());
+    play.textContent = audio.paused ? "▶" : "⏸"; play.setAttribute("aria-label", audio.paused ? "پخش" : "توقف");
+  };
+  // فایلِ تازه‌ساخته ممکن است چند ثانیه برای همه‌ی نقاط شبکه‌ی KV دیده نشود (۴۰۴)؛ چند بار دوباره امتحان می‌کنیم
+  audio.addEventListener("error", () => {
+    if (++tries <= 10) { setTimeout(() => { audio.src = base + "&r=" + tries; audio.load(); }, 3000); return; }
+    msg.textContent = "پخش ممکن نشد؛ دکمه‌ی دانلود را امتحان کن یا صفحه را تازه کن."; msg.hidden = false;
+  });
+  for (const ev of ["loadedmetadata", "durationchange", "timeupdate", "play", "pause", "ended"]) audio.addEventListener(ev, paint);
+  audio.addEventListener("loadedmetadata", () => { tries = 0; msg.hidden = true; });
+  audio.addEventListener("play", () => { // هم‌زمان فقط یک پادکست پخش شود
+    document.querySelectorAll("audio").forEach((a) => { if (a !== audio) a.pause(); });
+    if ("mediaSession" in navigator && window.MediaMetadata) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: label || "پادکست", artist: location.host });
+      navigator.mediaSession.setActionHandler("play", () => audio.play());
+      navigator.mediaSession.setActionHandler("pause", () => audio.pause());
+      navigator.mediaSession.setActionHandler("seekbackward", () => { audio.currentTime = Math.max(0, audio.currentTime - 15); });
+      navigator.mediaSession.setActionHandler("seekforward", () => { audio.currentTime = Math.min(dur() || Infinity, audio.currentTime + 15); });
+    }
+  });
+  play.addEventListener("click", () => { if (audio.paused) audio.play().catch(() => {}); else audio.pause(); });
+  back.addEventListener("click", () => { audio.currentTime = Math.max(0, audio.currentTime - 15); });
+  fwd.addEventListener("click", () => { audio.currentTime = Math.min(dur() || Infinity, audio.currentTime + 15); });
+  speed.addEventListener("click", () => { si = (si + 1) % PP_SPEEDS.length; audio.playbackRate = PP_SPEEDS[si]; speed.textContent = fa(String(PP_SPEEDS[si]).replace(".", "٫")) + "×"; });
+  seek.addEventListener("input", () => { dragging = true; time.textContent = ppTime(Number(seek.value)) + " / " + ppTime(dur()); });
+  seek.addEventListener("change", () => { audio.currentTime = Number(seek.value); dragging = false; });
+  audio.src = base;
+  root.append(audio);
+  if (autoplay) audio.play().catch(() => {});
+  return root;
+}
+
 // اسلاید صوتی و پادکست همراه: در Workflow جدا چند دقیقه طول می‌کشند؛ وضعیتشان جدا خوانده می‌شود و دکمه‌ی دانلود هرکدام وقتی آماده شد نمایش داده می‌شود
 let audioTracking = 0;
 function trackAudio(s) {
   const my = ++audioTracking;
-  $("#doneAudioMore").replaceChildren(); show($("#doneAudioMsg"), false);
+  $("#doneAudioMore").replaceChildren(); $("#donePodcastPlayers").replaceChildren(); show($("#doneAudioMsg"), false);
   const kinds = [
     { id: s.audioId, state: s.audio, btn: "#doneAudioDl", wait: "#doneAudioWait", fail: "#doneAudioFail", part: "صدای اسلاید", err: "ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگردانده شد." },
     { id: s.podcastId, state: s.podcast, btn: "#donePodcastDl", wait: "#donePodcastWait", fail: "#donePodcastFail", part: "پادکست، قسمت", err: "ساخت پادکست ناموفق بود؛ اعتبارش برگردانده شد." },
@@ -1599,6 +1665,8 @@ async function pollAudio(my, k) {
       const b = $(k.btn); b.hidden = false; b.onclick = (ev) => download(r.ids[0], ev.currentTarget);
       // بخش‌های اضافه (پادکست چندقسمتی یا اسلایدهایی که به‌خاطر حجم جدا ذخیره شده‌اند): هرکدام یک دکمه
       r.ids.slice(1).forEach((id, n) => { const x = h("button", { class: "btn ghost", type: "button" }, `⬇️ ${k.part} ${fa(n + 2)}`); x.onclick = (ev) => download(id, ev.currentTarget); $("#doneAudioMore").append(x); });
+      // پادکست: برای هر قسمت یک پلیر داخل صفحه (همان فایل‌های دانلودی)
+      if (k.btn === "#donePodcastDl") r.ids.forEach((id, n) => $("#donePodcastPlayers").append(podcastPlayer(id, ($("#doneTitle").textContent || "پادکست") + (r.ids.length > 1 ? " — قسمت " + fa(n + 1) : ""))));
       if (r.note) { $("#doneAudioMsg").textContent = "ℹ️ " + r.note; show($("#doneAudioMsg"), true); }
       loadFiles();
     } else { const m = $("#doneAudioMsg"); m.textContent = "⚠️ " + (r.message || k.err); show(m, true); }
@@ -1674,13 +1742,20 @@ async function loadFiles() {
   if (!list.length) { box.replaceChildren(h("span", { class: "muted" }, "فایلی نداری. فایل هر ارائه تا ۲۴ ساعت اینجا می‌ماند.")); return; }
   box.replaceChildren(...list.map((f) => {
     const hrs = Math.max(1, Math.ceil((f.t + 86400000 - Date.now()) / 3600000));
+    const slot = f.audio === "podcast" ? h("div", { class: "pp-slot" }) : null;
+    const playBtn = slot ? h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => {
+      if (slot.firstChild) { const a = slot.querySelector("audio"); if (a) a.pause(); slot.replaceChildren(); ev.currentTarget.textContent = "▶ پخش"; return; }
+      slot.append(podcastPlayer(f.id, f.title, true)); ev.currentTarget.textContent = "✕ بستن پلیر";
+    } }, "▶ پخش") : null;
     return h("div", { class: "file" },
       h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${f.poster ? "پوستر" : f.handout ? "جزوه (Word)" : f.audio === "podcast" ? "پادکست" : f.audio === "slides" ? (f.slides ? "اسلاید صوتی · " + fa(f.slides) + " اسلاید" : "صدای یک اسلاید") : fa(f.slides) + " اسلاید"} · تا ${fa(hrs)} ساعت دیگر`)),
       h("div", { class: "fa" },
         f.handout || f.audio ? null : f.poster
           ? h("a", { class: "btn ghost sm", href: "/api/files/" + encodeURIComponent(f.id) + "?inline=1", target: "_blank", rel: "noopener" }, "👁 نمایش")
           : h("a", { class: "btn ghost sm", href: previewUrl(f.id), target: "_blank", rel: "noopener" }, "👁 پیش‌نمایش / PDF"),
+        playBtn,
         h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => download(f.id, ev.currentTarget) }, "⬇️ دانلود")),
+      slot,
       f.extras && f.extras.length
         ? h("div", { class: "fx" },
           h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),

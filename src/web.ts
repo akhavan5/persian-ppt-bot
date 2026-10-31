@@ -192,7 +192,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     const extras = await Promise.all(list.map((f) => (isPosterFile(f.name) || isHandoutFile(f.name) || audioKind(f.id) ? Promise.resolve([]) : missingExtras(env, user.id, f.id, list).catch(() => []))));
     return json({ files: list.map((f, i) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name), ...(audioKind(f.id) ? { audio: audioKind(f.id) } : {}), ...(extras[i].length ? { extras: extras[i] } : {}) })) });
   }
-  if (path.startsWith("/api/files/") && method === "GET") return download(env, user, path.slice("/api/files/".length), url.searchParams.get("inline") === "1");
+  if (path.startsWith("/api/files/") && method === "GET") return download(env, user, path.slice("/api/files/".length), url.searchParams.get("inline") === "1", req.headers.get("range"));
 
   return err("پیدا نشد", 404);
 }
@@ -576,8 +576,19 @@ const isPosterFile = (name: string) => /\.(png|jpe?g)$/i.test(name);
 const isHandoutFile = (name: string) => /\.docx$/i.test(name);
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-/** inline=true: نمایش در تگ img (پیش‌نمایش پوستر)؛ وگرنه دانلود */
-async function download(env: Env, user: WebUser, id: string, inline = false): Promise<Response> {
+/** Range سازگار با RFC 7233 (فقط یک بازه)؛ برای پخش و جلو/عقب‌کردن فایل صوتی. null = بدون Range، "bad" = نامعتبر */
+function parseRange(h: string | null, size: number): { start: number; end: number } | "bad" | null {
+  if (!h) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(h.trim());
+  if (!m || (m[1] === "" && m[2] === "")) return null; // بازه‌ی چندتکه یا ناشناخته: کل فایل (۲۰۰) برگردانده می‌شود
+  let a: number, b: number;
+  if (m[1] === "") { const n = Number(m[2]); if (n <= 0) return "bad"; a = Math.max(0, size - n); b = size - 1; }
+  else { a = Number(m[1]); b = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1); }
+  return a >= size || a > b ? "bad" : { start: a, end: b };
+}
+
+/** inline=true: نمایش در تگ img (پیش‌نمایش پوستر) یا پخش در تگ audio (پادکست/صدای اسلاید)، با پشتیبانی از Range؛ وگرنه دانلود */
+async function download(env: Env, user: WebUser, id: string, inline = false, range: string | null = null): Promise<Response> {
   if (!/^[\w-]{1,100}$/.test(id)) return err("پیدا نشد", 404);
   const f = await loadFileDirect(env, user.id, id);
   if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
@@ -586,13 +597,23 @@ async function download(env: Env, user: WebUser, id: string, inline = false): Pr
   const docx = isHandoutFile(f.entry.name);
   const wav = isWavFile(f.entry.name);
   const ascii = poster ? `poster-${siteHost(env)}.${png ? "png" : "jpg"}` : docx ? `handout-${siteHost(env)}.docx` : wav ? `audio-${siteHost(env)}.wav` : audioKind(id) === "slides" ? `audio-presentation-${siteHost(env)}.pptx` : `presentation-${siteHost(env)}.pptx`;
-  return new Response(f.data, {
-    headers: {
-      "content-type": poster ? (png ? "image/png" : "image/jpeg") : docx ? DOCX_MIME : wav ? "audio/wav" : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "content-disposition": `${poster && inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
-      ...SEC_HEADERS,
-    },
-  });
+  const headers: Record<string, string> = {
+    "content-type": poster ? (png ? "image/png" : "image/jpeg") : docx ? DOCX_MIME : wav ? "audio/wav" : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "content-disposition": `${(poster || wav) && inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
+    ...SEC_HEADERS,
+  };
+  // فقط برای پخش صوتی: Range تا مرورگر (به‌ویژه Safari/iOS) بتواند شروع به پخش کند و جلو/عقب برود
+  if (wav && inline) {
+    const size = f.data.byteLength;
+    headers["accept-ranges"] = "bytes";
+    const r = parseRange(range, size);
+    if (r === "bad") return new Response(null, { status: 416, headers: { ...headers, "content-range": `bytes */${size}` } });
+    if (r) {
+      const body = new Uint8Array(f.data, r.start, r.end - r.start + 1);
+      return new Response(body, { status: 206, headers: { ...headers, "content-range": `bytes ${r.start}-${r.end}/${size}`, "content-length": String(body.byteLength) } });
+    }
+  }
+  return new Response(f.data, { headers });
 }
 
 // ---------- پیش‌نمایش و PDF ----------

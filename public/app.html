@@ -31,6 +31,19 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .btn{font:700 .95rem Vazirmatn,Tahoma,sans-serif;border:0;border-radius:12px;padding:11px 16px;background:var(--btn);color:var(--btn-fg);width:100%;cursor:pointer}
 .btn.ghost{background:var(--sec);color:var(--fg);border:1px solid var(--line)}
 .btn.sm{width:auto;padding:6px 12px;font-size:.82rem;border-radius:9px}
+/* پلیر پادکست (blob با هدر Authorization گرفته می‌شود چون تگ audio نمی‌تواند هدر بفرستد) */
+.ppList{display:grid;gap:8px;margin-top:10px}.ppList:empty{display:none}
+.pp{background:var(--sec);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:grid;gap:6px}
+.pp-title{font-size:.85rem;font-weight:700;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-row{display:flex;align-items:center;gap:8px;direction:ltr}
+.pp-play{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--btn);color:var(--btn-fg);font-size:1.05rem;display:grid;place-items:center}
+.pp-play:disabled{opacity:.55}
+.pp-skip,.pp-speed{flex:none;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:10px;min-width:38px;height:34px;padding:0 6px;font:inherit;font-size:.76rem}
+.pp-seek{flex:1 1 auto;min-width:0;accent-color:var(--btn);height:28px}
+.pp-time{flex:none;font-size:.76rem;color:var(--hint);font-variant-numeric:tabular-nums;text-align:center;width:100%}
+.pp-msg{font-size:.78rem;color:var(--hint);margin:0;text-align:center}.pp-msg.err{color:var(--danger)}
+.file .pp-slot{flex:1 1 100%}.file .pp-slot:empty{display:none}
+
 .btn:disabled{opacity:.55}
 .btn.busy::after{content:"";display:inline-block;width:.9em;height:.9em;margin-inline-start:8px;vertical-align:-2px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -188,6 +201,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <div id="doneAudioMore" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
         <div class="muted" id="doneAudioWait" hidden style="margin-top:8px">🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</div>
         <div class="muted" id="donePodcastWait" hidden style="margin-top:8px">🎙 پادکست در حال ساخت است (چند دقیقه)…</div>
+         <div class="ppList" id="donePodcastPlayers"></div>
         <div class="err" id="doneWarn" hidden></div>
         <div id="doneExtraJobs"></div>
         <div class="fx" id="doneExtras" hidden></div>
@@ -920,11 +934,66 @@ function showDone(jobId, s, took = 0) {
   $("#done").dataset.job = jobId; doneExtras([]); loadFiles(); // دکمه‌های «ساخت جداگانه» بعد از رسیدن فهرست فایل‌ها (loadFiles → doneExtras) پر می‌شوند
   view("done"); $("#done").scrollIntoView({ behavior: "smooth", block: "center" });
 }
+// پلیر پادکست داخل Mini App: فایل با هدر Authorization به‌صورت blob گرفته و با تگ audio پخش می‌شود. دریافت فقط با زدن «پخش» شروع می‌شود (صرفه‌جویی در اینترنت)؛
+// فایل تازه چند ثانیه برای KV دیده نمی‌شود، پس ۴۰۴ چند بار دوباره امتحان می‌شود. اگر پخش در WebView ممکن نشد، «ارسال به چت» همچنان هست.
+const ppTime = (t) => { t = Math.max(0, Math.floor(t || 0)); return fa(Math.floor(t / 60)) + ":" + fa(String(t % 60).padStart(2, "0")); };
+const PP_SPEEDS = [1, 1.25, 1.5, 2, 0.75];
+function podcastPlayer(id, label, autoplay = false) {
+  const audio = h("audio", { preload: "metadata" });
+  const play = h("button", { class: "pp-play", type: "button", "aria-label": "پخش" }, "▶");
+  const back = h("button", { class: "pp-skip", type: "button", "aria-label": "۱۵ ثانیه عقب" }, "⟲ ۱۵");
+  const fwd = h("button", { class: "pp-skip", type: "button", "aria-label": "۱۵ ثانیه جلو" }, "۱۵ ⟳");
+  const speed = h("button", { class: "pp-speed", type: "button", "aria-label": "سرعت پخش" }, "۱×");
+  const seek = h("input", { class: "pp-seek", type: "range", min: "0", max: "0", step: "1", value: "0", "aria-label": "موقعیت پخش" });
+  const time = h("div", { class: "pp-time" }, "۰:۰۰ / ۰:۰۰");
+  const msg = h("p", { class: "pp-msg", hidden: true });
+  const root = h("div", { class: "pp" }, h("p", { class: "pp-title" }, "🎙 " + (label || "پادکست")), h("div", { class: "pp-row" }, play, back, seek, fwd, speed), time, msg);
+  let url = "", loading = false, dragging = false, si = 0;
+  const dur = () => (isFinite(audio.duration) ? audio.duration : 0);
+  const note = (t, bad) => { msg.textContent = t || ""; msg.className = "pp-msg" + (bad ? " err" : ""); show(msg, !!t); };
+  const paint = () => {
+    seek.max = String(Math.floor(dur()) || 0);
+    if (!dragging) seek.value = String(Math.floor(audio.currentTime));
+    time.textContent = ppTime(audio.currentTime) + " / " + ppTime(dur());
+    play.textContent = audio.paused ? "▶" : "⏸"; play.setAttribute("aria-label", audio.paused ? "پخش" : "توقف");
+  };
+  async function load() {
+    if (url || loading) return !!url;
+    loading = true; play.disabled = true; note("در حال بارگذاری پادکست…");
+    try {
+      for (let i = 0; i < 20; i++) {
+        const r = await raw("/api/files/" + encodeURIComponent(id) + "?inline=1").catch(() => null);
+        if (r && r.ok) { url = URL.createObjectURL(await r.blob()); audio.src = url; note(""); return true; }
+        if (!r || r.status !== 404) break;
+        await sleep(3000);
+      }
+      note("بارگذاری نشد؛ دوباره امتحان کن یا «ارسال به چت» را بزن.", true); return false;
+    } finally { loading = false; play.disabled = false; }
+  }
+  async function toggle() {
+    if (!url && !(await load())) return;
+    if (audio.paused) audio.play().catch(() => note("برای پخش دوباره دکمه‌ی ▶ را بزن.")); else audio.pause();
+  }
+  for (const ev of ["loadedmetadata", "durationchange", "timeupdate", "play", "pause", "ended"]) audio.addEventListener(ev, paint);
+  audio.addEventListener("error", () => { if (url) note("این پادکست در Mini App پخش نشد؛ «ارسال به چت» را بزن.", true); });
+  audio.addEventListener("play", () => { document.querySelectorAll("audio").forEach((a) => { if (a !== audio) a.pause(); }); });
+  play.onclick = toggle;
+  back.onclick = () => { audio.currentTime = Math.max(0, audio.currentTime - 15); };
+  fwd.onclick = () => { audio.currentTime = Math.min(dur() || Infinity, audio.currentTime + 15); };
+  speed.onclick = () => { si = (si + 1) % PP_SPEEDS.length; audio.playbackRate = PP_SPEEDS[si]; speed.textContent = fa(String(PP_SPEEDS[si]).replace(".", "٫")) + "×"; };
+  seek.addEventListener("input", () => { dragging = true; time.textContent = ppTime(Number(seek.value)) + " / " + ppTime(dur()); });
+  seek.addEventListener("change", () => { audio.currentTime = Number(seek.value); dragging = false; });
+  root.append(audio);
+  root.dispose = () => { audio.pause(); audio.removeAttribute("src"); audio.load(); if (url) URL.revokeObjectURL(url); url = ""; };
+  if (autoplay) toggle();
+  return root;
+}
+
 // اسلاید صوتی و پادکست همراه: در Workflow جدا چند دقیقه طول می‌کشند؛ وضعیتشان جدا خوانده می‌شود و دکمه‌ی «ارسال به چت» هرکدام وقتی آماده شد نمایش داده می‌شود
 let audioTracking = 0;
 function trackAudio(s) {
   const my = ++audioTracking;
-  $("#doneAudioMore").replaceChildren();
+  $("#doneAudioMore").replaceChildren(); $("#donePodcastPlayers").querySelectorAll(".pp").forEach((p) => p.dispose && p.dispose()); $("#donePodcastPlayers").replaceChildren();
   const kinds = [
     { id: s.audioId, state: s.audio, btn: "#doneAudio", wait: "#doneAudioWait", part: "صدای اسلاید", err: "ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگشت." },
     { id: s.podcastId, state: s.podcast, btn: "#donePodcast", wait: "#donePodcastWait", part: "پادکست، قسمت", err: "ساخت پادکست ناموفق بود؛ اعتبارش برگشت." },
@@ -946,6 +1015,7 @@ async function pollAudio(my, k) {
       const b = $(k.btn); show(b, true); b.onclick = (e) => sendToChat(r.ids[0], e.currentTarget);
       // بخش‌های اضافه (پادکست چندقسمتی یا اسلایدهایی که به‌خاطر حجم جدا ذخیره شده‌اند)
       r.ids.slice(1).forEach((id, n) => $("#doneAudioMore").append(h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(id, e.currentTarget) }, `📥 ${k.part} ${fa(n + 2)}`)));
+      if (k.btn === "#donePodcast") r.ids.forEach((id, n) => $("#donePodcastPlayers").append(podcastPlayer(id, ($("#doneTitle").textContent || "پادکست") + (r.ids.length > 1 ? " — قسمت " + fa(n + 1) : ""))));
       TG.haptic("success");
     } else toast(r.message || k.err);
     return;
@@ -1044,9 +1114,15 @@ async function loadFiles() {
   box.replaceChildren(...list.map((f) => {
     const hrs = Math.max(1, Math.ceil((f.t + 86400000 - Date.now()) / 3600000));
     const kind = f.poster ? "🖼 پوستر" : f.handout ? "📝 جزوه (Word)" : f.audio === "podcast" ? "🎙 پادکست" : f.audio === "slides" ? (f.slides ? `🔊 اسلاید صوتی · ${fa(f.slides)} اسلاید` : "🔊 صدای یک اسلاید") : `📊 ${fa(f.slides)} اسلاید`;
+    const slot = f.audio === "podcast" ? h("div", { class: "pp-slot" }) : null;
+    const playBtn = slot ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => {
+      if (slot.firstChild) { slot.firstChild.dispose && slot.firstChild.dispose(); slot.replaceChildren(); e.currentTarget.textContent = "▶ پخش"; return; }
+      slot.append(podcastPlayer(f.id, f.title, true)); e.currentTarget.textContent = "✕ بستن پلیر";
+    } }, "▶ پخش") : null;
     return h("div", { class: "file" },
       h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${kind} · تا ${fa(hrs)} ساعت دیگر`)),
       h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end" },
+        playBtn,
         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
         !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
@@ -1054,7 +1130,8 @@ async function loadFiles() {
         ? h("div", { class: "fx" },
           h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),
           f.extras.flatMap((k) => (EXTRA_BTNS[k] || []).map(([label, layout]) => h("button", { class: "btn ghost sm", type: "button", onclick: (e) => makeExtra(f, k, layout, e.currentTarget) }, label))))
-        : null);
+        : null,
+      slot);
   }));
 }
 
