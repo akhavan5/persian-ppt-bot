@@ -6,7 +6,6 @@ import { SIGNUP_CREDITS } from "./settings";
 import { toFa } from "./util";
 import { BRAND, sendEmail, siteOf } from "./email";
 
-const BOT_URL = "https://t.me/pptsaz_bot";
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const FONT = "Vazirmatn,Tahoma,'Segoe UI',Arial,sans-serif";
@@ -20,7 +19,7 @@ const STEPS: [string, string][] = [
   ["مدل، تعداد اسلاید و تصویر را انتخاب کن", "قالب فارسی و راست‌چین، با فونت‌های خوانا، بدون دردسر."],
   ["فایل PPTX را بگیر و ویرایش کن", "ارائه‌ی آماده را در پاورپوینت باز کن و هر چه خواستی عوض کن."],
 ];
-const FEATURES = ["📄 تبدیل Word به ارائه", "📑 تبدیل PDF به ارائه", "🔗 ساخت ارائه از لینک", "🖼 اسلاید با تصویر", "🗒 یادداشت سخنران", "📊 اینفوگرافیک و جزوه"];
+const FEATURES = ["📄 تبدیل Word به ارائه", "📑 تبدیل PDF به ارائه", "🔗 ساخت ارائه از لینک", "🖼 اسلاید با تصویر", "🗒 یادداشت سخنران", "📊 اینفوگرافیک و جزوه", "🤖 ساخت ارائه در ربات تلگرام"];
 
 export function welcomeEmail(env: Env, name: string): { subject: string; html: string; text: string } {
   const site = siteOf(env);
@@ -42,8 +41,8 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
               </td>
             </tr>`).join("");
 
-  const chip = (t: string) => `<td width="50%" style="padding:0 0 10px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="#ffffff" style="border:1px solid ${LINE};border-radius:12px;padding:10px 8px;font:600 13px/1.6 ${FONT};color:${INK};">${t}</td></tr></table></td>`;
-  const chipRows = [0, 2, 4].map((i) => `<tr>${chip(FEATURES[i])}${chip(FEATURES[i + 1])}</tr>`).join("");
+  const chip = (t: string, span = 1) => `<td width="${span === 2 ? 100 : 50}%" colspan="${span}" style="padding:0 0 10px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="#ffffff" style="border:1px solid ${LINE};border-radius:12px;padding:10px 8px;font:600 13px/1.6 ${FONT};color:${INK};">${t}</td></tr></table></td>`;
+  const chipRows = [0, 2, 4].map((i) => `<tr>${chip(FEATURES[i])}${chip(FEATURES[i + 1])}</tr>`).join("") + `<tr>${chip(FEATURES[6], 2)}</tr>`;
 
   const html = `<!doctype html>
 <html lang="fa" dir="rtl" xmlns="http://www.w3.org/1999/xhtml">
@@ -95,15 +94,9 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
     </td></tr>
 
     <!-- امکانات -->
-    <tr><td bgcolor="#f8faff" style="background:#f8faff;padding:22px 28px 12px 18px;border-top:1px solid ${LINE};font-family:${FONT};text-align:right;">
+    <tr><td bgcolor="#f8faff" style="background:#f8faff;padding:22px 28px 22px 18px;border-top:1px solid ${LINE};border-radius:0 0 22px 22px;font-family:${FONT};text-align:right;">
       <div style="font:700 15px/1.8 ${FONT};color:${INK};padding:0 0 12px 10px;">کارهایی که می‌توانی بکنی</div>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${chipRows}</table>
-    </td></tr>
-
-    <!-- تلگرام -->
-    <tr><td bgcolor="#ffffff" align="center" style="background:#ffffff;padding:24px 28px 30px;border-top:1px solid ${LINE};border-radius:0 0 22px 22px;font-family:${FONT};">
-      <div style="font:400 13.5px/2 ${FONT};color:${MUTED};">ترجیح می‌دهی از موبایل و داخل تلگرام بسازی؟</div>
-      <a href="${BOT_URL}" target="_blank" style="font:700 14px/2 ${FONT};color:${BLUE};text-decoration:none;">ربات تلگرام ${BRAND} ←</a>
     </td></tr>
 
     <!-- پانوشت -->
@@ -127,7 +120,6 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
     ...STEPS.map(([t], i) => `${toFa(String(i + 1))}. ${t}`),
     "",
     `شروع: ${site}/`,
-    `ربات تلگرام: ${BOT_URL}`,
     "",
     "سؤالی داشتی؟ همین ایمیل را پاسخ بده.",
   ].join("\n");
