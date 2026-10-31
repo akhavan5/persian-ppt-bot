@@ -108,6 +108,7 @@ export const BOT_COMMANDS = [
 export const ADMIN_COMMANDS = [
   ...BOT_COMMANDS,
   { command: "admin", description: "پنل مدیریت (دکمه‌ای)" },
+  { command: "poster", description: "پوستر علمی چاپی A0/A1/A2 (PDF)" },
   { command: "cancel", description: "لغو ورودی در انتظار پنل" },
   { command: "appver", description: "نسخه‌ی اپ اندروید (دکمه‌ای در پنل)" },
   { command: "apppush", description: "اعلان به اپ اندروید: /apppush عنوان | متن | لینک" },
