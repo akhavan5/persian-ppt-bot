@@ -739,7 +739,7 @@ async function boot() {
     me = r.user ? r : null;
   } catch (e) { toast("ارتباط با سرور برقرار نشد؛ صفحه را دوباره باز کن."); return; }
   if (me && me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.");
-  renderCommon(); initPoster(); initLink();
+  renderCommon(); initPoster(); initLink(); initVoice();
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
   if (me) { if ($("#authDlg").open) $("#authDlg").close(); renderApp(); } else renderAuthBtn();
   handlePayReturn();
@@ -1342,6 +1342,9 @@ async function readImage(file, ext, my) {
   if (file.size <= IMG_MAX) return serverExtract(file.type === type ? file : new Blob([file], { type }), my);
   const bmp = await createImageBitmap(file); return serverExtract(await jpegUnder(bmp, bmp.width, bmp.height), my);
 }
+// ویس/فایل صوتی (فقط وقتی سرور cfg.voice را روشن کرده): روی سرور با Deepgram به متن تبدیل می‌شود
+const AUDIO_MIME = { mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg", flac: "audio/flac", aac: "audio/aac", amr: "audio/amr" };
+const AUDIO_EXT = Object.keys(AUDIO_MIME);
 const readPdf = (file, my) => serverExtract(file.type === "application/pdf" ? file : new Blob([file], { type: "application/pdf" }), my);
 async function extractFile(file, my) {
   const ext = (file.name.split(".").pop() || "").toLowerCase();
@@ -1355,6 +1358,10 @@ async function extractFile(file, my) {
   }
   if (ext === "pdf") return readPdf(file, my);
   if (["png", "jpg", "jpeg"].includes(ext)) return readImage(file, ext, my);
+  if (AUDIO_EXT.includes(ext)) {
+    if (!(cfg && cfg.voice)) throw new Error("ورودی صوتی فعال نیست؛ موضوع را به‌صورت متن بنویس.");
+    return serverExtract(new Blob([file], { type: AUDIO_MIME[ext] }), my);
+  }
   throw new Error("این نوع فایل پشتیبانی نمی‌شود. فایل Word، PDF، PowerPoint، Excel، متن یا تصویر بده (فایل‌های قدیمی doc/ppt را ابتدا به docx/pptx تبدیل کن).");
 }
 const HINT = $("#upHint").textContent;
@@ -1367,6 +1374,12 @@ async function onFile(file) {
   try {
     const raw = tidy(await extractFile(file, my));
     if (my !== upSeq) return;
+    const isAudio = AUDIO_EXT.includes((file.name.split(".").pop() || "").toLowerCase());
+    if (isAudio && raw.length < 3) throw new Error("صدایی تشخیص داده نشد؛ واضح‌تر و با نویز کمتر امتحان کن.");
+    if (isAudio && raw.length <= 600) { // ویس کوتاه = «موضوع» ارائه (مثل ربات تلگرام)؛ منبع نمی‌شود
+      const t = $("#topic"); t.value = t.value.trim() ? t.value.trimEnd() + " " + raw : raw; store.set("topic", t.value);
+      $("#upHint").textContent = HINT; return;
+    }
     if (raw.length < 30) throw new Error("متنی در فایل پیدا نشد (اگر اسکن یا تصویر است، واضح‌تر و کم‌حجم‌تر امتحان کن).");
     srcText = raw.slice(0, MAX_SRC); srcName = file.name;
     $("#upName").textContent = `${file.name} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false); show($("#linkBtn"), false);
@@ -1385,6 +1398,11 @@ $("#upBox").addEventListener("drop", (e) => { if (!extracting && !srcText) onFil
 
 // ---------- ساخت از روی لینک ----------
 // آدرس صفحه به سرور می‌رود (Tavily Extract)؛ فقط متن صفحه برمی‌گردد و مثل متن فایل آپلودی «منبع» ارائه می‌شود. فقط وقتی سرور فعالش کرده نمایش داده می‌شود.
+function initVoice() {
+  const on = !!(cfg && cfg.voice);
+  $("#file").accept = ".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg" + (on ? "," + AUDIO_EXT.map((e) => "." + e).join(",") : "");
+  $("#pick").textContent = on ? "📎 آپلود فایل یا ویس (اختیاری)" : "📎 آپلود فایل (اختیاری)";
+}
 function initLink() { show($("#linkBtn"), !!(cfg && cfg.link) && $("#upChip").hidden); }
 $("#linkBtn").onclick = () => { if (extracting || srcText) return; upMsg(""); show($("#linkRow"), true); $("#linkUrl").focus(); };
 $("#linkCancel").onclick = () => { show($("#linkRow"), false); $("#linkUrl").value = ""; upMsg(""); };
