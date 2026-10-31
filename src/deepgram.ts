@@ -16,6 +16,13 @@ const MIME_BY_EXT: Record<string, string> = {
   flac: "audio/flac", aac: "audio/aac", amr: "audio/amr", wma: "audio/x-ms-wma",
 };
 
+/** نوع محتوای فایل صوتی آپلودی وب ← پسوند (مرورگرها برای فایل صوتی نوع‌های گوناگونی می‌فرستند) */
+export const AUDIO_TYPES = new Map<string, string>([
+  ["audio/mpeg", "mp3"], ["audio/mp3", "mp3"], ["audio/mp4", "m4a"], ["audio/x-m4a", "m4a"], ["audio/m4a", "m4a"],
+  ["audio/wav", "wav"], ["audio/x-wav", "wav"], ["audio/wave", "wav"], ["audio/ogg", "ogg"], ["audio/opus", "ogg"],
+  ["audio/flac", "flac"], ["audio/x-flac", "flac"], ["audio/aac", "aac"], ["audio/amr", "amr"],
+]);
+
 const keysOf = (env: Env) => String(env.DEEPGRAM_API_KEY ?? "").split(/[\n;,]+/).map((k) => k.trim()).filter(Boolean);
 export const deepgramEnabled = (env: Env) => keysOf(env).length > 0;
 

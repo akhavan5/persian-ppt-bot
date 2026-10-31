@@ -599,6 +599,10 @@ async function restoreDraft() {
 for (const id of ["#topic", "#slides", "#imgs", "#pOn", "#pChoice", "#hOn", "#aOn", "#cOn"]) for (const ev of ["input", "change"]) $(id).addEventListener(ev, saveDraft);
 
 // ---------- ساخت ----------
+const FILE_ACCEPT = ".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg";
+// ویس/فایل صوتی (فقط وقتی سرور cfg.voice را روشن کرده): روی سرور با Deepgram به متن تبدیل می‌شود
+const AUDIO_MIME = { mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg", flac: "audio/flac", aac: "audio/aac", amr: "audio/amr" };
+const AUDIO_EXT = Object.keys(AUDIO_MIME);
 function renderMake() {
   const prevS = $("#slides").value, prevI = $("#imgs").value; // انتخاب‌های فعلی فرم (با ذخیره‌ی تنظیمات پاک نشوند)
   const max = me.maxSlides, cur = Math.min(me.settings.slides, max);
@@ -609,6 +613,8 @@ function renderMake() {
   if (prevS && choices.includes(Number(prevS))) $("#slides").value = prevS;
   if (prevI && me.maxImages > 0) $("#imgs").value = prevI;
   show($("#pRow"), !!cfg.poster); show($("#pLay"), !!cfg.poster && $("#pOn").checked); show($("#linkBtn"), !!cfg.link && !srcText);
+  $("#file").accept = FILE_ACCEPT + (cfg.voice ? "," + AUDIO_EXT.map((e) => "." + e).join(",") : "");
+  $("#pick").textContent = cfg.voice ? "📎 آپلود فایل یا ویس (اختیاری)" : "📎 آپلود فایل (اختیاری)";
   show($("#aRow"), !!cfg.audio); show($("#cRow"), !!cfg.audio); // اسلاید صوتی و پادکست: فقط وقتی سرور فعالشان کرده؛ پیش‌فرض روشن
   $("#pOn").onchange = () => show($("#pLay"), $("#pOn").checked);
   $("#examples").replaceChildren(...EXAMPLES.map((t) => h("button", { type: "button", onclick: () => { $("#topic").value = t; saveDraft(); TG.haptic("select"); } }, t)));
@@ -714,6 +720,10 @@ async function extractFile(file, my) {
   }
   if (ext === "pdf") return serverExtract(file.type === "application/pdf" ? file : new Blob([file], { type: "application/pdf" }), my);
   if (["png", "jpg", "jpeg"].includes(ext)) return readImage(file, ext, my);
+  if (AUDIO_EXT.includes(ext)) {
+    if (!cfg.voice) throw new Error("ورودی صوتی فعال نیست؛ موضوع را به‌صورت متن بنویس.");
+    return serverExtract(new Blob([file], { type: AUDIO_MIME[ext] }), my);
+  }
   throw new Error("این نوع فایل پشتیبانی نمی‌شود. فایل Word، PDF، PowerPoint، Excel، متن یا تصویر بده (فایل‌های قدیمی doc/ppt را ابتدا به docx/pptx تبدیل کن).");
 }
 function setSource(text, label, hint) {
@@ -735,6 +745,15 @@ async function onFile(file) {
   try {
     const raw = tidy(await extractFile(file, my));
     if (my !== upSeq) return;
+    if (AUDIO_EXT.includes(extOf(file))) {
+      // ویس/فایل صوتی: متن کوتاه (تا ۶۰۰ نویسه) اگر موضوع خالی است همان موضوع می‌شود؛ متن بلندتر منبع ارائه است
+      if (raw.length < 3) throw new Error("صدایی که قابل‌تشخیص باشد در فایل پیدا نشد؛ واضح‌تر بگو یا دوباره بفرست.");
+      const tp = $("#topic");
+      if (!tp.value.trim() && raw.length <= 600) { tp.value = raw; saveDraft(); $("#upHint").textContent = "🎙 متن صدا به‌عنوان موضوع گذاشته شد؛ اگر لازم است ویرایشش کن."; return; }
+      setSource(raw, file.name, "ارائه از روی متنِ پیاده‌شده‌ی این فایل صوتی ساخته می‌شود.");
+      if (!tp.value.trim()) tp.value = file.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").slice(0, 120);
+      return;
+    }
     if (raw.length < 30) throw new Error("متنی در فایل پیدا نشد (اگر اسکن یا تصویر است، واضح‌تر و کم‌حجم‌تر امتحان کن).");
     setSource(raw, file.name, "ارائه از روی محتوای این فایل ساخته می‌شود.");
     const t = $("#topic"); if (!t.value.trim()) t.value = file.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").slice(0, 120);

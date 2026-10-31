@@ -22,6 +22,7 @@ import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, lau
 import { ensureUid, resolveUid } from "./link";
 import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
+import { deepgramEnabled } from "./deepgram";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
 import { fetchLinkSource, findLinkInText, linkCapNote, linkEnabled, linkLimitHit } from "./link-source";
 
@@ -38,6 +39,10 @@ const HELP =
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
   "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۵ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دعوت = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
+
+/** خط ورودی صوتی فقط وقتی DEEPGRAM_API_KEY تنظیم است در راهنما می‌آید */
+const VOICE_HELP = "🎙 یا یک <b>ویس</b> (یا فایل صوتی) بفرست؛ به متن تبدیل می‌شود. ویس کوتاه همان <b>موضوع</b> ارائه است (مثلاً «ده اسلاید درباره‌ی هوش مصنوعی در آموزش») و ویس یا فایل صوتی بلندتر (مثل یک سخنرانی) <b>منبع</b> ارائه می‌شود.\n\n";
+const helpText = (env: Env) => (deepgramEnabled(env) ? HELP.replace("🔗 یا <b>لینک", VOICE_HELP + "🔗 یا <b>لینک") : HELP);
 
 type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
@@ -633,7 +638,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (cmd === "/invite") return await showInvite(env, chatId, userId);
 
   if (cmd === "/credit" || cmd === "/balance") return await showCredit(env, chatId, uid, userId);
-  if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, HELP, homeKb(env, userId, admin));
+  if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, helpText(env), homeKb(env, userId, admin));
   if (cmd === "/menu") return await sendMessage(env, chatId, HOME_TEXT, homeKb(env, userId, admin));
   if (cmd === "/settings") return await showSettings(env, chatId, uid);
   if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. منوی دکمه‌ای:", homeKb(env, userId, admin));

@@ -23,6 +23,7 @@ import {
 } from "./auth";
 import { audioEnabled, beginDeck, fileNameWithSite, launchDeck, posterEnabled, runningJob, siteHost, slidesLimitMsg } from "./deck-service";
 import { OCR_TYPES } from "./extract";
+import { AUDIO_TYPES, deepgramEnabled } from "./deepgram";
 import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { WEB_MAX_FILE, extractFileBytes } from "./tg-file";
 import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
@@ -111,6 +112,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       pdf: hasBrowser(env),
       // ساخت ارائه از روی لینک (Tavily Extract)؛ بدون TAVILY_API_KEY دکمه‌اش در سایت نمایش داده نمی‌شود
       link: linkEnabled(env),
+      // ورودی صوتی (ویس/فایل صوتی ← متن با Deepgram)؛ بدون DEEPGRAM_API_KEY آپلود صوتی در سایت پذیرفته نمی‌شود
+      voice: deepgramEnabled(env),
       // مدل‌های بدون پرچم free فقط برای دارندگان پلن‌اند: free=false
       models: modelList(env).map((m) => ({ id: m.id, name: m.name, brand: m.brand, free: m.free })),
       plans: PLANS,
@@ -434,17 +437,19 @@ async function extract(req: Request, env: Env, user: WebUser): Promise<Response>
   if (!isAllowed(env, user.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
   if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
   const mime = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-  if (!OCR_TYPES.has(mime)) return err("فقط تصویر PNG/JPG یا فایل PDF پشتیبانی می‌شود.", 415);
+  const isAudio = AUDIO_TYPES.has(mime); // ویس/فایل صوتی ← متن با Deepgram (همان مسیر مشترک extractFileBytes)
+  if (!OCR_TYPES.has(mime) && !isAudio) return err("فقط تصویر PNG/JPG، فایل PDF یا فایل صوتی پشتیبانی می‌شود.", 415);
+  if (isAudio && !deepgramEnabled(env)) return err("ورودی صوتی فعال نیست.", 404);
   const isPdf = mime === "application/pdf";
-  const max = isPdf ? WEB_MAX_FILE : VISION_MAX_IMAGE_BYTES; // PDF ۲۴ مگابایت (وب)، تصویر ۴ مگابایت
-  const tooBig = () => err(isPdf ? "حجم فایل حداکثر ۲۴ مگابایت می‌تواند باشد." : "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد.", 413);
+  const max = isPdf || isAudio ? WEB_MAX_FILE : VISION_MAX_IMAGE_BYTES; // PDF و صدا ۲۴ مگابایت (وب)، تصویر ۴ مگابایت
+  const tooBig = () => err(isPdf || isAudio ? "حجم فایل حداکثر ۲۴ مگابایت می‌تواند باشد." : "حجم تصویر برای تبدیل به متن حداکثر ۴ مگابایت می‌تواند باشد.", 413);
   if (Number(req.headers.get("content-length") ?? 0) > max) return tooBig();
   // سقف روزانه‌ی آپلود (حتی PDF متنی) = اعتبار ساخت ارائه + ۲؛ سقف جداگانه‌ی «تبدیل اسکن/تصویر» هم داخل خود مسیر مشترک اعمال می‌شود (ocr-limit.ts)
-  if (await ocrLimitHit(env, user.id, "upload")) return err(`سقف امروزت برای آپلود PDF/تصویر تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`, 429);
+  if (await ocrLimitHit(env, user.id, "upload")) return err(`سقف امروزت برای آپلود PDF/تصویر/صدا تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`, 429);
   const bytes = await req.arrayBuffer();
   if (bytes.byteLength > max) return tooBig();
-  if (bytes.byteLength < 100 || !ocrMagic(bytes, mime)) return err("فایل معتبر نیست؛ فایل دیگری را امتحان کن.", 415);
-  const name = isPdf ? "file.pdf" : mime === "image/png" ? "image.png" : "image.jpg"; // پسوند همیشه با نوع واقعی می‌خواند
+  if (bytes.byteLength < 100 || (!isAudio && !ocrMagic(bytes, mime))) return err("فایل معتبر نیست؛ فایل دیگری را امتحان کن.", 415);
+  const name = isAudio ? `audio.${AUDIO_TYPES.get(mime)}` : isPdf ? "file.pdf" : mime === "image/png" ? "image.png" : "image.jpg"; // پسوند همیشه با نوع واقعی می‌خواند
 
   if (env.WEB_OCR_WORKFLOW) {
     const jobId = `${user.id}-ocr-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
