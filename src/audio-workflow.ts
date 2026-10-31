@@ -195,6 +195,8 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         } else {
           await sendDocument(this.env, chatId, out.bytes, name,
             `🔊 <b>${esc(plan.title)}</b>\nصدای ${toFa(String(items.length))} اسلاید داخل خود اسلایدها گذاشته شده است؛ در حالت نمایش (Slide Show) خودکار پخش می‌شود و بعد از پایان صدا اسلاید عوض می‌شود.`);
+          // ربات: نسخه‌ای هم در «فایل‌ها» (سایت، Mini App و اپ) نگه می‌داریم؛ بهترین‌تلاش است و اگر ذخیره نشد (مثلاً بزرگ‌تر از ۲۴ مگابایت) ارسال به چت خراب نمی‌شود
+          await saveFile(this.env, uid, id, out.bytes, name, plan.title, items.length).catch((e) => console.error("audio save (bot)", String(e).slice(0, 200)));
         }
       }
       // اسلایدهایی که در فایل جا نشدند مثل قبل جدا فرستاده می‌شوند
@@ -211,6 +213,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         }
         await sendAudio(this.env, chatId, wav, wname,
           `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: wavSeconds(wav) });
+        await saveFile(this.env, uid, `${id}-s${m.i + 1}`, wav, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0).catch((e) => console.error("slide audio save (bot)", String(e).slice(0, 200)));
       }
       for (const m of made) await this.env.FILES.delete(tmpKey(id, m.i)).catch(() => {});
       return { inFile: inFile.length, apart: apart.map((m) => toFa(String(m.i + 1))), saved };
@@ -281,6 +284,11 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         }
         await sendAudio(this.env, chatId, merged, pname,
           `🎙 <b>${esc(script.title)}</b>${part}`, { title: script.title, performer: siteHost(this.env), duration: wavSeconds(merged) });
+        // ربات: علاوه بر چت، نسخه‌ای هم در «فایل‌ها» (سایت، Mini App و اپ) نگه می‌داریم تا پلیر و دانلود آن‌جا هم باشد.
+        // بهترین‌تلاش است: اگر فایل از سقف ذخیره (۲۴ مگابایت) بزرگ‌تر بود یا ذخیره نشد، ارسال به چت که انجام شده خراب نمی‌شود.
+        try {
+          await saveFile(this.env, uid, g === 0 ? id : `${id}-${g + 1}`, merged, pname, `${script.title}${part}`.slice(0, 120), 0);
+        } catch (e) { console.error("podcast save (bot)", String(e).slice(0, 200)); }
       }
       for (let i = 0; i < chunks.length; i++) await this.env.FILES.delete(tmpKey(id, i)).catch(() => {});
       return ids;
