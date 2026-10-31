@@ -35,6 +35,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -141,6 +142,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -902,6 +904,16 @@ private fun ExtraButtons(deckId: String, title: String, kinds: List<String>, job
     }
 }
 
+/** زمان‌سنج ساخت («⏱ ۱:۰۵») که هر ثانیه به‌روز می‌شود؛ startedAt بر پایه‌ی SystemClock.elapsedRealtime() است. */
+@Composable
+private fun JobElapsed(startedAt: Long) {
+    val now by produceState(android.os.SystemClock.elapsedRealtime(), startedAt) {
+        while (true) { value = android.os.SystemClock.elapsedRealtime(); delay(1000) }
+    }
+    val t = ((now - startedAt) / 1000).coerceAtLeast(0)
+    Text("⏱ " + (t / 60).toInt().fa() + ":" + (t % 60).toInt().toString().padStart(2, '0').faStr(), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.85f))
+}
+
 @Composable
 private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extras: List<String> = emptyList(), extraJobs: Map<String, String> = emptyMap()) {
     val cs = MaterialTheme.colorScheme
@@ -949,8 +961,22 @@ private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extra
         }
         else -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(ex.brand).padding(18.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("در حال ساخت ارائه…", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape), color = Color.White, trackColor = Color.White.copy(alpha = 0.3f))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("در حال ساخت ارائه…", style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.weight(1f))
+                    if (job.startedAt > 0L) JobElapsed(job.startedAt)
+                }
+                // نوار مرحله‌ای: ۱ سرفصل‌ها ← ۲ محتوا ← ۳ فایل (مرحله ۰ = هنوز در صف: نوار نامعلوم)
+                val step = job.step.coerceIn(0, 3)
+                val target = listOf(0f, 0.15f, 0.45f, 0.80f)[step] + if (job.extra) 0.12f else 0f
+                val shown by animateFloatAsState(target, tween(600), label = "jobProgress")
+                if (step == 0) LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape), color = Color.White, trackColor = Color.White.copy(alpha = 0.3f))
+                else LinearProgressIndicator(progress = { shown }, modifier = Modifier.fillMaxWidth().clip(CircleShape), color = Color.White, trackColor = Color.White.copy(alpha = 0.3f))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    listOf("۱ · سرفصل‌ها", "۲ · محتوا", "۳ · فایل").forEachIndexed { i, t ->
+                        val on = step == i + 1
+                        Text(t, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = if (on) 1f else 0.6f), fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
                 Text(job.message, color = Color.White.copy(alpha = 0.95f), style = MaterialTheme.typography.bodyMedium)
                 Text("می‌توانید اپ را ببندید؛ وقتی ارائه آماده شد با اعلان خبرتان می‌کنیم.", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
             }

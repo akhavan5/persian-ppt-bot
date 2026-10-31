@@ -175,6 +175,14 @@ textarea{min-height:110px;resize:vertical}
 .bar::after{content:"";display:block;height:100%;width:35%;border-radius:99px;background:linear-gradient(90deg,var(--primary),var(--primary-2));animation:slide 1.4s ease-in-out infinite}
 @keyframes slide{0%{margin-inline-start:-35%}100%{margin-inline-start:100%}}
 @media(prefers-reduced-motion:reduce){.bar::after{animation:none;width:100%}html{scroll-behavior:auto}}
+/* نوار پیشرفت مرحله‌ای ساخت (مثل Mini App تلگرام): ۱ سرفصل‌ها ← ۲ محتوا ← ۳ فایل */
+.jobHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pbar{height:8px;border-radius:99px;background:var(--soft);border:1px solid var(--line);overflow:hidden;margin:14px 0 4px}
+.pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--primary),var(--primary-2));transition:width .6s}
+.pbar.ind i{width:35%;animation:slide 1.4s ease-in-out infinite}
+.psteps{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin:6px 0 0}
+.psteps .on{color:var(--primary);font-weight:700}
+@media(prefers-reduced-motion:reduce){.pbar.ind i{animation:none;width:100%}.pbar i{transition:none}}
 .themes{display:flex;gap:8px;flex-wrap:wrap}
 .theme{display:flex;align-items:center;gap:8px;border:2px solid var(--line);background:#fff;border-radius:12px;padding:6px 12px;cursor:pointer;font-size:.88rem}
 .theme[aria-pressed=true]{border-color:var(--primary);background:var(--soft)}
@@ -385,8 +393,10 @@ address{font-style:normal}
 
   <section class="card" id="job" hidden aria-live="polite">
     <div id="jobRun">
-      <h2 id="jobText" style="font-size:1.1rem">⏳ در حال ساخت…</h2>
-      <div class="bar" aria-hidden="true"></div>
+      <div class="jobHead"><h2 style="font-size:1.1rem;margin:0">⏳ در حال ساخت…</h2><span class="muted" id="jobTime" hidden></span></div>
+      <div class="pbar ind" id="jobBar" role="progressbar" aria-label="پیشرفت ساخت ارائه" aria-valuemin="0" aria-valuemax="3" aria-valuenow="0"><i></i></div>
+      <div class="psteps" id="jobSteps"><span data-s="1">۱ · سرفصل‌ها</span><span data-s="2">۲ · محتوا</span><span data-s="3">۳ · فایل</span></div>
+      <div class="muted" id="jobText" style="margin:8px 0 6px"></div>
       <div class="muted">معمولاً ۱ تا ۲ دقیقه طول می‌کشد. می‌توانی صفحه را ببندی و بعداً برگردی.</div>
     </div>
     <div id="jobDone" hidden>
@@ -982,7 +992,7 @@ function renderApp() {
   $("#font").replaceChildren(...cfg.fonts.map((f) => h("option", { value: f }, f)));
   syncSettings();
   loadFiles();
-  if (me.activeJob) track(me.activeJob);
+  if (me.activeJob) track(me.activeJob, true);
 }
 const MODE_HINTS = {
   normal: "ساختار آزاد، متناسب با موضوع",
@@ -1452,22 +1462,47 @@ $("#go").onclick = async () => {
   }
 };
 
-async function track(jobId) {
+// پیشرفت: متن وضعیت سرور «۱/۳ — …»، «۲/۳ — …»، «۳/۳ — …» دارد؛ مرحله از همان خوانده می‌شود. بعد از ۳/۳ پیام‌های پوستر/جزوه (بدون شماره) فقط نوار را پر نگه می‌دارند.
+const latin = (t) => String(t || "").replace(/[۰-۹]/g, (c) => "۰۱۲۳۴۵۶۷۸۹".indexOf(c));
+const stepOf = (msg) => { const m = /([1-3])\s*\/\s*3/.exec(latin(msg)); return m ? Number(m[1]) : 0; };
+const fmtDur = (ms) => { const t = Math.max(0, Math.round(ms / 1000)); return fa(Math.floor(t / 60)) + ":" + fa(String(t % 60).padStart(2, "0")); };
+let jobStep = 0, jobExtra = false, jobT0 = 0, jobTick = 0;
+function paintJob(msg) {
+  const st = stepOf(msg);
+  if (st) { if (st >= jobStep) jobStep = st; }
+  else if (jobStep >= 3 && msg && !/صف/.test(msg)) jobExtra = true;
+  const bar = $("#jobBar"), pct = [0, 15, 45, 80][jobStep] + (jobExtra ? 12 : 0);
+  bar.classList.toggle("ind", jobStep === 0);
+  bar.setAttribute("aria-valuenow", String(jobStep));
+  bar.firstElementChild.style.width = jobStep === 0 ? "" : pct + "%";
+  document.querySelectorAll("#jobSteps span").forEach((x) => x.classList.toggle("on", Number(x.dataset.s) === jobStep));
+}
+function jobTimer(on) {
+  clearInterval(jobTick); jobTick = 0;
+  show($("#jobTime"), on && !!jobT0);
+  if (!on || !jobT0) return;
+  const t = () => { $("#jobTime").textContent = "⏱ " + fmtDur(Date.now() - jobT0); };
+  t(); jobTick = setInterval(t, 1000);
+}
+async function track(jobId, resumed = false) {
   const my = ++tracking;
-  $("#go").disabled = true; jobView("run");
+  jobStep = 0; jobExtra = false; jobT0 = resumed ? 0 : Date.now(); // کار ازسرگرفته‌شده زمان شروع ندارد؛ فقط برای کار همین نشست زمان نشان می‌دهیم
+  $("#go").disabled = true; $("#jobText").textContent = "⏳ در صف…"; paintJob(""); jobView("run"); jobTimer(true);
+  const took = () => (jobT0 ? Date.now() - jobT0 : 0);
   for (let i = 0; i < 400 && my === tracking; i++) {
     let s;
     try { s = await api("/api/jobs/" + jobId); }
     catch (e) {
-      if (e.status === 401) { me = null; boot(); return; }
-      if (e.status === 404) { jobView(null); $("#go").disabled = false; return; }
+      if (e.status === 401) { jobTimer(false); me = null; boot(); return; }
+      if (e.status === 404) { jobTimer(false); jobView(null); $("#go").disabled = false; return; }
       await sleep(4000); continue;
     }
     if (my !== tracking) return;
-    if (s.state === "running") { $("#jobText").textContent = s.message; await sleep(3000); continue; }
+    if (s.state === "running") { $("#jobText").textContent = s.message; paintJob(s.message); await sleep(3000); continue; }
+    const ms = took(); jobTimer(false);
     $("#go").disabled = false; refreshMe();
     if (s.state === "done") {
-      $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = s.slides ? ` — ${fa(s.slides)} اسلاید` : "";
+      $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = (s.slides ? ` — ${fa(s.slides)} اسلاید` : "") + (ms ? ` · ساخته‌شده در ${fmtDur(ms)}` : "");
       $("#doneDl").onclick = (ev) => download(jobId, ev.currentTarget);
       $("#doneView").href = $("#donePdf").href = previewUrl(jobId);
       fontDlSync(me && me.settings && me.settings.font, "#doneFont", "#doneFontName", "#doneFontLink");
@@ -1490,7 +1525,7 @@ async function track(jobId) {
     } else { $("#jobErrText").textContent = s.message; jobView("err"); }
     return;
   }
-  if (my === tracking) { $("#go").disabled = false; jobView(null); }
+  if (my === tracking) { jobTimer(false); $("#go").disabled = false; jobView(null); }
 }
 
 // اسلاید صوتی و پادکست همراه: در Workflow جدا چند دقیقه طول می‌کشند؛ وضعیتشان جدا خوانده می‌شود و دکمه‌ی دانلود هرکدام وقتی آماده شد نمایش داده می‌شود

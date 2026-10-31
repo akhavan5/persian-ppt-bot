@@ -29,6 +29,12 @@ import kotlinx.coroutines.launch
 
 enum class Screen { Loading, Error, Login, Main }
 
+/** شماره‌ی مرحله (۱ تا ۳) از پیام وضعیت سرور «۱/۳ — …»؛ ۰ = شماره ندارد. رقم‌های فارسی و عربی هم پذیرفته می‌شوند. */
+internal fun jobStepOf(msg: String): Int {
+    val latin = msg.map { c -> when (c) { in '۰'..'۹' -> '0' + (c - '۰'); in '٠'..'٩' -> '0' + (c - '٠'); else -> c } }.joinToString("")
+    return Regex("([1-3])\\s*/\\s*3").find(latin)?.groupValues?.get(1)?.toInt() ?: 0
+}
+
 data class JobState(
     val id: String,
     val message: String,
@@ -38,6 +44,10 @@ data class JobState(
     val handoutId: String? = null,
     val posterId: String? = null,
     val posterFailed: Boolean = false,
+    // نوار پیشرفت مرحله‌ای (مثل Mini App): step = ۰ تا ۳ از متن «۱/۳ — …»؛ extra = پیام‌های پوستر/جزوه بعد از ۳/۳؛ startedAt = SystemClock.elapsedRealtime() شروع ساخت (۰ = کار ازسرگرفته‌شده، بدون زمان‌سنج)
+    val step: Int = 0,
+    val extra: Boolean = false,
+    val startedAt: Long = 0L,
     // اسلاید صوتی و پادکست همراه: چند دقیقه بعد از ارائه در سرور ساخته می‌شوند؛ تا آماده شدن «در حال ساخت» می‌ماند و بعد شناسه‌ی فایل‌ها می‌آید
     val audioWaiting: Boolean = false,
     val podcastWaiting: Boolean = false,
@@ -343,7 +353,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, images, audio, podcast)
                 _state.update { it.copy(busy = false) }
                 if (id.isEmpty()) toast("شروع ساخت انجام نشد") else {
-                    watch(id)
+                    watch(id, fresh = true)
                     JobWatcher.schedule(getApplication(), id) // اگر اپ بسته شد، با اعلان خبر می‌دهیم
                     _events.trySend(Event.AskNotify)
                 }
@@ -355,9 +365,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun watch(id: String) {
+    private fun watch(id: String, fresh: Boolean = false) {
         pollJob?.cancel()
-        _state.update { it.copy(job = JobState(id, "در صف ساخت…")) }
+        val jobT0 = if (fresh) SystemClock.elapsedRealtime() else 0L // کار ازسرگرفته‌شده زمان شروع ندارد
+        var step = 0
+        var extra = false
+        _state.update { it.copy(job = JobState(id, "در صف ساخت…", startedAt = jobT0)) }
         pollJob = viewModelScope.launch {
             var fails = 0
             val startedAt = SystemClock.elapsedRealtime()
@@ -410,7 +423,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         else -> {
                             val msg = j.optString("message", "در حال ساخت…")
-                            _state.update { it.copy(job = JobState(id, msg)) }
+                            val st = jobStepOf(msg)
+                            if (st > 0) { if (st >= step) step = st }
+                            else if (step >= 3 && msg.isNotBlank() && !msg.contains("صف")) extra = true
+                            _state.update { it.copy(job = JobState(id, msg, step = step, extra = extra, startedAt = jobT0)) }
                             // اعلان «در حال ساخت» فقط وقتی اپ جلوی چشم نیست
                             val app = getApplication<Application>()
                             if (AppForeground.on) Notifier.cancelProgress(app, id) else Notifier.progress(app, id, msg)
@@ -430,7 +446,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         return@launch
                     }
-                    if (fails >= 3) _state.update { it.copy(job = JobState(id, "اتصال قطع شد؛ ساخت ادامه دارد و دوباره تلاش می‌کنیم…")) }
+                    if (fails >= 3) _state.update { it.copy(job = JobState(id, "اتصال قطع شد؛ ساخت ادامه دارد و دوباره تلاش می‌کنیم…", step = step, extra = extra, startedAt = jobT0)) }
                 }
                 delay(if (fails >= 3) 8000 else 3000)
             }
