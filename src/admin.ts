@@ -1085,12 +1085,26 @@ export async function handleAdminFileCallback(env: Env, cq: any) {
   const f = (typeof userId === "string" || Number.isSafeInteger(userId)) && fid ? await loadFile(env, userId, fid) : null;
   if (!f) return await sendMessage(env, chatId, "⌛️ این فایل دیگر در دسترس نیست (فایل‌ها ۲۴ ساعت و حداکثر ۹ فایل آخر هر کاربر (پلاس ۱۸، پرو ۳۰) نگه داشته می‌شوند).");
   await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`);
-  // اگر برای همین ارائه پوستر یا جزوه هم ساخته شده (و هنوز نگه داشته می‌شود)، همراهش فرستاده می‌شود
-  if (/-(poster|handout)$/.test(fid)) return;
-  for (const [suffix, label] of [["poster", "🖼 پوستر"], ["handout", "📘 جزوه"]] as const) {
-    const extra = await loadFile(env, userId, `${fid}-${suffix}`).catch(() => null);
+  // اگر برای همین ارائه همراه‌ها هم ساخته شده (و هنوز نگه داشته می‌شوند)، همراهش فرستاده می‌شوند: پوستر، جزوه، اسلاید صوتی، صدای اسلایدهای جاماندنی و پادکست
+  // (اسلاید صوتی و پادکست فقط برای کاربران وب ذخیره می‌شوند؛ در تلگرام مستقیم به چت خودِ کاربر رفته‌اند)
+  if (/-(poster|handout|audio(-s\d+)?|podcast(-\d+)?)$/.test(fid)) return;
+  const kinds: { re: RegExp; label: string }[] = [
+    { re: /^poster$/, label: "🖼 پوستر" },
+    { re: /^handout$/, label: "📘 جزوه" },
+    { re: /^audio$/, label: "🔊 اسلاید صوتی" },
+    { re: /^audio-s(\d+)$/, label: "🔊 صدای اسلاید" },
+    { re: /^podcast(-\d+)?$/, label: "🎙 پادکست" },
+  ];
+  const num = (x: string) => Number(/(\d+)$/.exec(x)?.[1] ?? 0);
+  const extras = (await listFiles(env, userId).catch(() => []))
+    .filter((x) => x.id.startsWith(`${fid}-`))
+    .map((x) => ({ x, k: kinds.findIndex((k) => k.re.test(x.id.slice(fid.length + 1))) }))
+    .filter((e) => e.k >= 0)
+    .sort((a, b) => a.k - b.k || num(a.x.id) - num(b.x.id));
+  for (const { x, k } of extras) {
+    const extra = await loadFile(env, userId, x.id).catch(() => null);
     if (!extra) continue;
-    await sendDocument(env, chatId, new Uint8Array(extra.data), extra.entry.name, `${label} · <b>${esc(extra.entry.title)}</b>\n👤 <code>${userId}</code>`)
-      .catch((err) => console.error("admin send extra", suffix, err));
+    await sendDocument(env, chatId, new Uint8Array(extra.data), extra.entry.name, `${kinds[k].label} · <b>${esc(extra.entry.title)}</b>\n👤 <code>${userId}</code>`)
+      .catch((err) => console.error("admin send extra", x.id, err));
   }
 }
