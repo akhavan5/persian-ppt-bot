@@ -49,6 +49,11 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .file:first-child{border-top:0}
 .file strong{display:block;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .file>div:first-child{min-width:0;flex:1}
+/* همراه‌های بعد از ساخت ارائه (پوستر، جزوه، اسلاید صوتی، پادکست): ردیف جدا زیر هر ارائه */
+.file{flex-wrap:wrap}
+.file .fx{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.file .fx .xl{flex:1 1 100%;font-size:.78rem;color:var(--hint)}
+#extraJobs .xj{margin:6px 0;font-size:.85rem;color:var(--hint)}
 .src{display:inline-flex;align-items:center;gap:8px;background:var(--sec);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 12px;font-size:.82rem;max-width:100%}
 .src span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .src button{border:0;background:none;color:var(--hint);font-size:1rem;cursor:pointer}
@@ -190,7 +195,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
 
     <!-- فایل‌ها -->
     <section id="t-files" role="tabpanel" aria-labelledby="tb-files" hidden>
-      <div class="card"><h2>فایل‌های ۲۴ ساعت اخیر</h2><div id="files"></div></div>
+      <div class="card"><h2>فایل‌های ۲۴ ساعت اخیر</h2><div id="extraJobs" aria-live="polite"></div><div id="files"></div></div>
     </section>
 
     <!-- تنظیمات -->
@@ -960,6 +965,39 @@ async function dlFile(id, btn) {
 }
 
 // ---------- فایل‌ها ----------
+// همراه‌های بعد از ساخت ارائه: زیر هر ارائه دکمه‌ی پوستر، جزوه، اسلاید صوتی و پادکست (هرکدام ۱ اعتبار جدا) فقط وقتی هنوز برای همان ارائه ساخته نشده‌اند
+const EXTRA_BTNS = {
+  audio: [["🔊 اسلاید صوتی", null]], podcast: [["🎙 پادکست", null]], handout: [["📝 جزوه (Word)", null]],
+  poster: [["🖼 پوستر افقی", "wide"], ["🖼 پوستر عمودی", "tall"]],
+};
+async function makeExtra(f, kind, layout, btn) {
+  return busy(btn, "در حال شروع…", async () => {
+    let r;
+    try { r = await api("/api/files/" + encodeURIComponent(f.id) + "/extra", { method: "POST", body: { kind, via: "miniapp", ...(layout ? { layout } : {}) } }); }
+    catch (e) {
+      TG.haptic("error"); toast(e.message);
+      if (e.data && e.data.noCredit) openPlans(); else if (e.status === 409 || e.status === 410) loadFiles();
+      return;
+    }
+    TG.haptic("success"); toast("⏳ شروع شد؛ ۱ اعتبار کم شد."); refreshMe(); loadFiles(); // دکمه‌ی همین همراه دیگر نشان داده نمی‌شود
+    trackExtra(r.jobId, kind);
+  });
+}
+// وضعیت کار در Workflow جدا چند دقیقه طول می‌کشد؛ پیام پیشرفت بالای فهرست دیده می‌شود، در پایان فایل تازه در همین فهرست می‌آید (اگر اپ بسته باشد، ربات خبر می‌دهد)
+async function trackExtra(jobId, kind) {
+  const line = h("div", { class: "xj" }, EXTRA_BTNS[kind][0][0].split(" ")[0] + " در صف است…");
+  $("#extraJobs").append(line);
+  for (let i = 0; i < 240; i++) {
+    let r;
+    try { r = await api("/api/jobs/" + jobId); }
+    catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
+    if (r.state === "running") { line.textContent = r.message; await sleep(4000); continue; }
+    if (r.state === "done" && r.ids && r.ids.length) { TG.haptic("success"); toast("✅ آماده شد؛ از فهرست بگیر."); } else { TG.haptic("error"); toast("⚠️ " + (r.message || "ساخت ناموفق بود؛ اعتبارش برگردانده شد.")); }
+    line.remove(); refreshMe(); loadFiles(); return;
+  }
+  line.remove(); loadFiles();
+}
+
 async function loadFiles() {
   let list; try { list = (await api("/api/files")).files; } catch { return; }
   const box = $("#files");
@@ -972,7 +1010,12 @@ async function loadFiles() {
       h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end" },
         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
-        !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null));
+        !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
+      f.extras && f.extras.length
+        ? h("div", { class: "fx" },
+          h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),
+          f.extras.flatMap((k) => (EXTRA_BTNS[k] || []).map(([label, layout]) => h("button", { class: "btn ghost sm", type: "button", onclick: (e) => makeExtra(f, k, layout, e.currentTarget) }, label))))
+        : null);
   }));
 }
 

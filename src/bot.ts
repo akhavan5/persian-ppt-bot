@@ -8,8 +8,8 @@ import {
   type Uid,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
-import { listFiles, loadFile, loadPreview } from "./files";
-import { ttsEnabled } from "./gemini-tts";
+import { listFiles, loadFile } from "./files";
+import { extraButtons, extraOfCode, extrasHint, isButtonOf, madeExtras, startExtra, type ExtraKind } from "./extras";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
@@ -345,27 +345,32 @@ async function sendDeckPdf(env: Env, cq: any, uid: Uid, chatId: number, id: stri
   }
 }
 
-/** دکمه‌های «🔊 اسلاید صوتی» (au:<شناسه‌ی ارائه>) و «🎙 پادکست» (pc:<شناسه‌ی ارائه>): فقط مدیر؛ کار سنگین در AudioWorkflow انجام می‌شود */
-async function startAudioJob(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, kind: "slides" | "podcast", id: string) {
+/** دکمه‌های زیر ارائه: ex:<کد>:<شناسه‌ی ارائه> (🔊 اسلاید صوتی، 🎙 پادکست، 📝 جزوه، 🖼 پوستر افقی/عمودی) و دکمه‌های قدیمی au:/pc:.
+ *  هر کدام ۱ اعتبار جدا می‌خواهد و فقط یک بار برای هر ارائه ساخته می‌شود؛ کار سنگین در Workflow انجام می‌شود (extras.ts) */
+async function startExtraButton(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, kind: ExtraKind, id: string, layout?: "wide" | "tall") {
   const answer = (text?: string, alert = false) =>
     tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
-  if (!isAdmin(env, tgId)) return await answer("این قابلیت فعلاً فقط برای مدیر فعال است.", true);
   if (!/^[\w-]{1,100}$/.test(id)) return await answer();
-  if (!env.AUDIO_WORKFLOW || !ttsEnabled(env)) return await answer("صدا فعال نیست: GEMINI_API_KEYS و Workflow «persian-ppt-audio» را تنظیم کن.", true);
-  if (!(await loadPreview(env, uid, id).catch(() => null))) return await answer("⌛️ متن این ارائه منقضی شده است (متن‌ها ۲۴ ساعت نگه داشته می‌شوند).", true);
-  // جلوگیری از دوبار زدن پشت‌سرهم (هر بار چند درخواست از سهمیه‌ی Gemini مصرف می‌کند)
-  if (await hitLimit(env, `aud:${uid}:${id}:${kind}`, 1, 120)) return await answer("همین کار چند لحظه پیش شروع شده است؛ کمی صبر کن.", true);
-  await answer("⏳ شروع شد…");
-  const st = await sendMessage(env, chatId, kind === "podcast" ? "🎙 پادکست در صف است… (چند دقیقه طول می‌کشد)" : "🔊 اسلاید صوتی در صف است… (صدای هر اسلاید داخل خود فایل پاورپوینت گذاشته می‌شود)");
-  try {
-    const model = (await getSettings(env, uid).catch(() => null))?.model;
-    await env.AUDIO_WORKFLOW.create({
-      id: `${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      params: { kind, chatId, statusMessageId: st.message_id, uid, deckId: id, ...(model ? { model } : {}) },
-    });
-  } catch (e) {
-    console.error("audio workflow create failed", e);
-    await editMessage(env, chatId, st.message_id, "❌ شروع کار ناموفق بود؛ دوباره امتحان کن.").catch(() => {});
+  const r = await startExtra(env, uid, id, kind, { channel: "telegram", chatId, layout });
+  if (!r.ok) {
+    await answer(r.error, true);
+    // اعتبار تمام: دکمه‌های خرید پلن هم نشان داده می‌شود
+    if (r.noCredit) await sendMessage(env, chatId, `💳 ${r.error}\nبا دکمه‌ی زیر در سایت پلن بگیر؛ با همین حساب تلگرامت خودکار وارد می‌شوی.`, await buyKbFor(env, uid, tgId).catch(() => undefined)).catch(() => {});
+    return;
+  }
+  await answer("⏳ شروع شد؛ ۱ اعتبار کم شد. فایل در همین چت می‌آید.");
+  // دکمه‌ی همین همراه (و برای پوستر هر دو چیدمان) از زیر پیام برداشته می‌شود؛ وقتی دکمه‌ای نماند جمله‌ی راهنمای کپشن هم برداشته می‌شود
+  const rows = ((cq.message?.reply_markup?.inline_keyboard ?? []) as { text: string; callback_data?: string }[][])
+    .map((row) => row.filter((x) => !isButtonOf(x.callback_data, kind))).filter((row) => row.length);
+  const left = rows.some((row) => row.some((x) => /^(ex|au|pc):/.test(x.callback_data ?? "")));
+  const caption: string | undefined = cq.message?.caption;
+  const hint = extrasHint([[{ text: "", callback_data: "" }]]).trim();
+  if (!left && caption && caption.endsWith(hint)) {
+    await tg(env, "editMessageCaption", {
+      chat_id: chatId, message_id: cq.message.message_id, caption: caption.slice(0, caption.length - hint.length).replace(/\s+$/, ""), caption_entities: cq.message.caption_entities ?? [], reply_markup: { inline_keyboard: rows },
+    }).catch(() => {});
+  } else {
+    await tg(env, "editMessageReplyMarkup", { chat_id: chatId, message_id: cq.message.message_id, reply_markup: { inline_keyboard: rows } }).catch(() => {});
   }
 }
 
@@ -394,7 +399,12 @@ async function handleCallback(env: Env, cq: any) {
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
   if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
   if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
-  if (act === "au" || act === "pc") return await startAudioJob(env, cq, uid, userId, chatId, act === "pc" ? "podcast" : "slides", a);
+  if (act === "au" || act === "pc") return await startExtraButton(env, cq, uid, userId, chatId, act === "pc" ? "podcast" : "audio", a);
+  if (act === "ex") {
+    const x = extraOfCode(a);
+    if (!x) return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+    return await startExtraButton(env, cq, uid, userId, chatId, x.kind, b, x.layout);
+  }
   if (act === "fb") { // دکمه‌ی «ارسال نظر» زیر ارائه: پیام متنی بعدی کاربر برای مدیر فرستاده می‌شود
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
     const survey = a === "p"; // fb:p = دکمه‌ی نظرسنجی پایان پلن (plan-feedback.ts)؛ پیامش کپشن ارائه ندارد
@@ -418,9 +428,13 @@ async function handleCallback(env: Env, cq: any) {
     await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
     const f = await loadFile(env, uid, a);
     if (!f) return await sendMessage(env, chatId, "⌛️ این فایل منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).");
-    return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>`,
+    // ارائه‌ی دوباره‌فرستاده‌شده: دکمه‌ی همراه‌هایی که هنوز ساخته نشده‌اند (پوستر، جزوه، اسلاید صوتی، پادکست) زیرش هم می‌آید
+    const isDeck = !/\.(png|jpe?g|docx|wav)$/i.test(f.entry.name);
+    const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a).catch(() => new Set<ExtraKind>(["poster", "handout", "audio", "podcast"]))) : [];
+    return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>${extrasHint(xrows)}`,
       /\.(png|jpe?g)$/i.test(f.entry.name) ? { mime: /\.png$/i.test(f.entry.name) ? "image/png" : "image/jpeg" }
-        : /\.docx$/i.test(f.entry.name) ? { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" } : undefined);
+        : /\.docx$/i.test(f.entry.name) ? { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
+        : xrows.length ? { reply_markup: { inline_keyboard: xrows } } : undefined);
   }
   const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);
   let view = mainMenu(env, s, caps);

@@ -1,5 +1,5 @@
 /**
- * اسلاید صوتی و پادکست دو‌گوینده؛ همراه ارائه برای همه‌ی کاربران (تلگرام و وب، هرکدام ۱ اعتبار جدا) و دکمه‌ی دستی مدیر در تلگرام.
+ * اسلاید صوتی و پادکست دو‌گوینده؛ همراه ارائه یا با دکمه‌ی زیر ارائه (تلگرام، سایت، Mini App) برای همه‌ی کاربران، هرکدام ۱ اعتبار جدا (extras.ts).
  *  • slides: متن سخنرانی (notes) هر اسلاید با یک صدا خوانده می‌شود و صدا «داخل خود اسلاید» در همان فایل PPTX جاسازی می‌شود (pptx-audio.ts)؛
  *    در نمایش، هر اسلاید صدایش را خودکار پخش می‌کند و بعد از پایان صدا به اسلاید بعد می‌رود. اگر حجم از سقف نشست، اسلایدهای باقی‌مانده جدا فرستاده می‌شوند.
  *  • podcast: LLM یک گفت‌وگوی دو‌نفره می‌نویسد؛ Gemini با دو صدا می‌خواند؛ تکه‌ها به یک فایل می‌چسبند.
@@ -18,6 +18,7 @@ import { withStore } from "./store";
 import { refundCredit, type CreditSource } from "./settings";
 import { fileNameWithSite, miniappUrl, siteHost } from "./deck-service";
 import { toFa } from "./util";
+import { unmarkExtra } from "./extras";
 import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript } from "./podcast";
@@ -102,7 +103,11 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       const reason = String(e instanceof Error ? e.message : e).slice(0, 500);
       console.error("audio workflow failed", reason);
       // هر کار در گام جدا تا اگر یکی تکرار شد اعتبار دو بار برنگردد
-      if (credit) await step.do("refund", () => refundCredit(this.env, uid, credit.source, credit.day)).catch((re) => console.error("refund audio", re));
+      if (credit) {
+        await step.do("refund", () => refundCredit(this.env, uid, credit.source, credit.day)).catch((re) => console.error("refund audio", re));
+        // نشانگر «ساخته شده» پاک می‌شود تا دکمه‌ی این همراه زیر ارائه دوباره دیده شود
+        await step.do("unmark", () => unmarkExtra(this.env, uid, event.payload.deckId, kind === "podcast" ? "podcast" : "audio")).catch(() => {});
+      }
       await step.do("notify-failure", async () => {
         await status(`❌ ساخت ${kind === "podcast" ? "پادکست" : "اسلاید صوتی"} ناموفق بود${credit && credit.source !== "none" ? "؛ اعتبارش برگردانده شد" : ""}.\n<code>${esc(reason)}</code>`);
       }).catch(() => {});

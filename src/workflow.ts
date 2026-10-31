@@ -9,11 +9,10 @@ import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
 import { getUserById } from "./auth";
 import { toFa } from "./util";
-import { adminIds, bumpStat, getCredit, getUserSeen, isAdmin, noteDeckDone, refundCredit, releaseLock } from "./settings";
-import { ttsEnabled } from "./gemini-tts";
+import { adminIds, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
 import { BUY_SITE_NOTE, buyKbFor, fileNameWithSite, miniappUrl } from "./deck-service";
 import { getLinkedTg } from "./link";
-import { hasBrowser } from "./browser-api";
+import { deckKeyboard, extraButtons, extrasHint, markExtra, type ExtraKind } from "./extras";
 import { logDeck, saveFile, savePreview } from "./files";
 import { fontCaption } from "./themes";
 import { generateImage } from "./images";
@@ -118,16 +117,11 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               throw new Error("generated file is too large to store");
             }
           } else {
+            // دکمه‌های زیر ارائه: PDF + همراه‌هایی که همراه ارائه خواسته نشده‌اند (پوستر، جزوه، اسلاید صوتی، پادکست؛ هرکدام ۱ اعتبار جدا) + ارسال نظر
+            const hide = new Set<ExtraKind>([poster ? "poster" : null, handout ? "handout" : null, audio ? "audio" : null, podcast ? "podcast" : null].filter((k): k is ExtraKind => !!k));
             await sendDocument(this.env, chatId, bytes, filename,
-              `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}`,
-              // دکمه‌ی دریافت نسخه‌ی PDF (فقط اگر پیش‌نمایش ذخیره شده و مرورگر کلودفلر وصل است)
-              { reply_markup: { inline_keyboard: [
-                ...(hasBrowser(this.env) ? [[{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${event.instanceId}` }]] : []),
-                // اسلاید صوتی (خواندن متن سخنرانی) و پادکست دو‌گوینده: فعلاً فقط مدیر
-                ...(this.env.AUDIO_WORKFLOW && ttsEnabled(this.env) && isAdmin(this.env, event.payload.tgId ?? userId)
-                  ? [[{ text: "🔊 اسلاید صوتی", callback_data: `au:${event.instanceId}` }, { text: "🎙 پادکست", callback_data: `pc:${event.instanceId}` }]] : []),
-                [{ text: "💬 ارسال نظر", callback_data: "fb:s" }], // نظر کاربر فقط برای مدیر فرستاده می‌شود (ذخیره نمی‌شود)
-              ] } });
+              `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}${extrasHint(extraButtons(this.env, event.instanceId, hide))}`,
+              { reply_markup: deckKeyboard(this.env, event.instanceId, hide) }); // نظر کاربر فقط برای مدیر فرستاده می‌شود (ذخیره نمی‌شود)
             // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
             await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
               .catch((err) => console.error("saveFile", err));
@@ -176,6 +170,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             await saveFile(this.env, userId, pid, img.data, pname, ig.title, 0).catch((err) => console.error("saveFile poster", err));
           });
           posterOk = true;
+          await markExtra(this.env, userId, event.instanceId, "poster").catch(() => {}); // دکمه‌ی پوستر زیر همین ارائه دیگر نشان داده نمی‌شود
         } catch (pe) {
           console.error("poster failed", pe);
           // پوستر ۱ اعتبار جدا دارد؛ شکست پوستر فقط همان را برمی‌گرداند (ارائه‌ی تحویل‌شده سر جایش می‌ماند)
@@ -215,6 +210,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             await saveFile(this.env, userId, hid, data, hname, hd.title, 0).catch((err) => console.error("saveFile handout", err));
           });
           handoutOk = true;
+          await markExtra(this.env, userId, event.instanceId, "handout").catch(() => {});
         } catch (he) {
           console.error("handout failed", he);
           await step.do("refund-handout-fail", () => refundCredit(this.env, userId, handout.credit, handout.day)).catch((re) => console.error("refund handout", re));
@@ -242,6 +238,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           });
           started[key] = true;
           built[key] = "pending";
+          await markExtra(this.env, userId, event.instanceId, key).catch(() => {}); // خطای AudioWorkflow همراه برگشت اعتبار، نشانگر را هم برمی‌دارد
         } catch (ae) {
           console.error(`${key} start failed`, ae);
           await step.do(`refund-${key}-start`, () => refundCredit(this.env, userId, extra.credit, extra.day)).catch((re) => console.error(`refund ${key}`, re));

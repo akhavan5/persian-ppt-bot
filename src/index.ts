@@ -15,6 +15,7 @@ export { BroadcastWorkflow } from "./broadcast";
 export { OcrWorkflow } from "./ocr-workflow";
 export { WebOcrWorkflow } from "./web-ocr-workflow";
 export { AudioWorkflow } from "./audio-workflow";
+export { ExtraWorkflow } from "./extra-workflow";
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;

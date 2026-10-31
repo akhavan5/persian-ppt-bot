@@ -4,6 +4,7 @@ import type { Store } from "./store";
 import type { OcrParams } from "./ocr-workflow";
 import type { WebOcrParams } from "./web-ocr-workflow";
 import type { AudioParams } from "./audio-workflow";
+import type { ExtraParams } from "./extra-workflow";
 
 export interface Env {
   /** پایگاه داده‌ی D1: همه‌ی داده‌های کوچک (کاربران، نشست‌ها، اعتبار، آمار، قفل‌ها) اینجا ذخیره می‌شود */
@@ -29,6 +30,8 @@ export interface Env {
 
   /** اسلاید صوتی و پادکست (فقط مدیر، فقط تلگرام): خواندن متن سخنرانی/گفت‌وگو با Gemini؛ اختیاری: اگر تعریف نشود، دکمه‌های صوتی نمایش داده نمی‌شوند */
   AUDIO_WORKFLOW?: Workflow<AudioParams>;
+  /** پوستر و جزوه‌ی Word که بعد از ساخت ارائه با دکمه‌ی زیر ارائه خواسته می‌شوند (Workflow «persian-ppt-extra»)؛ بدون آن این دو دکمه نمایش داده نمی‌شوند */
+  EXTRA_WORKFLOW?: Workflow<ExtraParams>;
   /** کلیدهای Gemini (هر خط یا «;» یا «,» یک کلید). هر کلید ۳ درخواست می‌گیرد و بعد نوبت کلید بعدی است؛ با هر خطا (۴۲۹، ۴۰۱، ۴۰۳، ۴۰۰، ۵xx، تایم‌اوت) همان درخواست با کلید بعدی تکرار می‌شود. به‌صورت secret بگذارید */
   GEMINI_API_KEYS?: string;
   /** اختیاری: تعداد درخواست پشت‌سرهم هر کلید قبل از رفتن به کلید بعدی (پیش‌فرض ۳) */

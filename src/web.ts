@@ -29,6 +29,7 @@ import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
+import { EXTRA_KINDS, missingExtras, startExtra } from "./extras";
 import { miniappBuy, miniappDlLink, miniappDownload, miniappInvite, miniappLogin, miniappPdf, miniappSend } from "./miniapp";
 
 const SEC_HEADERS = {
@@ -171,6 +172,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/profile/telegram/verify" && method === "POST") return tgLinkVerify(req, env, user);
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
   if (path === "/api/generate" && method === "POST") return generate(req, env, user);
+  const ex = method === "POST" ? path.match(/^\/api\/files\/([\w-]{1,80})\/extra$/) : null;
+  if (ex) return startExtraJob(req, env, user, ex[1]);
   if (path === "/api/extract" && method === "POST") return extract(req, env, user);
   if (path === "/api/link" && method === "POST") return linkSource(req, env, user);
   if (path.startsWith("/api/extract/") && method === "GET") return ocrStatus(env, user, path.slice("/api/extract/".length));
@@ -182,7 +185,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   if (path === "/api/files" && method === "GET") {
     const list = await listFiles(env, user.id);
-    return json({ files: list.map((f) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name), ...(audioKind(f.id) ? { audio: audioKind(f.id) } : {}) })) });
+    // زیر هر ارائه (نه پوستر/جزوه/صدا) دکمه‌ی همراه‌هایی که هنوز ساخته نشده‌اند و روی سرویس روشن‌اند: extras = ["audio","podcast","handout","poster"] (زیرمجموعه)
+    const extras = await Promise.all(list.map((f) => (isPosterFile(f.name) || isHandoutFile(f.name) || audioKind(f.id) ? Promise.resolve([]) : missingExtras(env, user.id, f.id, list).catch(() => []))));
+    return json({ files: list.map((f, i) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name), ...(audioKind(f.id) ? { audio: audioKind(f.id) } : {}), ...(extras[i].length ? { extras: extras[i] } : {}) })) });
   }
   if (path.startsWith("/api/files/") && method === "GET") return download(env, user, path.slice("/api/files/".length), url.searchParams.get("inline") === "1");
 
@@ -489,6 +494,8 @@ async function jobStatus(env: Env, user: WebUser, id: string): Promise<Response>
   if (!/^[\w-]{1,100}$/.test(id) || !id.startsWith(`${user.id}-`)) return err("پیدا نشد", 404);
   // کار صوتی همراه ارائه: شناسه‌ی «<کار>-audio» (اسلاید صوتی) یا «<کار>-podcast»؛ در AudioWorkflow جدا ساخته می‌شود
   if (/-(audio|podcast)$/.test(id)) return audioJobStatus(env, id);
+  // پوستر/جزوه‌ای که بعد از ساخت ارائه با دکمه‌ی زیر ارائه خواسته شده: «<کاربر>-x<۶ حرف>-poster|handout»؛ در ExtraWorkflow جدا ساخته می‌شود
+  if (/-(poster|handout)$/.test(id)) return extraJobStatus(env, id);
   const inst = await env.DECK_WORKFLOW.get(id).catch(() => null);
   if (!inst) return err("پیدا نشد", 404);
   const st = await inst.status();
@@ -507,6 +514,35 @@ async function jobStatus(env: Env, user: WebUser, id: string): Promise<Response>
     return json({ state: "error", message: "ساخت ارائه با خطا مواجه شد؛ اعتبارت برگردانده شد. چند دقیقه بعد دوباره امتحان کن." });
   }
   const message = (await env.KV.get(`job:${id}`)) ?? "⏳ در حال ساخت…";
+  return json({ state: "running", message });
+}
+
+/** دکمه‌ی همراه زیر ارائه (سایت و Mini App): POST /api/files/<ارائه>/extra با بدنه‌ی {kind, layout?, via?}؛ ۱ اعتبار جدا کم می‌شود و jobId برمی‌گردد (وضعیت: GET /api/jobs/<jobId>) */
+async function startExtraJob(req: Request, env: Env, user: WebUser, deckId: string): Promise<Response> {
+  if (!isAllowed(env, user.id)) return err("این سرویس خصوصی است و دسترسی نداری.", 403);
+  if (await isBanned(env, user.id)) return err("دسترسی شما مسدود شده است.", 403);
+  const b = await readBody(req, 2_000);
+  const kind = EXTRA_KINDS.find((k) => k === b?.kind);
+  if (!kind) return err("نوع درخواست نامعتبر است.", 400);
+  const r = await startExtra(env, user.id, deckId, kind, { channel: "web", layout: b?.layout === "wide" ? "wide" : "tall", ...(b?.via === "miniapp" ? { notify: true } : {}) });
+  if (!r.ok) return json({ error: r.error, ...(r.noCredit ? { noCredit: true, extras: true } : {}) }, r.status);
+  return json({ jobId: r.jobId });
+}
+
+/** وضعیت پوستر/جزوه‌ی خواسته‌شده بعد از ساخت ارائه؛ خروجی هم‌شکل کار صوتی: ids = شناسه‌ی فایل ذخیره‌شده */
+async function extraJobStatus(env: Env, id: string): Promise<Response> {
+  const handout = id.endsWith("-handout");
+  const inst = await env.EXTRA_WORKFLOW?.get(id).catch(() => null);
+  if (!inst) return err("پیدا نشد", 404);
+  const st = await inst.status();
+  if (st.status === "complete") {
+    const o = (st.output ?? {}) as { ids?: string[]; note?: string };
+    return json({ state: "done", ids: Array.isArray(o.ids) ? o.ids : [], note: o.note ?? "" });
+  }
+  if (st.status === "errored" || st.status === "terminated") {
+    return json({ state: "error", message: `ساخت ${handout ? "جزوه" : "پوستر"} ناموفق بود؛ اعتبارش برگردانده شد.` });
+  }
+  const message = (await env.KV.get(`job:${id}`)) ?? (handout ? "📝 جزوه در صف است…" : "🖼 پوستر در صف است…");
   return json({ state: "running", message });
 }
 
