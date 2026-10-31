@@ -638,7 +638,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                 trailing = { CreditPill(me) { vm.setTab(3) } },
             )
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (job != null) JobCard(job, vm, st.config?.pdf == true)
+                if (job != null) JobCard(job, vm, st.config?.pdf == true, st.files.firstOrNull { it.id == job.id }?.extras.orEmpty(), st.extraJobs)
 
                 // موضوع
                 SurfaceCard {
@@ -867,8 +867,43 @@ private fun CreditPill(me: Me, onClick: () -> Unit) {
     }
 }
 
+/**
+ * دکمه‌های «ساخت جداگانه» زیر ارائه: فقط همراه‌هایی که هنوز برای همین ارائه ساخته نشده‌اند (kinds از فهرست فایل‌های سرور می‌آید)؛
+ * هر کدام ۱ اعتبار جدا. همراه‌هایی که الان در حال ساخت‌اند به‌جای دکمه، پیام وضعیت دارند.
+ */
 @Composable
-private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false) {
+private fun ExtraButtons(deckId: String, title: String, kinds: List<String>, jobs: Map<String, String>, vm: AppViewModel, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val pending = EXTRA_KINDS.filter { "$deckId|$it" in jobs }
+    val show = EXTRA_KINDS.filter { it in kinds && it !in pending }
+    if (show.isEmpty() && pending.isEmpty()) return
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        pending.forEach { k ->
+            val name = when (k) { "poster" -> "🖼 پوستر"; "handout" -> "📝 جزوه"; "audio" -> "🔊 اسلاید صوتی"; else -> "🎙 پادکست" }
+            Text("$name: ${jobs["$deckId|$k"].orEmpty()}", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+        if (show.isNotEmpty()) {
+            Text("ساخت جداگانه برای همین ارائه (هر مورد ۱ اعتبار):", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                show.forEach { k ->
+                    when (k) {
+                        "audio" -> SoftButton("اسلاید صوتی", { vm.makeExtra(deckId, title, "audio") }, icon = AppIcons.Slides)
+                        "podcast" -> SoftButton("پادکست", { vm.makeExtra(deckId, title, "podcast") }, icon = AppIcons.Mic)
+                        "handout" -> SoftButton("جزوه (Word)", { vm.makeExtra(deckId, title, "handout") }, icon = AppIcons.Doc)
+                        "poster" -> {
+                            SoftButton("پوستر افقی", { vm.makeExtra(deckId, title, "poster", "wide") }, icon = AppIcons.Image)
+                            SoftButton("پوستر عمودی", { vm.makeExtra(deckId, title, "poster", "tall") }, icon = AppIcons.Image)
+                        }
+                        else -> {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extras: List<String> = emptyList(), extraJobs: Map<String, String> = emptyMap()) {
     val cs = MaterialTheme.colorScheme
     val ex = LocalExtra.current
     when {
@@ -908,6 +943,8 @@ private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false) {
                     SoftButton(if (i == 0) "دانلود پادکست" else "دانلود پادکست — قسمت " + (i + 1).fa(), { vm.download(pid) }, Modifier.fillMaxWidth(), icon = AppIcons.Mic)
                 }
                 if (job.podcastFailed) Text("ساخت پادکست ناموفق بود؛ اعتبارش برگشت.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                // همراه‌هایی که همراه ارائه نخواسته بودید (یا ساخته نشدند): با دکمه جدا بسازید؛ بعد از ساخت، دکمه‌ی همان نوع می‌رود
+                ExtraButtons(job.id, job.title, extras, extraJobs, vm)
             }
         }
         else -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(ex.brand).padding(18.dp)) {
@@ -987,7 +1024,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(st.files, key = { it.id }) { f -> FileRow(f, vm, f.id in localIds, st.config?.pdf == true) }
+                    items(st.files, key = { it.id }) { f -> FileRow(f, vm, f.id in localIds, st.config?.pdf == true, st.extraJobs) }
                     if (localOnly.isNotEmpty()) {
                         item(key = "local-header") {
                             Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -1007,7 +1044,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
 }
 
 @Composable
-private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf: Boolean = false) {
+private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf: Boolean = false, extraJobs: Map<String, String> = emptyMap()) {
     val cs = MaterialTheme.colorScheme
     val (icon, brush) = when {
         f.poster -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
@@ -1043,6 +1080,10 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             }
             IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "دانلود") }
+        }
+        // فقط زیر خودِ ارائه (نه پوستر/جزوه/صدا)؛ همراه‌های ساخته‌شده یا در حال ساخت دکمه ندارند
+        if (!f.poster && !f.handout && f.audio.isEmpty()) {
+            ExtraButtons(f.id, f.title, f.extras, extraJobs, vm, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp))
         }
     }
 }

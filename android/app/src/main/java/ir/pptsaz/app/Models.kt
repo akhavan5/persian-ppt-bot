@@ -54,8 +54,12 @@ data class Me(
     val support: String,
 )
 
-/** audio: "" = فایل معمولی، "slides" = اسلاید صوتی (یا صدای یک اسلاید)، "podcast" = پادکست */
-data class FileItem(val id: String, val title: String, val slides: Int, val t: Long, val poster: Boolean, val handout: Boolean, val audio: String = "")
+/**
+ * audio: "" = فایل معمولی، "slides" = اسلاید صوتی (یا صدای یک اسلاید)، "podcast" = پادکست.
+ * extras: همراه‌هایی که هنوز برای همین ارائه ساخته نشده‌اند و روی سرور روشن‌اند (زیرمجموعه‌ی "audio"، "podcast"، "handout"، "poster")؛
+ * فقط برای خودِ ارائه پر می‌شود و زیرش دکمه‌ی «ساخت جداگانه» دارد.
+ */
+data class FileItem(val id: String, val title: String, val slides: Int, val t: Long, val poster: Boolean, val handout: Boolean, val audio: String = "", val extras: List<String> = emptyList())
 
 /** isPublic = false یعنی فایل در حافظه‌ی اختصاصی اپ است (اندروید ۷–۹) و کاربر باید «ذخیره در گوشی» را بزند. */
 data class Saved(val uri: android.net.Uri, val mime: String, val name: String, val isPublic: Boolean = true)
@@ -133,8 +137,14 @@ fun parseMe(j: JSONObject): Me? {
 
 fun parseFiles(j: JSONObject): List<FileItem> =
     j.optJSONArray("files").objects().map {
-        FileItem(it.str("id"), it.str("title"), it.optInt("slides"), it.optLong("t"), it.optBoolean("poster"), it.optBoolean("handout"), it.str("audio"))
+        FileItem(
+            it.str("id"), it.str("title"), it.optInt("slides"), it.optLong("t"), it.optBoolean("poster"), it.optBoolean("handout"), it.str("audio"),
+            it.optJSONArray("extras")?.let { a -> (0 until a.length()).map { i -> a.optString(i) }.filter { k -> k in EXTRA_KINDS } } ?: emptyList(),
+        )
     }
+
+/** انواع همراهِ بعد از ساخت ارائه (همان کلیدهای سرور) به ترتیب نمایش دکمه‌ها */
+val EXTRA_KINDS = listOf("audio", "podcast", "handout", "poster")
 
 /** ارقام فارسی/عربی را به لاتین تبدیل می‌کند (برای ارسال به سرور). */
 fun normDigits(s: String): String = buildString {

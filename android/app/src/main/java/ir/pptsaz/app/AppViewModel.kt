@@ -66,6 +66,8 @@ data class UiState(
     val otpSent: Boolean = false,
     val error: String? = null,
     val job: JobState? = null,
+    /** همراه‌هایی که بعد از ساخت ارائه با دکمه خواسته شده و در حال ساخت‌اند: کلید «<ارائه>|<نوع>» ← پیام وضعیت (دکمه‌ی همان نوع تا پایان کار نشان داده نمی‌شود) */
+    val extraJobs: Map<String, String> = emptyMap(),
     val extractBusy: String? = null,
     val extractedText: String? = null,
     val viewer: Viewer? = null,
@@ -489,6 +491,89 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (e.status == 404 || e.status == 401) { stop(); return@launch }
                     fails++
                     if (SystemClock.elapsedRealtime() - startedAt > MAX_WATCH_MS) { stop(); return@launch }
+                }
+                delay(if (fails >= 3) 8000 else 4000)
+            }
+        }
+    }
+
+    /**
+     * دکمه‌ی «ساخت جداگانه» زیر ارائه (کارت «آماده شد» و تب فایل‌ها): پوستر/جزوه/اسلاید صوتی/پادکستی که همراه ارائه نخواسته بودند.
+     * ۱ اعتبار جدا کم می‌شود؛ سرور فقط یک بار برای هر ارائه و هر نوع می‌سازد (دوبار زدن اعتبار اضافه نمی‌گیرد).
+     * kind = "poster" | "handout" | "audio" | "podcast"؛ layout فقط برای پوستر ("wide" | "tall").
+     */
+    fun makeExtra(deckId: String, title: String, kind: String, layout: String? = null) {
+        val key = "$deckId|$kind"
+        if (_state.value.extraJobs.containsKey(key)) return
+        _state.update { it.copy(extraJobs = it.extraJobs + (key to "در صف است…")) }
+        viewModelScope.launch {
+            try {
+                val jobId = Api.startExtra(deckId, kind, layout)
+                if (jobId.isEmpty()) throw ApiException("شروع ساخت انجام نشد.")
+                toast("⏳ شروع شد؛ ۱ اعتبار کم شد.")
+                onResume(force = true) // اعتبار کم‌شده فوراً به‌روز شود
+                loadFiles() // دکمه‌ی همین همراه از فهرست سرور برداشته می‌شود
+                watchExtra(deckId, kind, jobId, title)
+            } catch (e: ApiException) {
+                _state.update { it.copy(extraJobs = it.extraJobs - key) }
+                toast(e.message ?: "")
+                if (e.noCredit || e.needPlan) _state.update { it.copy(tab = 3) } else if (e.status == 409 || e.status == 410) loadFiles()
+            }
+        }
+    }
+
+    /** پیگیری همراهِ خواسته‌شده با دکمه؛ با آماده‌شدن فایل در فهرست می‌آید، روی گوشی ذخیره می‌شود و اگر کارت همان ارائه باز است، دکمه‌ی دانلودش آنجا هم می‌آید. */
+    private fun watchExtra(deckId: String, kind: String, jobId: String, title: String) {
+        val key = "$deckId|$kind"
+        val name = when (kind) { "poster" -> "پوستر"; "handout" -> "جزوه"; "audio" -> "اسلاید صوتی"; else -> "پادکست" }
+        val finish = { _state.update { it.copy(extraJobs = it.extraJobs - key) } }
+        viewModelScope.launch {
+            var fails = 0
+            val startedAt = SystemClock.elapsedRealtime()
+            while (true) {
+                try {
+                    val j = Api.job(jobId)
+                    fails = 0
+                    when (j.optString("state")) {
+                        "done" -> {
+                            val arr = j.optJSONArray("ids")
+                            val ids = if (arr == null) emptyList() else (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotEmpty() }
+                            finish()
+                            if (ids.isEmpty()) {
+                                toast("ساخت $name ناموفق بود؛ اعتبارش برگشت.")
+                            } else {
+                                updateJob(deckId) {
+                                    when (kind) {
+                                        "poster" -> it.copy(posterId = ids.first())
+                                        "handout" -> it.copy(handoutId = ids.first())
+                                        "audio" -> it.copy(audioIds = ids)
+                                        else -> it.copy(podcastIds = ids)
+                                    }
+                                }
+                                toast("✅ $name آماده شد؛ در «فایل‌ها» هست.")
+                                val app = getApplication<Application>()
+                                if (LocalFiles.autoSaveExtra(app, title, ids.map { it to kind })) refreshLocal()
+                            }
+                            loadFiles()
+                            onResume(force = true) // اگر ساخت شکست خورده و اعتبار برگشته، فوراً دیده شود
+                            return@launch
+                        }
+                        "error" -> {
+                            finish()
+                            toast(j.optString("message").ifEmpty { "ساخت $name ناموفق بود؛ اعتبارش برگشت." })
+                            loadFiles() // دکمه دوباره دیده شود
+                            onResume(force = true)
+                            return@launch
+                        }
+                        else -> {
+                            val msg = j.optString("message")
+                            if (msg.isNotEmpty()) _state.update { it.copy(extraJobs = if (key in it.extraJobs) it.extraJobs + (key to msg) else it.extraJobs) }
+                        }
+                    }
+                } catch (e: ApiException) {
+                    if (e.status == 404 || e.status == 401) { finish(); loadFiles(); return@launch }
+                    fails++
+                    if (SystemClock.elapsedRealtime() - startedAt > MAX_WATCH_MS) { finish(); loadFiles(); return@launch }
                 }
                 delay(if (fails >= 3) 8000 else 4000)
             }

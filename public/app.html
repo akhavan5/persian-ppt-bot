@@ -51,8 +51,10 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .file>div:first-child{min-width:0;flex:1}
 /* همراه‌های بعد از ساخت ارائه (پوستر، جزوه، اسلاید صوتی، پادکست): ردیف جدا زیر هر ارائه */
 .file{flex-wrap:wrap}
-.file .fx{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.file .fx .xl{flex:1 1 100%;font-size:.78rem;color:var(--hint)}
+.file .fx,#doneExtras{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+#doneExtras{margin-top:10px}
+.file .fx .xl,#doneExtras .xl{flex:1 1 100%;font-size:.78rem;color:var(--hint)}
+#doneExtraJobs .xj{margin:6px 0;font-size:.85rem;color:var(--hint)}
 #extraJobs .xj{margin:6px 0;font-size:.85rem;color:var(--hint)}
 .src{display:inline-flex;align-items:center;gap:8px;background:var(--sec);border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 12px;font-size:.82rem;max-width:100%}
 .src span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -187,6 +189,8 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <div class="muted" id="doneAudioWait" hidden style="margin-top:8px">🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</div>
         <div class="muted" id="donePodcastWait" hidden style="margin-top:8px">🎙 پادکست در حال ساخت است (چند دقیقه)…</div>
         <div class="err" id="doneWarn" hidden></div>
+        <div id="doneExtraJobs"></div>
+        <div class="fx" id="doneExtras" hidden></div>
         <img class="poster" id="posterImg" alt="پوستر" hidden>
       </div>
 
@@ -894,6 +898,7 @@ function showDone(jobId, s, took = 0) {
   const warn = [s.poster === "failed" ? "ساخت پوستر ناموفق بود و اعتبارش برگشت." : "", s.handout === "failed" ? "ساخت جزوه ناموفق بود و اعتبارش برگشت." : ""].filter(Boolean).join(" ");
   $("#doneWarn").textContent = warn; show($("#doneWarn"), !!warn);
   trackAudio(s);
+  $("#done").dataset.job = jobId; doneExtras([]); loadFiles(); // دکمه‌های «ساخت جداگانه» بعد از رسیدن فهرست فایل‌ها (loadFiles → doneExtras) پر می‌شوند
   view("done"); $("#done").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 // اسلاید صوتی و پادکست همراه: در Workflow جدا چند دقیقه طول می‌کشند؛ وضعیتشان جدا خوانده می‌شود و دکمه‌ی «ارسال به چت» هرکدام وقتی آماده شد نمایش داده می‌شود
@@ -987,19 +992,34 @@ async function makeExtra(f, kind, layout, btn) {
 async function trackExtra(jobId, kind) {
   const line = h("div", { class: "xj" }, EXTRA_BTNS[kind][0][0].split(" ")[0] + " در صف است…");
   $("#extraJobs").append(line);
+  const line2 = line.cloneNode(true); $("#doneExtraJobs").append(line2); // همان وضعیت زیر کارت «ارائه آماده است» هم دیده شود
+  const setLine = (t) => { line.textContent = t; line2.textContent = t; };
+  const endLine = () => { line.remove(); line2.remove(); };
   for (let i = 0; i < 240; i++) {
     let r;
     try { r = await api("/api/jobs/" + jobId); }
     catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
-    if (r.state === "running") { line.textContent = r.message; await sleep(4000); continue; }
+    if (r.state === "running") { setLine(r.message); await sleep(4000); continue; }
     if (r.state === "done" && r.ids && r.ids.length) { TG.haptic("success"); toast("✅ آماده شد؛ از فهرست بگیر."); } else { TG.haptic("error"); toast("⚠️ " + (r.message || "ساخت ناموفق بود؛ اعتبارش برگردانده شد.")); }
-    line.remove(); refreshMe(); loadFiles(); return;
+    endLine(); refreshMe(); loadFiles(); return;
   }
-  line.remove(); loadFiles();
+  endLine(); loadFiles();
+}
+
+// دکمه‌های «ساخت جداگانه» زیر کارت «ارائه آماده است»: همراه‌هایی که همراه ارائه نخواسته بودی (یا ساخته نشدند) و روی سرویس روشن‌اند؛
+// فهرستشان همان extras هر ارائه در /api/files است و بعد از ساخت یا در حال ساخت بودن، دکمه‌ی همان نوع برداشته می‌شود
+function doneExtras(list) {
+  const box = $("#doneExtras"), id = $("#done").dataset.job;
+  const f = id ? list.find((x) => x.id === id) : null;
+  const items = f && f.extras ? f.extras.flatMap((k) => (EXTRA_BTNS[k] || []).map(([label, layout]) => [k, label, layout])) : [];
+  box.replaceChildren(...(items.length ? [h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):")] : []),
+    ...items.map(([k, label, layout]) => h("button", { class: "btn ghost sm", type: "button", onclick: (e) => makeExtra(f, k, layout, e.currentTarget) }, label)));
+  show(box, items.length > 0);
 }
 
 async function loadFiles() {
   let list; try { list = (await api("/api/files")).files; } catch { return; }
+  doneExtras(list);
   const box = $("#files");
   if (!list.length) { box.replaceChildren(h("span", { class: "muted" }, "فایلی نداری. فایل هر ارائه تا ۲۴ ساعت اینجا می‌ماند.")); return; }
   box.replaceChildren(...list.map((f) => {

@@ -160,6 +160,16 @@ object Api {
         return call("POST", "/api/generate", b).optString("jobId")
     }
 
+    /**
+     * ساخت جداگانه‌ی پوستر/جزوه/اسلاید صوتی/پادکست برای ارائه‌ی ساخته‌شده (۱ اعتبار جدا؛ همان سرویس دکمه‌های وب و تلگرام).
+     * kind = "poster" | "handout" | "audio" | "podcast"؛ layout فقط برای پوستر ("wide" | "tall"). شناسه‌ی کار را برمی‌گرداند (وضعیت: job()).
+     */
+    suspend fun startExtra(deckId: String, kind: String, layout: String? = null): String {
+        val b = JSONObject().put("kind", kind)
+        if (layout != null) b.put("layout", layout)
+        return call("POST", "/api/files/" + Uri.encode(deckId) + "/extra", b).optString("jobId")
+    }
+
     suspend fun job(id: String): JSONObject = call("GET", "/api/jobs/" + Uri.encode(id))
 
     suspend fun putSetting(key: String, value: Any) {
