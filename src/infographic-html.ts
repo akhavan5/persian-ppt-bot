@@ -9,8 +9,8 @@ import type { IgBlock, IgLayout, Infographic } from "./infographic";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** پوستر افقی ۳۴۵۶px (قبلاً ۳۲۰۰): با همان اندازه‌ی فونت، هر ستون حدود ۸٪ پهن‌تر می‌شود (جدول و کارت کمتر می‌شکنند) */
-export const IG_WIDTH: Record<IgLayout, number> = { wide: 3456, tall: 1200 };
+/** پوستر افقی ۴۲۴۰px (قبلاً ۳۴۵۶): با همان اندازه‌ی فونت، هر ستون حدود ۲۳٪ پهن‌تر می‌شود (جدول و کارت کمتر می‌شکنند)؛ عکس‌ِ تلگرام از سقف ۱۰۰۰۰px می‌گذرد و فقط فایل کامل (sendDocument) فرستاده می‌شود */
+export const IG_WIDTH: Record<IgLayout, number> = { wide: 4240, tall: 1200 };
 
 export interface IgRenderOpts {
   theme: string;
@@ -28,7 +28,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
   const W = IG_WIDTH[o.layout];
   const cols = o.layout === "wide" ? 4 : 2;
-  const base = o.layout === "wide" ? 48 : 24; // پوستر افقی: فونت پایه ۴۰ ← ۴۸ (۲۰٪ بزرگ‌تر) تا در پیش‌نمایش تلگرام خواناتر باشد؛ ۴ ستون در ۳۴۵۶px. اگر مجموع ابعاد عکس (با مقیاس ۱.۵) از سقف ۱۰۰۰۰px تلگرام بگذرد، فقط فایل کامل فرستاده می‌شود (sendDocument)
+  const base = o.layout === "wide" ? 48 : 24; // پوستر افقی: فونت پایه ۴۰ ← ۴۸ (۲۰٪ بزرگ‌تر) تا در پیش‌نمایش تلگرام خواناتر باشد؛ ۴ ستون در ۴۲۴۰px. اگر مجموع ابعاد عکس (با مقیاس ۱.۵) از سقف ۱۰۰۰۰px تلگرام بگذرد، فقط فایل کامل فرستاده می‌شود (sendDocument)
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
   const dark = t.bg.toUpperCase() < "808080"; // پس‌زمینه‌ی تیره (مثل تم نیمه‌شب)
