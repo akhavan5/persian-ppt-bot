@@ -617,9 +617,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args, text, userId);
   // ورودی در انتظار پنل مدیر (جستجو، مقدار اعتبار، متن پیام…): پیام متنی بعدی مدیر همان است
-  if (admin && !cmd && text && !msg.document && !msg.photo && (await handleAdminInput(env, chatId, userId, text).catch((e) => { console.error("admin input", e); return false; }))) return;
+  if (admin && !cmd && text && !msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleAdminInput(env, chatId, userId, text).catch((e) => { console.error("admin input", e); return false; }))) return;
 
-  if (!msg.document && !msg.photo && (await handleFeedback(env, msg, userId, uid, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
+  if (!msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleFeedback(env, msg, userId, uid, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
 
   if (cmd === "/app") return await showApp(env, chatId);
   if (cmd === "/site") return await showSite(env, chatId, userId);
@@ -648,7 +648,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     // OcrWorkflow چند ثانیه صبر می‌کند، همه را به‌ترتیب می‌خواند و یک کارت می‌سازد (به‌جای یک کارت و OCR جدا برای هر عکس)
     const gid = msg.media_group_id ? String(msg.media_group_id) : "";
     let group: string | undefined;
-    if (gid && env.OCR_WORKFLOW) {
+    if (gid && env.OCR_WORKFLOW && !ref.isAudio) { // آلبوم فقط برای عکس؛ هر ویس/فایل صوتی جدا خوانده می‌شود
       const gk = `mg:${chatId}:${gid}`;
       if (!(await env.KV.get(`${gk}:done`))) { // بعد از شروع خواندن آلبوم، عکس دیررسیده مثل فایل تکی رفتار می‌کند
         await env.KV.put(`${gk}:i:${String(msg.message_id).padStart(12, "0")}`, JSON.stringify({ ref, caption }), { expirationTtl: 600 });
@@ -658,9 +658,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     }
     const gate = await wizardGate(env, chatId, uid, userId);
     if (!gate) return;
-    const wait = await sendMessage(env, chatId, "⏳ در حال خواندن فایل…");
+    const wait = await sendMessage(env, chatId, ref.isAudio ? "🎙 در حال تبدیل صدا به متن…" : "⏳ در حال خواندن فایل…");
     // PDF و عکس ممکن است OCR شوند (چند ده ثانیه)؛ waitUntil فقط ~۳۰ ثانیه فرصت دارد، پس در Workflow اجرا می‌شود
-    const heavy = ref.isPhoto || ref.mime === "application/pdf" || ref.mime.startsWith("image/") || /\.(pdf|png|jpe?g)$/i.test(ref.name);
+    const heavy = ref.isPhoto || ref.isAudio || ref.mime === "application/pdf" || ref.mime.startsWith("image/") || /\.(pdf|png|jpe?g)$/i.test(ref.name);
     if (heavy && env.OCR_WORKFLOW) {
       try {
         await env.OCR_WORKFLOW.create({ id: `ocr-${chatId}-${Date.now()}`, params: { chatId, userId, uid, ref, caption, waitId: wait.message_id, ...(group ? { group } : {}) } });
@@ -672,7 +672,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     return await finishFileUpload(env, chatId, uid, userId, ref, caption, await extractTelegramFile(env, ref, uid), wait.message_id);
   }
 
-  if (!text) return await sendMessage(env, chatId, `لطفاً موضوع ارائه را به‌صورت <b>متن</b> بفرست؛ یا یک فایل (${SUPPORTED_NOTE}) تا ارائه از روی محتوایش ساخته شود.`);
+  if (!text) return await sendMessage(env, chatId, `لطفاً موضوع ارائه را به‌صورت <b>متن</b> یا <b>ویس</b> بفرست؛ یا یک فایل (${SUPPORTED_NOTE}) تا ارائه از روی محتوایش ساخته شود.`);
 
   // لینک صفحه‌ی وب (فقط وقتی Tavily فعال است): متن صفحه خوانده و منبع ارائه می‌شود
   if (linkEnabled(env)) {
@@ -714,6 +714,17 @@ export async function finishFileUpload(env: Env, chatId: number, uid: Uid, userI
   const { topic: capTopic, slides: capSlides, mode: capMode } = extractSlideCount(caption);
   const gate = await wizardGate(env, chatId, uid, userId);
   if (!gate) { await editMessage(env, chatId, waitId, "✅ فایل خوانده شد."); return null; }
+  // ویس/فایل صوتی: متن کوتاه (تا ۶۰۰ نویسه و بدون کپشن) همان «موضوع» است، مثل پیام متنی (تعداد اسلاید و حالت هم از لابه‌لای حرفت فهمیده می‌شود)؛ متن بلندتر منبع ارائه می‌شود
+  if (ref.isAudio) {
+    const spoken = ex.text.trim();
+    if (capTopic.length < 3 && spoken.length <= 600) {
+      const sp = extractSlideCount(spoken);
+      if (sp.topic.length >= 3) { await showWizard(env, chatId, uid, gate, { topic: sp.topic, slides: sp.slides, mode: sp.mode, cardId: waitId, orig: spoken }); return null; }
+    }
+    const aTopic = capTopic.length >= 3 ? capTopic : "ارائه از روی پیام صوتی";
+    await showWizard(env, chatId, uid, gate, { topic: aTopic, slides: capSlides, mode: capMode, source: spoken, file: ref.name === "voice.ogg" ? "پیام صوتی" : ref.name, cardId: waitId, orig: caption });
+    return null;
+  }
   const fromName = ref.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
   const topic = capTopic.length >= 3 ? capTopic : fromName.length >= 3 && !ref.isPhoto ? fromName.slice(0, 200) : "ارائه از روی فایل ارسالی";
   await showWizard(env, chatId, uid, gate, { topic, slides: capSlides, mode: capMode, source: ex.text, file: ref.name, cardId: waitId, orig: caption });

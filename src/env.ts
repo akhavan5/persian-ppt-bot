@@ -134,6 +134,10 @@ export interface Env {
   LINK_SOURCE?: string;
   LINK_DAILY_LIMIT?: string;
   LINK_GLOBAL_DAILY?: string;
+  /** ورودی صوتی (ویس و فایل صوتی تلگرام ← متن) با Deepgram: کلید API (چند کلید: هر خط یا «;» یا «,»). بدون آن ورودی صوتی خاموش است. DEEPGRAM_MODEL پیش‌فرض nova-3؛ DEEPGRAM_LANGUAGE پیش‌فرض fa (auto = تشخیص خودکار زبان، multi = چندزبانه) */
+  DEEPGRAM_API_KEY?: string;
+  DEEPGRAM_MODEL?: string;
+  DEEPGRAM_LANGUAGE?: string;
   /** تبدیل تصویر/PDF اسکن‌شده به متن (OCR) با ocr.space؛ کلید رایگان از ocr.space/ocrapi/freekey. بدون آن از کلید دموی عمومی (با سقف بسیار کم) استفاده می‌شود */
   OCR_SPACE_API_KEY?: string;
   /** اختیاری: مدل‌های vision کلودفلر برای OCR (با کاما، به ترتیب اولویت). پیش‌فرض: gemma-4-26b-a4b-it ← qwen3.8-27b ← mistral-small-3.1 */

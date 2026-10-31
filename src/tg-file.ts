@@ -12,6 +12,7 @@ import type { Env } from "./env";
 import { ocrSmart, VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { tg } from "./telegram";
+import { AUDIO_EXT, deepgramEnabled, transcribeAudio } from "./deepgram";
 
 export const TG_MAX_FILE = 20 * 1024 * 1024; // سقف دانلود Bot API رسمی تلگرام
 export const WEB_MAX_FILE = 24 * 1024 * 1024; // سقف آپلود وب؛ زیر سقف ۲۵ MiB مقدار KV (فایل برای Workflow در KV می‌ماند)
@@ -135,13 +136,23 @@ async function readImage(env: Env, bytes: ArrayBuffer, mime: string, userId: str
   return ocrSmart(env, bytes, mime);
 }
 
-export interface TgFileRef { fileId: string; name: string; mime: string; size?: number; isPhoto?: boolean }
+export interface TgFileRef { fileId: string; name: string; mime: string; size?: number; isPhoto?: boolean; /** ویس یا فایل صوتی ← متن با Deepgram */ isAudio?: boolean }
 
 /** از پیام تلگرام، فایل قابل‌پردازش (سند یا عکس) را برمی‌گرداند؛ عکس: بزرگ‌ترین اندازه‌ی ≤۴ مگابایت (سقف OCR) */
 export function fileRefOf(msg: any): TgFileRef | null {
+  if (msg.voice?.file_id) { // ویس تلگرام (ogg/opus)
+    const v = msg.voice;
+    return { fileId: v.file_id, name: "voice.ogg", mime: String(v.mime_type ?? "audio/ogg"), size: v.file_size, isAudio: true };
+  }
+  if (msg.audio?.file_id) { // فایل صوتی (mp3/m4a/…) که با دکمه‌ی «موسیقی» فرستاده شده
+    const a = msg.audio;
+    return { fileId: a.file_id, name: String(a.file_name ?? "audio.mp3"), mime: String(a.mime_type ?? ""), size: a.file_size, isAudio: true };
+  }
   if (msg.document?.file_id) {
     const d = msg.document;
-    return { fileId: d.file_id, name: String(d.file_name ?? "file"), mime: String(d.mime_type ?? ""), size: d.file_size };
+    const name = String(d.file_name ?? "file"), mime = String(d.mime_type ?? "");
+    const isAudio = mime.startsWith("audio/") || AUDIO_EXT.has((name.split(".").pop() || "").toLowerCase());
+    return { fileId: d.file_id, name, mime, size: d.file_size, ...(isAudio ? { isAudio: true } : {}) };
   }
   if (Array.isArray(msg.photo) && msg.photo.length) {
     const sizes = [...msg.photo].sort((a: any, b: any) => (a.file_size ?? 0) - (b.file_size ?? 0));
@@ -158,10 +169,11 @@ const extOf = (name: string, mime: string) => {
   if (mime === "image/png") return "png";
   if (mime.startsWith("image/jpeg")) return "jpg";
   if (mime.startsWith("text/")) return "txt";
+  if (mime.startsWith("audio/")) return /mpeg|mp3/.test(mime) ? "mp3" : /mp4|m4a|aac/.test(mime) ? "m4a" : /wav/.test(mime) ? "wav" : /flac/.test(mime) ? "flac" : "ogg";
   return "";
 };
 
-const isSupportedExt = (ext: string) => TEXT_EXT.has(ext) || IMG_EXT.has(ext) || ["docx", "pptx", "xlsx", "pdf"].includes(ext);
+const isSupportedExt = (ext: string) => TEXT_EXT.has(ext) || IMG_EXT.has(ext) || AUDIO_EXT.has(ext) || ["docx", "pptx", "xlsx", "pdf"].includes(ext);
 const unsupportedFile = (): Extracted =>
   fail(`این نوع فایل پشتیبانی نمی‌شود. ${SUPPORTED_NOTE} بفرست (فایل‌های قدیمی doc/ppt/xls را ابتدا به docx/pptx/xlsx تبدیل کن).`);
 
@@ -177,6 +189,7 @@ const tooBigForTelegram = (env: Env, size: number): Extracted => {
 export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: string | number): Promise<Extracted> {
   const ext = extOf(ref.name, ref.mime);
   if (!isSupportedExt(ext)) return unsupportedFile();
+  if (AUDIO_EXT.has(ext) && !deepgramEnabled(env)) return fail("ورودی صوتی فعال نیست؛ موضوع را به‌صورت متن بفرست.");
   if ((ref.size ?? 0) > TG_MAX_FILE) return tooBigForTelegram(env, ref.size ?? 0);
 
   let bytes: ArrayBuffer;
@@ -203,6 +216,14 @@ export async function extractFileBytes(env: Env, bytes: ArrayBuffer, name: strin
   const ext = extOf(name, mime);
   if (!isSupportedExt(ext)) return unsupportedFile();
   if (bytes.byteLength > WEB_MAX_FILE) return fail("حجم فایل حداکثر ۲۴ مگابایت می‌تواند باشد.");
+
+  // ویس/فایل صوتی ← متن (Deepgram). موضوعِ گفته‌شده ممکن است کوتاه باشد (مثل «ده اسلاید درباره‌ی …»)، پس حداقل ۳۰ نویسه‌ی فایل‌های متنی اینجا اعمال نمی‌شود
+  if (AUDIO_EXT.has(ext)) {
+    const r = await transcribeAudio(env, bytes, ext, userId);
+    if (!r.ok) return fail(r.error);
+    const text = tidy(r.text);
+    return text.length < 3 ? fail("صدایی که قابل‌تشخیص باشد در فایل پیدا نشد؛ واضح‌تر بگو یا دوباره بفرست.") : { ok: true, text };
+  }
 
   try {
     let text: string;
