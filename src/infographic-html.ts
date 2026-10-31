@@ -28,7 +28,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
   const W = IG_WIDTH[o.layout];
   const cols = o.layout === "wide" ? 4 : 2;
-  const base = o.layout === "wide" ? 40 : 24; // ۴ ستون در ۳۴۵۶px (هر ستون حدود ۶۵۰ تا ۹۵۰px)؛ مجموع ابعاد عکس (با مقیاس ۱.۵) باید زیر سقف ۱۰۰۰۰px تلگرام بماند
+  const base = o.layout === "wide" ? 48 : 24; // پوستر افقی: فونت پایه ۴۰ ← ۴۸ (۲۰٪ بزرگ‌تر) تا در پیش‌نمایش تلگرام خواناتر باشد؛ ۴ ستون در ۳۴۵۶px. اگر مجموع ابعاد عکس (با مقیاس ۱.۵) از سقف ۱۰۰۰۰px تلگرام بگذرد، فقط فایل کامل فرستاده می‌شود (sendDocument)
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
   const dark = t.bg.toUpperCase() < "808080"; // پس‌زمینه‌ی تیره (مثل تم نیمه‌شب)
