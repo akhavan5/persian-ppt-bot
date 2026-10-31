@@ -20,7 +20,7 @@ import { fileNameWithSite, miniappUrl } from "./deck-service";
 import { toFa } from "./util";
 import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
-import { chunkTurns, makePodcastScript, transcript } from "./podcast";
+import { chunkTurns, makePodcastScript } from "./podcast";
 import { NARRATION_BATCH, makeNarration } from "./narration";
 import { mergeWav, wavSeconds } from "./wav";
 import { embedAudio, pptxSlideNo, type SlideAudio } from "./pptx-audio";
@@ -233,7 +233,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
       return makePodcastScript(this.env, p.deck, { model });
     }));
-    // کاربر بدون پلن: مجری (علی) در پایان پادکست سایت را معرفی می‌کند؛ این نوبت در متن گفت‌وگوی تلگرام هم می‌آید
+    // کاربر بدون پلن: مجری (علی) در پایان پادکست سایت را معرفی می‌کند
     const turns: Turn[] = mark ? [...script.turns, { speaker: "A", text: OUTRO_PODCAST }] : script.turns;
     const chunks = chunkTurns(turns);
 
@@ -277,12 +277,10 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         await sendAudio(this.env, chatId, merged, pname,
           `🎙 <b>${esc(script.title)}</b>${part}\nپادکست دو‌گوینده · ${toFa(String(turns.length))} نوبت`, { title: script.title, performer: "علی و سارا", duration: wavSeconds(merged) });
       }
-      // متن گفت‌وگو برای بازبینی (اگر تلفظ جایی غلط بود، متن را ببین)؛ فقط تلگرام (در وب فایل اضافه به سقف فایل‌های ۲۴ ساعته می‌خورد)
-      if (!web) await sendDocument(this.env, chatId, new TextEncoder().encode(transcript({ title: script.title, turns })), fileNameWithSite(this.env, script.title, "txt", "متن پادکست", 40), "📝 متن گفت‌وگوی پادکست", { mime: "text/plain" }).catch((e) => console.error("transcript", String(e).slice(0, 200)));
       for (let i = 0; i < chunks.length; i++) await this.env.FILES.delete(tmpKey(id, i)).catch(() => {});
       return ids;
     });
-    await step.do("finish", async () => { if (!web) await status("✅ پادکست آماده شد؛ فایل صوتی و متن گفت‌وگو را بالا ببین."); }).catch(() => {}); // خطای پیام پایانی نباید به «برگشت اعتبار» برسد
+    await step.do("finish", async () => { if (!web) await status("✅ پادکست آماده شد؛ فایل صوتی را بالا ببین."); }).catch(() => {}); // خطای پیام پایانی نباید به «برگشت اعتبار» برسد
     return { kind: "podcast", title: script.title, ids: saved, note: "" };
   }
 }
