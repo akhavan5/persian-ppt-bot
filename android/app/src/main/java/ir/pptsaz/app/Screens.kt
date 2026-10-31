@@ -422,11 +422,13 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
 
 /** وضعیت فرم «ساخت»؛ در AppViewModel نگه داشته می‌شود تا با عوض‌کردن تب و چرخش صفحه پاک نشود (و متن بلند وارد Bundle نشود). */
 @Stable
-class CreateForm(topic: String = "", source: String = "", handout: Boolean = true, poster: String = "wide") {
+class CreateForm(topic: String = "", source: String = "", handout: Boolean = true, poster: String = "wide", audio: Boolean = true, podcast: Boolean = true) {
     var topic by mutableStateOf(topic)
     var source by mutableStateOf(source)
     var handout by mutableStateOf(handout)
     var poster by mutableStateOf(poster)
+    var audio by mutableStateOf(audio)
+    var podcast by mutableStateOf(podcast)
 
     /** برگشت به حالت اولِ فرم (مقادیر پیش‌فرض همان‌هایی است که Draft.load برای پیش‌نویس خالی می‌دهد). */
     fun reset() {
@@ -434,6 +436,8 @@ class CreateForm(topic: String = "", source: String = "", handout: Boolean = tru
         source = ""
         handout = true
         poster = "wide"
+        audio = true
+        podcast = true
     }
 }
 
@@ -458,7 +462,7 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
     val form = vm.form
     // ذخیره‌ی خودکار پیش‌نویس روی گوشی (با ۰٫۷ ثانیه تاخیر تا با هر حرف نوشته نشود)
     LaunchedEffect(form) {
-        snapshotFlow { listOf<Any>(form.topic, form.source, form.handout, form.poster) }.collectLatest {
+        snapshotFlow { listOf<Any>(form.topic, form.source, form.handout, form.poster, form.audio, form.podcast) }.collectLatest {
             delay(700)
             Draft.save(ctx, form)
         }
@@ -817,6 +821,19 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                             )
                         }
                     }
+                    // اسلاید صوتی و پادکست (فقط وقتی سرور فعالشان کرده)؛ پیش‌فرض روشن، هرکدام ۱ اعتبار جدا
+                    if (cfg.audio) {
+                        HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+                        ToggleRow(
+                            title = "اسلاید صوتی", subtitle = "صدای گوینده داخل هر اسلاید؛ چند دقیقه بعد از ارائه آماده می‌شود", icon = AppIcons.Slides,
+                            checked = form.audio, badge = EXTRA_CREDIT, onChange = { form.audio = it },
+                        )
+                        HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+                        ToggleRow(
+                            title = "پادکست", subtitle = "گفت‌وگوی دونفره‌ی علی و سارا؛ چند دقیقه بعد از ارائه آماده می‌شود", icon = AppIcons.Mic,
+                            checked = form.podcast, badge = EXTRA_CREDIT, onChange = { form.podcast = it },
+                        )
+                    }
                 }
             }
         }
@@ -829,7 +846,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
         ) {
             GradientButton(
                 text = if (running) "در حال ساخت…" else "ساخت ارائه",
-                onClick = { vm.generate(form.topic, s.slides, form.handout, form.source, (if (cfg.poster) form.poster.ifEmpty { null } else null), s.images) },
+                onClick = { vm.generate(form.topic, s.slides, form.handout, form.source, (if (cfg.poster) form.poster.ifEmpty { null } else null), s.images, cfg.audio && form.audio, cfg.audio && form.podcast) },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !running && !st.busy,
                 icon = AppIcons.Sparkles,
@@ -880,6 +897,17 @@ private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false) {
                 job.handoutId?.let { hid -> SoftButton("دانلود جزوه (Word)", { vm.download(hid) }, Modifier.fillMaxWidth(), icon = AppIcons.Doc) }
                 job.posterId?.let { pid -> SoftButton("نمایش پوستر", { vm.openViewer(Viewer.Poster(pid)) }, Modifier.fillMaxWidth(), icon = AppIcons.Image) }
                 if (job.posterFailed) Text("ساخت پوستر ناموفق بود؛ ارائه‌ی شما سالم است.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                // اسلاید صوتی و پادکست: چند دقیقه بعد از ارائه آماده می‌شوند؛ تا آن موقع پیام «در حال ساخت»، بعد دکمه‌های دانلود
+                if (job.audioWaiting) Text("🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                job.audioIds.forEachIndexed { i, aid ->
+                    SoftButton(if (i == 0) "دانلود اسلاید صوتی" else "دانلود بخش " + (i + 1).fa(), { vm.download(aid) }, Modifier.fillMaxWidth(), icon = AppIcons.Slides)
+                }
+                if (job.audioFailed) Text("ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگشت.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                if (job.podcastWaiting) Text("🎙 پادکست در حال ساخت است (چند دقیقه)…", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                job.podcastIds.forEachIndexed { i, pid ->
+                    SoftButton(if (i == 0) "دانلود پادکست" else "دانلود پادکست — قسمت " + (i + 1).fa(), { vm.download(pid) }, Modifier.fillMaxWidth(), icon = AppIcons.Mic)
+                }
+                if (job.podcastFailed) Text("ساخت پادکست ناموفق بود؛ اعتبارش برگشت.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
         else -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(ex.brand).padding(18.dp)) {
@@ -984,11 +1012,15 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
     val (icon, brush) = when {
         f.poster -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
         f.handout -> AppIcons.Doc to Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFF97316)))
+        f.audio == "podcast" -> AppIcons.Mic to Brush.linearGradient(listOf(Color(0xFF0EA5E9), Color(0xFF6366F1)))
+        f.audio == "slides" -> AppIcons.Slides to Brush.linearGradient(listOf(Color(0xFF14B8A6), Color(0xFF0EA5E9)))
         else -> AppIcons.Slides to LocalExtra.current.brand
     }
     val kind = when {
         f.poster -> "پوستر"
         f.handout -> "جزوه‌ی Word"
+        f.audio == "podcast" -> "پادکست"
+        f.audio == "slides" -> if (f.slides > 0) "اسلاید صوتی • " + f.slides.fa() + " اسلاید" else "صدای یک اسلاید"
         else -> f.slides.fa() + " اسلاید"
     }
     SurfaceCard {
@@ -1003,10 +1035,10 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             }
             if (f.poster) {
                 IconButton(onClick = { vm.openViewer(Viewer.Poster(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "نمایش پوستر") }
-            } else if (!f.handout) {
+            } else if (!f.handout && f.audio.isEmpty()) {
                 IconButton(onClick = { vm.openViewer(Viewer.Preview(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "پیش‌نمایش اسلایدها") }
             }
-            if (pdf && !f.poster && !f.handout) {
+            if (pdf && !f.poster && !f.handout && f.audio.isEmpty()) {
                 TextButton(onClick = { vm.downloadPdf(f.id) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("PDF") }
             }
             IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
@@ -1023,11 +1055,15 @@ private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
     val (icon, brush) = when (f.kind) {
         "poster" -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
         "handout" -> AppIcons.Doc to Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFF97316)))
+        "podcast" -> AppIcons.Mic to Brush.linearGradient(listOf(Color(0xFF0EA5E9), Color(0xFF6366F1)))
+        "audio" -> AppIcons.Slides to Brush.linearGradient(listOf(Color(0xFF14B8A6), Color(0xFF0EA5E9)))
         else -> AppIcons.Slides to LocalExtra.current.brand
     }
     val kind = when (f.kind) {
         "poster" -> "پوستر"
         "handout" -> "جزوه‌ی Word"
+        "podcast" -> "پادکست"
+        "audio" -> "اسلاید صوتی"
         else -> if (f.slides > 0) f.slides.fa() + " اسلاید" else "ارائه"
     }
     SurfaceCard {

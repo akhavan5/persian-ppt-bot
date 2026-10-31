@@ -38,6 +38,13 @@ data class JobState(
     val handoutId: String? = null,
     val posterId: String? = null,
     val posterFailed: Boolean = false,
+    // اسلاید صوتی و پادکست همراه: چند دقیقه بعد از ارائه در سرور ساخته می‌شوند؛ تا آماده شدن «در حال ساخت» می‌ماند و بعد شناسه‌ی فایل‌ها می‌آید
+    val audioWaiting: Boolean = false,
+    val podcastWaiting: Boolean = false,
+    val audioIds: List<String> = emptyList(),
+    val podcastIds: List<String> = emptyList(),
+    val audioFailed: Boolean = false,
+    val podcastFailed: Boolean = false,
 )
 
 sealed interface Viewer {
@@ -323,7 +330,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ ساخت ارائه
 
-    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean) {
+    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean, audio: Boolean = false, podcast: Boolean = false) {
         if (topic.trim().length < 3) {
             toast("موضوع ارائه را بنویسید")
             return
@@ -331,7 +338,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, images)
+                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, images, audio, podcast)
                 _state.update { it.copy(busy = false) }
                 if (id.isEmpty()) toast("شروع ساخت انجام نشد") else {
                     watch(id)
@@ -360,15 +367,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         "done" -> {
                             val h = if (j.optString("handout") == "ok") j.optString("handoutId").ifEmpty { null } else null
                             val posterOk = j.optString("poster") == "ok"
+                            // اسلاید صوتی / پادکست: "pending" ⇒ در Workflow جدا در حال ساخت (شناسه‌ی کار جدا)؛ "failed" ⇒ شروع نشد و اعتبارش برگشت
+                            val audioJob = if (j.optString("audio") == "pending") j.optString("audioId").ifEmpty { null } else null
+                            val podcastJob = if (j.optString("podcast") == "pending") j.optString("podcastId").ifEmpty { null } else null
                             _state.update {
                                 it.copy(
                                     job = JobState(
                                         id, "آماده شد", done = true, title = j.optString("title"), handoutId = h,
                                         posterId = if (posterOk) j.optString("posterId").ifEmpty { null } else null,
                                         posterFailed = j.optString("poster") == "failed",
+                                        audioWaiting = audioJob != null, podcastWaiting = podcastJob != null,
+                                        audioFailed = j.optString("audio") == "failed", podcastFailed = j.optString("podcast") == "failed",
                                     )
                                 )
                             }
+                            if (audioJob != null) watchAudio(id, "audio", audioJob, j.optString("title"))
+                            if (podcastJob != null) watchAudio(id, "podcast", podcastJob, j.optString("title"))
                             loadFiles()
                             onResume(force = true) // اعتبار مصرف‌شده یا برگشت‌خورده فوراً به‌روز شود
                             val app = getApplication<Application>()
@@ -425,6 +439,60 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun showJob(id: String) {
         if (id.isEmpty() || _state.value.job?.id == id) return
         watch(id)
+    }
+
+    /** کارت ارائه‌ی deckJobId را (اگر هنوز همان کارت جلوی چشم است) به‌روز می‌کند. */
+    private fun updateJob(deckJobId: String, f: (JobState) -> JobState) {
+        _state.update { st ->
+            val jb = st.job
+            if (jb != null && jb.id == deckJobId) st.copy(job = f(jb)) else st
+        }
+    }
+
+    /**
+     * پیگیری اسلاید صوتی (kind = "audio") یا پادکست (kind = "podcast") که چند دقیقه بعد از ارائه در سرور ساخته می‌شود.
+     * با آماده‌شدن، دکمه‌ی دانلود روی کارت می‌آید و نسخه‌ی محلی (بی‌صدا) روی گوشی ذخیره می‌شود. اگر کاربر کارت را ببندد،
+     * فایل‌ها همچنان در تب «فایل‌ها» می‌آیند. شکست ساخت = اعتبار همان برگشته است.
+     */
+    private fun watchAudio(deckJobId: String, kind: String, jobId: String, title: String) {
+        viewModelScope.launch {
+            var fails = 0
+            val startedAt = SystemClock.elapsedRealtime()
+            val stop = { updateJob(deckJobId) { if (kind == "audio") it.copy(audioWaiting = false) else it.copy(podcastWaiting = false) } }
+            while (true) {
+                try {
+                    val j = Api.job(jobId)
+                    fails = 0
+                    when (j.optString("state")) {
+                        "done" -> {
+                            val arr = j.optJSONArray("ids")
+                            val ids = if (arr == null) emptyList() else (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotEmpty() }
+                            updateJob(deckJobId) {
+                                if (kind == "audio") it.copy(audioWaiting = false, audioIds = ids, audioFailed = ids.isEmpty())
+                                else it.copy(podcastWaiting = false, podcastIds = ids, podcastFailed = ids.isEmpty())
+                            }
+                            loadFiles()
+                            val app = getApplication<Application>()
+                            if (ids.isNotEmpty() && LocalFiles.autoSaveExtra(app, title, ids.map { it to kind })) refreshLocal()
+                            return@launch
+                        }
+                        "error" -> {
+                            updateJob(deckJobId) {
+                                if (kind == "audio") it.copy(audioWaiting = false, audioFailed = true) else it.copy(podcastWaiting = false, podcastFailed = true)
+                            }
+                            toast(j.optString("message").ifEmpty { "ساخت فایل صوتی ناموفق بود؛ اعتبارش برگشت." })
+                            onResume(force = true) // اعتبار برگشت‌خورده فوراً به‌روز شود
+                            return@launch
+                        }
+                    }
+                } catch (e: ApiException) {
+                    if (e.status == 404 || e.status == 401) { stop(); return@launch }
+                    fails++
+                    if (SystemClock.elapsedRealtime() - startedAt > MAX_WATCH_MS) { stop(); return@launch }
+                }
+                delay(if (fails >= 3) 8000 else 4000)
+            }
+        }
     }
 
     fun dismissJob() {

@@ -151,9 +151,11 @@ object Api {
 
     suspend fun files(): List<FileItem> = parseFiles(call("GET", "/api/files"))
 
-    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean): String {
+    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean, audio: Boolean = false, podcast: Boolean = false): String {
         val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout).put("images", images)
         if (poster != null) b.put("poster", poster)
+        if (audio) b.put("audio", true)
+        if (podcast) b.put("podcast", true)
         if (source.isNotEmpty()) b.put("source", source)
         return call("POST", "/api/generate", b).optString("jobId")
     }

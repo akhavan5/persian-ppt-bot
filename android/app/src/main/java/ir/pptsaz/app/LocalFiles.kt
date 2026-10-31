@@ -7,7 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** kind: "deck" (PPTX)، "handout" (جزوه‌ی Word)، "poster" (تصویر پوستر) */
+/** kind: "deck" (PPTX)، "handout" (جزوه‌ی Word)، "poster" (تصویر پوستر)، "audio" (اسلاید صوتی)، "podcast" (پادکست) */
 data class LocalFile(val id: String, val title: String, val name: String, val mime: String, val kind: String, val slides: Int, val t: Long, val size: Long)
 
 class LocalBlob(val name: String, val mime: String, val bytes: ByteArray)
@@ -118,6 +118,25 @@ object LocalFiles {
                 val f = Api.fetchFile(id, maxRetries = 20)
                 withContext(Dispatchers.IO) {
                     put(ctx, LocalFile(id, title, f.name, f.mime, kind, if (kind == "deck") slides else 0, System.currentTimeMillis(), 0), f.bytes)
+                }
+                saved = true
+            } catch (_: Exception) {
+                // شبکه یا حافظه: بی‌صدا رد می‌شویم؛ کاربر همچنان می‌تواند از سرور دانلود کند
+            }
+        }
+        return saved
+    }
+
+    /** اسلاید صوتی و پادکست (که چند دقیقه بعد از ارائه آماده می‌شوند) را بی‌صدا روی گوشی نگه می‌دارد. items = (شناسه‌ی فایل، kind). */
+    suspend fun autoSaveExtra(ctx: Context, title: String, items: List<Pair<String, String>>): Boolean {
+        if (!autoEnabled(ctx)) return false
+        var saved = false
+        for ((id, kind) in items) {
+            if (has(ctx, id)) continue
+            try {
+                val f = Api.fetchFile(id, maxRetries = 20)
+                withContext(Dispatchers.IO) {
+                    put(ctx, LocalFile(id, title, f.name, f.mime, kind, 0, System.currentTimeMillis(), 0), f.bytes)
                 }
                 saved = true
             } catch (_: Exception) {

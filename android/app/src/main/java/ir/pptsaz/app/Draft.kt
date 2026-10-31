@@ -15,6 +15,8 @@ object Draft {
             source = p.getString("source", "").orEmpty(),
             handout = p.getBoolean("handout", true),
             poster = p.getString("poster", "wide").orEmpty(),
+            audio = p.getBoolean("audio", true),
+            podcast = p.getBoolean("podcast", true),
         )
     }
 
@@ -24,6 +26,8 @@ object Draft {
             .putString("source", f.source.take(120_000))
             .putBoolean("handout", f.handout)
             .putString("poster", f.poster)
+            .putBoolean("audio", f.audio)
+            .putBoolean("podcast", f.podcast)
             .apply()
     }
 
@@ -40,7 +44,7 @@ object FileCache {
     fun save(ctx: Context, list: List<FileItem>) {
         val a = JSONArray()
         list.forEach {
-            a.put(JSONObject().put("id", it.id).put("title", it.title).put("slides", it.slides).put("t", it.t).put("poster", it.poster).put("handout", it.handout))
+            a.put(JSONObject().put("id", it.id).put("title", it.title).put("slides", it.slides).put("t", it.t).put("poster", it.poster).put("handout", it.handout).put("audio", it.audio))
         }
         p(ctx).edit().putString("files", a.toString()).apply()
     }
@@ -49,7 +53,7 @@ object FileCache {
         val a = JSONArray(p(ctx).getString("files", "[]"))
         val now = System.currentTimeMillis()
         (0 until a.length()).mapNotNull { a.optJSONObject(it) }
-            .map { FileItem(it.optString("id"), it.optString("title"), it.optInt("slides"), it.optLong("t"), it.optBoolean("poster"), it.optBoolean("handout")) }
+            .map { FileItem(it.optString("id"), it.optString("title"), it.optInt("slides"), it.optLong("t"), it.optBoolean("poster"), it.optBoolean("handout"), it.optString("audio")) }
             .filter {
                 val ms = if (it.t in 1..9_999_999_999L) it.t * 1000 else it.t // سرور ثانیه یا میلی‌ثانیه بفرستد هر دو درست است
                 it.id.isNotEmpty() && now - ms < DAY

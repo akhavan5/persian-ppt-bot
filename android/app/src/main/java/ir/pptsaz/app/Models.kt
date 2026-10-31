@@ -26,6 +26,7 @@ data class Config(
     val minVersion: Int = 0, // کمترین versionCode مجاز؛ پایین‌تر از آن اپ باید حتماً به‌روز شود
     val updateUrl: String = "",
     val pdf: Boolean = false, // خروجی PDF ارائه (سرور Browser Rendering دارد)
+    val audio: Boolean = false, // اسلاید صوتی و پادکست همراه ارائه (سرور Gemini TTS دارد)
     val googleClientId: String = "", // خالی = ورود با گوگل خاموش
 )
 
@@ -53,7 +54,8 @@ data class Me(
     val support: String,
 )
 
-data class FileItem(val id: String, val title: String, val slides: Int, val t: Long, val poster: Boolean, val handout: Boolean)
+/** audio: "" = فایل معمولی، "slides" = اسلاید صوتی (یا صدای یک اسلاید)، "podcast" = پادکست */
+data class FileItem(val id: String, val title: String, val slides: Int, val t: Long, val poster: Boolean, val handout: Boolean, val audio: String = "")
 
 /** isPublic = false یعنی فایل در حافظه‌ی اختصاصی اپ است (اندروید ۷–۹) و کاربر باید «ذخیره در گوشی» را بزند. */
 data class Saved(val uri: android.net.Uri, val mime: String, val name: String, val isPublic: Boolean = true)
@@ -87,6 +89,7 @@ fun parseConfig(j: JSONObject): Config {
         models = j.optJSONArray("models").objects().map { ModelOpt(it.str("id"), it.str("name"), it.str("brand"), it.optBoolean("free", true)) },
         poster = j.optBoolean("poster"),
         pdf = j.optBoolean("pdf"),
+        audio = j.optBoolean("audio"),
         googleClientId = if (j.optBoolean("google")) j.str("googleClientId") else "",
         dailyFree = j.optInt("dailyFree"),
         bazaar = j.optBoolean(Store.ID), // «bazaar» در نسخه‌ی بازار، «myket» در نسخه‌ی مایکت
@@ -130,7 +133,7 @@ fun parseMe(j: JSONObject): Me? {
 
 fun parseFiles(j: JSONObject): List<FileItem> =
     j.optJSONArray("files").objects().map {
-        FileItem(it.str("id"), it.str("title"), it.optInt("slides"), it.optLong("t"), it.optBoolean("poster"), it.optBoolean("handout"))
+        FileItem(it.str("id"), it.str("title"), it.optInt("slides"), it.optLong("t"), it.optBoolean("poster"), it.optBoolean("handout"), it.str("audio"))
     }
 
 /** ارقام فارسی/عربی را به لاتین تبدیل می‌کند (برای ارسال به سرور). */
