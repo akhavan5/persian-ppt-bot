@@ -345,6 +345,7 @@ address{font-style:normal}
     <div class="up" id="upBox">
       <input type="file" id="file" hidden accept=".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg">
       <button class="btn ghost sm" type="button" id="pick">📎 آپلود فایل (اختیاری)</button>
+      <button class="btn ghost sm" type="button" id="recBtn" hidden>🎙 ضبط ویس</button>
       <button class="btn ghost sm" type="button" id="linkBtn" hidden>🔗 افزودن لینک</button>
       <span class="upchip" id="upChip" hidden><span id="upName"></span><button type="button" id="upDel" aria-label="حذف فایل" title="حذف فایل">✕</button></span>
       <span class="muted" id="upHint">Word، PDF، PowerPoint، Excel، متن یا تصویر — ارائه از روی محتوای فایل ساخته می‌شود (فایل را اینجا هم می‌توانی رها کنی)</span>
@@ -1343,7 +1344,7 @@ async function readImage(file, ext, my) {
   const bmp = await createImageBitmap(file); return serverExtract(await jpegUnder(bmp, bmp.width, bmp.height), my);
 }
 // ویس/فایل صوتی (فقط وقتی سرور cfg.voice را روشن کرده): روی سرور با Deepgram به متن تبدیل می‌شود
-const AUDIO_MIME = { mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg", flac: "audio/flac", aac: "audio/aac", amr: "audio/amr" };
+const AUDIO_MIME = { mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg", flac: "audio/flac", aac: "audio/aac", amr: "audio/amr", webm: "audio/webm" };
 const AUDIO_EXT = Object.keys(AUDIO_MIME);
 const readPdf = (file, my) => serverExtract(file.type === "application/pdf" ? file : new Blob([file], { type: "application/pdf" }), my);
 async function extractFile(file, my) {
@@ -1365,7 +1366,7 @@ async function extractFile(file, my) {
   throw new Error("این نوع فایل پشتیبانی نمی‌شود. فایل Word، PDF، PowerPoint، Excel، متن یا تصویر بده (فایل‌های قدیمی doc/ppt را ابتدا به docx/pptx تبدیل کن).");
 }
 const HINT = $("#upHint").textContent;
-function clearFile() { upSeq++; srcText = srcName = ""; extracting = false; $("#file").value = ""; show($("#upChip"), false); $("#upHint").textContent = HINT; show($("#pick"), true); $("#pick").disabled = false; $("#linkGo").disabled = false; $("#linkUrl").value = ""; show($("#linkRow"), false); initLink(); upMsg(""); }
+function clearFile() { upSeq++; srcText = srcName = ""; extracting = false; $("#file").value = ""; show($("#upChip"), false); $("#upHint").textContent = HINT; show($("#pick"), true); $("#pick").disabled = false; $("#linkGo").disabled = false; $("#linkUrl").value = ""; show($("#linkRow"), false); initLink(); initVoice(); upMsg(""); }
 async function onFile(file) {
   if (!file) return;
   upMsg(""); show($("#linkRow"), false); const my = ++upSeq;
@@ -1382,7 +1383,7 @@ async function onFile(file) {
     }
     if (raw.length < 30) throw new Error("متنی در فایل پیدا نشد (اگر اسکن یا تصویر است، واضح‌تر و کم‌حجم‌تر امتحان کن).");
     srcText = raw.slice(0, MAX_SRC); srcName = file.name;
-    $("#upName").textContent = `${file.name} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false); show($("#linkBtn"), false);
+    $("#upName").textContent = `${file.name} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false); show($("#linkBtn"), false); show($("#recBtn"), false);
     $("#upHint").textContent = raw.length > MAX_SRC ? `فایل بلند است؛ فقط ${fa(MAX_SRC)} نویسه‌ی اول استفاده می‌شود.` : "ارائه از روی محتوای این فایل ساخته می‌شود.";
     const t = $("#topic"); if (!t.value.trim()) { t.value = file.name.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ").slice(0, 120); store.set("topic", t.value); }
   } catch (e) {
@@ -1402,7 +1403,33 @@ function initVoice() {
   const on = !!(cfg && cfg.voice);
   $("#file").accept = ".txt,.md,.csv,.json,.html,.htm,.docx,.pptx,.xlsx,.pdf,.png,.jpg,.jpeg" + (on ? "," + AUDIO_EXT.map((e) => "." + e).join(",") : "");
   $("#pick").textContent = on ? "📎 آپلود فایل یا ویس (اختیاری)" : "📎 آپلود فایل (اختیاری)";
+  show($("#recBtn"), on && !rec && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && typeof MediaRecorder !== "undefined" && $("#upChip").hidden);
 }
+// ضبط ویس با میکروفون مرورگر (MediaRecorder)؛ فایل ضبط‌شده همان مسیر آپلود صوتی را می‌رود. حداکثر ۵ دقیقه، با لمس دوباره‌ی دکمه تمام می‌شود
+const REC_MAX_SEC = 300;
+let rec = null;
+async function toggleRec() {
+  if (rec) { rec.stop(); return; }
+  if (extracting || srcText) return;
+  upMsg("");
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { upMsg("اجازه‌ی میکروفون داده نشد؛ در تنظیمات مرورگر برای این سایت مجازش کن."); return; }
+  const mt = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
+  const mr = new MediaRecorder(stream, mt ? { mimeType: mt } : undefined), chunks = [], t0 = Date.now(), btn = $("#recBtn");
+  const tick = () => { const s = Math.floor((Date.now() - t0) / 1000); btn.textContent = `⏹ پایان ضبط · ${fa(Math.floor(s / 60))}:${fa(String(s % 60).padStart(2, "0"))}`; if (s >= REC_MAX_SEC) mr.stop(); };
+  const timer = setInterval(tick, 500); tick();
+  mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  mr.onstop = () => {
+    clearInterval(timer); stream.getTracks().forEach((t) => t.stop()); rec = null; btn.textContent = "🎙 ضبط ویس"; $("#pick").disabled = false;
+    const type = (mr.mimeType || mt || "audio/webm").split(";")[0], ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+    const blob = new Blob(chunks, { type });
+    if (blob.size < 1000) { upMsg("چیزی ضبط نشد؛ دوباره امتحان کن."); return; }
+    onFile(new File([blob], `voice.${ext}`, { type }));
+  };
+  rec = mr; $("#pick").disabled = true; mr.start();
+}
+$("#recBtn").onclick = toggleRec;
 function initLink() { show($("#linkBtn"), !!(cfg && cfg.link) && $("#upChip").hidden); }
 $("#linkBtn").onclick = () => { if (extracting || srcText) return; upMsg(""); show($("#linkRow"), true); $("#linkUrl").focus(); };
 $("#linkCancel").onclick = () => { show($("#linkRow"), false); $("#linkUrl").value = ""; upMsg(""); };
@@ -1421,7 +1448,7 @@ async function onLink() {
     const raw = tidy(String(d.text || ""));
     if (raw.length < 30) throw new Error("متنی در این لینک پیدا نشد.");
     srcText = raw.slice(0, MAX_SRC); srcName = d.host || url;
-    $("#upName").textContent = `🔗 ${d.host || url} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false); show($("#linkBtn"), false); show($("#linkRow"), false);
+    $("#upName").textContent = `🔗 ${d.host || url} · ${fa(srcText.length)} نویسه`; show($("#upChip"), true); show($("#pick"), false); show($("#linkBtn"), false); show($("#recBtn"), false); show($("#linkRow"), false);
     $("#upHint").textContent = d.truncated || raw.length > MAX_SRC ? `صفحه بلند است؛ فقط ${fa(MAX_SRC)} نویسه‌ی اول استفاده می‌شود.` : "ارائه از روی محتوای این لینک ساخته می‌شود.";
     const t = $("#topic"); if (!t.value.trim() && d.title) { t.value = String(d.title).slice(0, 120); store.set("topic", t.value); }
   } catch (e) {
