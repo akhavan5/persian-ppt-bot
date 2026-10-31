@@ -16,7 +16,7 @@ import { editMessage, esc, sendAudio, sendDocument, sendMessage } from "./telegr
 import { getLinkedTg } from "./link";
 import { withStore } from "./store";
 import { refundCredit, type CreditSource } from "./settings";
-import { fileNameWithSite, miniappUrl } from "./deck-service";
+import { fileNameWithSite, miniappUrl, siteHost } from "./deck-service";
 import { toFa } from "./util";
 import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
@@ -275,7 +275,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           continue;
         }
         await sendAudio(this.env, chatId, merged, pname,
-          `🎙 <b>${esc(script.title)}</b>${part}\nپادکست دو‌گوینده · ${toFa(String(turns.length))} نوبت`, { title: script.title, performer: "علی و سارا", duration: wavSeconds(merged) });
+          `🎙 <b>${esc(script.title)}</b>${part}`, { title: script.title, performer: siteHost(this.env), duration: wavSeconds(merged) });
       }
       for (let i = 0; i < chunks.length; i++) await this.env.FILES.delete(tmpKey(id, i)).catch(() => {});
       return ids;

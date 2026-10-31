@@ -14,7 +14,7 @@ import { listFiles, loadFileDirect } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { wavSeconds } from "./wav";
-import { fileNameWithSite, siteLoginUrl } from "./deck-service";
+import { fileNameWithSite, siteHost, siteLoginUrl } from "./deck-service";
 
 const enc = new TextEncoder();
 const INIT_MAX_AGE = 86_400; // ثانیه؛ initData قدیمی‌تر از یک روز پذیرفته نمی‌شود
@@ -130,7 +130,7 @@ export async function miniappSend(env: Env, user: WebUser, body: Record<string, 
     if (ext === "wav") {
       // فایل صوتی با پخش‌کننده‌ی تلگرام (اگر WAV را نپذیرفت، sendAudio خودش به‌صورت سند می‌فرستد)
       const wav = new Uint8Array(f.data);
-      await sendAudio(env, tgId, wav, f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { title: f.entry.title, ...(podcast ? { performer: "علی و سارا" } : {}), duration: wavSeconds(wav) });
+      await sendAudio(env, tgId, wav, f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { title: f.entry.title, ...(podcast ? { performer: siteHost(env) } : {}), duration: wavSeconds(wav) });
     } else {
       await sendDocument(env, tgId, new Uint8Array(f.data), f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { mime: MIME[ext] ?? "application/octet-stream" });
     }

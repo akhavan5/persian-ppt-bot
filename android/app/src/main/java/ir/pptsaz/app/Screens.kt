@@ -830,7 +830,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                         )
                         HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                         ToggleRow(
-                            title = "پادکست", subtitle = "گفت‌وگوی دونفره‌ی علی و سارا؛ چند دقیقه بعد از ارائه آماده می‌شود", icon = AppIcons.Mic,
+                            title = "پادکست", subtitle = "گفت‌وگوی دونفره درباره‌ی موضوع ارائه؛ چند دقیقه بعد از ارائه آماده می‌شود", icon = AppIcons.Mic,
                             checked = form.podcast, badge = EXTRA_CREDIT, onChange = { form.podcast = it },
                         )
                     }
