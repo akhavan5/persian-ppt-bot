@@ -80,6 +80,8 @@ data class UiState(
     val extraJobs: Map<String, String> = emptyMap(),
     val extractBusy: String? = null,
     val extractedText: String? = null,
+    /** متن کوتاهِ پیاده‌شده‌ی یک ویس/فایل صوتی (تا ۶۰۰ نویسه)؛ اگر موضوع خالی باشد همان موضوع می‌شود، وگرنه به منبع اضافه می‌شود */
+    val extractedTopic: String? = null,
     val viewer: Viewer? = null,
     val bazaarReady: Boolean = false,
     val billingTick: Int = 0, // با هر بازگشت به اپ یا خطای خرید یکی زیاد می‌شود تا خریدهای تاییدنشده دوباره بررسی شوند
@@ -110,6 +112,12 @@ sealed interface Share {
 }
 
 private const val MAX_SOURCE_CHARS = 120_000
+
+/** نوع‌های فایل صوتی که سرور (Deepgram) می‌پذیرد؛ همان فهرست AUDIO_TYPES در src/deepgram.ts */
+private val AUDIO_MIMES = setOf(
+    "audio/mpeg", "audio/mp3", "audio/mp4", "audio/x-m4a", "audio/m4a", "audio/wav", "audio/x-wav", "audio/wave",
+    "audio/ogg", "audio/opus", "audio/flac", "audio/x-flac", "audio/aac", "audio/amr",
+)
 
 /** حداکثر مدتی که اپ در حالت باز، وضعیت ساخت را (حتی با قطعی اینترنت) پیگیری می‌کند؛ هم‌اندازه‌ی JobWatcher پس‌زمینه (≈ ۲۰ دقیقه). */
 private const val MAX_WATCH_MS = 20L * 60 * 1000
@@ -755,6 +763,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(extractedText = null) }
     }
 
+    fun consumeExtractedTopic() {
+        _state.update { it.copy(extractedTopic = null) }
+    }
+
     /** نوع فایل: اول از سیستم، و اگر نامشخص بود از پسوند نام فایل. */
     private fun detectMime(ctx: Context, uri: Uri): String {
         val t = ctx.contentResolver.getType(uri).orEmpty().lowercase()
@@ -777,6 +789,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "png" -> "image/png"
             "webp" -> "image/webp"
             "heic", "heif" -> "image/heic"
+            "mp3" -> "audio/mpeg"
+            "m4a" -> "audio/mp4"
+            "wav" -> "audio/wav"
+            "ogg", "oga", "opus" -> "audio/ogg"
+            "flac" -> "audio/flac"
+            "aac" -> "audio/aac"
+            "amr" -> "audio/amr"
             else -> t
         }
     }
@@ -786,8 +805,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val mime = detectMime(ctx, uri)
         val supported = mime == "application/pdf" || mime.startsWith("image/") || mime == DocReader.DOCX_MIME ||
             mime == DocReader.PPTX_MIME || mime == DocReader.XLSX_MIME ||
-            mime.startsWith("text/") || mime == "application/json"
-        if (!supported) throw ApiException("فقط PDF، عکس، Word، PowerPoint، Excel، HTML یا فایل متنی (txt, csv, json, md) پشتیبانی می‌شود.")
+            mime.startsWith("text/") || mime == "application/json" || mime.startsWith("audio/")
+        if (!supported) throw ApiException("فقط PDF، عکس، Word، PowerPoint، Excel، HTML، فایل متنی (txt, csv, json, md) یا فایل صوتی پشتیبانی می‌شود.")
+        if (mime.startsWith("audio/")) {
+            if (_state.value.config?.voice != true) throw ApiException("ورودی صوتی فعال نیست؛ موضوع را بنویسید.")
+            if (mime !in AUDIO_MIMES) throw ApiException("این نوع فایل صوتی پشتیبانی نمی‌شود؛ mp3، m4a، wav، ogg، flac یا aac بدهید.")
+        }
         val bytes = withContext(Dispatchers.IO) {
             ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
         } ?: throw ApiException("فایل خوانده نشد.")
@@ -806,6 +829,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 status("در حال استخراج متن (ممکن است چند دقیقه طول بکشد)…")
                 Api.extractText(jpg, "image/jpeg")
+            }
+            mime.startsWith("audio/") -> {
+                // ویس/فایل صوتی روی سرور (Deepgram) به متن تبدیل می‌شود
+                if (bytes.size > 24 * 1024 * 1024) throw ApiException("حجم فایل صوتی بیشتر از ۲۴ مگابایت است.")
+                status("در حال تبدیل صدا به متن…")
+                Api.extractText(bytes, mime)
             }
             mime == DocReader.DOCX_MIME -> {
                 val t = withContext(Dispatchers.Default) {
@@ -838,6 +867,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val parts = ArrayList<String>()
             var failed = 0
             var lastError = ""
+            val audioSingle = uris.size == 1 && detectMime(ctx, uris[0]).startsWith("audio/")
             for ((idx, uri) in uris.withIndex()) {
                 val label = if (uris.size > 1) " (" + (idx + 1).fa() + " از " + uris.size.fa() + ")" else ""
                 _state.update { it.copy(extractBusy = "در حال خواندن فایل$label…") }
@@ -854,8 +884,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val full = parts.joinToString("\n\n")
             val text = full.take(MAX_SOURCE_CHARS)
             val truncated = full.length > MAX_SOURCE_CHARS
-            _state.update { it.copy(extractBusy = null, extractedText = text.ifEmpty { null }) }
+            // یک ویس/فایل صوتیِ کوتاه (تا ۶۰۰ نویسه) = موضوع؛ بلندتر = منبع ارائه
+            val asTopic = audioSingle && parts.size == 1 && full.trim().length in 3..600
+            _state.update { it.copy(extractBusy = null, extractedText = if (asTopic) null else text.ifEmpty { null }, extractedTopic = if (asTopic) full.trim() else null) }
             when {
+                asTopic -> toast("متن صدا آماده شد")
                 parts.isEmpty() -> toast(lastError.ifEmpty { "خواندن فایل انجام نشد" })
                 failed > 0 -> toast("متن " + parts.size.fa() + " فایل اضافه شد؛ " + failed.fa() + " فایل خوانده نشد. " + lastError)
                 truncated -> toast("متن فایل خیلی بلند بود؛ فقط " + MAX_SOURCE_CHARS.fa() + " نویسه‌ی اول به منبع اضافه شد")

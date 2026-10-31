@@ -600,6 +600,18 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
             vm.consumeExtracted()
         }
     }
+    // متن کوتاهِ پیاده‌شده‌ی ویس/فایل صوتی: اگر موضوع خالی است همان موضوع می‌شود، وگرنه به منبع اضافه می‌شود
+    LaunchedEffect(st.extractedTopic) {
+        val t = st.extractedTopic
+        if (t != null) {
+            if (form.topic.isBlank()) form.topic = t
+            else {
+                form.source = if (form.source.isBlank()) t else form.source.trimEnd() + "\n\n" + t
+                sourceOpen = true
+            }
+            vm.consumeExtractedTopic()
+        }
+    }
     // ورودی صوتی موضوع: پنجره‌ی تشخیص گفتار خودِ سیستم (RecognizerIntent) باز می‌شود؛ چون ضبط را سیستم انجام می‌دهد، مجوز RECORD_AUDIO لازم نیست
     val voice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         if (r.resultCode == Activity.RESULT_OK) {
@@ -703,7 +715,10 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SoftButton(
                                     "افزودن فایل",
-                                    { picker.launch(arrayOf("application/pdf", "image/*", DocReader.DOCX_MIME, DocReader.PPTX_MIME, DocReader.XLSX_MIME, "text/*", "application/json", "application/octet-stream")) },
+                                    {
+                                        val types = arrayOf("application/pdf", "image/*", DocReader.DOCX_MIME, DocReader.PPTX_MIME, DocReader.XLSX_MIME, "text/*", "application/json", "application/octet-stream")
+                                        picker.launch(if (cfg.voice) types + "audio/*" else types)
+                                    },
                                     Modifier.weight(1f), enabled = !running && st.extractBusy == null, icon = AppIcons.Attach,
                                 )
                                 SoftButton(
@@ -712,7 +727,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                                 )
                             }
                             Text(
-                                "PDF، عکس، Word، PowerPoint، Excel، HTML یا متن (txt, csv, json)؛ چند فایل را می‌توانید با هم انتخاب کنید.",
+                                "PDF، عکس، Word، PowerPoint، Excel، HTML یا متن (txt, csv, json)" + (if (cfg.voice) " یا فایل صوتی (ویس)" else "") + "؛ چند فایل را می‌توانید با هم انتخاب کنید.",
                                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                             )
                             if (cfg.link) {

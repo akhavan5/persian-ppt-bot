@@ -27,6 +27,7 @@ data class Config(
     val updateUrl: String = "",
     val pdf: Boolean = false, // خروجی PDF ارائه (سرور Browser Rendering دارد)
     val audio: Boolean = false, // اسلاید صوتی و پادکست همراه ارائه (سرور Gemini TTS دارد)
+    val voice: Boolean = false, // ورودی صوتی: فایل صوتی/ویس به متن (سرور کلید Deepgram دارد)
     val googleClientId: String = "", // خالی = ورود با گوگل خاموش
 )
 
@@ -94,6 +95,7 @@ fun parseConfig(j: JSONObject): Config {
         poster = j.optBoolean("poster"),
         pdf = j.optBoolean("pdf"),
         audio = j.optBoolean("audio"),
+        voice = j.optBoolean("voice"),
         googleClientId = if (j.optBoolean("google")) j.str("googleClientId") else "",
         dailyFree = j.optInt("dailyFree"),
         bazaar = j.optBoolean(Store.ID), // «bazaar» در نسخه‌ی بازار، «myket» در نسخه‌ی مایکت
