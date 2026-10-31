@@ -56,7 +56,7 @@ function fromProxy(req: Request, env: Env): Request {
 }
 
 // تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
-const SITEMAP_LASTMOD = "2026-10-18";
+const SITEMAP_LASTMOD = "2026-11-01";
 
 export default {
   // پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی D1 (cron در wrangler.jsonc)

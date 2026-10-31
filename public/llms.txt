@@ -45,12 +45,14 @@
 - [اینفوگرافیک ساز فارسی](https://pptsaz.ir/infographic-maker): پوستر آموزشی افقی و عمودی همراه ارائه، ۱ اعتبار جدا
 - [جزوه ساز با هوش مصنوعی](https://pptsaz.ir/handout-maker): جزوه‌ی Word حدود سه‌صفحه‌ای همراه ارائه، ۱ اعتبار جدا
 - [ساخت پاورپوینت از Excel](https://pptsaz.ir/excel-to-pptx): تبدیل فایل Excel و CSV به اسلاید، جدول و نمودار قابل‌ویرایش
+- [دانلود فونت فارسی برای پاورپوینت](https://pptsaz.ir/persian-font-download): دانلود مستقیم وزیرمتن، B Nazanin و B Titr، آموزش نصب و جاسازی فونت
+- [تبدیل متن به پاورپوینت با گوشی](https://pptsaz.ir/mobile-powerpoint-maker): ساخت پاورپوینت آنلاین با مرورگر گوشی یا ربات تلگرام
 
 ## وبلاگ
 - [وبلاگ](https://pptsaz.ir/blog): راهنماهای ساخت و ارائه‌ی پاورپوینت فارسی
 - [ساختار پاورپوینت دفاع پایان‌نامه](https://pptsaz.ir/blog/thesis-defense-slides-guide): زمان‌بندی و محتوای اسلایدهای دفاعیه
 - [چند اسلاید برای ارائه؟](https://pptsaz.ir/blog/how-many-slides): جدول تعداد اسلاید بر اساس زمان
-- [نمونه موضوع پاورپوینت](https://pptsaz.ir/blog/presentation-topic-ideas): ۵۰ ایده‌ی موضوع
+- [موضوع برای پاورپوینت؛ ۵۰ ایده](https://pptsaz.ir/blog/presentation-topic-ideas): ۵۰ ایده‌ی موضوع
 - [طراحی پاورپوینت فارسی](https://pptsaz.ir/blog/persian-powerpoint-design): فونت، رنگ و راست‌به‌چپ
 - [ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-topic-tips): نوشتن موضوع و بررسی خروجی
 - [ارائه‌ی کلاسی بدون استرس](https://pptsaz.ir/blog/class-presentation-tips): تمرین، اجرا و پرسش و پاسخ
@@ -58,6 +60,9 @@
 - [ساخت پاورپوینت با ChatGPT (چت‌جی‌پی‌تی)](https://pptsaz.ir/blog/chatgpt-powerpoint-persian): پرامپت آماده و محدودیت‌های فارسی
 - [پرسش‌های رایج ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-faq-persian): فارسی، رایگان، گوشی و ChatGPT
 - [ساخت پاورپوینت با گوشی و تلگرام](https://pptsaz.ir/blog/ai-powerpoint-mobile-telegram): راهنمای قدم‌به‌قدم
+- [موضوع پاورپوینت جالب برای مدرسه](https://pptsaz.ir/blog/school-presentation-topics): ۴۰ ایده به تفکیک پایه و ساختار ۶ اسلایدی
+- [موضوع پاورپوینت ساده](https://pptsaz.ir/blog/simple-powerpoint-topics): ۳۰ ایده‌ی آسان و ساختار ۵ اسلایدی
+- [رفع مشکل انگلیسی در پاراگراف فارسی پاورپوینت](https://pptsaz.ir/blog/english-in-persian-powerpoint-fix): جهت متن، علامت RLM و تنظیم فونت
 - [راهنمای گام‌به‌گام ساخت پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/ai-powerpoint-step-by-step): هفت قدم از نوشتن موضوع تا فایل آماده
 - [ساخت پاورپوینت دفاع پایان‌نامه در ۷ مرحله](https://pptsaz.ir/blog/thesis-defense-powerpoint-how-to): از فصل‌ها تا روز دفاع
 - [قالب پاورپوینت رایگان و فارسی‌سازی آن](https://pptsaz.ir/blog/free-powerpoint-templates-persian): منبع‌ها، چک‌لیست انتخاب و فارسی‌سازی قدم‌به‌قدم

@@ -7,7 +7,7 @@ export const BRAND = "پاورپوینت‌ساز فارسی";
 export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // [متن](/مسیر) → لینک داخلی
 export const inline = (s: string) => esc(s)
-  .replace(/\[([^\]]+)\]\((\/[a-z0-9\-#/]*)\)/g, '<a href="$2">$1</a>')
+  .replace(/\[([^\]]+)\]\((\/(?!\/)[A-Za-z0-9\-#/._]*)\)/g, (_m, t: string, h: string) => `<a href="${h}"${/\.zip$/.test(h) ? " download" : ""}>${t}</a>`)
   .replace(/\[([^\]]+)\]\((https:\/\/t\.me\/[A-Za-z0-9_]+)\)/g, '<a href="$2" rel="noopener" target="_blank">$1</a>');
 export const plain = (s: string) => s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
 export const jsonLd = (o: unknown) => JSON.stringify(o).replace(/</g, "\\u003c");
@@ -238,6 +238,23 @@ const MORE_ARTICLES: Record<string, string[]> = {
 };
 for (const [page, slugs] of Object.entries(MORE_ARTICLES)) ARTICLES_FOR[page] = [...new Set([...(ARTICLES_FOR[page] ?? []), ...slugs])];
 
+// ۱۰ آبان ۱۴۰۵: صفحه‌ها و مقاله‌های کلیدواژه‌های سرچ کنسول (فونت فارسی، ساخت با گوشی، موضوع مدرسه و ساده، انگلیسی در متن فارسی)
+const SEO_ARTICLES: Record<string, string[]> = {
+  "persian-font-download": ["best-persian-font-powerpoint", "fix-persian-powerpoint-broken", "english-in-persian-powerpoint-fix", "persian-rtl-slides", "persian-powerpoint-design"],
+  "mobile-powerpoint-maker": ["ai-powerpoint-mobile-telegram", "ai-powerpoint-prompt-persian", "ai-powerpoint-faq-persian", "webpage-to-presentation-guide"],
+  "school-presentation": ["school-presentation-topics", "simple-powerpoint-topics"],
+  student: ["simple-powerpoint-topics", "school-presentation-topics"],
+  teacher: ["school-presentation-topics"],
+  "konkur-presentation": ["school-presentation-topics"],
+  free: ["simple-powerpoint-topics"],
+  "ready-made-powerpoint": ["school-presentation-topics", "simple-powerpoint-topics"],
+  "word-to-pptx": ["english-in-persian-powerpoint-fix"],
+  "persian-powerpoint-templates": ["english-in-persian-powerpoint-fix"],
+  "telegram-bot": ["ai-powerpoint-prompt-persian"],
+  "text-to-pptx": ["english-in-persian-powerpoint-fix"],
+};
+for (const [page, slugs] of Object.entries(SEO_ARTICLES)) ARTICLES_FOR[page] = [...new Set([...(ARTICLES_FOR[page] ?? []), ...slugs])];
+
 // صفحه‌های جدید در بخش «راهنماهای مرتبط» صفحه‌های قدیمی (لینک‌دهی داخلی دوطرفه)
 const MORE_RELATED: Record<string, string[]> = {
   free: ["link-to-pptx", "infographic-maker", "handout-maker", "excel-to-pptx"],
@@ -260,6 +277,24 @@ const MORE_RELATED: Record<string, string[]> = {
   "online-powerpoint-maker": ["link-to-pptx"],
   "persian-powerpoint-templates": ["infographic-maker"],
 };
+
+const SEO_RELATED: Record<string, string[]> = {
+  free: ["mobile-powerpoint-maker", "persian-font-download"],
+  "telegram-bot": ["mobile-powerpoint-maker"],
+  "text-to-pptx": ["mobile-powerpoint-maker", "persian-font-download"],
+  "online-powerpoint-maker": ["mobile-powerpoint-maker"],
+  "pdf-to-pptx": ["mobile-powerpoint-maker"],
+  "ppt-saz": ["persian-font-download", "mobile-powerpoint-maker"],
+  student: ["persian-font-download", "mobile-powerpoint-maker"],
+  "thesis-defense": ["persian-font-download"],
+  "school-presentation": ["mobile-powerpoint-maker", "persian-font-download"],
+  "slide-maker": ["persian-font-download"],
+  "word-to-pptx": ["persian-font-download"],
+  "ready-made-powerpoint": ["persian-font-download"],
+  "persian-powerpoint-templates": ["persian-font-download"],
+  "ai-powerpoint-maker": ["mobile-powerpoint-maker"],
+};
+for (const [page, slugs] of Object.entries(SEO_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
 
 /** مقاله → صفحه‌های فرودی که به آن لینک می‌دهند؛ برای لینک برگشتی از مقاله به صفحه‌های ابزار (لینک‌دهی داخلی دوطرفه). */
 export const LANDINGS_FOR_POST: Map<string, string[]> = (() => {

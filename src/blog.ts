@@ -4,7 +4,7 @@ import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
 import { BRAND, CSS, LANDINGS_FOR_POST, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
-const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، اینفوگرافیک و جزوه، تبدیل لینک و Excel به پاورپوینت، نوشتن موضوع برای هوش مصنوعی و مقایسه‌ی صادقانه‌ی ابزارها.";
+const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: موضوع پاورپوینت برای مدرسه و دانشگاه، فونت فارسی، نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، اینفوگرافیک و جزوه، تبدیل لینک و Excel به پاورپوینت، نوشتن موضوع برای هوش مصنوعی و مقایسه‌ی صادقانه‌ی ابزارها.";
 
 const EXTRA_CSS = `
 .meta{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;color:var(--muted);font-size:.86rem;margin:0 0 18px}
@@ -64,6 +64,21 @@ const MORE_POST_RELATED: Record<string, string[]> = {
   "ai-presentation-sample-slides": ["global-warming-presentation-sample"],
   "time-management-presentation-sample": ["self-introduction-presentation-sample"],
 };
+
+// ۱۰ آبان ۱۴۰۵: لینک‌دهی دوطرفه‌ی مقاله‌های موضوع (مدرسه و ساده) و مقاله‌ی انگلیسی در متن فارسی
+const SEO_POST_RELATED: Record<string, string[]> = {
+  "presentation-topic-ideas": ["school-presentation-topics", "simple-powerpoint-topics"],
+  "class-presentation-tips": ["school-presentation-topics"],
+  "how-many-slides": ["school-presentation-topics", "simple-powerpoint-topics"],
+  "global-warming-presentation-sample": ["school-presentation-topics"],
+  "self-introduction-presentation-sample": ["simple-powerpoint-topics"],
+  "make-powerpoint-from-scratch": ["simple-powerpoint-topics"],
+  "fix-persian-powerpoint-broken": ["english-in-persian-powerpoint-fix"],
+  "persian-rtl-slides": ["english-in-persian-powerpoint-fix"],
+  "best-persian-font-powerpoint": ["english-in-persian-powerpoint-fix"],
+  "persian-powerpoint-design": ["english-in-persian-powerpoint-fix"],
+};
+for (const [post, slugs] of Object.entries(SEO_POST_RELATED)) MORE_POST_RELATED[post] = [...new Set([...(MORE_POST_RELATED[post] ?? []), ...slugs])];
 
 const xml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
