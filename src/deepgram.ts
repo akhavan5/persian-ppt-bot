@@ -10,6 +10,9 @@ import { hitLimit } from "./auth";
 import { OCR_CAP_NOTE, ocrCap } from "./ocr-limit";
 import { today, type Uid } from "./settings";
 
+/** سقف انتظار برای Deepgram؛ خودِ Deepgram بعد از ۱۰ دقیقه 504 می‌دهد، پس کمی کمتر (فایل‌های بلند تا ۲۴ مگابایت ≈ ۲۰–۲۵ دقیقه صدا) */
+const STT_TIMEOUT_MS = 9 * 60_000;
+
 export const AUDIO_EXT = new Set(["mp3", "m4a", "wav", "ogg", "oga", "opus", "flac", "aac", "amr", "wma"]);
 const MIME_BY_EXT: Record<string, string> = {
   mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg",
@@ -47,7 +50,7 @@ export async function transcribeAudio(env: Env, bytes: ArrayBuffer, ext: string,
         method: "POST",
         headers: { Authorization: `Token ${key}`, "Content-Type": MIME_BY_EXT[ext] ?? "application/octet-stream" },
         body: bytes,
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(STT_TIMEOUT_MS),
       });
       if (r.status === 400) return { ok: false, error: "فایل صوتی قابل‌خواندن نبود؛ ویس یا فایل صوتی دیگری را امتحان کن." };
       if (!r.ok) { last = `HTTP ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`; continue; } // ۴۰۱/۴۰۲/۴۲۹/۵xx ⇒ کلید بعدی
@@ -56,6 +59,7 @@ export async function transcribeAudio(env: Env, bytes: ArrayBuffer, ext: string,
       return text ? { ok: true, text } : { ok: false, error: "صدایی که قابل‌تشخیص باشد در فایل پیدا نشد؛ واضح‌تر بگو یا دوباره بفرست." };
     } catch (e) {
       last = e instanceof Error ? e.message : String(e);
+      if (e instanceof Error && e.name === "TimeoutError") break; // کلید بعدی هم همین‌قدر طول می‌کشد؛ ۹ دقیقه‌ی دیگر منتظر نمان
     }
   }
   console.error("deepgram", last);
