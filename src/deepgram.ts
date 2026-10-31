@@ -13,17 +13,17 @@ import { today, type Uid } from "./settings";
 /** سقف انتظار برای Deepgram؛ خودِ Deepgram بعد از ۱۰ دقیقه 504 می‌دهد، پس کمی کمتر (فایل‌های بلند تا ۲۴ مگابایت ≈ ۲۰–۲۵ دقیقه صدا) */
 const STT_TIMEOUT_MS = 9 * 60_000;
 
-export const AUDIO_EXT = new Set(["mp3", "m4a", "wav", "ogg", "oga", "opus", "flac", "aac", "amr", "wma"]);
+export const AUDIO_EXT = new Set(["mp3", "m4a", "wav", "ogg", "oga", "opus", "flac", "aac", "amr", "wma", "webm"]);
 const MIME_BY_EXT: Record<string, string> = {
   mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg",
-  flac: "audio/flac", aac: "audio/aac", amr: "audio/amr", wma: "audio/x-ms-wma",
+  flac: "audio/flac", aac: "audio/aac", amr: "audio/amr", wma: "audio/x-ms-wma", webm: "audio/webm",
 };
 
 /** نوع محتوای فایل صوتی آپلودی وب ← پسوند (مرورگرها برای فایل صوتی نوع‌های گوناگونی می‌فرستند) */
 export const AUDIO_TYPES = new Map<string, string>([
   ["audio/mpeg", "mp3"], ["audio/mp3", "mp3"], ["audio/mp4", "m4a"], ["audio/x-m4a", "m4a"], ["audio/m4a", "m4a"],
   ["audio/wav", "wav"], ["audio/x-wav", "wav"], ["audio/wave", "wav"], ["audio/ogg", "ogg"], ["audio/opus", "ogg"],
-  ["audio/flac", "flac"], ["audio/x-flac", "flac"], ["audio/aac", "aac"], ["audio/amr", "amr"],
+  ["audio/flac", "flac"], ["audio/x-flac", "flac"], ["audio/aac", "aac"], ["audio/amr", "amr"], ["audio/webm", "webm"], ["video/webm", "webm"],
 ]);
 
 const keysOf = (env: Env) => String(env.DEEPGRAM_API_KEY ?? "").split(/[\n;,]+/).map((k) => k.trim()).filter(Boolean);
