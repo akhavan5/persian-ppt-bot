@@ -151,6 +151,8 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <label class="sw" id="pRow" hidden><span>🖼 پوستر (اینفوگرافیک) <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="pOn" checked></label>
           <div id="pLay" style="padding-bottom:6px" hidden><select id="pChoice"><option value="wide">پوستر افقی (مناسب نمایش روی صفحه)</option><option value="tall">پوستر عمودی (مناسب پیام‌رسان)</option></select></div>
           <label class="sw"><span>📝 جزوه‌ی <bdi>Word</bdi> <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="hOn" checked></label>
+          <label class="sw" id="aRow" hidden><span>🔊 اسلاید صوتی <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="aOn" checked></label>
+          <label class="sw" id="cRow" hidden><span>🎙 پادکست <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="cOn" checked></label>
         </div>
 
         <button class="btn" id="go" type="button" style="margin-top:12px">✨ بساز</button>
@@ -174,6 +176,11 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <button class="btn ghost" id="donePdf" type="button" style="margin-top:8px" hidden>📄 ارسال نسخه‌ی PDF به چت</button>
         <button class="btn ghost" id="doneHandout" type="button" style="margin-top:8px" hidden>📝 ارسال جزوه (Word) به چت</button>
         <button class="btn ghost" id="donePoster" type="button" style="margin-top:8px" hidden>🖼 ارسال پوستر به چت</button>
+        <button class="btn ghost" id="doneAudio" type="button" style="margin-top:8px" hidden>🔊 ارسال اسلاید صوتی به چت</button>
+        <button class="btn ghost" id="donePodcast" type="button" style="margin-top:8px" hidden>🎙 ارسال پادکست به چت</button>
+        <div id="doneAudioMore" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+        <div class="muted" id="doneAudioWait" hidden style="margin-top:8px">🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</div>
+        <div class="muted" id="donePodcastWait" hidden style="margin-top:8px">🎙 پادکست در حال ساخت است (چند دقیقه)…</div>
         <div class="err" id="doneWarn" hidden></div>
         <img class="poster" id="posterImg" alt="پوستر" hidden>
       </div>
@@ -562,7 +569,7 @@ function applyStart() {
 }
 let draftT;
 // انتخاب‌های فرم (تعداد اسلاید، تصویر، پوستر، جزوه) همراه موضوع در CloudStorage می‌ماند؛ در تنظیمات مشترکِ ربات/سایت نوشته نمی‌شود (پیش‌فرض بقیه‌ی کانال‌ها عوض نشود)
-const draftJson = (withTopic) => JSON.stringify({ t: withTopic ? $("#topic").value.slice(0, 600) : "", s: $("#slides").value, i: $("#imgs").value, p: $("#pOn").checked, pc: $("#pChoice").value, h: $("#hOn").checked });
+const draftJson = (withTopic) => JSON.stringify({ t: withTopic ? $("#topic").value.slice(0, 600) : "", s: $("#slides").value, i: $("#imgs").value, p: $("#pOn").checked, pc: $("#pChoice").value, h: $("#hOn").checked, a: $("#aOn").checked, c: $("#cOn").checked });
 function saveDraft() { clearTimeout(draftT); draftT = setTimeout(() => TG.cloud.set("draft", draftJson(true)), 1200); }
 async function restoreDraft() {
   const raw = await TG.cloud.get("draft");
@@ -575,10 +582,12 @@ async function restoreDraft() {
     if (typeof d.p === "boolean") $("#pOn").checked = d.p;
     if (d.pc === "wide" || d.pc === "tall") $("#pChoice").value = d.pc;
     if (typeof d.h === "boolean") $("#hOn").checked = d.h;
+    if (typeof d.a === "boolean") $("#aOn").checked = d.a;
+    if (typeof d.c === "boolean") $("#cOn").checked = d.c;
     show($("#pLay"), !!cfg.poster && $("#pOn").checked);
   } catch {}
 }
-for (const id of ["#topic", "#slides", "#imgs", "#pOn", "#pChoice", "#hOn"]) for (const ev of ["input", "change"]) $(id).addEventListener(ev, saveDraft);
+for (const id of ["#topic", "#slides", "#imgs", "#pOn", "#pChoice", "#hOn", "#aOn", "#cOn"]) for (const ev of ["input", "change"]) $(id).addEventListener(ev, saveDraft);
 
 // ---------- ساخت ----------
 function renderMake() {
@@ -591,6 +600,7 @@ function renderMake() {
   if (prevS && choices.includes(Number(prevS))) $("#slides").value = prevS;
   if (prevI && me.maxImages > 0) $("#imgs").value = prevI;
   show($("#pRow"), !!cfg.poster); show($("#pLay"), !!cfg.poster && $("#pOn").checked); show($("#linkBtn"), !!cfg.link && !srcText);
+  show($("#aRow"), !!cfg.audio); show($("#cRow"), !!cfg.audio); // اسلاید صوتی و پادکست: فقط وقتی سرور فعالشان کرده؛ پیش‌فرض روشن
   $("#pOn").onchange = () => show($("#pLay"), $("#pOn").checked);
   $("#examples").replaceChildren(...EXAMPLES.map((t) => h("button", { type: "button", onclick: () => { $("#topic").value = t; saveDraft(); TG.haptic("select"); } }, t)));
 }
@@ -810,6 +820,8 @@ $("#go").onclick = async () => {
       ...(srcText ? { source: srcText } : {}),
       ...(cfg.poster && $("#pOn").checked ? { poster: $("#pChoice").value } : {}),
       ...($("#hOn").checked ? { handout: true } : {}),
+      ...(cfg.audio && $("#aOn").checked ? { audio: true } : {}),
+      ...(cfg.audio && $("#cOn").checked ? { podcast: true } : {}),
     } }));
     refreshMe(); track(r.jobId); TG.cloud.set("draft", draftJson(false)); // ساخت شروع شد؛ موضوع پاک می‌شود ولی انتخاب‌های فرم می‌ماند
   } catch (e) {
@@ -876,7 +888,40 @@ function showDone(jobId, s, took = 0) {
   if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
   const warn = [s.poster === "failed" ? "ساخت پوستر ناموفق بود و اعتبارش برگشت." : "", s.handout === "failed" ? "ساخت جزوه ناموفق بود و اعتبارش برگشت." : ""].filter(Boolean).join(" ");
   $("#doneWarn").textContent = warn; show($("#doneWarn"), !!warn);
+  trackAudio(s);
   view("done"); $("#done").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+// اسلاید صوتی و پادکست همراه: در Workflow جدا چند دقیقه طول می‌کشند؛ وضعیتشان جدا خوانده می‌شود و دکمه‌ی «ارسال به چت» هرکدام وقتی آماده شد نمایش داده می‌شود
+let audioTracking = 0;
+function trackAudio(s) {
+  const my = ++audioTracking;
+  $("#doneAudioMore").replaceChildren();
+  const kinds = [
+    { id: s.audioId, state: s.audio, btn: "#doneAudio", wait: "#doneAudioWait", part: "صدای اسلاید", err: "ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگشت." },
+    { id: s.podcastId, state: s.podcast, btn: "#donePodcast", wait: "#donePodcastWait", part: "پادکست، قسمت", err: "ساخت پادکست ناموفق بود؛ اعتبارش برگشت." },
+  ];
+  for (const k of kinds) {
+    show($(k.btn), false); show($(k.wait), k.state === "pending");
+    if (k.state === "pending" && k.id) pollAudio(my, k);
+  }
+}
+async function pollAudio(my, k) {
+  for (let i = 0; i < 240 && my === audioTracking; i++) {
+    let r;
+    try { r = await api("/api/jobs/" + k.id); }
+    catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
+    if (my !== audioTracking) return;
+    if (r.state === "running") { $(k.wait).textContent = r.message; await sleep(4000); continue; }
+    show($(k.wait), false); loadFiles();
+    if (r.state === "done" && r.ids && r.ids.length) {
+      const b = $(k.btn); show(b, true); b.onclick = (e) => sendToChat(r.ids[0], e.currentTarget);
+      // بخش‌های اضافه (پادکست چندقسمتی یا اسلایدهایی که به‌خاطر حجم جدا ذخیره شده‌اند)
+      r.ids.slice(1).forEach((id, n) => $("#doneAudioMore").append(h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(id, e.currentTarget) }, `📥 ${k.part} ${fa(n + 2)}`)));
+      TG.haptic("success");
+    } else toast(r.message || k.err);
+    return;
+  }
+  show($(k.wait), false);
 }
 // پیش‌نمایش پوستر: تصویر با هدر Authorization گرفته می‌شود (تگ img نمی‌تواند هدر بفرستد)؛ فایل تازه چند ثانیه برای KV دیده نمی‌شود
 async function posterPreview(id) {
@@ -921,13 +966,13 @@ async function loadFiles() {
   if (!list.length) { box.replaceChildren(h("span", { class: "muted" }, "فایلی نداری. فایل هر ارائه تا ۲۴ ساعت اینجا می‌ماند.")); return; }
   box.replaceChildren(...list.map((f) => {
     const hrs = Math.max(1, Math.ceil((f.t + 86400000 - Date.now()) / 3600000));
-    const kind = f.poster ? "🖼 پوستر" : f.handout ? "📝 جزوه (Word)" : `📊 ${fa(f.slides)} اسلاید`;
+    const kind = f.poster ? "🖼 پوستر" : f.handout ? "📝 جزوه (Word)" : f.audio === "podcast" ? "🎙 پادکست" : f.audio === "slides" ? (f.slides ? `🔊 اسلاید صوتی · ${fa(f.slides)} اسلاید` : "🔊 صدای یک اسلاید") : `📊 ${fa(f.slides)} اسلاید`;
     return h("div", { class: "file" },
       h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${kind} · تا ${fa(hrs)} ساعت دیگر`)),
       h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end" },
         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
-        !f.poster && !f.handout && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null));
+        !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null));
   }));
 }
 

@@ -15,6 +15,7 @@ import { toFa } from "./util";
 import { hasBrowser } from "./browser-api";
 import { supportLink, type Uid } from "./settings";
 import { createLoginToken } from "./link";
+import { ttsEnabled } from "./gemini-tts";
 
 export const siteUrl = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
 /** نام دامنه‌ی سایت (مثل pptsaz.ir)؛ برای واترمارک فایل‌ها و افزودن آدرس سایت به نام فایل‌ها */
@@ -77,19 +78,21 @@ export function cleanSource(raw: unknown): string {
     .trim().slice(0, MAX_SOURCE_CHARS);
 }
 
-export interface Denied { error: string; status: number; needPlan?: boolean; noCredit?: boolean; /** کمبود اعتبار برای همراهان (پوستر/جزوه): متن خطا برای نمایش در پنجره‌ی پلن آماده است */ extras?: boolean; busy?: boolean }
+export interface Denied { error: string; status: number; needPlan?: boolean; noCredit?: boolean; /** کمبود اعتبار برای همراهان (پوستر/جزوه/اسلاید صوتی/پادکست): متن خطا برای نمایش در پنجره‌ی پلن آماده است */ extras?: boolean; busy?: boolean }
 type Quota = Awaited<ReturnType<typeof spendCredit>>;
 export type Begin =
-  | { ok: true; topic: string; source: string; settings: Settings; imageCount: number; quota: Quota; /** کسر جداگانه‌ی اعتبار پوستر (فقط وقتی پوستر خواسته شده) */ posterQuota: Quota | null; /** کسر جداگانه‌ی اعتبار جزوه (Word) */ handoutQuota: Quota | null; undo: () => Promise<void> }
+  | { ok: true; topic: string; source: string; settings: Settings; imageCount: number; quota: Quota; /** کسر جداگانه‌ی اعتبار پوستر (فقط وقتی پوستر خواسته شده) */ posterQuota: Quota | null; /** کسر جداگانه‌ی اعتبار جزوه (Word) */ handoutQuota: Quota | null; /** کسر جداگانه‌ی اعتبار اسلاید صوتی */ audioQuota: Quota | null; /** کسر جداگانه‌ی اعتبار پادکست */ podcastQuota: Quota | null; undo: () => Promise<void> }
   | { ok: false; denied: Denied };
 
+type Extra = "poster" | "handout" | "audio" | "podcast";
+const EXTRA_NAMES: Record<Extra, string> = { poster: "پوستر", handout: "جزوه", audio: "اسلاید صوتی", podcast: "پادکست" };
 const deny = (error: string, status: number, extra: Partial<Denied> = {}): Begin => ({ ok: false, denied: { error, status, ...extra } });
 
 /**
  * اعتبارسنجی + کسر اعتبار + قفل. uid: شناسه‌ی اصلی کاربر (حساب وب یا تلگرامِ بدون اتصال).
  * بعد از موفقیت، فراخواننده باید یا launchDeck را صدا بزند یا (در صورت خطا) undo را.
  */
-export async function beginDeck(env: Env, uid: string | number, topicRaw: string, want: { slides?: number; /** اسلاید تصویر داشته باشد؟ (تعداد از روی تعداد اسلاید محاسبه می‌شود) */ images?: boolean; mode?: Mode; source?: unknown; /** پوستر همراه ارائه: ۱ اعتبار دیگر */ poster?: boolean; /** جزوه‌ی Word همراه ارائه: ۱ اعتبار دیگر */ handout?: boolean } = {}): Promise<Begin> {
+export async function beginDeck(env: Env, uid: string | number, topicRaw: string, want: { slides?: number; /** اسلاید تصویر داشته باشد؟ (تعداد از روی تعداد اسلاید محاسبه می‌شود) */ images?: boolean; mode?: Mode; source?: unknown; /** پوستر همراه ارائه: ۱ اعتبار دیگر */ poster?: boolean; /** جزوه‌ی Word همراه ارائه: ۱ اعتبار دیگر */ handout?: boolean; /** اسلاید صوتی همراه ارائه: ۱ اعتبار دیگر */ audio?: boolean; /** پادکست همراه ارائه: ۱ اعتبار دیگر */ podcast?: boolean } = {}): Promise<Begin> {
   const topic = topicRaw.replace(/\s+/g, " ").trim();
   if (topic.length < 3) return deny("موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.", 400);
   if (topic.length > 600) return deny("موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).", 400);
@@ -111,9 +114,9 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
 
   // ۲) از اینجا قفل مال ماست: هر خروجِ زودهنگام یا خطا باید قفل (و اعتبار کسرشده) را برگرداند
   let spent: Quota | null = null;
-  const extras: { poster: Quota | null; handout: Quota | null } = { poster: null, handout: null };
+  const extras: Record<Extra, Quota | null> = { poster: null, handout: null, audio: null, podcast: null };
   const refundExtras = async () => {
-    for (const q of [extras.poster, extras.handout]) if (q) await refundCredit(env, uid, q.source, q.day).catch((e) => console.error("refund", e));
+    for (const q of Object.values(extras)) if (q) await refundCredit(env, uid, q.source, q.day).catch((e) => console.error("refund", e));
   };
   try {
     const quota = await spendCredit(env, uid);
@@ -122,8 +125,8 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
       return deny("اعتبارت تمام شده است.", 402, { noCredit: true });
     }
     spent = quota;
-    // همراهان اختیاری ارائه (پوستر، جزوه): هر کدام ۱ اعتبار جدا. اگر موجودی کافی نبود، همه‌ی کسرها برمی‌گردد و هیچ کاری شروع نمی‌شود
-    const wanted = ([want.poster && posterEnabled(env) ? "poster" : null, want.handout ? "handout" : null].filter(Boolean)) as ("poster" | "handout")[];
+    // همراهان اختیاری ارائه (پوستر، جزوه، اسلاید صوتی، پادکست): هر کدام ۱ اعتبار جدا. اگر موجودی کافی نبود، همه‌ی کسرها برمی‌گردد و هیچ کاری شروع نمی‌شود
+    const wanted = ([want.poster && posterEnabled(env) ? "poster" : null, want.handout ? "handout" : null, want.audio && audioEnabled(env) ? "audio" : null, want.podcast && audioEnabled(env) ? "podcast" : null].filter(Boolean)) as Extra[];
     for (const k of wanted) {
       const q = await spendCredit(env, uid);
       if (!q.ok) {
@@ -131,12 +134,13 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
         spent = null;
         await refundExtras();
         await releaseLock(env, uid).catch((e) => console.error("unlock", e));
-        const names = wanted.map((w) => (w === "poster" ? "پوستر" : "جزوه")).join(" و ");
+        const labels = wanted.map((w) => EXTRA_NAMES[w]);
+        const names = labels.length > 1 ? `${labels.slice(0, -1).join("، ")} و ${labels[labels.length - 1]}` : labels[0];
         return deny(`ارائه‌ی همراه با ${names} ${toFa(String(1 + wanted.length))} اعتبار می‌خواهد (۱ اعتبار ارائه + ۱ اعتبار برای هر همراه) و اعتبارت کافی نیست. ${wanted.length > 1 ? "یکی از همراه‌ها را حذف کن" : "همراه را خاموش کن"} یا اعتبار بگیر.`, 402, { noCredit: true, extras: true });
       }
       extras[k] = q;
     }
-    const lastSpent = extras.handout ?? extras.poster;
+    const lastSpent = wanted.length ? extras[wanted[wanted.length - 1]] : null; // آخرین کسر کمترین «باقی‌مانده» را دارد
 
     const settings = await getSettings(env, uid);
     settings.slides = wantSlides !== undefined ? clampSlides(wantSlides, maxSlides) : Math.min(settings.slides, maxSlides);
@@ -154,7 +158,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
       await refundExtras();
       await releaseLock(env, uid).catch((e) => console.error("unlock", e));
     };
-    return { ok: true, topic, source, settings, imageCount, quota: lastSpent ? { ...quota, left: lastSpent.left } : quota, posterQuota: extras.poster, handoutQuota: extras.handout, undo };
+    return { ok: true, topic, source, settings, imageCount, quota: lastSpent ? { ...quota, left: lastSpent.left } : quota, posterQuota: extras.poster, handoutQuota: extras.handout, audioQuota: extras.audio, podcastQuota: extras.podcast, undo };
   } catch (e) {
     if (spent) await refundCredit(env, uid, spent.source, spent.day).catch((err) => console.error("refund", err));
     await refundExtras();
@@ -165,6 +169,8 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
 
 /** پوستر (اینفوگرافیک) همراه ارائه: فقط به Browser Rendering نیاز دارد (همان که PDF استفاده می‌کند)؛ بدون آن، گزینه‌ی پوستر نمایش داده نمی‌شود */
 export const posterEnabled = (env: Env) => hasBrowser(env);
+/** اسلاید صوتی و پادکست: نیاز به کلید Gemini (TTS) و Workflow جدا (persian-ppt-audio)؛ بدون آن‌ها گزینه‌هایش نمایش داده نمی‌شود */
+export const audioEnabled = (env: Env) => !!env.AUDIO_WORKFLOW && ttsEnabled(env);
 export interface PosterWant { layout: "wide" | "tall" }
 
 export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** اعلان پایان کار در تلگرام (Mini App) */ notify?: boolean; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
@@ -181,6 +187,9 @@ export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid:
     ...(poster && b.posterQuota ? { poster: { layout: poster.layout, credit: b.posterQuota.source, day: b.posterQuota.day } } : {}),
     // جزوه‌ی Word همراه ارائه (۱ اعتبار جدا که beginDeck کسر کرده)
     ...(b.handoutQuota ? { handout: { credit: b.handoutQuota.source, day: b.handoutQuota.day } } : {}),
+    // اسلاید صوتی و پادکست همراه ارائه (AudioWorkflow جدا بعد از تحویل ارائه؛ هرکدام ۱ اعتبار جدا که beginDeck کسر کرده)
+    ...(b.audioQuota ? { audio: { credit: b.audioQuota.source, day: b.audioQuota.day } } : {}),
+    ...(b.podcastQuota ? { podcast: { credit: b.podcastQuota.source, day: b.podcastQuota.day } } : {}),
   };
   try {
     if (d.channel === "web") await env.KV.put(`job:${jobId}`, "⏳ در صف…", { expirationTtl: 3600 });

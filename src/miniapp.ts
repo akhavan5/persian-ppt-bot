@@ -12,7 +12,8 @@ import { REF_MAX, REF_EVERY, displayName, referralMsg, isAdmin, isAllowed, isBan
 import { ensureUid, getLinkedTg, resolveUid } from "./link";
 import { listFiles, loadFileDirect } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
-import { esc, sendDocument, sendMessage, tg } from "./telegram";
+import { esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
+import { wavSeconds } from "./wav";
 import { fileNameWithSite, siteLoginUrl } from "./deck-service";
 
 const enc = new TextEncoder();
@@ -108,9 +109,10 @@ const MIME: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+  wav: "audio/wav",
 };
 
-/** POST /api/miniapp/send {id} — فایل (pptx، جزوه، پوستر) را ربات به چت تلگرام خود کاربر می‌فرستد.
+/** POST /api/miniapp/send {id} — فایل (pptx، جزوه، پوستر، اسلاید صوتی، پادکست) را ربات به چت تلگرام خود کاربر می‌فرستد.
  *  دانلود مستقیم blob داخل WebView تلگرام (به‌خصوص iOS) قابل‌اتکا نیست؛ ارسال به چت همه‌جا کار می‌کند. */
 export async function miniappSend(env: Env, user: WebUser, body: Record<string, unknown> | null, ip: string): Promise<Response> {
   const id = typeof body?.id === "string" ? body.id : "";
@@ -121,9 +123,17 @@ export async function miniappSend(env: Env, user: WebUser, body: Record<string, 
   const f = await loadFileDirect(env, user.id, id);
   if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
   const ext = (f.entry.name.split(".").pop() ?? "").toLowerCase();
-  const label = ext === "docx" ? "📝 جزوه" : ext === "png" || ext === "jpg" || ext === "jpeg" ? "🖼 پوستر" : "📥 ارائه";
+  // اسلاید صوتی و پادکست از روی شناسه‌ی فایل شناخته می‌شوند: «<کار>-audio[-s<n>]» و «<کار>-podcast[-<n>]»
+  const slidesAudio = /-audio(-s\d+)?$/.test(id), podcast = /-podcast(-\d+)?$/.test(id);
+  const label = ext === "docx" ? "📝 جزوه" : ext === "png" || ext === "jpg" || ext === "jpeg" ? "🖼 پوستر" : ext === "wav" ? (podcast ? "🎙 پادکست" : "🔊 صدای اسلاید") : slidesAudio ? "🔊 اسلاید صوتی" : "📥 ارائه";
   try {
-    await sendDocument(env, tgId, new Uint8Array(f.data), f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { mime: MIME[ext] ?? "application/octet-stream" });
+    if (ext === "wav") {
+      // فایل صوتی با پخش‌کننده‌ی تلگرام (اگر WAV را نپذیرفت، sendAudio خودش به‌صورت سند می‌فرستد)
+      const wav = new Uint8Array(f.data);
+      await sendAudio(env, tgId, wav, f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { title: f.entry.title, ...(podcast ? { performer: "علی و سارا" } : {}), duration: wavSeconds(wav) });
+    } else {
+      await sendDocument(env, tgId, new Uint8Array(f.data), f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { mime: MIME[ext] ?? "application/octet-stream" });
+    }
   } catch (e) {
     console.error("miniapp send", String(e).slice(0, 200));
     return err("ارسال فایل به چت ناموفق بود؛ مطمئن شو ربات را مسدود نکرده‌ای و دوباره امتحان کن.", 502);

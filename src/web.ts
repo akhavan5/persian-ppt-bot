@@ -21,7 +21,7 @@ import {
   googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtp,
   sessionCookie, validEmail, type WebUser,
 } from "./auth";
-import { beginDeck, fileNameWithSite, launchDeck, posterEnabled, runningJob, siteHost, slidesLimitMsg } from "./deck-service";
+import { audioEnabled, beginDeck, fileNameWithSite, launchDeck, posterEnabled, runningJob, siteHost, slidesLimitMsg } from "./deck-service";
 import { OCR_TYPES } from "./extract";
 import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { WEB_MAX_FILE, extractFileBytes } from "./tg-file";
@@ -104,6 +104,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       dailyFree: DAILY_FREE_CREDITS,
       // پوستر (اینفوگرافیک) اختیاری همراه ارائه با ۱ اعتبار جدا؛ فقط وقتی Browser Rendering وصل است
       poster: posterEnabled(env),
+      // اسلاید صوتی و پادکست اختیاری همراه ارائه (هرکدام ۱ اعتبار جدا)؛ فقط وقتی کلید Gemini TTS و Workflow صدا وصل است
+      audio: audioEnabled(env),
       // خروجی PDF ارائه (نیاز به Browser Rendering)
       pdf: hasBrowser(env),
       // ساخت ارائه از روی لینک (Tavily Extract)؛ بدون TAVILY_API_KEY دکمه‌اش در سایت نمایش داده نمی‌شود
@@ -180,7 +182,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   if (path === "/api/files" && method === "GET") {
     const list = await listFiles(env, user.id);
-    return json({ files: list.map((f) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name) })) });
+    return json({ files: list.map((f) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name), ...(audioKind(f.id) ? { audio: audioKind(f.id) } : {}) })) });
   }
   if (path.startsWith("/api/files/") && method === "GET") return download(env, user, path.slice("/api/files/".length), url.searchParams.get("inline") === "1");
 
@@ -393,6 +395,8 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   const begin = await beginDeck(env, user.id, String(b?.topic ?? ""), {
     poster: !!posterWant,
     handout: b?.handout === true,
+    audio: b?.audio === true,
+    podcast: b?.podcast === true,
     source: typeof b?.source === "string" ? b.source : undefined,
     slides: typeof b?.slides === "number" ? b.slides : undefined,
     images: typeof b?.images === "boolean" ? b.images : undefined,
@@ -483,16 +487,21 @@ async function ocrStatus(env: Env, user: WebUser, id: string): Promise<Response>
 // وضعیت قطعی از خود Workflow می‌آید (سازگاری قوی)؛ متن پیشرفت از KV و ممکن است چند ثانیه عقب باشد
 async function jobStatus(env: Env, user: WebUser, id: string): Promise<Response> {
   if (!/^[\w-]{1,100}$/.test(id) || !id.startsWith(`${user.id}-`)) return err("پیدا نشد", 404);
+  // کار صوتی همراه ارائه: شناسه‌ی «<کار>-audio» (اسلاید صوتی) یا «<کار>-podcast»؛ در AudioWorkflow جدا ساخته می‌شود
+  if (/-(audio|podcast)$/.test(id)) return audioJobStatus(env, id);
   const inst = await env.DECK_WORKFLOW.get(id).catch(() => null);
   if (!inst) return err("پیدا نشد", 404);
   const st = await inst.status();
 
   if (st.status === "complete") {
-    const o = (st.output ?? {}) as { title?: string; slides?: number; name?: string; poster?: "ok" | "failed"; handout?: "ok" | "failed" };
+    const o = (st.output ?? {}) as { title?: string; slides?: number; name?: string; poster?: "ok" | "failed"; handout?: "ok" | "failed"; audio?: "pending" | "failed"; podcast?: "pending" | "failed" };
     // poster: "ok" ⇒ فایل پوستر با شناسه‌ی «<کار>-poster» ذخیره شده؛ "failed" ⇒ ارائه آماده است ولی پوستر ساخته نشد
     return json({ state: "done", title: o.title ?? "", slides: o.slides ?? 0, name: o.name ?? "presentation.pptx", ...(o.poster ? { poster: o.poster, ...(o.poster === "ok" ? { posterId: `${id}-poster` } : {}) } : {}),
       // جزوه‌ی Word همراه: "ok" ⇒ فایل با شناسه‌ی «<کار>-handout»؛ "failed" ⇒ ساخته نشد و اعتبارش برگشت
-      ...(o.handout ? { handout: o.handout, ...(o.handout === "ok" ? { handoutId: `${id}-handout` } : {}) } : {}) });
+      ...(o.handout ? { handout: o.handout, ...(o.handout === "ok" ? { handoutId: `${id}-handout` } : {}) } : {}),
+      // اسلاید صوتی / پادکست: "pending" ⇒ در حال ساخت؛ وضعیتش را با GET /api/jobs/<audioId> بخوان؛ "failed" ⇒ شروع نشد و اعتبارش برگشت
+      ...(o.audio ? { audio: o.audio, ...(o.audio === "pending" ? { audioId: `${id}-audio` } : {}) } : {}),
+      ...(o.podcast ? { podcast: o.podcast, ...(o.podcast === "pending" ? { podcastId: `${id}-podcast` } : {}) } : {}) });
   }
   if (st.status === "errored" || st.status === "terminated") {
     return json({ state: "error", message: "ساخت ارائه با خطا مواجه شد؛ اعتبارت برگردانده شد. چند دقیقه بعد دوباره امتحان کن." });
@@ -500,6 +509,26 @@ async function jobStatus(env: Env, user: WebUser, id: string): Promise<Response>
   const message = (await env.KV.get(`job:${id}`)) ?? "⏳ در حال ساخت…";
   return json({ state: "running", message });
 }
+
+/** وضعیت کار صوتی (اسلاید صوتی یا پادکست): خروجی کامل = شناسه‌ی فایل‌های ذخیره‌شده (ids)؛ خطا ⇒ اعتبار همان برگشته است */
+async function audioJobStatus(env: Env, id: string): Promise<Response> {
+  const podcast = id.endsWith("-podcast");
+  const inst = await env.AUDIO_WORKFLOW?.get(id).catch(() => null);
+  if (!inst) return err("پیدا نشد", 404);
+  const st = await inst.status();
+  if (st.status === "complete") {
+    const o = (st.output ?? {}) as { ids?: string[]; note?: string };
+    return json({ state: "done", ids: Array.isArray(o.ids) ? o.ids : [], note: o.note ?? "" });
+  }
+  if (st.status === "errored" || st.status === "terminated") {
+    return json({ state: "error", message: `ساخت ${podcast ? "پادکست" : "اسلاید صوتی"} ناموفق بود؛ اعتبارش برگردانده شد.` });
+  }
+  const message = (await env.KV.get(`job:${id}`)) ?? (podcast ? "🎙 پادکست در صف است…" : "🔊 اسلاید صوتی در صف است…");
+  return json({ state: "running", message });
+}
+/** فایل صوتی از روی شناسه: «<کار>-audio[-s<n>]» = اسلاید صوتی (یا صدای یک اسلاید)، «<کار>-podcast[-<n>]» = پادکست */
+const audioKind = (id: string): "slides" | "podcast" | undefined => (/-audio(-s\d+)?$/.test(id) ? "slides" : /-podcast(-\d+)?$/.test(id) ? "podcast" : undefined);
+const isWavFile = (name: string) => /\.wav$/i.test(name);
 
 /** پوستر به‌صورت تصویر PNG/JPG ذخیره می‌شود (پسوند تصویر)؛ ارائه‌ها PPTX */
 const isPosterFile = (name: string) => /\.(png|jpe?g)$/i.test(name);
@@ -514,10 +543,11 @@ async function download(env: Env, user: WebUser, id: string, inline = false): Pr
   const poster = isPosterFile(f.entry.name);
   const png = /\.png$/i.test(f.entry.name);
   const docx = isHandoutFile(f.entry.name);
-  const ascii = poster ? `poster-${siteHost(env)}.${png ? "png" : "jpg"}` : docx ? `handout-${siteHost(env)}.docx` : `presentation-${siteHost(env)}.pptx`;
+  const wav = isWavFile(f.entry.name);
+  const ascii = poster ? `poster-${siteHost(env)}.${png ? "png" : "jpg"}` : docx ? `handout-${siteHost(env)}.docx` : wav ? `audio-${siteHost(env)}.wav` : audioKind(id) === "slides" ? `audio-presentation-${siteHost(env)}.pptx` : `presentation-${siteHost(env)}.pptx`;
   return new Response(f.data, {
     headers: {
-      "content-type": poster ? (png ? "image/png" : "image/jpeg") : docx ? DOCX_MIME : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "content-type": poster ? (png ? "image/png" : "image/jpeg") : docx ? DOCX_MIME : wav ? "audio/wav" : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "content-disposition": `${poster && inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
       ...SEC_HEADERS,
     },

@@ -1,5 +1,5 @@
 /**
- * اسلاید صوتی و پادکست دو‌گوینده (فعلاً فقط تلگرام و فقط مدیر).
+ * اسلاید صوتی و پادکست دو‌گوینده؛ همراه ارائه برای همه‌ی کاربران (تلگرام و وب، هرکدام ۱ اعتبار جدا) و دکمه‌ی دستی مدیر در تلگرام.
  *  • slides: متن سخنرانی (notes) هر اسلاید با یک صدا خوانده می‌شود و صدا «داخل خود اسلاید» در همان فایل PPTX جاسازی می‌شود (pptx-audio.ts)؛
  *    در نمایش، هر اسلاید صدایش را خودکار پخش می‌کند و بعد از پایان صدا به اسلاید بعد می‌رود. اگر حجم از سقف نشست، اسلایدهای باقی‌مانده جدا فرستاده می‌شوند.
  *  • podcast: LLM یک گفت‌وگوی دو‌نفره می‌نویسد؛ Gemini با دو صدا می‌خواند؛ تکه‌ها به یک فایل می‌چسبند.
@@ -11,12 +11,14 @@ import { NonRetryableError } from "cloudflare:workflows";
 import type { Env } from "./env";
 import type { Uid } from "./settings";
 import { LlmError } from "./llm";
-import { loadFileDirect, loadPreview } from "./files";
-import { editMessage, esc, sendAudio, sendDocument } from "./telegram";
+import { loadFileDirect, loadPreview, saveFile } from "./files";
+import { editMessage, esc, sendAudio, sendDocument, sendMessage } from "./telegram";
+import { getLinkedTg } from "./link";
 import { withStore } from "./store";
-import { fileNameWithSite } from "./deck-service";
+import { refundCredit, type CreditSource } from "./settings";
+import { fileNameWithSite, miniappUrl } from "./deck-service";
 import { toFa } from "./util";
-import { GeminiError, ttsDialogue, ttsSpeak } from "./gemini-tts";
+import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript, transcript } from "./podcast";
 import { NARRATION_BATCH, makeNarration } from "./narration";
@@ -31,7 +33,18 @@ export interface AudioParams {
   /** شناسه‌ی ارائه (همان شناسه‌ی نمونه‌ی DeckWorkflow)؛ متن از پیش‌نمایش ۲۴ ساعته خوانده می‌شود */
   deckId: string;
   model?: string;
+  /** کانال تحویل: پیش‌فرض تلگرام. در «web» به‌جای ارسال فایل، در فایل‌های ۲۴ ساعته ذخیره می‌شود (شناسه‌ها در خروجی Workflow) و وضعیت در KV (job:<شناسه‌ی نمونه>) نوشته می‌شود */
+  channel?: "telegram" | "web";
+  /** فقط کانال وب و فقط ساخت‌شده از Mini App: پایان کار یک پیام کوتاه با دکمه‌ی «باز کردن اپ» به تلگرامِ وصل‌شده‌ی کاربر می‌رود */
+  notify?: boolean;
+  /** کاربر بدون پلن: جمله‌ی تبلیغ سایت در پایان صدا (مثل واترمارک فایل‌ها). خالی = بدون جمله */
+  mark?: boolean;
+  /** اعتبار این کار (همراه ارائه)؛ اگر کار کاملاً شکست بخورد برگردانده می‌شود. خالی = کار دستی مدیر */
+  credit?: { source: CreditSource; day: string };
 }
+
+/** خروجی نمونه (کانال وب): شناسه‌ی فایل‌های ذخیره‌شده به ترتیب + توضیح کوتاه برای اسلایدهای ناموفق/جدا */
+export interface AudioOut { kind: "slides" | "podcast"; title: string; ids: string[]; note: string }
 
 /** صدا گران است: خطای هر گام تا ۴ بار با فاصله‌ی افزایشی تکرار می‌شود (سقف دقیقه‌ای کلیدها) */
 const TTS_STEP = { retries: { limit: 4, delay: "30 seconds", backoff: "exponential" }, timeout: "6 minutes" } as const;
@@ -48,6 +61,12 @@ const STYLE_B = "warm, easygoing and confident, like explaining something to a f
 // حجم PPTX + صدا در حافظه‌ی Worker (۱۲۸ مگابایت) چند نسخه می‌شود؛ بیشتر از این مقدار صدا داخل فایل نمی‌رود و بقیه‌ی اسلایدها جدا فرستاده می‌شوند
 const EMBED_BUDGET = 30 * 1024 * 1024;
 
+// وب: مقدار هر فایل در KV حداکثر ۲۴ مگابایت است؛ با حاشیه
+const WEB_FILE_LIMIT = 22 * 1024 * 1024;
+// جمله‌ی پایانیِ تبلیغ سایت برای کاربران بدون پلن (مثل واترمارک فایل‌ها). نشانی سایت با حروف نوشته شده تا TTS درست تلفظ کند.
+const OUTRO_SLIDES = "اگه از این اسلاید خوشتون اومد، به سایت ما سر بزنید: پی پی تی ساز، دات آی آر.";
+const OUTRO_PODCAST = "اگه از این پادکست خوشتون اومد، به سایت ما سر بزنید: پی پی تی ساز، دات آی آر.";
+
 const tmpKey = (id: string, i: number) => `tmp:aud:${id}:${i}`;
 
 async function guard<T>(fn: () => Promise<T>): Promise<T> {
@@ -60,25 +79,40 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
 export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
   constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
 
-  async run(event: WorkflowEvent<AudioParams>, step: WorkflowStep) {
-    const { kind, chatId, statusMessageId: mid } = event.payload;
-    const status = (t: string) => editMessage(this.env, chatId, mid, t).catch(() => {});
+  async run(event: WorkflowEvent<AudioParams>, step: WorkflowStep): Promise<AudioOut> {
+    const { kind, chatId, statusMessageId: mid, uid, credit } = event.payload;
+    const web = event.payload.channel === "web";
+    // تلگرام: ویرایش پیام وضعیت؛ وب: متن پیشرفت در KV (صفحه‌ی وب هر چند ثانیه می‌خواند)
+    const status = (t: string) => (web
+      ? this.env.KV.put(`job:${event.instanceId}`, t, { expirationTtl: 3600 })
+      : editMessage(this.env, chatId, mid, t)).catch(() => {});
     try {
-      if (kind === "podcast") await this.podcast(event, step, status);
-      else await this.slides(event, step, status);
+      const out = kind === "podcast" ? await this.podcast(event, step, status, web) : await this.slides(event, step, status, web);
+      // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ. خطایش نباید به «برگشت اعتبار» برسد (فایل ذخیره شده)
+      if (web && event.payload.notify && out.ids.length) {
+        await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+          const tgChat = await getLinkedTg(this.env, String(uid));
+          if (!tgChat) return;
+          await sendMessage(this.env, tgChat, `✅ ${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
+            { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(this.env)}/app` } }]] } });
+        }).catch((ne) => console.error("notify-app", String(ne).slice(0, 200)));
+      }
+      return out;
     } catch (e) {
       const reason = String(e instanceof Error ? e.message : e).slice(0, 500);
       console.error("audio workflow failed", reason);
+      // هر کار در گام جدا تا اگر یکی تکرار شد اعتبار دو بار برنگردد
+      if (credit) await step.do("refund", () => refundCredit(this.env, uid, credit.source, credit.day)).catch((re) => console.error("refund audio", re));
       await step.do("notify-failure", async () => {
-        await status(`❌ ساخت ${kind === "podcast" ? "پادکست" : "اسلاید صوتی"} ناموفق بود.\n<code>${esc(reason)}</code>`);
+        await status(`❌ ساخت ${kind === "podcast" ? "پادکست" : "اسلاید صوتی"} ناموفق بود${credit && credit.source !== "none" ? "؛ اعتبارش برگردانده شد" : ""}.\n<code>${esc(reason)}</code>`);
       }).catch(() => {});
       throw e;
     }
   }
 
   // ---------- اسلاید صوتی (صدا داخل خود اسلاید) ----------
-  private async slides(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: (t: string) => Promise<unknown>) {
-    const { chatId, uid, deckId } = event.payload;
+  private async slides(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: (t: string) => Promise<unknown>, web: boolean): Promise<AudioOut> {
+    const { chatId, uid, deckId, mark } = event.payload;
     const id = event.instanceId;
     const plan = await step.do("load-deck", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
       const p = await loadPreview(this.env, uid, deckId);
@@ -109,12 +143,16 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
 
     // هر اسلاید در گام جدا ساخته و موقت در KV نگه داشته می‌شود (بایت‌های صدا از گام‌ها برنمی‌گردند)
     const failed: string[] = [];
+    const lastIdx = plan.items[plan.items.length - 1].i;
     const made: { i: number; no: number; title: string; bytes: number }[] = [];
     for (const it of plan.items) {
       try {
         const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
           await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`);
-          const wav = await ttsSpeak(this.env, splitSpeech(spoken[it.i] ?? it.text, 1200), { style: speechStyle(this.env) });
+          // کاربر بدون پلن: جمله‌ی تبلیغ سایت در پایانِ آخرین اسلاید گفته می‌شود
+          const body = spoken[it.i] ?? it.text;
+          const text = mark && it.i === lastIdx ? `${body} ${OUTRO_SLIDES}` : body;
+          const wav = await ttsSpeak(this.env, splitSpeech(text, 1200), { style: speechStyle(this.env) });
           await this.env.FILES.put(tmpKey(id, it.i), wav, { expirationTtl: 3600 }); // فقط تا لحظه‌ی جاسازی؛ یک ساعته پاک می‌شود
           return wav.length;
         }));
@@ -130,8 +168,9 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       await status("🔊 جاسازی صدا داخل اسلایدها و ارسال فایل…");
       const f = await loadFileDirect(this.env, uid, deckId);
       if (!f) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
-      let budget = EMBED_BUDGET - f.data.byteLength;
+      let budget = (web ? WEB_FILE_LIMIT : EMBED_BUDGET) - f.data.byteLength;
       const items: SlideAudio[] = [];
+      const saved: string[] = []; // وب: شناسه‌ی فایل‌های ذخیره‌شده
       const inFile: number[] = [], apart: typeof made = [];
       for (const m of made) {
         if (m.bytes > budget) { apart.push(m); continue; }
@@ -143,28 +182,49 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       }
       if (items.length) {
         const out = await embedAudio(f.data, items, { autoPlay: true, autoAdvance: true });
-        await sendDocument(this.env, chatId, out.bytes, fileNameWithSite(this.env, plan.title, "pptx", "صوتی", 40),
-          `🔊 <b>${esc(plan.title)}</b>\nصدای ${toFa(String(items.length))} اسلاید داخل خود اسلایدها گذاشته شده است؛ در حالت نمایش (Slide Show) خودکار پخش می‌شود و بعد از پایان صدا اسلاید عوض می‌شود.`);
+        const name = fileNameWithSite(this.env, plan.title, "pptx", "صوتی", 40);
+        if (web) {
+          // وب: فایل در KV می‌ماند و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام باید شکست بخورد (تلاش مجدد/برگشت اعتبار)
+          if (!(await saveFile(this.env, uid, id, out.bytes, name, plan.title, items.length))) throw new Error("audio pptx too large to store");
+          saved.push(id);
+        } else {
+          await sendDocument(this.env, chatId, out.bytes, name,
+            `🔊 <b>${esc(plan.title)}</b>\nصدای ${toFa(String(items.length))} اسلاید داخل خود اسلایدها گذاشته شده است؛ در حالت نمایش (Slide Show) خودکار پخش می‌شود و بعد از پایان صدا اسلاید عوض می‌شود.`);
+        }
       }
       // اسلایدهایی که در فایل جا نشدند مثل قبل جدا فرستاده می‌شوند
       for (const m of apart) {
         const b = await this.env.FILES.get(tmpKey(id, m.i), "arrayBuffer");
         if (!b) continue;
         const wav = new Uint8Array(b);
-        await sendAudio(this.env, chatId, wav, fileNameWithSite(this.env, plan.title, "wav", `اسلاید ${m.i + 1}`, 40),
+        const wname = fileNameWithSite(this.env, plan.title, "wav", `اسلاید ${m.i + 1}`, 40);
+        if (web) {
+          const fid = `${id}-s${m.i + 1}`;
+          if (!(await saveFile(this.env, uid, fid, wav, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0))) throw new Error("slide audio too large to store");
+          saved.push(fid);
+          continue;
+        }
+        await sendAudio(this.env, chatId, wav, wname,
           `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: wavSeconds(wav) });
       }
       for (const m of made) await this.env.FILES.delete(tmpKey(id, m.i)).catch(() => {});
-      return { inFile: inFile.length, apart: apart.map((m) => toFa(String(m.i + 1))) };
+      return { inFile: inFile.length, apart: apart.map((m) => toFa(String(m.i + 1))), saved };
     });
     await step.do("finish", async () => {
-      await status(`✅ اسلاید صوتی آماده شد: صدا داخل ${toFa(String(summary.inFile))} اسلاید گذاشته شد${summary.apart.length ? `\n📎 اسلاید ${summary.apart.join("، ")} به‌خاطر حجم جدا فرستاده شد` : ""}${failed.length ? `\n⚠️ ناموفق: اسلاید ${failed.join("، ")} (دوباره دکمه را بزن)` : ""}`);
-    });
+      if (web) return;
+      await status(`✅ اسلاید صوتی آماده شد: صدا داخل ${toFa(String(summary.inFile))} اسلاید گذاشته شد${summary.apart.length ? `\n📎 اسلاید ${summary.apart.join("، ")} به‌خاطر حجم جدا فرستاده شد` : ""}${failed.length ? `\n⚠️ ناموفق: اسلاید ${failed.join("، ")}${event.payload.credit ? "" : " (دوباره دکمه را بزن)"}` : ""}`);
+    }).catch(() => {}); // خطای پیام پایانی نباید به «برگشت اعتبار» برسد (فایل قبلاً تحویل شده)
+    return {
+      kind: "slides",
+      title: plan.title,
+      ids: summary.saved,
+      note: [summary.apart.length ? `اسلاید ${summary.apart.join("، ")} به‌خاطر حجم، جدا ذخیره شد.` : "", failed.length ? `اسلاید ${failed.join("، ")} ساخته نشد.` : ""].filter(Boolean).join(" "),
+    };
   }
 
   // ---------- پادکست ----------
-  private async podcast(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: (t: string) => Promise<unknown>) {
-    const { chatId, uid, deckId, model } = event.payload;
+  private async podcast(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: (t: string) => Promise<unknown>, web: boolean): Promise<AudioOut> {
+    const { chatId, uid, deckId, model, mark } = event.payload;
     const id = event.instanceId;
 
     const script = await step.do("script", LLM_STEP, () => guard(async () => {
@@ -173,7 +233,9 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
       return makePodcastScript(this.env, p.deck, { model });
     }));
-    const chunks = chunkTurns(script.turns);
+    // کاربر بدون پلن: مجری (علی) در پایان پادکست سایت را معرفی می‌کند؛ این نوبت در متن گفت‌وگوی تلگرام هم می‌آید
+    const turns: Turn[] = mark ? [...script.turns, { speaker: "A", text: OUTRO_PODCAST }] : script.turns;
+    const chunks = chunkTurns(turns);
 
     for (let i = 0; i < chunks.length; i++) {
       await step.do(`voice-${i}`, TTS_STEP, () => guard(async () => {
@@ -184,32 +246,44 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       }));
     }
 
-    await step.do("merge-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
+    const saved = await step.do("merge-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
       await status("🎙 ۳/۳ — چسباندن و ارسال…");
+      const ids: string[] = []; // وب: شناسه‌ی فایل‌های ذخیره‌شده
       const wavs: Uint8Array[] = [];
       for (let i = 0; i < chunks.length; i++) {
         const b = await this.env.FILES.get(tmpKey(id, i), "arrayBuffer");
         if (!b) throw new Error(`voice chunk ${i} missing`);
         wavs.push(new Uint8Array(b));
       }
-      // تقریباً هیچ‌وقت پیش نمی‌آید، ولی اگر مجموع از سقف تلگرام گذشت به چند قسمت تقسیم می‌شود
+      // تقریباً هیچ‌وقت پیش نمی‌آید، ولی اگر مجموع از سقف تلگرام (یا سقف فایل در وب) گذشت به چند قسمت تقسیم می‌شود
+      const limit = web ? WEB_FILE_LIMIT : TG_LIMIT;
       const groups: Uint8Array[][] = [[]];
       let size = 0;
       for (const w of wavs) {
-        if (size + w.length > TG_LIMIT && groups[groups.length - 1].length) { groups.push([]); size = 0; }
+        if (size + w.length > limit && groups[groups.length - 1].length) { groups.push([]); size = 0; }
         groups[groups.length - 1].push(w); size += w.length;
       }
       for (let g = 0; g < groups.length; g++) {
         const merged = mergeWav(groups[g], 450);
         const part = groups.length > 1 ? ` (قسمت ${toFa(String(g + 1))})` : "";
-        await sendAudio(this.env, chatId, merged, fileNameWithSite(this.env, script.title, "wav", `پادکست${groups.length > 1 ? ` ${g + 1}` : ""}`, 40),
-          `🎙 <b>${esc(script.title)}</b>${part}\nپادکست دو‌گوینده · ${toFa(String(script.turns.length))} نوبت`, { title: script.title, performer: "علی و سارا", duration: wavSeconds(merged) });
+        const pname = fileNameWithSite(this.env, script.title, "wav", `پادکست${groups.length > 1 ? ` ${g + 1}` : ""}`, 40);
+        if (web) {
+          // وب: فایل در KV می‌ماند و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام شکست می‌خورد (تلاش مجدد/برگشت اعتبار)
+          const fid = g === 0 ? id : `${id}-${g + 1}`;
+          if (!(await saveFile(this.env, uid, fid, merged, pname, `${script.title}${part}`.slice(0, 120), 0))) throw new Error("podcast too large to store");
+          ids.push(fid);
+          continue;
+        }
+        await sendAudio(this.env, chatId, merged, pname,
+          `🎙 <b>${esc(script.title)}</b>${part}\nپادکست دو‌گوینده · ${toFa(String(turns.length))} نوبت`, { title: script.title, performer: "علی و سارا", duration: wavSeconds(merged) });
       }
-      // متن گفت‌وگو برای بازبینی (اگر تلفظ جایی غلط بود، متن را ببین)
-      await sendDocument(this.env, chatId, new TextEncoder().encode(transcript(script)), fileNameWithSite(this.env, script.title, "txt", "متن پادکست", 40), "📝 متن گفت‌وگوی پادکست", { mime: "text/plain" }).catch((e) => console.error("transcript", String(e).slice(0, 200)));
+      // متن گفت‌وگو برای بازبینی (اگر تلفظ جایی غلط بود، متن را ببین)؛ فقط تلگرام (در وب فایل اضافه به سقف فایل‌های ۲۴ ساعته می‌خورد)
+      if (!web) await sendDocument(this.env, chatId, new TextEncoder().encode(transcript({ title: script.title, turns })), fileNameWithSite(this.env, script.title, "txt", "متن پادکست", 40), "📝 متن گفت‌وگوی پادکست", { mime: "text/plain" }).catch((e) => console.error("transcript", String(e).slice(0, 200)));
       for (let i = 0; i < chunks.length; i++) await this.env.FILES.delete(tmpKey(id, i)).catch(() => {});
+      return ids;
     });
-    await step.do("finish", async () => { await status("✅ پادکست آماده شد؛ فایل صوتی و متن گفت‌وگو را بالا ببین."); });
+    await step.do("finish", async () => { if (!web) await status("✅ پادکست آماده شد؛ فایل صوتی و متن گفت‌وگو را بالا ببین."); }).catch(() => {}); // خطای پیام پایانی نباید به «برگشت اعتبار» برسد
+    return { kind: "podcast", title: script.title, ids: saved, note: "" };
   }
 }
 

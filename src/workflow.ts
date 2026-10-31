@@ -54,16 +54,19 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     const mark = event.payload.credit !== "plan";
     const handout = event.payload.handout; // جزوه‌ی Word همراه ارائه (اختیاری، ۱ اعتبار جدا)
     const poster = event.payload.poster; // پوستر همراه ارائه (اختیاری): در همین Workflow و با همان ۱ اعتبار
+    const audio = event.payload.audio; // اسلاید صوتی همراه ارائه (اختیاری، ۱ اعتبار جدا): بعد از تحویل ارائه در AudioWorkflow جدا ساخته می‌شود
+    const podcast = event.payload.podcast; // پادکست همراه ارائه (اختیاری، ۱ اعتبار جدا): مثل اسلاید صوتی
+    const started = { audio: false, podcast: false }; // کدام کار صوتی واقعاً شروع شده (برای برگشت اعتبار در خطا)
     // تلگرام: ویرایش پیام وضعیت؛ وب: متن پیشرفت در KV (صفحه‌ی وب هر چند ثانیه می‌خواند)
     const status = (t: string) => (web
       ? this.env.KV.put(`job:${event.instanceId}`, t, { expirationTtl: 3600 })
       : editMessage(this.env, chatId, mid, t)).catch(() => {});
 
     const notes: string[] = []; // هشدارهای همراهان ناموفق برای پیام پایانی
-    let built: { title: string; slides: number; name: string; poster?: "ok" | "failed"; handout?: "ok" | "failed" };
+    let built: { title: string; slides: number; name: string; poster?: "ok" | "failed"; handout?: "ok" | "failed"; /** pending ⇒ در AudioWorkflow جدا (شناسه‌ی <کار>-audio) در حال ساخت است */ audio?: "pending" | "failed"; podcast?: "pending" | "failed" };
     /** پیام پایانی تلگرام؛ اعتبار کم ⇒ دکمه‌های خرید. با پوستر، بعد از آن نمایش داده می‌شود (posterNote: نتیجه‌ی پوستر) */
     const finalStatus = async (posterNote: string) => {
-      const done = `✅ آماده شد! فایل${poster || handout ? "‌ها" : ""} بالا را ببین.${posterNote} برای ساخت ارائه‌ی بعدی، موضوع جدید را بفرست.`;
+      const done = `✅ آماده شد! فایل${poster || handout || audio || podcast ? "‌ها" : ""} بالا را ببین.${posterNote} برای ساخت ارائه‌ی بعدی، موضوع جدید را بفرست.`;
       const c = await getCredit(this.env, userId).catch(() => null);
       if (c && !c.unlimited && c.total <= 1) {
         const warn = c.total === 0 ? "⚠️ اعتبارت تمام شد." : "⚠️ فقط ۱ ارائه‌ی دیگر اعتبار داری.";
@@ -136,7 +139,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now(), ...(event.payload.orig ? { o: event.payload.orig } : {}) })
             .catch((err) => console.error("logDeck", err));
           if (web) return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename };
-          if (!poster && !handout) await finalStatus("");
+          if (!poster && !handout && !audio && !podcast) await finalStatus("");
           return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename };
         });
 
@@ -219,13 +222,44 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         built.handout = handoutOk ? "ok" : "failed";
         if (!handoutOk) notes.push("⚠️ ساخت جزوه ناموفق بود؛ اعتبار جزوه برگردانده شد.");
       }
-      if ((poster || handout) && !web) await step.do("final-status", () => finalStatus(notes.length ? "\n" + notes.join("\n") : "")).catch(() => {}); // خطای پیام پایانی نباید به «برگشت اعتبار» برسد
+      // اسلاید صوتی و پادکست همراه ارائه: ارائه تا اینجا تحویل شده؛ هرکدام در AudioWorkflow جدا ساخته می‌شود (چند دقیقه، با تلاش مجدد برای کلیدهای TTS).
+      // اگر شروعشان ممکن نشد فقط اعتبار همان برمی‌گردد؛ بعد از شروع، برگشت اعتبار با خودِ AudioWorkflow است.
+      for (const [kind, extra] of [["slides", audio], ["podcast", podcast]] as const) {
+        if (!extra) continue;
+        const key = kind === "podcast" ? "podcast" : "audio";
+        try {
+          await step.do(`start-${key}`, { retries: { limit: 0, delay: "1 second" }, timeout: "1 minute" }, async () => {
+            if (!this.env.AUDIO_WORKFLOW) throw new Error("AUDIO_WORKFLOW is not bound");
+            const queued = kind === "podcast" ? "🎙 پادکست در صف است… (چند دقیقه طول می‌کشد)" : "🔊 اسلاید صوتی در صف است… (صدای هر اسلاید داخل خود فایل پاورپوینت گذاشته می‌شود)";
+            const st = web ? 0 : (await sendMessage(this.env, chatId, queued)).message_id;
+            await this.env.AUDIO_WORKFLOW.create({
+              id: `${event.instanceId}-${key}`,
+              params: {
+                kind, chatId: web ? 0 : chatId, statusMessageId: st, uid: userId, deckId: event.instanceId, channel: web ? "web" : "telegram", mark, ...(web && event.payload.notify ? { notify: true } : {}),
+                ...(settings.model ? { model: settings.model } : {}), credit: { source: extra.credit, day: extra.day },
+              },
+            });
+          });
+          started[key] = true;
+          built[key] = "pending";
+        } catch (ae) {
+          console.error(`${key} start failed`, ae);
+          await step.do(`refund-${key}-start`, () => refundCredit(this.env, userId, extra.credit, extra.day)).catch((re) => console.error(`refund ${key}`, re));
+          built[key] = "failed";
+          notes.push(`⚠️ شروع ساخت ${kind === "podcast" ? "پادکست" : "اسلاید صوتی"} ناموفق بود؛ اعتبارش برگردانده شد.`);
+        }
+      }
+      if (!web && (started.audio || started.podcast)) notes.push(`${[started.audio ? "🔊 اسلاید صوتی" : "", started.podcast ? "🎙 پادکست" : ""].filter(Boolean).join(" و ")} چند دقیقه‌ی دیگر در پیام‌های جدا می‌رسد.`);
+      if ((poster || handout || audio || podcast) && !web) await step.do("final-status", () => finalStatus(notes.length ? "\n" + notes.join("\n") : "")).catch(() => {}); // خطای پیام پایانی نباید به «برگشت اعتبار» برسد
     } catch (e) {
       console.error("deck workflow failed", e);
       // هر کار در گام جدا تا اگر یکی تکرار شد، بقیه دوباره اجرا نشوند (مثلاً اعتبار دو بار برنگردد)
       await step.do("refund", () => refundCredit(this.env, userId, credit ?? "none", day));
       if (handout) await step.do("refund-handout", () => refundCredit(this.env, userId, handout.credit, handout.day));
       if (poster) await step.do("refund-poster", () => refundCredit(this.env, userId, poster.credit, poster.day));
+      // اسلاید صوتی/پادکستی که شروع نشده برمی‌گردد؛ شروع‌شده‌ها اعتبارشان را AudioWorkflow خودش برمی‌گرداند
+      if (audio && !started.audio) await step.do("refund-audio", () => refundCredit(this.env, userId, audio.credit, audio.day));
+      if (podcast && !started.podcast) await step.do("refund-podcast", () => refundCredit(this.env, userId, podcast.credit, podcast.day));
       await step.do("notify-failure", async () => {
         await status("❌ ساخت ارائه با خطا مواجه شد" + (credit && credit !== "none" ? "؛ اعتبارت برگردانده شد" : "") +
           ". چند دقیقه بعد دوباره امتحان کن؛ اگر تکرار شد، تنظیمات سرویس هوش مصنوعی را بررسی کن.");
@@ -253,7 +287,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       await noteDeckDone(this.env, userId).catch((e) => console.error("noteDeckDone", e)); // قیف کاربران پنل مدیر
     });
     // اعلام تمام شدن اعتبار پلن (فقط ایمیل): اگر اعتبار این ارائه (یا پوستر/جزوه‌اش) از پلن کم شده و اکنون اعتبار پلن صفر است. بعد از «finish»، بدون تلاش مجدد؛ خطایش به اعتبار یا کار نمی‌رسد.
-    if (credit === "plan" || poster?.credit === "plan" || handout?.credit === "plan") {
+    if (credit === "plan" || poster?.credit === "plan" || handout?.credit === "plan" || audio?.credit === "plan" || podcast?.credit === "plan") {
       await step.do("plan-credits-out", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, () => notifyPlanCreditsOut(this.env, userId))
         .catch((e) => console.error("plan-credits-out", String(e).slice(0, 200)));
     }
@@ -263,7 +297,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
         const tgChat = await getLinkedTg(this.env, String(userId));
         if (!tgChat) return;
-        const extras = [built.poster === "ok" ? "🖼 پوستر" : "", built.handout === "ok" ? "📝 جزوه" : ""].filter(Boolean);
+        const extras = [built.poster === "ok" ? "🖼 پوستر" : "", built.handout === "ok" ? "📝 جزوه" : "", built.audio === "pending" ? "🔊 اسلاید صوتی (چند دقیقه‌ی دیگر)" : "", built.podcast === "pending" ? "🎙 پادکست (چند دقیقه‌ی دیگر)" : ""].filter(Boolean);
         const text = `✅ <b>${esc(built.title)}</b> آماده شد (${toFa(String(built.slides))} اسلاید${extras.length ? " + " + extras.join(" + ") : ""}).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`;
         await sendMessage(this.env, tgChat, text, { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(this.env)}/app` } }]] } });
       }).catch((e) => console.error("notify-app", String(e).slice(0, 200)));

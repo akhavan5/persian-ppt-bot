@@ -18,7 +18,7 @@ import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
-import { BUY_SITE_NOTE, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
+import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
@@ -32,11 +32,11 @@ const HELP =
   "من ربات <b>ساخت پاورپوینت فارسی</b> هستم.\n\n" +
   "📝 فقط <b>موضوع ارائه</b> را بفرست؛ بعد مرحله‌به‌مرحله <b>مدل، تعداد اسلاید و داشتن تصویر</b> را انتخاب می‌کنی و ساخت شروع می‌شود. فایل PPTX آماده (راست‌به‌چپ و قابل ویرایش در پاورپوینت) را همین‌جا می‌گیری.\n\n" +
   "مثال:\n<code>هوش مصنوعی در آموزش</code>\n\n" +
-  "🖼 در مرحله‌های آخر می‌توانی یک <b>پوستر (اینفوگرافیک)</b> و یک <b>جزوه‌ی Word</b> هم همراه ارائه بگیری.\n\n" +
+  "🖼 در مرحله‌های آخر می‌توانی یک <b>پوستر (اینفوگرافیک)</b>، یک <b>جزوه‌ی Word</b>، یک <b>اسلاید صوتی</b> (صدای گوینده داخل خود اسلایدها) و یک <b>پادکست</b> دو‌نفره هم همراه ارائه بگیری؛ هرکدام ۱ اعتبار جدا.\n\n" +
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "🖼 چند عکس (مثلاً صفحه‌های یک جزوه) را <b>یک‌جا و به‌صورت آلبوم</b> انتخاب و بفرست (حداکثر ۱۰ عدد)؛ همه با هم خوانده می‌شوند و فقط <b>یک ارائه</b> ساخته می‌شود. عکس‌هایی که جدا از هم بفرستی هر کدام ارائه‌ی جداگانه حساب می‌شوند.\n\n" +
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
-  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دعوت = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
+  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۵ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دعوت = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
 type Btn = { text: string; callback_data?: string; url?: string };
@@ -101,23 +101,24 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
 }
 
 // ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← اسلاید حاوی تصویر؟) ----------
-type Step = "model" | "slides" | "imgs" | "poster" | "handout";
+type Step = "model" | "slides" | "imgs" | "poster" | "handout" | "audio" | "podcast";
 /** پوستر (اینفوگرافیک) همراه ارائه: none = نه، wide = افقی، tall = عمودی */
 type PosterChoice = "none" | "wide" | "tall";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
-interface Pending { /** جزوه‌ی Word همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; /** اسلاید حاوی تصویر باشد؟ (پیش‌فرض بله) */ imgs: boolean; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string; /** منبع از روی لینک وب است (file = نام سایت) */ link?: boolean }
+interface Pending { /** اسلاید صوتی همراه ارائه (۱ اعتبار جدا؛ پیش‌فرض روشن، فقط وقتی TTS فعال است) */ audio?: boolean; /** پادکست همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا؛ پیش‌فرض روشن) */ podcast?: boolean; /** جزوه‌ی Word همراه ارائه (۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; /** اسلاید حاوی تصویر باشد؟ (پیش‌فرض بله) */ imgs: boolean; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string; /** منبع از روی لینک وب است (file = نام سایت) */ link?: boolean }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
 
 /** مرحله‌ها به ترتیب: مدل (فقط اگر بیش از یکی باشد)، اسلاید (اگر کاربر در متن موضوع تعداد را نوشته باشد پرسیده نمی‌شود)، تصویر،
- *  پوستر (اینفوگرافیک) همراه ارائه — فقط وقتی Browser Rendering وصل است. ارائه همیشه ساخته می‌شود؛ پوستر اختیاری است و هزینه‌ی اضافه ندارد */
+ *  پوستر (اینفوگرافیک)، جزوه، اسلاید صوتی و پادکست همراه ارائه (هرکدام اختیاری و ۱ اعتبار جدا؛ پوستر فقط با Browser Rendering، صدا فقط با TTS). ارائه همیشه ساخته می‌شود */
 const stepsOf = (env: Env, p: Pending): Step[] => [
   ...(modelList(env).length > 1 ? (["model"] as Step[]) : []),
   ...(p.fixed ? [] : (["slides"] as Step[])),
   "imgs",
   ...(posterEnabled(env) ? (["poster"] as Step[]) : []),
   "handout",
+  ...(audioEnabled(env) ? (["audio", "podcast"] as Step[]) : []), // اسلاید صوتی و پادکست: فقط وقتی کلید Gemini و Workflow صدا وصل است
 ];
 
 function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
@@ -144,10 +145,22 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
       [{ text: mark((p.poster ?? "none") === "none", "بدون پوستر"), callback_data: "p:poster:none" }],
     ];
   } else if (p.step === "handout") {
-    ask = "📝 <b>جزوه‌ی Word</b> هم ساخته شود؟ (۱ اعتبار)\n<i>جزوه‌ی مطالعه‌ی حدود سه صفحه‌ای به‌صورت فایل Word قابل‌ویرایش، شامل مقدمه، چند بخش توضیحی و نکات کلیدی. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
+    ask = "📝 <b>جزوه‌ی Word</b> هم ساخته شود؟ (۱ اعتبار)\n<i>جزوه‌ی مطالعه‌ی حدود سه صفحه‌ای به‌صورت فایل Word قابل‌ویرایش، شامل مقدمه، چند بخش توضیحی و نکات کلیدی.</i>" + (steps[steps.length - 1] === "handout" ? "\n<i>با انتخاب این گزینه ساخت شروع می‌شود.</i>" : "");
     opts = [
       [{ text: mark(p.handout !== false, "📝 با جزوه — ۱ اعتبار"), callback_data: "p:handout:1" }],
       [{ text: mark(p.handout === false, "بدون جزوه"), callback_data: "p:handout:0" }],
+    ];
+  } else if (p.step === "audio") {
+    ask = "🔊 <b>اسلاید صوتی</b> هم ساخته شود؟ (۱ اعتبار)\n<i>همان ارائه به‌صورت PPTX که صدای گوینده داخل هر اسلاید گذاشته شده است؛ در حالت نمایش (Slide Show) خودکار پخش می‌شود و بعد از پایان صدا اسلاید عوض می‌شود. چند دقیقه بعد از ارائه، جدا می‌رسد.</i>";
+    opts = [
+      [{ text: mark(p.audio !== false, "🔊 با اسلاید صوتی — ۱ اعتبار"), callback_data: "p:audio:1" }],
+      [{ text: mark(p.audio === false, "بدون اسلاید صوتی"), callback_data: "p:audio:0" }],
+    ];
+  } else if (p.step === "podcast") {
+    ask = "🎙 <b>پادکست</b> هم ساخته شود؟ (۱ اعتبار)\n<i>گفت‌وگوی دو‌نفره‌ی علی و سارا درباره‌ی موضوع ارائه، به‌صورت فایل صوتی (حدود چند دقیقه) همراه متن گفت‌وگو. چند دقیقه بعد از ارائه، جدا می‌رسد. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
+    opts = [
+      [{ text: mark(p.podcast !== false, "🎙 با پادکست — ۱ اعتبار"), callback_data: "p:podcast:1" }],
+      [{ text: mark(p.podcast === false, "بدون پادکست"), callback_data: "p:podcast:0" }],
     ];
   } else {
     ask = "🖼 <b>اسلایدها حاوی تصویر باشند؟</b>" + (steps[steps.length - 1] === "imgs" ? "\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>" : "");
@@ -186,7 +199,8 @@ function plansText(curId?: string): string {
 /** شروع ساخت پس از آخرین مرحله: اعتبار کم می‌شود و همین پیام به پیام وضعیت تبدیل می‌شود */
 async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
   const wantPoster = p.poster === "wide" || p.poster === "tall";
-  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout !== false, slides: p.slides, images: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
+  const wantAudio = p.audio !== false && audioEnabled(env), wantPodcast = p.podcast !== false && audioEnabled(env); // پیش‌فرض روشن؛ بدون TTS هیچ‌کدام
+  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout !== false, audio: wantAudio, podcast: wantPodcast, slides: p.slides, images: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
   if (!begin.ok) {
     const d = begin.denied;
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
@@ -206,7 +220,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     await answer();
     const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
     await editMessage(env, chatId, mid,
-      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout !== false ? " + جزوه" : ""})…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${creditLine}`,
+      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout !== false ? " + جزوه" : ""}${wantAudio ? " + اسلاید صوتی" : ""}${wantPodcast ? " + پادکست" : ""})…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${wantAudio || wantPodcast ? "\n🔊 صدا (اسلاید صوتی/پادکست) جدا و چند دقیقه بعد از ارائه می‌رسد." : ""}${creditLine}`,
       { reply_markup: { inline_keyboard: [] } });
     const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig },
       wantPoster && posterEnabled(env) ? { layout: p.poster as "wide" | "tall" } : undefined);
@@ -263,6 +277,12 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
   } else if (a === "handout") {
     if (b !== "0" && b !== "1") return await answer();
     p.handout = b === "1";
+  } else if (a === "audio") {
+    if (b !== "0" && b !== "1") return await answer();
+    p.audio = b === "1";
+  } else if (a === "podcast") {
+    if (b !== "0" && b !== "1") return await answer();
+    p.podcast = b === "1";
   } else if (a === "poster") {
     if (b !== "none" && b !== "wide" && b !== "tall") return await answer();
     p.poster = b;
@@ -713,6 +733,8 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     model: models.some((m) => m.id === s.model) ? (s.model as string) : (models[0]?.id ?? ""),
     poster: "wide", // پیش‌فرض: با پوستر افقی
     handout: true, // جزوه‌ی Word: پیش‌فرض روشن
+    audio: true, // اسلاید صوتی: پیش‌فرض روشن (۱ اعتبار)
+    podcast: true, // پادکست: پیش‌فرض روشن (۱ اعتبار)
     step: "model",
     fixed: o.slides !== undefined, // تعداد اسلاید در متن موضوع آمده؛ دوباره پرسیده نمی‌شود
     ...(o.mode ? { mode: o.mode } : {}),

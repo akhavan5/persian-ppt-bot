@@ -83,4 +83,8 @@ export interface DeckParams {
   poster?: { layout: "wide" | "tall"; credit: "plan" | "bonus" | "none"; day: string };
   /** جزوه‌ی Word (حدود ۳ صفحه با یک تصویر) همراه ارائه، در همین Workflow؛ ۱ اعتبار جدا. خالی = بدون جزوه */
   handout?: { credit: "plan" | "bonus" | "none"; day: string };
+  /** اسلاید صوتی همراه ارائه (صدای گوینده داخل خود PPTX)؛ در AudioWorkflow جدا ساخته می‌شود و ۱ اعتبار جدا دارد. خالی = بدون اسلاید صوتی */
+  audio?: { credit: "plan" | "bonus" | "none"; day: string };
+  /** پادکست دو‌گوینده همراه ارائه (AudioWorkflow جدا؛ ۱ اعتبار جدا). خالی = بدون پادکست */
+  podcast?: { credit: "plan" | "bonus" | "none"; day: string };
 }
