@@ -24,7 +24,6 @@ import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
 import { fetchLinkSource, findLinkInText, linkCapNote, linkEnabled, linkLimitHit } from "./link-source";
-import { handleSciPosterCallback, sciPosterIntercept, showSciPosterCard } from "./sci-poster-bot";
 
 /** مربع رنگی کنار نام تم در دکمه‌های تلگرام (دکمه‌ی اینلاین تصویر نمی‌گیرد) */
 const THEME_DOT: Record<string, string> = { ocean: "🟦", forest: "🟩", sunset: "🟧", royal: "🟪", violet: "🟣", midnight: "⬛" };
@@ -393,12 +392,10 @@ async function handleCallback(env: Env, cq: any) {
     if (a === "inv") return await showInvite(env, chatId, userId);
     if (a === "site") return await showSite(env, chatId, userId);
     if (a === "admin" && isAdmin(env, userId)) return await handleAdmin(env, chatId, "/admin", [], "/admin", userId);
-    if (a === "poster" && isAdmin(env, userId)) return await showSciPosterCard(env, chatId, userId);
     return;
   }
   if (act === "bc") return await handleBroadcastCallback(env, cq);
   if (act === "af") return await handleAdminFileCallback(env, cq);
-  if (act === "sp") return await handleSciPosterCallback(env, cq); // پوستر علمی چاپی (فقط مدیر)
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
   if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
   if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
@@ -530,7 +527,7 @@ function homeKb(env: Env, tgId: number, admin: boolean) {
     [{ text: "📁 فایل‌های من", callback_data: "h:files" }, { text: "🎁 دعوت دوستان", callback_data: "h:inv" }],
     [{ text: "🌐 سایت و خرید پلن", callback_data: "h:site" }, { text: "💬 پشتیبانی", url: supportLink(tgId) }],
   ];
-  if (admin) rows.push([{ text: "🛠 پنل مدیریت", callback_data: "h:admin" }, { text: "🔬 پوستر علمی چاپی", callback_data: "h:poster" }]);
+  if (admin) rows.push([{ text: "🛠 پنل مدیریت", callback_data: "h:admin" }]);
   return kb(rows);
 }
 
@@ -618,8 +615,6 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   const isNew = await touchUser(env, userId, msg.from.username, name).catch((e) => { console.error("touchUser", e); return false; });
   if (!admin) await noteActive(env, userId, msg.from.username, name).catch((e) => console.error("noteActive", e)); // فهرست «کاربران اخیر» مدیر؛ خود مدیرها در آن نمی‌آیند
 
-  // پوستر علمی چاپی (فقط مدیر): /poster، و پیام (متن/فایل) بعد از «ارسال متن مقاله»؛ هر دستور دیگر ورودی در انتظار را پاک می‌کند
-  if (admin && (await sciPosterIntercept(env, msg, chatId, userId, uid, text, cmd).catch((e) => { console.error("sci poster", e); return false; }))) return;
   if (admin && ADMIN_CMDS.has(cmd)) return await handleAdmin(env, chatId, cmd, args, text, userId);
   // ورودی در انتظار پنل مدیر (جستجو، مقدار اعتبار، متن پیام…): پیام متنی بعدی مدیر همان است
   if (admin && !cmd && text && !msg.document && !msg.photo && (await handleAdminInput(env, chatId, userId, text).catch((e) => { console.error("admin input", e); return false; }))) return;

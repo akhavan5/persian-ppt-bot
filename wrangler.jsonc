@@ -48,7 +48,6 @@
     // اسلاید صوتی و پادکست دو‌گوینده (Gemini TTS؛ همراه ارائه یا با دکمه‌ی زیر ارائه)
     { "name": "persian-ppt-audio", "binding": "AUDIO_WORKFLOW", "class_name": "AudioWorkflow" },
     // پوستر و جزوه‌ی Word که بعد از ساخت ارائه با دکمه‌ی زیر ارائه (تلگرام، سایت، Mini App) خواسته می‌شوند
-    { "name": "persian-ppt-extra", "binding": "EXTRA_WORKFLOW", "class_name": "ExtraWorkflow" },
-    { "name": "persian-ppt-sciposter", "binding": "SCI_POSTER_WORKFLOW", "class_name": "SciPosterWorkflow" }
+    { "name": "persian-ppt-extra", "binding": "EXTRA_WORKFLOW", "class_name": "ExtraWorkflow" }
   ]
 }
