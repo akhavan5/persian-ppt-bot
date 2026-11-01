@@ -1114,7 +1114,8 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
         else -> f.slides.fa() + " اسلاید"
     }
     SurfaceCard {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             IconTile(icon, brush, 46.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(f.title.ifBlank { "بدون عنوان" }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -1123,6 +1124,8 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                 )
             }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
             if (f.poster) {
                 IconButton(onClick = { vm.openViewer(Viewer.Poster(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "نمایش پوستر") }
             } else if (!f.handout && f.audio.isEmpty()) {
@@ -1136,6 +1139,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             }
             IconButton(onClick = { shareOpen = true }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "ارسال") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "دانلود") }
+        }
         }
         if (f.audio == "podcast" && showPlayer) {
             PodcastPlayerCard(f.id, f.title, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp), autoStart = true)
@@ -1179,7 +1183,8 @@ private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
         else -> if (f.slides > 0) f.slides.fa() + " اسلاید" else "ارائه"
     }
     SurfaceCard {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             IconTile(icon, brush, 46.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(f.title.ifBlank { f.name.ifBlank { "بدون عنوان" } }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -1188,12 +1193,15 @@ private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                 )
             }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
             if (f.kind == "podcast") {
                 IconButton(onClick = { showPlayer = !showPlayer }) { AppIcon(if (showPlayer) AppIcons.Close else PLAY_ICON, tint = cs.primary, description = if (showPlayer) "بستن پلیر" else "پخش پادکست") }
             }
             IconButton(onClick = { confirm = true }) { AppIcon(AppIcons.Delete, tint = cs.onSurfaceVariant, description = "حذف از گوشی") }
             IconButton(onClick = { shareOpen = true }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "ارسال") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "ذخیره در دانلودها") }
+        }
         }
         if (f.kind == "podcast" && showPlayer) {
             PodcastPlayerCard(f.id, f.title.ifBlank { f.name }, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp), autoStart = true)
