@@ -4,7 +4,7 @@ import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
 import { BRAND, CSS, LANDINGS_FOR_POST, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
-const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: موضوع پاورپوینت جالب برای مدرسه و دانشگاه، فونت فارسی، جدول فارسی در اسلاید، نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، اینفوگرافیک و جزوه، تبدیل لینک، Excel و عکس به پاورپوینت، پرامپت ساخت پاورپوینت، ساخت پاورپوینت با چت جی پی تی و مقایسه‌ی صادقانه‌ی ابزارها.";
+const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: موضوع پاورپوینت جالب برای مدرسه و دانشگاه، فونت فارسی، جدول فارسی در اسلاید، رفع جدا شدن حروف فارسی در پاورپوینت، نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، اینفوگرافیک و جزوه، تبدیل لینک، Excel و عکس به پاورپوینت، پرامپت ساخت پاورپوینت، ساخت پاورپوینت با چت جی پی تی و مقایسه‌ی صادقانه‌ی ابزارها.";
 
 const EXTRA_CSS = `
 .meta{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;color:var(--muted);font-size:.86rem;margin:0 0 18px}
@@ -96,6 +96,18 @@ const NEW_POST_RELATED: Record<string, string[]> = {
   "ai-powerpoint-prompt-persian": ["persian-table-in-slide"],
 };
 for (const [post, slugs] of Object.entries(NEW_POST_RELATED)) MORE_POST_RELATED[post] = [...new Set([...(MORE_POST_RELATED[post] ?? []), ...slugs])];
+
+// ۱۰ آبان ۱۴۰۵ (۳): لینک‌دهی دوطرفه‌ی مقاله‌ی «جدا شدن حروف فارسی در پاورپوینت» با مقاله‌های رفع مشکل
+const FIX_POST_RELATED: Record<string, string[]> = {
+  "fix-persian-powerpoint-broken": ["persian-letters-separated-powerpoint"],
+  "persian-rtl-slides": ["persian-letters-separated-powerpoint"],
+  "best-persian-font-powerpoint": ["persian-letters-separated-powerpoint"],
+  "english-in-persian-powerpoint-fix": ["persian-letters-separated-powerpoint"],
+  "persian-powerpoint-design": ["persian-letters-separated-powerpoint"],
+  "persian-table-in-slide": ["persian-letters-separated-powerpoint"],
+  "photo-to-powerpoint-ocr-tips": ["persian-letters-separated-powerpoint"],
+};
+for (const [post, slugs] of Object.entries(FIX_POST_RELATED)) MORE_POST_RELATED[post] = [...new Set([...(MORE_POST_RELATED[post] ?? []), ...slugs])];
 
 const xml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 

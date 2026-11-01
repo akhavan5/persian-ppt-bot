@@ -339,6 +339,41 @@ const NEW_RELATED: Record<string, string[]> = {
 };
 for (const [page, slugs] of Object.entries(NEW_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
 
+// ۱۰ آبان ۱۴۰۵ (۳): صفحه‌های «موضوع برای پاورپوینت» و «پاورپوینت صوتی و پادکست» و مقاله‌ی «جدا شدن حروف فارسی»
+const TOPIC_AUDIO_ARTICLES: Record<string, string[]> = {
+  "powerpoint-topics": ["presentation-topic-ideas", "simple-powerpoint-topics", "school-presentation-topics", "ai-powerpoint-topic-tips", "how-many-slides", "self-introduction-presentation-sample"],
+  "audio-slide-podcast": ["class-presentation-tips", "how-to-defend-your-presentation", "handout-vs-slides-vs-infographic", "ai-powerpoint-step-by-step"],
+  "persian-font-download": ["persian-letters-separated-powerpoint"],
+  "word-to-pptx": ["persian-letters-separated-powerpoint"],
+  "text-to-pptx": ["persian-letters-separated-powerpoint"],
+  "mobile-powerpoint-maker": ["persian-letters-separated-powerpoint"],
+  "persian-powerpoint-templates": ["persian-letters-separated-powerpoint"],
+  free: ["persian-letters-separated-powerpoint"],
+  "ppt-saz": ["persian-letters-separated-powerpoint"],
+  "school-presentation": ["presentation-topic-ideas"],
+  student: ["presentation-topic-ideas"],
+};
+for (const [page, slugs] of Object.entries(TOPIC_AUDIO_ARTICLES)) ARTICLES_FOR[page] = [...new Set([...(ARTICLES_FOR[page] ?? []), ...slugs])];
+
+const TOPIC_AUDIO_RELATED: Record<string, string[]> = {
+  student: ["powerpoint-topics", "audio-slide-podcast"],
+  teacher: ["powerpoint-topics", "audio-slide-podcast"],
+  "konkur-presentation": ["powerpoint-topics", "audio-slide-podcast"],
+  "school-presentation": ["powerpoint-topics"],
+  "ready-made-powerpoint": ["powerpoint-topics"],
+  "slide-maker": ["powerpoint-topics", "audio-slide-podcast"],
+  free: ["powerpoint-topics", "audio-slide-podcast"],
+  "ppt-saz": ["audio-slide-podcast"],
+  "ai-powerpoint-maker": ["powerpoint-topics", "audio-slide-podcast"],
+  "online-powerpoint-maker": ["powerpoint-topics"],
+  "telegram-bot": ["audio-slide-podcast"],
+  "speaker-notes": ["audio-slide-podcast"],
+  "handout-maker": ["audio-slide-podcast"],
+  "infographic-maker": ["audio-slide-podcast"],
+  "thesis-defense": ["audio-slide-podcast"],
+};
+for (const [page, slugs] of Object.entries(TOPIC_AUDIO_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
+
 /** مقاله → صفحه‌های فرودی که به آن لینک می‌دهند؛ برای لینک برگشتی از مقاله به صفحه‌های ابزار (لینک‌دهی داخلی دوطرفه). */
 export const LANDINGS_FOR_POST: Map<string, string[]> = (() => {
   const m = new Map<string, string[]>();
@@ -437,7 +472,7 @@ export function renderLanding(p: Page, SITE: string): string {
     <h1>${esc(p.h1[0])}<em>${esc(p.h1[1])}</em>${esc(p.h1[2])}</h1>
     <p class="lead">${esc(p.lead)}</p>
     <div class="cta-row"><a class="btn" href="/#topic">${esc(p.cta)}</a><a class="btn ghost" href="/#pricing">مشاهده‌ی تعرفه</a></div>
-    <div class="trust"><span dir="rtl">🆓&#8207; ۵ ارائه‌ی رایگانِ ثبت‌نام &#8207;+ روزی ۱ اعتبار رایگان</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
+    <div class="trust"><span dir="rtl">🆓&#8207; ۵ ارائه‌ی رایگانِ ثبت‌نام &#8207;+ ۱ اعتبار رایگان در روز، وقتی اعتبارت تمام شود</span><span>🔤 راست‌به‌چپ و فونت فارسی</span><span>✏️ کاملاً قابل‌ویرایش</span></div>
     <p class="upd">آخرین به‌روزرسانی: <time datetime="${p.updated}">${faDate(p.updated)}</time></p>
   </div>
   <article>
