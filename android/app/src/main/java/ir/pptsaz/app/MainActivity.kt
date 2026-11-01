@@ -319,13 +319,9 @@ class MainActivity : ComponentActivity() {
                                         startPurchase(e.sku) { m -> say(m) }
                                     }
                                 }
-                                is Event.NativeUpdate -> try {
-                                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("myket://check-update?id=" + BuildConfig.APPLICATION_ID)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                                    if (e.manual) say("بررسی نسخه در مایکت انجام شد؛ اگر نسخه‌ی جدیدی باشد پیشنهاد می‌شود")
-                                } catch (ex: ActivityNotFoundException) {
-                                    // کلاینت مایکت (۹.۸.۹ به بعد) نصب نیست: فقط در بررسی دستی صفحه‌ی اپ را باز کن
-                                    if (e.manual) try { CustomTabsIntent.Builder().build().launchUrl(ctx, Uri.parse(e.url)) } catch (_: ActivityNotFoundException) { say("مرورگری برای باز کردن لینک پیدا نشد") }
-                                }
+                                is Event.NativeUpdate -> StoreUpdate.check(this@MainActivity, e.manual, e.url,
+                                    say = { say(it) }, needUpdate = { vm.showUpdateDialog() }, openUrl = { vm.openUrl(it) })
+                                is Event.StartUpdate -> StoreUpdate.install(this@MainActivity, e.url) { vm.openUrl(it) }
                                 is Event.OpenUrl -> try {
                                     CustomTabsIntent.Builder().build().launchUrl(ctx, Uri.parse(e.url))
                                 } catch (ex: ActivityNotFoundException) {

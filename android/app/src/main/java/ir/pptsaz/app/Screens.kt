@@ -178,7 +178,7 @@ fun Root(st: UiState, vm: AppViewModel, snack: SnackbarHostState) {
                     onDismissRequest = { vm.dismissUpdate() },
                     title = { Text("نسخه‌ی جدید موجود است") },
                     text = { Text("نسخه‌ی تازه‌ی پاورپوینت‌ساز منتشر شده است. برای استفاده از امکانات و اصلاحات جدید، اپ را به‌روزرسانی کنید.") },
-                    confirmButton = { TextButton(onClick = { vm.dismissUpdate(); vm.openUrl(cfg.updateUrl) }) { Text("به‌روزرسانی") } },
+                    confirmButton = { TextButton(onClick = { vm.dismissUpdate(); vm.startUpdate(cfg.updateUrl) }) { Text("به‌روزرسانی") } },
                     dismissButton = { TextButton(onClick = { vm.dismissUpdate() }) { Text("بعداً") } },
                 )
             }

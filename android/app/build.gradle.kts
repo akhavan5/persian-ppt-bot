@@ -114,6 +114,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)
     "bazaarImplementation"("com.github.cafebazaar.Poolakey:poolakey:2.2.0")
+    // به‌روزرسانی درون‌برنامه‌ای بازار (فقط نسخه‌ی بازار)
+    "bazaarImplementation"("com.github.cafebazaar:bazaarUpdater:1.1.2")
     // پرداخت درون‌برنامه‌ای مایکت (فقط نسخه‌ی مایکت)
     "myketImplementation"("com.github.myketstore:myket-billing-client:1.6")
     // بررسی پس‌زمینه‌ی پایان ساخت ارائه (اعلان محلی)

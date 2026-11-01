@@ -96,6 +96,8 @@ sealed interface Event {
     data class Toast(val msg: String) : Event
     data class OpenUrl(val url: String) : Event
     /** درخواست بررسی نسخه‌ی جدید از خود فروشگاه (مایکت). url = لینک جایگزین اگر مایکت نصب نبود. */
+    /** کاربر «به‌روزرسانی» را زد: نصب درون‌برنامه‌ای (بازار) یا باز کردن صفحه‌ی اپ. */
+    data class StartUpdate(val url: String) : Event
     data class NativeUpdate(val url: String, val manual: Boolean) : Event
     /** فایل دانلود شد. share = true یعنی کاربر «اشتراک‌گذاری» را زده است. */
     data class FileReady(val saved: Saved, val share: Boolean) : Event
@@ -1010,6 +1012,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(updateDialog = true) }
         }
     }
+
+    fun showUpdateDialog() { _state.update { it.copy(updateDialog = true) } }
+
+    fun startUpdate(url: String) { refreshOnNextResume = true; _events.trySend(Event.StartUpdate(url)) }
 
     fun dismissUpdate() {
         _state.update { it.copy(updateDialog = false) }

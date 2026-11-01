@@ -10,6 +10,7 @@ dependencyResolutionManagement {
             url = uri("https://jitpack.io")
             content {
                 includeGroup("com.github.cafebazaar.Poolakey")
+                includeGroup("com.github.cafebazaar") // BazaarUpdater
                 includeGroup("com.github.myketstore")
             }
         }
