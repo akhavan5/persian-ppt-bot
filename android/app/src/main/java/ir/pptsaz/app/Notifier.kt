@@ -1,6 +1,7 @@
 package ir.pptsaz.app
 
 import android.app.NotificationChannel
+import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -79,22 +80,75 @@ object Notifier {
 
     private fun progressId(jobId: String) = jobId.hashCode() xor 0x5A5A5A
 
-    /** اعلان ثابت و بی‌صدای «در حال ساخت» با نوار پیشرفت نامعین؛ با پایان کار یا باز شدن اپ برداشته می‌شود. */
-    fun progress(ctx: Context, jobId: String, message: String) {
+    /** درصد تقریبی هر مرحله؛ همان عددهای نوار پیشرفت داخل اپ (Screens.kt) تا اعلان و صفحه یکی باشند. */
+    internal fun percentOf(step: Int, extra: Boolean): Int {
+        val base = intArrayOf(0, 15, 45, 80)[step.coerceIn(0, 3)]
+        return (base + if (extra) 12 else 0).coerceAtMost(95)
+    }
+
+    /**
+     * اعلان «پیشرفت زنده» برای ساخت ارائه.
+     * - اندروید ۱۶ به بالا: Notification.ProgressStyle با سه بخش (تحلیل، ساخت اسلاید، نهایی‌سازی) و درخواست «Live Update»
+     *   تا روی صفحه‌ی قفل و نوار وضعیت به‌صورت چیپ نمایش داده شود (اگر کاربر در تنظیمات اجازه نداده باشد، اعلان عادی می‌ماند).
+     * - نسخه‌های قدیمی‌تر: همان اعلان ثابت و بی‌صدا، ولی با نوار درصدی به‌جای نوار نامعین.
+     * با پایان کار یا باز شدن اپ برداشته می‌شود. step = ۰ یعنی هنوز در صف / مرحله‌ی نامشخص.
+     */
+    fun progress(ctx: Context, jobId: String, message: String, step: Int = 0, extra: Boolean = false) {
         val nm = NotificationManagerCompat.from(ctx)
         if (!nm.areNotificationsEnabled()) return
         ensureChannel(ctx)
+        val text = message.ifBlank { "کمی صبر کنید؛ آماده که شد خبرتان می‌کنیم." }.take(120)
+        val pct = percentOf(step, extra)
+        val indeterminate = step <= 0
+        val intent = pending(ctx, jobId, "open", 3)
+        try {
+            if (Build.VERSION.SDK_INT >= 36) {
+                nm.notify(progressId(jobId), liveBuilder(ctx, text, pct, indeterminate, step, intent).build())
+                return
+            }
+        } catch (_: SecurityException) {
+            return
+        } catch (_: Throwable) {
+            // اگر ProgressStyle روی بعضی دستگاه‌ها خطا داد، به اعلان ساده برمی‌گردیم
+        }
         val b = NotificationCompat.Builder(ctx, CHANNEL_PROGRESS)
             .setSmallIcon(R.drawable.ic_stat_notify)
             .setContentTitle("در حال ساخت ارائه…")
-            .setContentText(message.ifBlank { "کمی صبر کنید؛ آماده که شد خبرتان می‌کنیم." }.take(120))
-            .setContentIntent(pending(ctx, jobId, "open", 3))
-            .setProgress(0, 0, true)
+            .setContentText(text)
+            .setContentIntent(intent)
+            .setProgress(100, pct, indeterminate)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
+        if (!indeterminate) b.setSubText("مرحله $step از ۳".toFa())
         try { nm.notify(progressId(jobId), b.build()) } catch (_: SecurityException) {}
     }
+
+    @android.annotation.SuppressLint("NewApi")
+    private fun liveBuilder(
+        ctx: Context, text: String, pct: Int, indeterminate: Boolean, step: Int, intent: PendingIntent,
+    ): Notification.Builder {
+        val seg = { len: Int -> Notification.ProgressStyle.Segment(len) }
+        val style = Notification.ProgressStyle()
+            .setStyledByProgress(true)
+            .setProgressIndeterminate(indeterminate)
+            .setProgressSegments(listOf(seg(15), seg(30), seg(35), seg(20))) // صف/تحلیل، ساخت، تصویر و طراحی، نهایی‌سازی
+            .setProgress(pct)
+        return Notification.Builder(ctx, CHANNEL_PROGRESS)
+            .setSmallIcon(R.drawable.ic_stat_notify)
+            .setContentTitle("در حال ساخت ارائه…")
+            .setContentText(text)
+            .setContentIntent(intent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_PROGRESS)
+            .setStyle(style)
+            .setShortCriticalText(if (indeterminate) "…" else "$pct٪".toFa())
+            .setRequestPromotedOngoing(true)
+    }
+
+    private fun String.toFa(): String =
+        map { if (it in '0'..'9') '۰' + (it - '0') else it }.joinToString("")
 
     fun cancelProgress(ctx: Context, jobId: String) {
         NotificationManagerCompat.from(ctx).cancel(progressId(jobId))
@@ -149,7 +203,10 @@ class JobWatchWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                     if (!AppForeground.on) Notifier.failed(applicationContext, id, j.optString("message"))
                     return Result.success()
                 }
-                else -> if (!AppForeground.on) Notifier.progress(applicationContext, id, j.optString("message"))
+                else -> if (!AppForeground.on) {
+                    val msg = j.optString("message")
+                    Notifier.progress(applicationContext, id, msg, jobStepOf(msg))
+                }
             }
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 404) return Result.success() // نشست تمام شده یا کار پاک شده

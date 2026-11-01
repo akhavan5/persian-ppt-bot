@@ -441,7 +441,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             _state.update { it.copy(job = JobState(id, msg, step = step, extra = extra, startedAt = jobT0)) }
                             // اعلان «در حال ساخت» فقط وقتی اپ جلوی چشم نیست
                             val app = getApplication<Application>()
-                            if (AppForeground.on) Notifier.cancelProgress(app, id) else Notifier.progress(app, id, msg)
+                            if (AppForeground.on) Notifier.cancelProgress(app, id) else Notifier.progress(app, id, msg, step, extra)
                         }
                     }
                 } catch (e: ApiException) {
