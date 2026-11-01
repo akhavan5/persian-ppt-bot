@@ -92,6 +92,8 @@ nav button.on{color:var(--btn);font-weight:700}
 .bar{height:8px;border-radius:99px;background:var(--sec);border:1px solid var(--line);overflow:hidden;margin-top:10px}
 .bar i{display:block;height:100%;width:0;background:var(--btn);border-radius:99px;transition:width .6s}
 .bar.ind i{width:35%;animation:ind 1.1s ease-in-out infinite alternate}
+.bar.sm{height:6px;margin-top:6px}
+.bar:not(.ind) i{min-width:6px}
 @keyframes ind{from{margin-inline-start:0}to{margin-inline-start:65%}}
 .steps{display:flex;justify-content:space-between;font-size:.78rem;color:var(--hint);margin-top:6px}
 .steps .on{color:var(--btn);font-weight:700}
@@ -199,8 +201,14 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <button class="btn ghost" id="doneAudio" type="button" style="margin-top:8px" hidden>🔊 ارسال اسلاید صوتی به چت</button>
         <button class="btn ghost" id="donePodcast" type="button" style="margin-top:8px" hidden>🎙 ارسال پادکست به چت</button>
         <div id="doneAudioMore" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
-        <div class="muted" id="doneAudioWait" hidden style="margin-top:8px">🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</div>
-        <div class="muted" id="donePodcastWait" hidden style="margin-top:8px">🎙 پادکست در حال ساخت است (چند دقیقه)…</div>
+        <div id="doneAudioWait" hidden style="margin-top:8px">
+          <div class="muted" id="doneAudioWaitTxt">🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</div>
+          <div class="bar sm ind" id="doneAudioBar" role="progressbar" aria-label="پیشرفت ساخت اسلاید صوتی" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+        </div>
+        <div id="donePodcastWait" hidden style="margin-top:8px">
+          <div class="muted" id="donePodcastWaitTxt">🎙 پادکست در حال ساخت است (چند دقیقه)…</div>
+          <div class="bar sm ind" id="donePodcastBar" role="progressbar" aria-label="پیشرفت ساخت پادکست" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+        </div>
          <div class="ppList" id="donePodcastPlayers"></div>
         <div class="err" id="doneWarn" hidden></div>
         <div id="doneExtraJobs"></div>
@@ -991,15 +999,21 @@ function podcastPlayer(id, label, autoplay = false) {
 
 // اسلاید صوتی و پادکست همراه: در Workflow جدا چند دقیقه طول می‌کشند؛ وضعیتشان جدا خوانده می‌شود و دکمه‌ی «ارسال به چت» هرکدام وقتی آماده شد نمایش داده می‌شود
 let audioTracking = 0;
+// نوار پیشرفت کار صوتی: درصد عددی ⇒ نوار پر می‌شود؛ هنوز درصدی نیامده (در صف) ⇒ نوار نامعین
+function setBar(bar, p) {
+  const i = bar.firstElementChild;
+  if (typeof p === "number") { bar.classList.remove("ind"); i.style.width = p + "%"; bar.setAttribute("aria-valuenow", String(p)); }
+  else { bar.classList.add("ind"); i.style.width = ""; bar.removeAttribute("aria-valuenow"); }
+}
 function trackAudio(s) {
   const my = ++audioTracking;
   $("#doneAudioMore").replaceChildren(); $("#donePodcastPlayers").querySelectorAll(".pp").forEach((p) => p.dispose && p.dispose()); $("#donePodcastPlayers").replaceChildren();
   const kinds = [
-    { id: s.audioId, state: s.audio, btn: "#doneAudio", wait: "#doneAudioWait", part: "صدای اسلاید", err: "ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگشت." },
-    { id: s.podcastId, state: s.podcast, btn: "#donePodcast", wait: "#donePodcastWait", part: "پادکست، قسمت", err: "ساخت پادکست ناموفق بود؛ اعتبارش برگشت." },
+    { id: s.audioId, state: s.audio, btn: "#doneAudio", wait: "#doneAudioWait", txt: "#doneAudioWaitTxt", bar: "#doneAudioBar", part: "صدای اسلاید", err: "ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگشت." },
+    { id: s.podcastId, state: s.podcast, btn: "#donePodcast", wait: "#donePodcastWait", txt: "#donePodcastWaitTxt", bar: "#donePodcastBar", part: "پادکست، قسمت", err: "ساخت پادکست ناموفق بود؛ اعتبارش برگشت." },
   ];
   for (const k of kinds) {
-    show($(k.btn), false); show($(k.wait), k.state === "pending");
+    show($(k.btn), false); show($(k.wait), k.state === "pending"); setBar($(k.bar));
     if (k.state === "pending" && k.id) pollAudio(my, k);
   }
 }
@@ -1009,7 +1023,7 @@ async function pollAudio(my, k) {
     try { r = await api("/api/jobs/" + k.id); }
     catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
     if (my !== audioTracking) return;
-    if (r.state === "running") { $(k.wait).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); await sleep(4000); continue; } // درصد را فقط کار صوتی می‌فرستد
+    if (r.state === "running") { $(k.txt).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); setBar($(k.bar), typeof r.progress === "number" ? r.progress : undefined); await sleep(4000); continue; } // درصد را فقط کار صوتی می‌فرستد
     show($(k.wait), false); loadFiles();
     if (r.state === "done" && r.ids && r.ids.length) {
       const b = $(k.btn); show(b, true); b.onclick = (e) => sendToChat(r.ids[0], e.currentTarget);
@@ -1079,16 +1093,23 @@ async function makeExtra(f, kind, layout, btn) {
 }
 // وضعیت کار در Workflow جدا چند دقیقه طول می‌کشد؛ پیام پیشرفت بالای فهرست دیده می‌شود، در پایان فایل تازه در همین فهرست می‌آید (اگر اپ بسته باشد، ربات خبر می‌دهد)
 async function trackExtra(jobId, kind) {
-  const line = h("div", { class: "xj" }, EXTRA_BTNS[kind][0][0].split(" ")[0] + " در صف است…");
+  // اسلاید صوتی و پادکست درصد عددی هم دارند؛ برایشان نوار پیشرفت زیر متن نشان داده می‌شود
+  const withBar = kind === "audio" || kind === "podcast";
+  const mk = () => {
+    const txt = h("div", {}, EXTRA_BTNS[kind][0][0].split(" ")[0] + " در صف است…");
+    const bar = withBar ? h("div", { class: "bar sm ind", role: "progressbar", "aria-label": kind === "podcast" ? "پیشرفت ساخت پادکست" : "پیشرفت ساخت اسلاید صوتی", "aria-valuemin": "0", "aria-valuemax": "100" }, h("i")) : null;
+    return { line: h("div", { class: "xj" }, txt, bar), txt, bar };
+  };
+  const a = mk(), b = mk(), line = a.line, line2 = b.line;
   $("#extraJobs").append(line);
-  const line2 = line.cloneNode(true); $("#doneExtraJobs").append(line2); // همان وضعیت زیر کارت «ارائه آماده است» هم دیده شود
-  const setLine = (t) => { line.textContent = t; line2.textContent = t; };
+  $("#doneExtraJobs").append(line2); // همان وضعیت زیر کارت «ارائه آماده است» هم دیده شود
+  const setLine = (t, p) => { for (const x of [a, b]) { x.txt.textContent = t; if (x.bar) setBar(x.bar, p); } };
   const endLine = () => { line.remove(); line2.remove(); };
   for (let i = 0; i < 240; i++) {
     let r;
     try { r = await api("/api/jobs/" + jobId); }
     catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
-    if (r.state === "running") { setLine(r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : "")); await sleep(4000); continue; }
+    if (r.state === "running") { setLine(r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""), typeof r.progress === "number" ? r.progress : undefined); await sleep(4000); continue; }
     if (r.state === "done" && r.ids && r.ids.length) { TG.haptic("success"); toast("✅ آماده شد؛ از فهرست بگیر."); } else { TG.haptic("error"); toast("⚠️ " + (r.message || "ساخت ناموفق بود؛ اعتبارش برگردانده شد.")); }
     endLine(); refreshMe(); loadFiles(); return;
   }
