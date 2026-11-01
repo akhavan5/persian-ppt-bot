@@ -207,6 +207,9 @@ export interface IgImage { data: Uint8Array; mime: "image/png" | "image/jpeg"; e
 /** سقف تلگرام برای sendPhoto ۱۰ مگابایت است؛ بزرگ‌تر از این به JPEG تبدیل می‌شود */
 const MAX_PNG = 9_000_000;
 
+/** مقیاس رندر: پوستر افقی (عرض بسیار زیاد) با مقیاس ۱ کافی است و حجم را حدود نصف می‌کند؛ پوستر عمودی (۱۲۰۰px) با ۱.۵ تیز می‌ماند */
+const renderScale = (width: number) => (width > 3000 ? 1 : 1.5);
+
 export async function renderInfographicImage(env: Env, html: string, width: number): Promise<IgImage> {
   if (!hasBrowser(env)) throw new Error("Browser Rendering (BROWSER) تعریف نشده است");
   if (useBindingForRender(env)) {
@@ -216,17 +219,17 @@ export async function renderInfographicImage(env: Env, html: string, width: numb
       console.error("poster binding failed, using backup accounts", String(e instanceof Error ? e.message : e).slice(0, 200));
     }
   }
-  const png = await remoteScreenshot(env, html, { width, scale: 1.5, type: "png" });
+  const png = await remoteScreenshot(env, html, { width, scale: renderScale(width), type: "png" });
   if (png.byteLength < 2000) throw new Error("screenshot is empty");
   if (png.byteLength <= MAX_PNG) return { data: png, mime: "image/png", ext: "png" };
-  return { data: await remoteScreenshot(env, html, { width, scale: 1.5, type: "jpeg", quality: 92 }), mime: "image/jpeg", ext: "jpg" };
+  return { data: await remoteScreenshot(env, html, { width, scale: renderScale(width), type: "jpeg", quality: 92 }), mime: "image/jpeg", ext: "jpg" };
 }
 
 async function renderViaBinding(env: Env, html: string, width: number): Promise<IgImage> {
   const browser = await launchWithRetry(env, hasRemoteBrowser(env));
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width, height: 900, deviceScaleFactor: 1.5 });
+    await page.setViewport({ width, height: 900, deviceScaleFactor: renderScale(width) });
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 40_000 });
     await page.evaluate("document.fonts.ready.then(function(){return 1})"); // فونت وب کامل بارگذاری شود
     const png = new Uint8Array((await page.screenshot({ type: "png", fullPage: true })) as any);
