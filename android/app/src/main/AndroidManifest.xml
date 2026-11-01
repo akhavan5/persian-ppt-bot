@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -9,6 +10,8 @@
     <!-- پخش پادکست در پس‌زمینه (سرویس پیش‌زمینه‌ی رسانه‌ای + MediaSession) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- پیگیری ساخت ارائه با Worker پیش‌زمینه (WorkManager، نوع dataSync) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".PptSazApp"
@@ -120,6 +123,11 @@
         <receiver
             android:name=".PodcastActionReceiver"
             android:exported="false" />
+        <!-- اندروید ۱۴ به بعد نوع سرویس پیش‌زمینه‌ی WorkManager باید در manifest اعلام شود -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
         <!-- ویجت صفحه‌ی اصلی: «ارائه‌ی جدید» و اعتبار باقی‌مانده (Glance) -->
         <receiver
             android:name=".PptWidgetReceiver"

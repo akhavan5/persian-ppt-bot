@@ -123,7 +123,7 @@ private val AUDIO_MIMES = setOf(
     "audio/ogg", "audio/opus", "audio/flac", "audio/x-flac", "audio/aac", "audio/amr",
 )
 
-/** حداکثر مدتی که اپ در حالت باز، وضعیت ساخت را (حتی با قطعی اینترنت) پیگیری می‌کند؛ هم‌اندازه‌ی JobWatcher پس‌زمینه (≈ ۲۰ دقیقه). */
+/** حداکثر مدتی که اپ در حالت باز، وضعیت ساخت را (حتی با قطعی اینترنت) پیگیری می‌کند؛ کمی کمتر از JobWatcher پس‌زمینه (≈ ۲۵ دقیقه). */
 private const val MAX_WATCH_MS = 20L * 60 * 1000
 
 /** حداقل فاصله‌ی دو بار «تازه‌کردن حساب» هنگام برگشت به اپ (ثانیه‌های کم بین باز و بسته‌شدن‌های پشت‌سرهم درخواست اضافه نمی‌سازد). */
@@ -366,7 +366,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(busy = false) }
                 if (id.isEmpty()) toast("شروع ساخت انجام نشد") else {
                     watch(id, fresh = true)
-                    JobWatcher.schedule(getApplication(), id) // اگر اپ بسته شد، با اعلان خبر می‌دهیم
+                    JobWatcher.schedule(getApplication(), id) // Worker پیش‌زمینه: حتی اگر اپ بسته شد، پیشرفت و اعلان پایان را پیگیری می‌کند
                     _events.trySend(Event.AskNotify)
                 }
             } catch (e: ApiException) {
@@ -439,9 +439,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             if (st > 0) { if (st >= step) step = st }
                             else if (step >= 3 && msg.isNotBlank() && !msg.contains("صف")) extra = true
                             _state.update { it.copy(job = JobState(id, msg, step = step, extra = extra, startedAt = jobT0)) }
-                            // اعلان «در حال ساخت» فقط وقتی اپ جلوی چشم نیست
-                            val app = getApplication<Application>()
-                            if (AppForeground.on) Notifier.cancelProgress(app, id) else Notifier.progress(app, id, msg, step, extra)
+                            // اعلان پیشرفت (اعلان سرویس پیش‌زمینه‌ی Worker) را به‌روز نگه می‌داریم
+                            Notifier.progress(getApplication<Application>(), id, msg, step, extra)
                         }
                     }
                 } catch (e: ApiException) {
@@ -610,7 +609,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissJob() {
         pollJob?.cancel()
-        _state.value.job?.let { Notifier.cancelProgress(getApplication(), it.id) }
+        _state.value.job?.let {
+            JobWatcher.cancel(getApplication(), it.id)
+            Notifier.cancelProgress(getApplication(), it.id)
+        }
         _state.update { it.copy(job = null) }
     }
 

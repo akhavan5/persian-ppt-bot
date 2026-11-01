@@ -6,18 +6,19 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
+import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 /** تعداد Activityهای نمایان؛ اگر اپ جلوی چشم کاربر است اعلان نمی‌دهیم (خود صفحه وضعیت را نشان می‌دهد). */
 object AppForeground {
@@ -96,20 +97,20 @@ object Notifier {
     fun progress(ctx: Context, jobId: String, message: String, step: Int = 0, extra: Boolean = false) {
         val nm = NotificationManagerCompat.from(ctx)
         if (!nm.areNotificationsEnabled()) return
+        try { nm.notify(progressId(jobId), buildProgress(ctx, jobId, message, step, extra)) } catch (_: SecurityException) {}
+    }
+
+    /** خود اعلان پیشرفت؛ هم برای notify معمولی و هم برای اعلان سرویس پیش‌زمینه‌ی WorkManager. */
+    private fun buildProgress(ctx: Context, jobId: String, message: String, step: Int, extra: Boolean): Notification {
         ensureChannel(ctx)
         val text = message.ifBlank { "کمی صبر کنید؛ آماده که شد خبرتان می‌کنیم." }.take(120)
         val pct = percentOf(step, extra)
         val indeterminate = step <= 0
         val intent = pending(ctx, jobId, "open", 3)
-        try {
-            if (Build.VERSION.SDK_INT >= 36) {
-                nm.notify(progressId(jobId), liveBuilder(ctx, text, pct, indeterminate, step, intent).build())
-                return
+        if (Build.VERSION.SDK_INT >= 36) {
+            try { return liveBuilder(ctx, text, pct, indeterminate, step, intent).build() } catch (_: Throwable) {
+                // اگر ProgressStyle روی بعضی دستگاه‌ها خطا داد، به اعلان ساده برمی‌گردیم
             }
-        } catch (_: SecurityException) {
-            return
-        } catch (_: Throwable) {
-            // اگر ProgressStyle روی بعضی دستگاه‌ها خطا داد، به اعلان ساده برمی‌گردیم
         }
         val b = NotificationCompat.Builder(ctx, CHANNEL_PROGRESS)
             .setSmallIcon(R.drawable.ic_stat_notify)
@@ -121,7 +122,14 @@ object Notifier {
             .setOnlyAlertOnce(true)
             .setSilent(true)
         if (!indeterminate) b.setSubText("مرحله $step از ۳".toFa())
-        try { nm.notify(progressId(jobId), b.build()) } catch (_: SecurityException) {}
+        return b.build()
+    }
+
+    /** اعلان پیشرفت به‌عنوان اعلان سرویس پیش‌زمینه (نوع dataSync) برای Worker؛ همان شناسه‌ی اعلان معمولی تا فقط یک اعلان بماند. */
+    fun foregroundInfo(ctx: Context, jobId: String, message: String, step: Int = 0, extra: Boolean = false): ForegroundInfo {
+        val n = buildProgress(ctx, jobId, message, step, extra)
+        return if (Build.VERSION.SDK_INT >= 29) ForegroundInfo(progressId(jobId), n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        else ForegroundInfo(progressId(jobId), n)
     }
 
     @android.annotation.SuppressLint("NewApi")
@@ -162,18 +170,19 @@ object Notifier {
 }
 
 /**
- * اگر کاربر اپ را ببندد و پردازش اپ را سیستم متوقف کند، این کار پس‌زمینه هر ~۳۰ ثانیه وضعیت ساخت را می‌پرسد
- * (حداکثر ۴۰ بار ≈ ۲۰ دقیقه) و در پایان اعلان می‌دهد. با پایان کار از داخل اپ لغو می‌شود.
+ * پیگیری ساخت ارائه در پس‌زمینه با یک Worker بلندمدت و پیش‌زمینه (setForeground، نوع dataSync).
+ * سرویس پیش‌زمینه پردازش اپ را زنده نگه می‌دارد، پس حتی بعد از پاک شدن اپ از لیست اخیر هر ~۳ ثانیه وضعیت
+ * پرسیده می‌شود، اعلان پیشرفت زنده به‌روز می‌ماند و در پایان اعلان «آماده شد» می‌آید.
+ * با پایان کار از داخل اپ (JobWatcher.cancel) یا خودش تمام می‌شود.
  */
 object JobWatcher {
-    fun schedule(ctx: Context, jobId: String, attempt: Int = 0, delaySec: Long = 45) {
+    fun schedule(ctx: Context, jobId: String) {
         val req = OneTimeWorkRequestBuilder<JobWatchWorker>()
-            .setInitialDelay(delaySec, TimeUnit.SECONDS)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .setInputData(workDataOf("id" to jobId, "n" to attempt))
+            .setInputData(workDataOf("id" to jobId, "t0" to System.currentTimeMillis()))
             .addTag("jobwatch-$jobId")
             .build()
-        WorkManager.getInstance(ctx).enqueueUniqueWork("jobwatch-$jobId-$attempt", ExistingWorkPolicy.REPLACE, req)
+        // KEEP: اگر برای همین کار Worker در حال اجراست، دومی ساخته نمی‌شود
+        WorkManager.getInstance(ctx).enqueueUniqueWork("jobwatch-$jobId", ExistingWorkPolicy.KEEP, req)
     }
 
     fun cancel(ctx: Context, jobId: String) {
@@ -182,36 +191,81 @@ object JobWatcher {
 }
 
 class JobWatchWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    private companion object {
+        const val MAX_MS = 25L * 60 * 1000 // کل زمان پیگیری از لحظه‌ی شروع ساخت
+        const val POLL_MS = 3000L
+        const val POLL_FG_MS = 4000L // اپ جلوی چشم است: ViewModel خودش می‌پرسد، اینجا فقط مراقبیم
+    }
+
+    // اگر سیستم Worker را متوقف و دوباره اجرا کرد (مثلاً محدودیت زمانی JobScheduler)، اعلان پیش‌زمینه از همین‌جا ساخته می‌شود
+    override suspend fun getForegroundInfo(): ForegroundInfo =
+        Notifier.foregroundInfo(applicationContext, inputData.getString("id").orEmpty(), "")
+
     override suspend fun doWork(): Result {
         val id = inputData.getString("id") ?: return Result.success()
-        val n = inputData.getInt("n", 0)
-        Api.init(applicationContext)
-        try {
-            val j = Api.job(id)
-            when (j.optString("state")) {
-                "done" -> {
-                    Notifier.cancelProgress(applicationContext, id)
-                    if (!AppForeground.on) Notifier.done(applicationContext, id, j.optString("title"))
-                    // اپ بسته است: نسخه‌ی محلی را همین‌جا بی‌صدا ذخیره می‌کنیم (فایل‌های سرور بعد از ۲۴ ساعت پاک می‌شوند)
-                    val h = if (j.optString("handout") == "ok") j.optString("handoutId").ifEmpty { null } else null
-                    val p = if (j.optString("poster") == "ok") j.optString("posterId").ifEmpty { null } else null
-                    LocalFiles.autoSave(applicationContext, id, j.optString("title"), j.optInt("slides"), h, p)
-                    return Result.success()
-                }
-                "error" -> {
-                    Notifier.cancelProgress(applicationContext, id)
-                    if (!AppForeground.on) Notifier.failed(applicationContext, id, j.optString("message"))
-                    return Result.success()
-                }
-                else -> if (!AppForeground.on) {
-                    val msg = j.optString("message")
-                    Notifier.progress(applicationContext, id, msg, jobStepOf(msg))
+        val t0 = inputData.getLong("t0", System.currentTimeMillis())
+        val ctx = applicationContext
+        Api.init(ctx)
+
+        var step = 0
+        var extra = false
+        var lastKey = ""
+        // شروع سرویس پیش‌زمینه فقط وقتی اپ جلوی چشم است مجاز است؛ اگر نشد، با اعلان معمولی ادامه می‌دهیم
+        var fg = promote(id, "", 0, false)
+
+        while (System.currentTimeMillis() - t0 < MAX_MS) {
+            if (!AppForeground.on) {
+                try {
+                    val j = Api.job(id)
+                    when (j.optString("state")) {
+                        "done" -> {
+                            Notifier.cancelProgress(ctx, id)
+                            if (!AppForeground.on) Notifier.done(ctx, id, j.optString("title"))
+                            // نسخه‌ی محلی را همین‌جا بی‌صدا ذخیره می‌کنیم (فایل‌های سرور بعد از ۲۴ ساعت پاک می‌شوند)
+                            val h = if (j.optString("handout") == "ok") j.optString("handoutId").ifEmpty { null } else null
+                            val p = if (j.optString("poster") == "ok") j.optString("posterId").ifEmpty { null } else null
+                            LocalFiles.autoSave(ctx, id, j.optString("title"), j.optInt("slides"), h, p)
+                            return Result.success()
+                        }
+                        "error" -> {
+                            Notifier.cancelProgress(ctx, id)
+                            if (!AppForeground.on) Notifier.failed(ctx, id, j.optString("message"))
+                            return Result.success()
+                        }
+                        else -> {
+                            val msg = j.optString("message")
+                            val st = jobStepOf(msg)
+                            if (st > 0) { if (st >= step) step = st }
+                            else if (step >= 3 && msg.isNotBlank() && !msg.contains("صف")) extra = true
+                            val key = "$step|$extra|$msg"
+                            if (key != lastKey) {
+                                lastKey = key
+                                if (fg) fg = promote(id, msg, step, extra)
+                                if (!fg) Notifier.progress(ctx, id, msg, step, extra)
+                            }
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ApiException) {
+                    if (e.status == 401 || e.status == 404) { Notifier.cancelProgress(ctx, id); return Result.success() } // نشست تمام شده یا کار پاک شده
+                } catch (_: Exception) {
+                    // قطعی اینترنت: ساخت در سرور ادامه دارد؛ دوباره می‌پرسیم
                 }
             }
-        } catch (e: ApiException) {
-            if (e.status == 401 || e.status == 404) return Result.success() // نشست تمام شده یا کار پاک شده
+            delay(if (AppForeground.on) POLL_FG_MS else POLL_MS)
         }
-        if (n < 40) JobWatcher.schedule(applicationContext, id, n + 1, 30)
+        Notifier.cancelProgress(ctx, id)
         return Result.success()
     }
+
+    private suspend fun promote(id: String, msg: String, step: Int, extra: Boolean): Boolean =
+        try {
+            setForeground(Notifier.foregroundInfo(applicationContext, id, msg, step, extra))
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false // ForegroundServiceStartNotAllowedException (شروع از پس‌زمینه) یا نبودن مجوز
+        }
 }
