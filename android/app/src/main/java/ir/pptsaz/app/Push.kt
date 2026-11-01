@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -85,11 +86,15 @@ object Push {
         val nm = NotificationManagerCompat.from(ctx)
         if (!nm.areNotificationsEnabled()) return
         ensureChannel(ctx)
-        val i = Intent(ctx, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            if (!url.isNullOrEmpty() && url.startsWith("https://")) putExtra("push_url", url)
-        }
         val id = (System.currentTimeMillis() % Int.MAX_VALUE).toInt()
+        // لینک https دارد: مستقیم در مرورگر باز می‌شود (اپ اصلاً باز نمی‌شود)؛ بدون لینک (مثلاً اعلان هدیه): اپ باز می‌شود
+        val i = if (!url.isNullOrEmpty() && url.startsWith("https://")) {
+            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        } else {
+            Intent(ctx, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+        }
         val pi = PendingIntent.getActivity(ctx, id, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val b = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_notify)
