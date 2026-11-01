@@ -68,7 +68,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/auth/google/callback" && method === "GET") return googleCallback(env, req, url);
 
   // ورود خودکار از دکمه‌های ربات تلگرام (لینک یک‌بارمصرف که فقط به چت خود کاربر فرستاده شده)
-  if (path === "/api/auth/tg" && method === "GET") return tgLogin(env, url);
+  if (path === "/api/auth/tg" && method === "GET") return tgLogin(env, req, url);
 
   // درگاه سیزپی: انتقال به درگاه (GET) و بازگشت از درگاه (POST از مرورگر کاربر؛ بدون بررسی origin)
   if (path === "/api/pay/go" && method === "GET") return paymentGo(env, url);
@@ -376,18 +376,30 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
 
 // ---------- ورود خودکار از ربات ----------
 /** GET /api/auth/tg?t=توکن&to=buy|home — توکن فقط داخل چت تلگرامِ خود کاربر آمده؛ مصرف می‌شود، نشست ۳۰ روزه ساخته می‌شود و کاربر به سایت می‌رود */
-async function tgLogin(env: Env, url: URL): Promise<Response> {
-  const fail = () => Response.redirect(`${url.origin}/?login=expired`, 303);
-  const tgId = await consumeLoginToken(env, url.searchParams.get("t") ?? "");
+async function tgLogin(env: Env, req: Request, url: URL): Promise<Response> {
+  const to = url.searchParams.get("to") === "buy" ? "/?buy=1" : "/";
+  const noStore = { "cache-control": "no-store", "referrer-policy": "no-referrer" };
+  // لینک یک‌بارمصرف است؛ اگر درخواست تکراری برسد (nginx/مرورگر) و کاربر همین حالا وارد شده، خطا نشان نمی‌دهیم
+  const fail = async () => {
+    const already = await authUser(env, req).catch(() => null);
+    return new Response(null, { status: 303, headers: { location: `${url.origin}${already ? to : "/?login=expired"}`, ...noStore } });
+  };
+  const t = url.searchParams.get("t") ?? "";
+  let tgId = await consumeLoginToken(env, t);
+  if (tgId) await env.KV.put(`tgd:${t}`, String(tgId), { expirationTtl: 60 }).catch(() => {});
+  else if (/^[A-Za-z0-9_-]{20,64}$/.test(t)) {
+    // تلاش دوباره‌ی همان درخواست (nginx/CDN) تا ۶۰ ثانیه بعد از مصرف: همان نتیجه، نه «منقضی شده»
+    const n = Number(await env.KV.get(`tgd:${t}`));
+    if (Number.isSafeInteger(n) && n > 0) tgId = n;
+  }
   if (!tgId || (await isBanned(env, tgId))) return fail();
   const uid = await ensureUid(env, tgId); // حساب وب خودکار اگر هنوز نبود
   if (typeof uid !== "string") return fail(); // مدیرها پروفایل وب خودکار ندارند
   await env.KV.put(`w2tg:${uid}`, String(tgId)).catch(() => {}); // نمایش تلگرام وصل‌شده در پروفایل (برای حساب‌های قدیمی هم)
   const token = await createSession(env, uid);
-  const to = url.searchParams.get("to") === "buy" ? "/?buy=1" : "/";
   return new Response(null, {
     status: 303,
-    headers: { location: `${url.origin}${to}`, "set-cookie": sessionCookie(token), "cache-control": "no-store", "referrer-policy": "no-referrer" },
+    headers: { location: `${url.origin}${to}`, "set-cookie": sessionCookie(token), ...noStore },
   });
 }
 

@@ -781,6 +781,8 @@ async function boot() {
   if (me && me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.");
   renderCommon(); initPoster(); initLink(); initVoice();
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
+  // درخواست تکراری callback (nginx/مرورگر) خطای کاذب برمی‌گرداند ولی نشست از درخواست اول ساخته شده؛ اگر وارد شده‌ایم خطا نمایش داده نشود و از آدرس پاک شود
+  if (me) { const sp = new URLSearchParams(location.search); if (sp.has("login_error") || sp.get("login") === "expired") history.replaceState(null, "", "/"); }
   if (me) { if ($("#authDlg").open) $("#authDlg").close(); renderApp(); } else renderAuthBtn();
   handlePayReturn();
   handleTgLogin();

@@ -252,7 +252,7 @@ export async function googleStart(env: Env, url: URL): Promise<Response> {
     client_id: env.GOOGLE_CLIENT_ID!, redirect_uri: redirectUri(url), response_type: "code",
     scope: "openid email profile", state, prompt: "select_account",
   });
-  const h = new Headers({ location: `https://accounts.google.com/o/oauth2/v2/auth?${q}` });
+  const h = new Headers({ location: `https://accounts.google.com/o/oauth2/v2/auth?${q}`, "cache-control": "no-store" });
   h.append("set-cookie", setCookie(STATE_COOKIE, state, 600, "/api/auth"));
   return new Response(null, { status: 302, headers: h });
 }
@@ -334,7 +334,7 @@ export async function googleCallback(env: Env, req: Request, url: URL): Promise<
   let isApp = false; // ورود از اپ اندروید (مرورگر پشتیبان)؛ بعد از state معتبر مشخص می‌شود
   const fail = (code: string) => {
     if (isApp) return appReturn(url, { e: code });
-    const h = new Headers({ location: `${url.origin}/?login_error=${code}` });
+    const h = new Headers({ location: `${url.origin}/?login_error=${code}`, "cache-control": "no-store", "referrer-policy": "no-referrer" });
     h.append("set-cookie", setCookie(STATE_COOKIE, "", 0, "/api/auth"));
     return new Response(null, { status: 302, headers: h });
   };
@@ -342,11 +342,46 @@ export async function googleCallback(env: Env, req: Request, url: URL): Promise<
   const state = url.searchParams.get("state") ?? "";
   const code = url.searchParams.get("code") ?? "";
   if (url.searchParams.get("error") || !code || !state) return fail("google_cancel");
-  // state هم باید با کوکی مرورگر بخواند و هم در KV ساخته شده باشد (یک‌بار مصرف)
-  const stateVal = state === getCookie(req, STATE_COOKIE) ? await env.KV.get(`wo:${state}`) : null;
-  if (stateVal === null) return fail("google_state");
-  await env.KV.delete(`wo:${state}`);
+  // state هم باید با کوکی مرورگر بخواند و هم در KV ساخته شده باشد
+  const cookieOk = state === getCookie(req, STATE_COOKIE);
+  const stateVal = cookieOk ? await env.KV.get(`wo:${state}`) : null;
+  const nh = { "cache-control": "no-store", "referrer-policy": "no-referrer" };
+  // پایان موفق (مشترک بین درخواست اصلی و تکراری): اپ ← کد یک‌بارمصرف، وب ← نشست
+  const finish = async (uid: string, app: boolean): Promise<Response> => {
+    if (app) {
+      isApp = true;
+      const c = randomToken(24);
+      await env.KV.put(`ga:${c}`, uid, { expirationTtl: 120 });
+      return appReturn(url, { c });
+    }
+    const h = new Headers({ location: `${url.origin}/`, ...nh });
+    h.append("set-cookie", sessionCookie(await createSession(env, uid)));
+    h.append("set-cookie", setCookie(STATE_COOKIE, "", 0, "/api/auth"));
+    return new Response(null, { status: 302, headers: h });
+  };
+  const doneOf = async () => (cookieOk ? ((await env.KV.get(`wd:${state}`, "json")) as { u: string; a: boolean } | null) : null);
+
+  if (stateVal === null) {
+    // درخواست تکراری (تلاش دوباره‌ی nginx/CDN/مرورگر) بعد از ورودِ موفق: همان نتیجه را دوباره می‌دهیم، نه خطا
+    const d = await doneOf();
+    if (d) return finish(d.u, d.a);
+    if (await authUser(env, req).catch(() => null)) {
+      const h = new Headers({ location: `${url.origin}/`, ...nh });
+      h.append("set-cookie", setCookie(STATE_COOKIE, "", 0, "/api/auth"));
+      return new Response(null, { status: 302, headers: h });
+    }
+    return fail("google_state");
+  }
   isApp = stateVal === "app";
+  // فقط اولین درخواست کد گوگل را مصرف می‌کند (شمارنده‌ی اتمی)؛ درخواست هم‌زمان تکراری منتظر نتیجه‌ی اولی می‌ماند
+  if (await hitLimit(env, `gcb:${state}`, 1, 120)) {
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 750));
+      const d = await doneOf();
+      if (d) return finish(d.u, d.a);
+    }
+    return fail("google_state");
+  }
 
   try {
     const tr = await fetch("https://oauth2.googleapis.com/token", {
@@ -371,18 +406,9 @@ export async function googleCallback(env: Env, req: Request, url: URL): Promise<
     if (!info.sub || !validEmail(email) || info.email_verified !== true) return fail("google_email");
 
     const user = await googleUser(env, { sub: info.sub, email, name: info.name, picture: info.picture });
-
-    if (isApp) {
-      // کد یک‌بارمصرف و کوتاه‌مدت؛ اپ آن را با /api/auth/google/exchange به نشست تبدیل می‌کند
-      const c = randomToken(24);
-      await env.KV.put(`ga:${c}`, user.id, { expirationTtl: 120 });
-      return appReturn(url, { c });
-    }
-    const token = await createSession(env, user.id);
-    const h = new Headers({ location: `${url.origin}/` });
-    h.append("set-cookie", sessionCookie(token));
-    h.append("set-cookie", setCookie(STATE_COOKIE, "", 0, "/api/auth"));
-    return new Response(null, { status: 302, headers: h });
+    await env.KV.put(`wd:${state}`, JSON.stringify({ u: user.id, a: isApp }), { expirationTtl: 90 }); // برای درخواست تکراری در ۹۰ ثانیه (فقط با همان کوکی state)
+    await env.KV.delete(`wo:${state}`).catch(() => {});
+    return finish(user.id, isApp);
   } catch (e) {
     console.error("google callback", e);
     return fail("google_token");
