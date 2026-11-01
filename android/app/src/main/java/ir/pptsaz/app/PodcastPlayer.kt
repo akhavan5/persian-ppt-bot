@@ -1,8 +1,6 @@
 package ir.pptsaz.app
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.MediaPlayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,15 +15,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,10 +33,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -89,127 +82,38 @@ private fun fmt(ms: Int): String {
     return (s / 60).fa() + ":" + (if (sec < 10) "۰" else "") + sec.fa()
 }
 
-private enum class Phase { Idle, Loading, Ready, Error }
-
-private val SPEEDS = floatArrayOf(1f, 1.25f, 1.5f, 2f, 0.75f)
-
-private class PlayerHolder { var mp: MediaPlayer? = null }
-
 /**
- * پلیر پادکست داخل اپ: پخش/توقف، ۱۵ ثانیه جلو و عقب، نوار زمان (قابل کشیدن) و سرعت پخش.
- * دریافت فایل فقط با زدن «پخش» (یا autoStart) شروع می‌شود تا اینترنت الکی مصرف نشود. با خروج از صفحه پخش‌کننده آزاد می‌شود.
+ * پلیر پادکست داخل اپ؛ فقط نمایش و کنترل است و پخش در PodcastEngine (با MediaSession و سرویس پیش‌زمینه) انجام می‌شود.
+ * پخش/توقف، ۱۵ ثانیه جلو و عقب، نوار زمان (قابل کشیدن) و سرعت پخش. با خروج از صفحه پخش قطع نمی‌شود و از اعلان / صفحه‌ی قفل / هدفون کنترل می‌شود.
+ * دریافت فایل فقط با زدن «پخش» (یا autoStart) شروع می‌شود تا اینترنت الکی مصرف نشود.
  */
 @Composable
 fun PodcastPlayerCard(id: String, title: String, modifier: Modifier = Modifier, autoStart: Boolean = false) {
     val ctx = LocalContext.current.applicationContext
     val cs = MaterialTheme.colorScheme
-    val scope = rememberCoroutineScope()
-    val holder = remember(id) { PlayerHolder() }
-    var phase by remember(id) { mutableStateOf(Phase.Idle) }
-    var playing by remember(id) { mutableStateOf(false) }
-    var pos by remember(id) { mutableIntStateOf(0) }
-    var dur by remember(id) { mutableIntStateOf(0) }
-    var speedIdx by remember(id) { mutableIntStateOf(0) }
+    // موتور یکی است؛ فقط وقتی همین پادکست در آن بارگذاری شده وضعیتش را نشان می‌دهیم
+    val mine = PodcastEngine.currentId == id
+    val phase = if (mine) PodcastEngine.phase else Phase.Idle
+    val playing = mine && PodcastEngine.playing
+    val dur = if (mine) PodcastEngine.dur else 0
+    val error = if (mine) PodcastEngine.error else ""
+    var live by remember(id) { mutableIntStateOf(0) }
     var drag by remember(id) { mutableFloatStateOf(-1f) }
-    var error by remember(id) { mutableStateOf("") }
+    val pos = if (playing) live else if (mine) PodcastEngine.pos else 0
 
-    DisposableEffect(id) {
-        onDispose {
-            holder.mp?.let { runCatching { it.release() } }
-            holder.mp = null
-        }
-    }
-
-    // MediaPlayer روی بعضی نسخه‌ها با setPlaybackParams در حالت توقف خودش شروع به پخش می‌کند؛ پس فقط هنگام پخش یا درست قبل از start اعمال می‌شود
-    fun applySpeed(mp: MediaPlayer) {
-        runCatching { mp.playbackParams = mp.playbackParams.setSpeed(SPEEDS[speedIdx]) }
-    }
-
-    fun start(mp: MediaPlayer) {
-        applySpeed(mp)
-        mp.start()
-        playing = true
-    }
-
-    fun loadAndMaybePlay(thenPlay: Boolean) {
-        if (phase == Phase.Loading) return
-        phase = Phase.Loading
-        error = ""
-        scope.launch {
-            try {
-                val f = PodcastAudio.file(ctx, id)
-                val mp = withContext(Dispatchers.IO) {
-                    MediaPlayer().apply {
-                        try {
-                            setAudioAttributes(
-                                AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                                    .build(),
-                            )
-                            setDataSource(f.absolutePath)
-                            this.prepare()
-                        } catch (e: Exception) {
-                            release()
-                            throw e
-                        }
-                    }
-                }
-                mp.setOnCompletionListener {
-                    playing = false
-                    pos = dur
-                }
-                mp.setOnErrorListener { _, _, _ ->
-                    playing = false
-                    phase = Phase.Error
-                    error = "پخش ممکن نشد؛ فایل را دانلود کنید."
-                    true
-                }
-                holder.mp?.let { runCatching { it.release() } }
-                holder.mp = mp
-                dur = mp.duration.coerceAtLeast(0)
-                pos = 0
-                phase = Phase.Ready
-                if (thenPlay) start(mp)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: ApiException) {
-                phase = Phase.Error
-                error = e.message ?: "دریافت پادکست انجام نشد."
-            } catch (e: Exception) {
-                phase = Phase.Error
-                error = "پخش ممکن نشد؛ فایل را دانلود کنید."
-            }
+    LaunchedEffect(id) { if (autoStart) PodcastEngine.load(ctx, id, title, play = true) }
+    LaunchedEffect(id, playing) {
+        while (playing) {
+            if (drag < 0f) live = PodcastEngine.position()
+            delay(250)
         }
     }
 
     fun toggle() {
-        val mp = holder.mp
         when {
             phase == Phase.Loading -> Unit
-            mp == null -> loadAndMaybePlay(thenPlay = true)
-            playing -> { mp.pause(); playing = false }
-            else -> {
-                // بعد از پایان پادکست دوباره از اول
-                if (dur > 0 && mp.currentPosition >= dur - 300) { mp.seekTo(0); pos = 0 }
-                start(mp)
-            }
-        }
-    }
-
-    fun seekBy(deltaMs: Int) {
-        val mp = holder.mp ?: return
-        val to = (mp.currentPosition + deltaMs).coerceIn(0, dur.coerceAtLeast(0))
-        mp.seekTo(to)
-        pos = to
-    }
-
-    LaunchedEffect(id) { if (autoStart) loadAndMaybePlay(thenPlay = true) }
-    LaunchedEffect(playing) {
-        while (playing) {
-            val mp = holder.mp
-            if (mp != null && drag < 0f) pos = runCatching { mp.currentPosition }.getOrDefault(pos)
-            delay(250)
+            !mine || phase == Phase.Idle || phase == Phase.Error -> PodcastEngine.load(ctx, id, title, play = true)
+            else -> PodcastEngine.toggle()
         }
     }
 
@@ -231,21 +135,21 @@ fun PodcastPlayerCard(id: String, title: String, modifier: Modifier = Modifier, 
                     if (phase == Phase.Loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = cs.onPrimary)
                     else AppIcon(if (playing) PAUSE_ICON else PLAY_ICON, size = 26.dp, description = if (playing) "توقف پادکست" else "پخش پادکست")
                 }
-                TextButton(onClick = { seekBy(-15_000) }, enabled = phase == Phase.Ready, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp)) { Text("⟲ ۱۵") }
+                TextButton(onClick = { PodcastEngine.seekBy(-15_000) }, enabled = phase == Phase.Ready, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp)) { Text("⟲ ۱۵") }
                 Slider(
                     value = if (drag >= 0f) drag else pos.toFloat().coerceAtMost(dur.toFloat().coerceAtLeast(1f)),
                     onValueChange = { drag = it },
                     onValueChangeFinished = {
                         val to = drag.toInt().coerceIn(0, dur.coerceAtLeast(0))
-                        holder.mp?.seekTo(to)
-                        pos = to
+                        PodcastEngine.seekTo(to)
+                        live = to
                         drag = -1f
                     },
                     valueRange = 0f..dur.toFloat().coerceAtLeast(1f),
                     enabled = phase == Phase.Ready,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { seekBy(15_000) }, enabled = phase == Phase.Ready, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp)) { Text("۱۵ ⟳") }
+                TextButton(onClick = { PodcastEngine.seekBy(15_000) }, enabled = phase == Phase.Ready, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp)) { Text("۱۵ ⟳") }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
@@ -255,12 +159,9 @@ fun PodcastPlayerCard(id: String, title: String, modifier: Modifier = Modifier, 
                     modifier = Modifier.padding(start = 6.dp),
                 )
                 TextButton(
-                    onClick = {
-                        speedIdx = (speedIdx + 1) % SPEEDS.size
-                        if (playing) holder.mp?.let { applySpeed(it) }
-                    },
+                    onClick = { PodcastEngine.cycleSpeed() },
                     enabled = phase != Phase.Loading,
-                ) { Text(SPEEDS[speedIdx].toString().removeSuffix(".0").replace(".", "٫").faStr() + "×") }
+                ) { Text(SPEEDS[PodcastEngine.speedIdx].toString().removeSuffix(".0").replace(".", "٫").faStr() + "×") }
             }
         }
         if (error.isNotEmpty()) {
