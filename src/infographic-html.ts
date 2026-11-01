@@ -28,7 +28,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
   const W = IG_WIDTH[o.layout];
   const cols = o.layout === "wide" ? 4 : 2;
-  const base = o.layout === "wide" ? 68 : 24; // پوستر افقی: فونت پایه ۴۰ ← ۴۸ ← ۵۸ ← ۶۸ (در مجموع ۴۵٪ بزرگ‌تر از اول) تا در پیش‌نمایش تلگرام خواناتر باشد؛ ۴ ستون در ۶۶۵۶px. اگر مجموع ابعاد عکس (افقی: مقیاس ۱، عمودی: ۱.۵) از سقف ۱۰۰۰۰px تلگرام بگذرد، فقط فایل کامل فرستاده می‌شود (sendDocument)
+  const base = o.layout === "wide" ? 80 : 24; // پوستر افقی: فونت پایه ۴۰ ← ۴۸ ← ۵۸ ← ۶۸ ← ۸۰ (بعد از پهن‌تر شدن بوم به ۶۶۵۶px، ۶۸ نسبت به عرض ریز دیده می‌شد و ستون‌های کوتاه جای خالی داشتند) (در مجموع ۴۵٪ بزرگ‌تر از اول) تا در پیش‌نمایش تلگرام خواناتر باشد؛ ۴ ستون در ۶۶۵۶px. اگر مجموع ابعاد عکس (افقی: مقیاس ۱، عمودی: ۱.۵) از سقف ۱۰۰۰۰px تلگرام بگذرد، فقط فایل کامل فرستاده می‌شود (sendDocument)
   const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
   const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
   const dark = t.bg.toUpperCase() < "808080"; // پس‌زمینه‌ی تیره (مثل تم نیمه‌شب)
