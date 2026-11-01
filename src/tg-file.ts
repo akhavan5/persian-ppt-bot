@@ -9,7 +9,7 @@
  */
 import JSZip from "jszip";
 import type { Env } from "./env";
-import { ocrSmart, VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
+import { ocrPdfRendered, ocrSmart, VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { tg } from "./telegram";
 import { AUDIO_EXT, deepgramEnabled, transcribeAudio } from "./deepgram";
@@ -103,6 +103,18 @@ function stripWatermarks(pages: { page: number; text: string }[]): { page: numbe
   return pages.map((p) => ({ page: p.page, text: p.text.split("\n").filter((l) => !SCANNER_MARK.test(l) && !repeated.has(norm(l))).join("\n").trim() }));
 }
 
+/**
+ * لایه‌ی متن PDF خراب است؟ بعضی PDFها (فونت‌های فارسی قدیمی/ناسازگار در Word) نگاشت یونیکد ندارند و استخراج،
+ * به‌جای حروف، کاراکتر کنترلی (\u0001، \u0002 …) برمی‌گرداند؛ طول متن کافی است ولی بی‌معنی است و باید OCR شود.
+ */
+function textLayerBroken(s: string): boolean {
+  const t = s.replace(/\s+/g, "");
+  if (t.length < 40) return false;
+  const ctrl = (t.match(/[\u0000-\u0008\u000e-\u001f\u007f-\u009f\ufffd]/g) ?? []).length;
+  // PDF سالم گاهی چند کاراکتر کنترلی پراکنده دارد (بولت، فونت Symbol)؛ فقط وقتی هم تعداد و هم نسبتشان زیاد باشد خراب حساب می‌شود
+  return ctrl >= 20 && ctrl / t.length > 0.08;
+}
+
 async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: string | number): Promise<Extracted> {
   let text = "";
   try {
@@ -120,6 +132,12 @@ async function readPdf(env: Env, bytes: ArrayBuffer, name: string, userId: strin
   // طول متن واقعی (بدون عنوان/Metadata/سرتیتر صفحه)؛ وگرنه اسکن به‌اشتباه «متنی» تشخیص داده می‌شود.
   const realLen = pages.reduce((n, p) => n + p.text.replace(/\s+/g, "").length, 0);
   const plain = pages.map((p) => p.text).filter(Boolean).join("\n\n");
+
+  // لایه‌ی متن هست ولی خراب است (فونت بدون نگاشت یونیکد) ⇒ مثل اسکن، صفحه‌ها رندر و OCR می‌شوند
+  if (textLayerBroken(plain)) {
+    if (await ocrLimitHit(env, userId)) return fail(`سقف روزانه‌ی تبدیل تصویر/اسکن به متن تمام شد؛ فردا دوباره امتحان کن. ${OCR_CAP_NOTE}`);
+    return ocrPdfRendered(env, bytes);
+  }
 
   // متنِ قابل‌قبول در کل فایل ⇒ مثل هر فایل متنی دیگر؛ هیچ OCRی (و هیچ مصرف سقف OCRی) در کار نیست
   if (realLen >= MIN_TEXT_CHARS) return { ok: true, text: plain };

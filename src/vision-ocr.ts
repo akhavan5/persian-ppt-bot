@@ -139,3 +139,18 @@ export async function ocrSmart(env: Env, bytes: ArrayBuffer, mime: string): Prom
   }
   return r;
 }
+
+/**
+ * PDFی که لایه‌ی متنش خراب است (فونت فارسی بدون نگاشت یونیکد؛ متن استخراج‌شده کاراکتر کنترلی و نشانه‌ی بی‌معنی است):
+ * تصویرهای داخل PDF فقط شکل‌ها هستند نه کل صفحه، پس extractPdfImages اینجا کافی نیست؛ خود صفحه‌ها با مرورگر رندر و OCR می‌شوند.
+ */
+export async function ocrPdfRendered(env: Env, bytes: ArrayBuffer): Promise<OcrResult> {
+  const rendered = await renderPdfPages(env, new Uint8Array(bytes), VISION_MAX_PAGES, VISION_MAX_IMAGE_BYTES);
+  if (!rendered) return { ok: false, error: "متن داخل این PDF با فونتِ ناسازگار ذخیره شده و قابل‌خواندن نیست و تبدیل صفحه‌ها به تصویر هم ممکن نشد؛ PDF را دوباره از Word با گزینه‌ی «Save as PDF» بسازید یا صفحه‌ها را به‌صورت عکس بفرستید." };
+  try {
+    return await readMany(env, rendered);
+  } catch (e) {
+    console.error("vision ocr pool", e instanceof Error ? e.message.slice(0, 200) : e);
+    return { ok: false, error: "سرویس تبدیل تصویر به متن موقتاً در دسترس نیست؛ کمی بعد دوباره امتحان کن." };
+  }
+}
