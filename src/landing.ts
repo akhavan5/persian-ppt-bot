@@ -19,11 +19,11 @@ export const faDate = (iso: string) => new Intl.DateTimeFormat("fa-IR", { dateSt
 export function siteNodes(SITE: string) {
   return [
     {
-      "@type": "Organization", "@id": `${SITE}/#org`, name: BRAND, alternateName: ["pptsaz", "pptsaz.ir", "پاورپوینت ساز فارسی", "پاورپوینت ساز"], url: `${SITE}/`,
+      "@type": "Organization", "@id": `${SITE}/#org`, name: BRAND, alternateName: ["pptsaz", "pptsaz.ir", "پاورپوینت ساز فارسی", "پاورپوینت ساز", "پاور ساز", "اسلایدساز"], url: `${SITE}/`,
       logo: { "@type": "ImageObject", url: `${SITE}/icon-512.png`, width: 512, height: 512 }, description: "ابزار آنلاین ساخت پاورپوینت فارسی و قابل‌ویرایش با هوش مصنوعی", email: "info@pptsaz.ir",
       contactPoint: { "@type": "ContactPoint", email: "info@pptsaz.ir", url: "https://t.me/pptsaz_bot", contactType: "customer support", areaServed: "IR", availableLanguage: "fa" }, sameAs: ["https://t.me/pptsaz_bot"],
     },
-    { "@type": "WebSite", "@id": `${SITE}/#website`, name: BRAND, alternateName: ["پاورپوینت ساز فارسی", "پاورپوینت ساز", "pptsaz.ir"], url: `${SITE}/`, inLanguage: "fa-IR", publisher: { "@id": `${SITE}/#org` } },
+    { "@type": "WebSite", "@id": `${SITE}/#website`, name: BRAND, alternateName: ["پاورپوینت ساز فارسی", "پاورپوینت ساز", "پاور ساز", "اسلایدساز", "pptsaz.ir"], url: `${SITE}/`, inLanguage: "fa-IR", publisher: { "@id": `${SITE}/#org` } },
   ];
 }
 
@@ -295,6 +295,49 @@ const SEO_RELATED: Record<string, string[]> = {
   "ai-powerpoint-maker": ["mobile-powerpoint-maker"],
 };
 for (const [page, slugs] of Object.entries(SEO_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
+
+// ۱۰ آبان ۱۴۰۵ (۲): صفحه‌های «تبدیل عکس به پاورپوینت آنلاین» و «چت جی پی تی پاورپوینت ساز»، بازنویسی «اسلاید ساز هوش مصنوعی» و مقاله‌های جدول فارسی و عکس جزوه
+const NEW_ARTICLES: Record<string, string[]> = {
+  "image-to-pptx": ["photo-to-powerpoint-ocr-tips", "pdf-link-to-powerpoint-tools-compared", "webpage-to-presentation-guide", "ai-powerpoint-mobile-telegram"],
+  "chatgpt-powerpoint-maker": ["chatgpt-powerpoint-persian", "ai-powerpoint-prompt-persian", "best-ai-powerpoint-makers-persian", "pptsaz-honest-comparison", "powerpoint-ai-without-credit-card-persian", "ai-powerpoint-faq-persian"],
+  "slide-maker": ["persian-table-in-slide", "ai-powerpoint-prompt-persian", "chatgpt-powerpoint-persian"],
+  "ai-powerpoint-maker": ["persian-table-in-slide"],
+  "pdf-to-pptx": ["photo-to-powerpoint-ocr-tips"],
+  "mobile-powerpoint-maker": ["photo-to-powerpoint-ocr-tips"],
+  "telegram-bot": ["photo-to-powerpoint-ocr-tips"],
+  "text-to-pptx": ["chatgpt-powerpoint-persian"],
+  free: ["chatgpt-powerpoint-persian", "photo-to-powerpoint-ocr-tips"],
+  business: ["persian-table-in-slide"],
+  "management-presentation": ["persian-table-in-slide"],
+  "excel-to-pptx": ["persian-table-in-slide"],
+  "persian-powerpoint-templates": ["persian-table-in-slide"],
+  "medical-presentation": ["persian-table-in-slide"],
+  "ppt-saz": ["persian-table-in-slide"],
+  "persian-font-download": ["persian-table-in-slide"],
+};
+for (const [page, slugs] of Object.entries(NEW_ARTICLES)) ARTICLES_FOR[page] = [...new Set([...(ARTICLES_FOR[page] ?? []), ...slugs])];
+
+const NEW_RELATED: Record<string, string[]> = {
+  "pdf-to-pptx": ["image-to-pptx"],
+  "text-to-pptx": ["image-to-pptx", "chatgpt-powerpoint-maker"],
+  "word-to-pptx": ["image-to-pptx"],
+  "mobile-powerpoint-maker": ["image-to-pptx", "chatgpt-powerpoint-maker"],
+  "telegram-bot": ["image-to-pptx"],
+  free: ["image-to-pptx", "chatgpt-powerpoint-maker", "slide-maker"],
+  student: ["image-to-pptx", "slide-maker"],
+  "school-presentation": ["image-to-pptx"],
+  "article-presentation": ["image-to-pptx"],
+  "online-powerpoint-maker": ["slide-maker", "image-to-pptx", "chatgpt-powerpoint-maker"],
+  "ai-powerpoint-maker": ["slide-maker", "chatgpt-powerpoint-maker", "image-to-pptx"],
+  "ppt-saz": ["chatgpt-powerpoint-maker", "image-to-pptx"],
+  compare: ["chatgpt-powerpoint-maker"],
+  "gamma-alternative": ["chatgpt-powerpoint-maker"],
+  "canva-alternative": ["chatgpt-powerpoint-maker"],
+  "iranian-powerpoint-maker": ["chatgpt-powerpoint-maker"],
+  "ppt-with-images": ["image-to-pptx"],
+  "slide-maker": ["chatgpt-powerpoint-maker", "image-to-pptx", "text-to-pptx"],
+};
+for (const [page, slugs] of Object.entries(NEW_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
 
 /** مقاله → صفحه‌های فرودی که به آن لینک می‌دهند؛ برای لینک برگشتی از مقاله به صفحه‌های ابزار (لینک‌دهی داخلی دوطرفه). */
 export const LANDINGS_FOR_POST: Map<string, string[]> = (() => {
