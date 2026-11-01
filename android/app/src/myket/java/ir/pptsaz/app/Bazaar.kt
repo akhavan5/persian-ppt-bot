@@ -15,6 +15,9 @@ object Store {
     const val ID = "myket" // کلید فلگ در /api/config و بخش آخر مسیر /api/pay/<ID>
     const val NAME_FA = "مایکت"
 
+    /** به‌روزرسانی با اینتنت بومی مایکت (myket://check-update)؛ نیازی به ثبت نسخه در پنل ادمین نیست. */
+    const val NATIVE_UPDATE = true
+
     /** آدرس به‌روزرسانی: اگر سرور آدرس بازار را داده بود، صفحه‌ی اپ در مایکت باز شود. */
     fun updateUrl(fromServer: String): String =
         if (fromServer.isBlank() || fromServer.contains("cafebazaar", ignoreCase = true)) "https://myket.ir/app/ir.pptsaz.app" else fromServer

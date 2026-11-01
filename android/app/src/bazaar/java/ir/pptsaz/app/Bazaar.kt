@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 object Store {
     const val ID = "bazaar" // کلید فلگ در /api/config و بخش آخر مسیر /api/pay/<ID>
     const val NAME_FA = "کافه‌بازار"
+    const val NATIVE_UPDATE = false
     fun updateUrl(fromServer: String): String = fromServer
 }
 

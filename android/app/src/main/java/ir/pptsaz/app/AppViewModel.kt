@@ -95,6 +95,8 @@ data class UiState(
 sealed interface Event {
     data class Toast(val msg: String) : Event
     data class OpenUrl(val url: String) : Event
+    /** درخواست بررسی نسخه‌ی جدید از خود فروشگاه (مایکت). url = لینک جایگزین اگر مایکت نصب نبود. */
+    data class NativeUpdate(val url: String, val manual: Boolean) : Event
     /** فایل دانلود شد. share = true یعنی کاربر «اشتراک‌گذاری» را زده است. */
     data class FileReady(val saved: Saved, val share: Boolean) : Event
     /** اجازه‌ی اعلان داده نشده؛ راهنمایی برای فعال‌سازی نشان بده. */
@@ -998,6 +1000,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** یک بار در هر اجرا: اگر نسخه‌ی جدیدتری منتشر شده، پیشنهاد به‌روزرسانی نشان بده. */
     fun maybeAskUpdate() {
         val c = _state.value.config ?: return
+        if (Store.NATIVE_UPDATE) {
+            // مایکت خودش نسخه را مقایسه می‌کند و فقط اگر نسخه‌ی جدیدتری باشد دیالوگ نشان می‌دهد
+            if (!updateAsked) { updateAsked = true; _events.trySend(Event.NativeUpdate(c.updateUrl, manual = false)) }
+            return
+        }
         if (!updateAsked && c.latestVersion > BuildConfig.VERSION_CODE) {
             updateAsked = true
             _state.update { it.copy(updateDialog = true) }
@@ -1014,7 +1021,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val c = Api.config()
                 _state.update { it.copy(config = c) }
-                if (c.latestVersion > BuildConfig.VERSION_CODE || c.minVersion > BuildConfig.VERSION_CODE) {
+                if (Store.NATIVE_UPDATE && c.minVersion <= BuildConfig.VERSION_CODE) {
+                    _events.trySend(Event.NativeUpdate(c.updateUrl, manual = true))
+                } else if (c.latestVersion > BuildConfig.VERSION_CODE || c.minVersion > BuildConfig.VERSION_CODE) {
                     _state.update { it.copy(updateDialog = true) }
                 } else {
                     toast("نسخه‌ی شما به‌روز است ✓")
