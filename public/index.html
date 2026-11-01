@@ -180,6 +180,9 @@ textarea{min-height:110px;resize:vertical}
 .pbar{height:8px;border-radius:99px;background:var(--soft);border:1px solid var(--line);overflow:hidden;margin:14px 0 4px}
 .pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--primary),var(--primary-2));transition:width .6s}
 .pbar.ind i{width:35%;animation:slide 1.4s ease-in-out infinite}
+.pbar.sm{height:6px;margin:6px 0 2px}
+.pbar[role=progressbar]:not(.ind) i{min-width:6px}
+.await .muted{margin:0}
 .psteps{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin:6px 0 0}
 .psteps .on{color:var(--primary);font-weight:700}
 @media(prefers-reduced-motion:reduce){.pbar.ind i{animation:none;width:100%}.pbar i{transition:none}}
@@ -429,8 +432,14 @@ address{font-style:normal}
       </div>
       <div class="doneBtns" id="doneAudioMore"></div>
       <div class="ppList" id="donePodcastPlayers"></div>
-      <p class="muted" id="doneAudioWait" hidden>🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</p>
-      <p class="muted" id="donePodcastWait" hidden>🎙 پادکست در حال ساخت است (چند دقیقه)…</p>
+      <div class="await" id="doneAudioWait" hidden>
+        <p class="muted" id="doneAudioWaitTxt">🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</p>
+        <div class="pbar sm ind" id="doneAudioBar" role="progressbar" aria-label="پیشرفت ساخت اسلاید صوتی" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+      </div>
+      <div class="await" id="donePodcastWait" hidden>
+        <p class="muted" id="donePodcastWaitTxt">🎙 پادکست در حال ساخت است (چند دقیقه)…</p>
+        <div class="pbar sm ind" id="donePodcastBar" role="progressbar" aria-label="پیشرفت ساخت پادکست" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+      </div>
       <p class="muted" id="doneAudioMsg" hidden></p>
       <p class="muted" id="doneHandoutFail" hidden>⚠️ ساخت جزوه ناموفق بود؛ ارائه‌ات آماده است و اعتبار جزوه برگردانده شد.</p>
       <p class="muted" id="doneAudioFail" hidden>⚠️ شروع ساخت اسلاید صوتی ناموفق بود؛ ارائه‌ات آماده است و اعتبار اسلاید صوتی برگردانده شد.</p>
@@ -1667,15 +1676,21 @@ function podcastPlayer(id, label, autoplay = false) {
 
 // اسلاید صوتی و پادکست همراه: در Workflow جدا چند دقیقه طول می‌کشند؛ وضعیتشان جدا خوانده می‌شود و دکمه‌ی دانلود هرکدام وقتی آماده شد نمایش داده می‌شود
 let audioTracking = 0;
+// نوار پیشرفت کار صوتی: درصد عددی ⇒ نوار پر می‌شود؛ هنوز درصدی نیامده (در صف) ⇒ نوار نامعین
+function setBar(bar, p) {
+  const i = bar.firstElementChild;
+  if (typeof p === "number") { bar.classList.remove("ind"); i.style.width = p + "%"; bar.setAttribute("aria-valuenow", String(p)); }
+  else { bar.classList.add("ind"); i.style.width = ""; bar.removeAttribute("aria-valuenow"); }
+}
 function trackAudio(s) {
   const my = ++audioTracking;
   $("#doneAudioMore").replaceChildren(); $("#donePodcastPlayers").replaceChildren(); show($("#doneAudioMsg"), false);
   const kinds = [
-    { id: s.audioId, state: s.audio, btn: "#doneAudioDl", wait: "#doneAudioWait", fail: "#doneAudioFail", part: "صدای اسلاید", err: "ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگردانده شد." },
-    { id: s.podcastId, state: s.podcast, btn: "#donePodcastDl", wait: "#donePodcastWait", fail: "#donePodcastFail", part: "پادکست، قسمت", err: "ساخت پادکست ناموفق بود؛ اعتبارش برگردانده شد." },
+    { id: s.audioId, state: s.audio, btn: "#doneAudioDl", wait: "#doneAudioWait", txt: "#doneAudioWaitTxt", bar: "#doneAudioBar", fail: "#doneAudioFail", part: "صدای اسلاید", err: "ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگردانده شد." },
+    { id: s.podcastId, state: s.podcast, btn: "#donePodcastDl", wait: "#donePodcastWait", txt: "#donePodcastWaitTxt", bar: "#donePodcastBar", fail: "#donePodcastFail", part: "پادکست، قسمت", err: "ساخت پادکست ناموفق بود؛ اعتبارش برگردانده شد." },
   ];
   for (const k of kinds) {
-    $(k.btn).hidden = true; $(k.wait).hidden = k.state !== "pending"; $(k.fail).hidden = k.state !== "failed";
+    $(k.btn).hidden = true; $(k.wait).hidden = k.state !== "pending"; $(k.fail).hidden = k.state !== "failed"; setBar($(k.bar));
     if (k.state === "pending" && k.id) pollAudio(my, k);
   }
 }
@@ -1685,7 +1700,7 @@ async function pollAudio(my, k) {
     try { r = await api("/api/jobs/" + k.id); }
     catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
     if (my !== audioTracking) return;
-    if (r.state === "running") { $(k.wait).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); await sleep(4000); continue; } // درصد را فقط کار صوتی می‌فرستد
+    if (r.state === "running") { $(k.txt).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); setBar($(k.bar), typeof r.progress === "number" ? r.progress : undefined); await sleep(4000); continue; } // درصد را فقط کار صوتی می‌فرستد
     $(k.wait).hidden = true;
     if (r.state === "done" && r.ids && r.ids.length) {
       const b = $(k.btn); b.hidden = false; b.onclick = (ev) => download(r.ids[0], ev.currentTarget);
@@ -1748,13 +1763,17 @@ async function makeExtra(f, kind, layout, btn) {
 }
 // وضعیت کار در Workflow جدا چند دقیقه طول می‌کشد؛ پیام پیشرفت بالای فهرست دیده می‌شود و در پایان فایل تازه در همین فهرست می‌آید
 async function trackExtra(jobId, kind) {
-  const line = h("div", { class: "xj" }, (EXTRA_BTNS[kind][0][0].split(" ")[0]) + " در صف است…");
+  // اسلاید صوتی و پادکست درصد عددی هم دارند؛ برایشان نوار پیشرفت زیر متن نشان داده می‌شود
+  const withBar = kind === "audio" || kind === "podcast";
+  const txt = h("div", {}, (EXTRA_BTNS[kind][0][0].split(" ")[0]) + " در صف است…");
+  const bar = withBar ? h("div", { class: "pbar sm ind", role: "progressbar", "aria-label": kind === "podcast" ? "پیشرفت ساخت پادکست" : "پیشرفت ساخت اسلاید صوتی", "aria-valuemin": "0", "aria-valuemax": "100" }, h("i")) : null;
+  const line = h("div", { class: "xj" }, txt, bar);
   $("#extraJobs").append(line);
   for (let i = 0; i < 240; i++) {
     let r;
     try { r = await api("/api/jobs/" + jobId); }
     catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
-    if (r.state === "running") { line.textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); await sleep(4000); continue; }
+    if (r.state === "running") { txt.textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); if (bar) setBar(bar, typeof r.progress === "number" ? r.progress : undefined); await sleep(4000); continue; }
     if (r.state === "done" && r.ids && r.ids.length) toast("✅ آماده شد؛ فایل را در فهرست پایین بگیر."); else toast("⚠️ " + (r.message || "ساخت ناموفق بود؛ اعتبارش برگردانده شد."));
     line.remove(); refreshMe(); loadFiles(); return;
   }
