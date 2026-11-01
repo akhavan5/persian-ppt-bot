@@ -35,6 +35,13 @@ internal fun jobStepOf(msg: String): Int {
     return Regex("([1-3])\\s*/\\s*3").find(latin)?.groupValues?.get(1)?.toInt() ?: 0
 }
 
+/** درصد پیشرفت (۰ تا ۱۰۰) که سرور برای اسلاید صوتی و پادکست در فیلد «progress» می‌فرستد؛ نیامده (هنوز در صف) = ‎-۱ (نوار نامعین). */
+internal fun jobPctOf(j: org.json.JSONObject): Int =
+    if (j.has("progress")) j.optInt("progress", -1).coerceIn(-1, 100) else -1
+
+/** وضعیت یک همراهِ در حال ساخت که با دکمه خواسته شده: متن پیام سرور + درصد (‎-۱ = نامعلوم). */
+data class ExtraProg(val msg: String, val pct: Int = -1)
+
 data class JobState(
     val id: String,
     val message: String,
@@ -55,6 +62,11 @@ data class JobState(
     val podcastIds: List<String> = emptyList(),
     val audioFailed: Boolean = false,
     val podcastFailed: Boolean = false,
+    // پیشرفت زنده‌ی ساخت اسلاید صوتی/پادکست همراه: متن پیام سرور و درصد (‎-۱ = هنوز در صف)
+    val audioMsg: String = "",
+    val audioPct: Int = -1,
+    val podcastMsg: String = "",
+    val podcastPct: Int = -1,
 )
 
 sealed interface Viewer {
@@ -77,7 +89,7 @@ data class UiState(
     val error: String? = null,
     val job: JobState? = null,
     /** همراه‌هایی که بعد از ساخت ارائه با دکمه خواسته شده و در حال ساخت‌اند: کلید «<ارائه>|<نوع>» ← پیام وضعیت (دکمه‌ی همان نوع تا پایان کار نشان داده نمی‌شود) */
-    val extraJobs: Map<String, String> = emptyMap(),
+    val extraJobs: Map<String, ExtraProg> = emptyMap(),
     val extractBusy: String? = null,
     val extractedText: String? = null,
     /** متن کوتاهِ پیاده‌شده‌ی یک ویس/فایل صوتی (تا ۶۰۰ نویسه)؛ اگر موضوع خالی باشد همان موضوع می‌شود، وگرنه به منبع اضافه می‌شود */
@@ -485,10 +497,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * فایل‌ها همچنان در تب «فایل‌ها» می‌آیند. شکست ساخت = اعتبار همان برگشته است.
      */
     private fun watchAudio(deckJobId: String, kind: String, jobId: String, title: String) {
+        val app = getApplication<Application>()
+        // Worker پیش‌زمینه: اگر اپ بسته شد، اعلان پیشرفت زنده و اعلان «آماده شد» را همان پیگیری می‌کند (شناسه‌ی یکتا ⇒ دوبار ساخته نمی‌شود)
+        ExtraWatcher.schedule(app, jobId, deckJobId, kind, title, files = false)
         viewModelScope.launch {
             var fails = 0
             val startedAt = SystemClock.elapsedRealtime()
-            val stop = { updateJob(deckJobId) { if (kind == "audio") it.copy(audioWaiting = false) else it.copy(podcastWaiting = false) } }
+            val stop = {
+                updateJob(deckJobId) { if (kind == "audio") it.copy(audioWaiting = false) else it.copy(podcastWaiting = false) }
+                Notifier.cancelExtraProgress(app, jobId)
+                ExtraWatcher.cancel(app, jobId)
+            }
             while (true) {
                 try {
                     val j = Api.job(jobId)
@@ -502,7 +521,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 else it.copy(podcastWaiting = false, podcastIds = ids, podcastFailed = ids.isEmpty())
                             }
                             loadFiles()
-                            val app = getApplication<Application>()
+                            Notifier.cancelExtraProgress(app, jobId)
+                            ExtraWatcher.cancel(app, jobId)
+                            if (!AppForeground.on) {
+                                if (ids.isNotEmpty()) Notifier.extraDone(app, deckJobId, kind, title, files = false)
+                                else Notifier.extraFailed(app, deckJobId, kind, "", files = false)
+                            }
                             if (ids.isNotEmpty() && LocalFiles.autoSaveExtra(app, title, ids.map { it to kind })) refreshLocal()
                             return@launch
                         }
@@ -510,9 +534,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             updateJob(deckJobId) {
                                 if (kind == "audio") it.copy(audioWaiting = false, audioFailed = true) else it.copy(podcastWaiting = false, podcastFailed = true)
                             }
+                            Notifier.cancelExtraProgress(app, jobId)
+                            ExtraWatcher.cancel(app, jobId)
+                            if (!AppForeground.on) Notifier.extraFailed(app, deckJobId, kind, j.optString("message"), files = false)
                             toast(j.optString("message").ifEmpty { "ساخت فایل صوتی ناموفق بود؛ اعتبارش برگشت." })
                             onResume(force = true) // اعتبار برگشت‌خورده فوراً به‌روز شود
                             return@launch
+                        }
+                        else -> {
+                            // در حال ساخت: متن و درصد زنده روی کارت و در اعلان
+                            val msg = j.optString("message")
+                            val pct = jobPctOf(j)
+                            updateJob(deckJobId) {
+                                if (kind == "audio") it.copy(audioMsg = msg, audioPct = pct) else it.copy(podcastMsg = msg, podcastPct = pct)
+                            }
+                            Notifier.extraProgress(app, jobId, deckJobId, kind, msg, pct, files = false)
                         }
                     }
                 } catch (e: ApiException) {
@@ -520,7 +556,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     fails++
                     if (SystemClock.elapsedRealtime() - startedAt > MAX_WATCH_MS) { stop(); return@launch }
                 }
-                delay(if (fails >= 3) 8000 else 4000)
+                delay(if (fails >= 3) 8000 else 3000)
             }
         }
     }
@@ -533,7 +569,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun makeExtra(deckId: String, title: String, kind: String, layout: String? = null) {
         val key = "$deckId|$kind"
         if (_state.value.extraJobs.containsKey(key)) return
-        _state.update { it.copy(extraJobs = it.extraJobs + (key to "در صف است…")) }
+        _state.update { it.copy(extraJobs = it.extraJobs + (key to ExtraProg("در صف است…"))) }
         viewModelScope.launch {
             try {
                 val jobId = Api.startExtra(deckId, kind, layout)
@@ -554,7 +590,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun watchExtra(deckId: String, kind: String, jobId: String, title: String) {
         val key = "$deckId|$kind"
         val name = when (kind) { "poster" -> "پوستر"; "handout" -> "جزوه"; "audio" -> "اسلاید صوتی"; else -> "پادکست" }
-        val finish = { _state.update { it.copy(extraJobs = it.extraJobs - key) } }
+        val app = getApplication<Application>()
+        val audible = kind == "audio" || kind == "podcast" // فقط اسلاید صوتی و پادکست درصد و اعلان پیشرفت دارند
+        val finish = {
+            _state.update { it.copy(extraJobs = it.extraJobs - key) }
+            if (audible) { Notifier.cancelExtraProgress(app, jobId); ExtraWatcher.cancel(app, jobId) }
+        }
+        // Worker پیش‌زمینه: اگر کاربر از اپ بیرون رفت، اعلان پیشرفت و «آماده شد» را همان پیگیری می‌کند؛ اعلان آماده‌شدن به تب «فایل‌ها» می‌برد
+        if (audible) ExtraWatcher.schedule(app, jobId, deckId, kind, title, files = true)
         viewModelScope.launch {
             var fails = 0
             val startedAt = SystemClock.elapsedRealtime()
@@ -569,6 +612,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             finish()
                             if (ids.isEmpty()) {
                                 toast("ساخت $name ناموفق بود؛ اعتبارش برگشت.")
+                                if (audible && !AppForeground.on) Notifier.extraFailed(app, deckId, kind, "", files = true)
                             } else {
                                 updateJob(deckId) {
                                     when (kind) {
@@ -579,7 +623,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                     }
                                 }
                                 toast("✅ $name آماده شد؛ در «فایل‌ها» هست.")
-                                val app = getApplication<Application>()
+                                if (audible && !AppForeground.on) Notifier.extraDone(app, deckId, kind, title, files = true)
                                 if (LocalFiles.autoSaveExtra(app, title, ids.map { it to kind })) refreshLocal()
                             }
                             loadFiles()
@@ -588,6 +632,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         "error" -> {
                             finish()
+                            if (audible && !AppForeground.on) Notifier.extraFailed(app, deckId, kind, j.optString("message"), files = true)
                             toast(j.optString("message").ifEmpty { "ساخت $name ناموفق بود؛ اعتبارش برگشت." })
                             loadFiles() // دکمه دوباره دیده شود
                             onResume(force = true)
@@ -595,7 +640,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         else -> {
                             val msg = j.optString("message")
-                            if (msg.isNotEmpty()) _state.update { it.copy(extraJobs = if (key in it.extraJobs) it.extraJobs + (key to msg) else it.extraJobs) }
+                            val pct = jobPctOf(j)
+                            if (msg.isNotEmpty() || pct >= 0) {
+                                _state.update { it.copy(extraJobs = if (key in it.extraJobs) it.extraJobs + (key to ExtraProg(msg.ifEmpty { it.extraJobs[key]?.msg.orEmpty() }, pct)) else it.extraJobs) }
+                            }
+                            if (audible) Notifier.extraProgress(app, jobId, deckId, kind, msg, pct, files = true)
                         }
                     }
                 } catch (e: ApiException) {

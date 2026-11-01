@@ -1685,7 +1685,7 @@ async function pollAudio(my, k) {
     try { r = await api("/api/jobs/" + k.id); }
     catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
     if (my !== audioTracking) return;
-    if (r.state === "running") { $(k.wait).textContent = r.message; await sleep(4000); continue; }
+    if (r.state === "running") { $(k.wait).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); await sleep(4000); continue; } // درصد را فقط کار صوتی می‌فرستد
     $(k.wait).hidden = true;
     if (r.state === "done" && r.ids && r.ids.length) {
       const b = $(k.btn); b.hidden = false; b.onclick = (ev) => download(r.ids[0], ev.currentTarget);
@@ -1754,7 +1754,7 @@ async function trackExtra(jobId, kind) {
     let r;
     try { r = await api("/api/jobs/" + jobId); }
     catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
-    if (r.state === "running") { line.textContent = r.message; await sleep(4000); continue; }
+    if (r.state === "running") { line.textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); await sleep(4000); continue; }
     if (r.state === "done" && r.ids && r.ids.length) toast("✅ آماده شد؛ فایل را در فهرست پایین بگیر."); else toast("⚠️ " + (r.message || "ساخت ناموفق بود؛ اعتبارش برگردانده شد."));
     line.remove(); refreshMe(); loadFiles(); return;
   }

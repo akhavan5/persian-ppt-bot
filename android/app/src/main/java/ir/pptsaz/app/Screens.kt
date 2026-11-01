@@ -889,7 +889,7 @@ private fun CreditPill(me: Me, onClick: () -> Unit) {
  * هر کدام ۱ اعتبار جدا. همراه‌هایی که الان در حال ساخت‌اند به‌جای دکمه، پیام وضعیت دارند.
  */
 @Composable
-private fun ExtraButtons(deckId: String, title: String, kinds: List<String>, jobs: Map<String, String>, vm: AppViewModel, modifier: Modifier = Modifier) {
+private fun ExtraButtons(deckId: String, title: String, kinds: List<String>, jobs: Map<String, ExtraProg>, vm: AppViewModel, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
     val pending = EXTRA_KINDS.filter { "$deckId|$it" in jobs }
     val show = EXTRA_KINDS.filter { it in kinds && it !in pending }
@@ -897,7 +897,10 @@ private fun ExtraButtons(deckId: String, title: String, kinds: List<String>, job
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         pending.forEach { k ->
             val name = when (k) { "poster" -> "🖼 پوستر"; "handout" -> "📝 جزوه"; "audio" -> "🔊 اسلاید صوتی"; else -> "🎙 پادکست" }
-            Text("$name: ${jobs["$deckId|$k"].orEmpty()}", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            val jp = jobs["$deckId|$k"] ?: ExtraProg("")
+            // اسلاید صوتی و پادکست درصد واقعی دارند (نوار)؛ پوستر و جزوه فقط پیام متنی
+            if (k == "audio" || k == "podcast") ExtraProgressRow(name, jp.msg, jp.pct)
+            else Text("$name: ${jp.msg}", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         if (show.isNotEmpty()) {
             Text("ساخت جداگانه برای همین ارائه (هر مورد ۱ اعتبار):", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -919,6 +922,27 @@ private fun ExtraButtons(deckId: String, title: String, kinds: List<String>, job
     }
 }
 
+/**
+ * ردیف پیشرفت اسلاید صوتی / پادکست: عنوان + درصد، نوار، و پیام وضعیت سرور (مثلاً «در حال ساخت صدا… اسلاید ۳ از ۱۰»).
+ * pct < 0 یعنی هنوز در صف: نوار نامعین. همین درصد در اعلان پیشرفت (Notifier) هم نشان داده می‌شود.
+ */
+@Composable
+private fun ExtraProgressRow(title: String, msg: String, pct: Int, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            if (pct >= 0) Text(pct.fa() + "٪", style = MaterialTheme.typography.labelLarge, color = cs.primary, fontWeight = FontWeight.Bold)
+        }
+        if (pct < 0) LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
+        else {
+            val shown by animateFloatAsState(pct / 100f, tween(600), label = "extraProgress")
+            LinearProgressIndicator(progress = { shown }, modifier = Modifier.fillMaxWidth().clip(CircleShape))
+        }
+        Text(msg.ifBlank { "در صف است…" }, color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 /** زمان‌سنج ساخت («⏱ ۱:۰۵») که هر ثانیه به‌روز می‌شود؛ startedAt بر پایه‌ی SystemClock.elapsedRealtime() است. */
 @Composable
 private fun JobElapsed(startedAt: Long) {
@@ -930,7 +954,7 @@ private fun JobElapsed(startedAt: Long) {
 }
 
 @Composable
-private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extras: List<String> = emptyList(), extraJobs: Map<String, String> = emptyMap()) {
+private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extras: List<String> = emptyList(), extraJobs: Map<String, ExtraProg> = emptyMap()) {
     val cs = MaterialTheme.colorScheme
     val ex = LocalExtra.current
     when {
@@ -969,12 +993,13 @@ private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extra
                 job.posterId?.let { pid -> SoftButton("نمایش پوستر", { vm.openViewer(Viewer.Poster(pid)) }, Modifier.fillMaxWidth(), icon = AppIcons.Image) }
                 if (job.posterFailed) Text("ساخت پوستر ناموفق بود؛ ارائه‌ی شما سالم است.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 // اسلاید صوتی و پادکست: چند دقیقه بعد از ارائه آماده می‌شوند؛ تا آن موقع پیام «در حال ساخت»، بعد دکمه‌های دانلود
-                if (job.audioWaiting) Text("🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                if (job.audioWaiting) ExtraProgressRow("🔊 اسلاید صوتی", job.audioMsg.ifBlank { "در حال ساخت است (چند دقیقه)…" }, job.audioPct)
                 job.audioIds.forEachIndexed { i, aid ->
                     SoftButton(if (i == 0) "دانلود اسلاید صوتی" else "دانلود بخش " + (i + 1).fa(), { vm.download(aid) }, Modifier.fillMaxWidth(), icon = AppIcons.Slides)
                 }
                 if (job.audioFailed) Text("ساخت اسلاید صوتی ناموفق بود؛ اعتبارش برگشت.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                if (job.podcastWaiting) Text("🎙 پادکست در حال ساخت است (چند دقیقه)…", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                if (job.podcastWaiting) ExtraProgressRow("🎙 پادکست", job.podcastMsg.ifBlank { "در حال ساخت است (چند دقیقه)…" }, job.podcastPct)
+                if (job.audioWaiting || job.podcastWaiting) Text("می‌توانید اپ را ببندید؛ آماده شد با اعلان خبرتان می‌کنیم.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 job.podcastIds.forEachIndexed { i, pid ->
                     PodcastPlayerCard(pid, job.title.ifEmpty { "پادکست" } + (if (job.podcastIds.size > 1) " — قسمت " + (i + 1).fa() else ""))
                     SoftButton(if (i == 0) "دانلود پادکست" else "دانلود پادکست — قسمت " + (i + 1).fa(), { vm.download(pid) }, Modifier.fillMaxWidth(), icon = AppIcons.Mic)
@@ -1095,7 +1120,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
 }
 
 @Composable
-private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf: Boolean = false, extraJobs: Map<String, String> = emptyMap()) {
+private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf: Boolean = false, extraJobs: Map<String, ExtraProg> = emptyMap()) {
     val cs = MaterialTheme.colorScheme
     var showPlayer by remember(f.id) { mutableStateOf(false) }
     var shareOpen by remember(f.id) { mutableStateOf(false) }

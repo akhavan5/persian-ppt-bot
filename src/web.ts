@@ -577,7 +577,10 @@ async function audioJobStatus(env: Env, id: string): Promise<Response> {
     return json({ state: "error", message: `ساخت ${podcast ? "پادکست" : "اسلاید صوتی"} ناموفق بود؛ اعتبارش برگردانده شد.` });
   }
   const message = (await env.KV.get(`job:${id}`)) ?? (podcast ? "🎙 پادکست در صف است…" : "🔊 اسلاید صوتی در صف است…");
-  return json({ state: "running", message });
+  // درصد پیشرفت (۰ تا ۱۰۰) که AudioWorkflow جدا از متن می‌نویسد؛ هنوز ننوشته باشد (در صف) ⇒ فیلد نمی‌آید و کلاینت نوار نامعین نشان می‌دهد
+  const raw = await env.KV.get(`jobp:${id}`);
+  const n = raw === null ? NaN : Number(raw);
+  return json({ state: "running", message, ...(Number.isFinite(n) ? { progress: Math.max(0, Math.min(100, Math.round(n))) } : {}) });
 }
 /** فایل صوتی از روی شناسه: «<کار>-audio[-s<n>]» = اسلاید صوتی (یا صدای یک اسلاید)، «<کار>-podcast[-<n>]» = پادکست */
 const audioKind = (id: string): "slides" | "podcast" | undefined => (/-audio(-s\d+)?$/.test(id) ? "slides" : /-podcast(-\d+)?$/.test(id) ? "podcast" : undefined);

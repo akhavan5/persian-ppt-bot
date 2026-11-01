@@ -70,6 +70,15 @@ const OUTRO_PODCAST = "اگه از این پادکست خوشتون اومد، �
 
 const tmpKey = (id: string, i: number) => `tmp:aud:${id}:${i}`;
 
+/** درصد پیشرفت (۰ تا ۱۰۰ و صحیح)؛ اپ اندروید و سایت همین عدد را در نوار و اعلان نشان می‌دهند */
+const clampPct = (p: number) => Math.max(0, Math.min(100, Math.round(p)));
+/** نوار متنی برای پیام وضعیت تلگرام: «▰▰▰▱▱▱▱▱▱▱ ۳۰٪» */
+const pctBar = (p: number) => { const n = Math.round(clampPct(p) / 10); return `${"▰".repeat(n)}${"▱".repeat(10 - n)} ${toFa(String(clampPct(p)))}٪`; };
+/** درصد گام k از n داخل بازه‌ی [from, to] */
+const lerp = (from: number, to: number, k: number, n: number) => from + (to - from) * (n > 0 ? Math.min(1, k / n) : 0);
+
+type Status = (t: string, pct?: number) => Promise<unknown>;
+
 async function guard<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn(); } catch (e) {
     if ((e instanceof GeminiError || e instanceof LlmError) && e.fatal) throw new NonRetryableError(e.message);
@@ -83,10 +92,13 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
   async run(event: WorkflowEvent<AudioParams>, step: WorkflowStep): Promise<AudioOut> {
     const { kind, chatId, statusMessageId: mid, uid, credit } = event.payload;
     const web = event.payload.channel === "web";
-    // تلگرام: ویرایش پیام وضعیت؛ وب: متن پیشرفت در KV (صفحه‌ی وب هر چند ثانیه می‌خواند)
-    const status = (t: string) => (web
-      ? this.env.KV.put(`job:${event.instanceId}`, t, { expirationTtl: 3600 })
-      : editMessage(this.env, chatId, mid, t)).catch(() => {});
+    // تلگرام: ویرایش پیام وضعیت (با نوار درصد)؛ وب و اپ: متن پیشرفت در KV (job:<شناسه>) و درصد عددی جدا (jobp:<شناسه>)؛ GET /api/jobs/<شناسه> هر دو را برمی‌گرداند
+    const status = (t: string, pct?: number) => (web
+      ? Promise.all([
+        this.env.KV.put(`job:${event.instanceId}`, t, { expirationTtl: 3600 }),
+        pct === undefined ? Promise.resolve() : this.env.KV.put(`jobp:${event.instanceId}`, String(clampPct(pct)), { expirationTtl: 3600 }),
+      ])
+      : editMessage(this.env, chatId, mid, pct === undefined ? t : `${t}\n${pctBar(pct)}`)).catch(() => {});
     try {
       const out = kind === "podcast" ? await this.podcast(event, step, status, web) : await this.slides(event, step, status, web);
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ. خطایش نباید به «برگشت اعتبار» برسد (فایل ذخیره شده)
@@ -116,10 +128,11 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
   }
 
   // ---------- اسلاید صوتی (صدا داخل خود اسلاید) ----------
-  private async slides(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: (t: string) => Promise<unknown>, web: boolean): Promise<AudioOut> {
+  private async slides(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: Status, web: boolean): Promise<AudioOut> {
     const { chatId, uid, deckId, mark } = event.payload;
     const id = event.instanceId;
     const plan = await step.do("load-deck", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+      await status("🔊 آماده‌سازی اسلایدها…", 2);
       const p = await loadPreview(this.env, uid, deckId);
       if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
       // صدا باید داخل همان فایل PPTX برود؛ پیش از خرج‌کردن سهمیه‌ی TTS مطمئن می‌شویم فایل هنوز هست
@@ -131,11 +144,13 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
 
     // متن گفتاریِ مناسبِ صدا برای اسلایدها (دسته‌های ۸تایی)؛ اگر LLM جواب نداد همان متن قبلی (یادداشت/نکته‌ها) خوانده می‌شود
     const spoken: Record<number, string> = {};
+    const batches = Math.ceil(plan.items.length / NARRATION_BATCH);
     for (let k = 0; k < plan.items.length; k += NARRATION_BATCH) {
       const idxs = plan.items.slice(k, k + NARRATION_BATCH).map((x) => x.i);
       try {
         const part = await step.do(`narration-${k / NARRATION_BATCH}`, LLM_STEP, () => guard(async () => {
-          await status("✍️ در حال نوشتن متن گفتاری اسلایدها…");
+          // درصد: نوشتن متن گفتاری ۳ تا ۲۵٪
+          await status("✍️ در حال نوشتن متن گفتاری اسلایدها…", lerp(3, 25, k / NARRATION_BATCH, batches));
           const p = await loadPreview(this.env, uid, deckId);
           if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
           return makeNarration(this.env, p.deck, idxs, { model: event.payload.model });
@@ -150,10 +165,12 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     const failed: string[] = [];
     const lastIdx = plan.items[plan.items.length - 1].i;
     const made: { i: number; no: number; title: string; bytes: number }[] = [];
-    for (const it of plan.items) {
+    for (let pos = 0; pos < plan.items.length; pos++) {
+      const it = plan.items[pos];
       try {
         const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
-          await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`);
+          // درصد: ساخت صدای اسلایدها ۲۵ تا ۸۸٪ (به نسبت تعداد اسلایدهای دارای متن)
+          await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`, lerp(25, 88, pos, plan.items.length));
           // کاربر بدون پلن: جمله‌ی تبلیغ سایت در پایانِ آخرین اسلاید گفته می‌شود
           const body = spoken[it.i] ?? it.text;
           const text = mark && it.i === lastIdx ? `${body} ${OUTRO_SLIDES}` : body;
@@ -170,7 +187,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     if (!made.length) await step.do("fail", async () => { throw new NonRetryableError("هیچ صدایی ساخته نشد (کلیدها یا سهمیه را بررسی کن)"); });
 
     const summary = await step.do("embed-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
-      await status("🔊 جاسازی صدا داخل اسلایدها و ارسال فایل…");
+      await status("🔊 جاسازی صدا داخل اسلایدها و ارسال فایل…", 90);
       const f = await loadFileDirect(this.env, uid, deckId);
       if (!f) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
       let budget = (web ? WEB_FILE_LIMIT : EMBED_BUDGET) - f.data.byteLength;
@@ -187,6 +204,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       }
       if (items.length) {
         const out = await embedAudio(f.data, items, { autoPlay: true, autoAdvance: true });
+        await status("🔊 ذخیره و ارسال فایل…", 97);
         const name = fileNameWithSite(this.env, plan.title, "pptx", "صوتی", 40);
         if (web) {
           // وب: فایل در KV می‌ماند و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام باید شکست بخورد (تلاش مجدد/برگشت اعتبار)
@@ -231,12 +249,12 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
   }
 
   // ---------- پادکست ----------
-  private async podcast(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: (t: string) => Promise<unknown>, web: boolean): Promise<AudioOut> {
+  private async podcast(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: Status, web: boolean): Promise<AudioOut> {
     const { chatId, uid, deckId, model, mark } = event.payload;
     const id = event.instanceId;
 
     const script = await step.do("script", LLM_STEP, () => guard(async () => {
-      await status("🎙 ۱/۳ — نوشتن گفت‌وگوی پادکست…");
+      await status("🎙 ۱/۳ — نوشتن گفت‌وگوی پادکست…", 5); // درصد: نوشتن گفت‌وگو ۵ تا ۲۵٪
       const p = await loadPreview(this.env, uid, deckId);
       if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
       return makePodcastScript(this.env, p.deck, { model });
@@ -247,7 +265,8 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
 
     for (let i = 0; i < chunks.length; i++) {
       await step.do(`voice-${i}`, TTS_STEP, () => guard(async () => {
-        await status(`🎙 ۲/۳ — ساخت صدا… بخش ${toFa(String(i + 1))} از ${toFa(String(chunks.length))}`);
+        // درصد: ساخت صدا ۲۵ تا ۸۸٪ به نسبت بخش‌ها
+        await status(`🎙 ۲/۳ — ساخت صدا… بخش ${toFa(String(i + 1))} از ${toFa(String(chunks.length))}`, lerp(25, 88, i, chunks.length));
         const wav = await ttsDialogue(this.env, chunks[i], { styleA: STYLE_A, styleB: STYLE_B });
         await this.env.FILES.put(tmpKey(id, i), wav, { expirationTtl: 3600 }); // فقط برای چسباندن؛ یک ساعته پاک می‌شود
         return wav.length;
@@ -255,7 +274,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     }
 
     const saved = await step.do("merge-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
-      await status("🎙 ۳/۳ — چسباندن و ارسال…");
+      await status("🎙 ۳/۳ — چسباندن و ارسال…", 90);
       const ids: string[] = []; // وب: شناسه‌ی فایل‌های ذخیره‌شده
       const wavs: Uint8Array[] = [];
       for (let i = 0; i < chunks.length; i++) {
@@ -263,6 +282,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         if (!b) throw new Error(`voice chunk ${i} missing`);
         wavs.push(new Uint8Array(b));
       }
+      await status("🎙 ۳/۳ — ذخیره و ارسال فایل…", 96);
       // تقریباً هیچ‌وقت پیش نمی‌آید، ولی اگر مجموع از سقف تلگرام (یا سقف فایل در وب) گذشت به چند قسمت تقسیم می‌شود
       const limit = web ? WEB_FILE_LIMIT : TG_LIMIT;
       const groups: Uint8Array[][] = [[]];
