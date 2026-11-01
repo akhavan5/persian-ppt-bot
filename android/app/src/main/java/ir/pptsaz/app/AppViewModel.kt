@@ -100,7 +100,8 @@ sealed interface Event {
     data class StartUpdate(val url: String) : Event
     data class NativeUpdate(val url: String, val manual: Boolean) : Event
     /** فایل دانلود شد. share = true یعنی کاربر «اشتراک‌گذاری» را زده است. */
-    data class FileReady(val saved: Saved, val share: Boolean) : Event
+    /** pkg = مقصد مستقیم اشتراک‌گذاری (مثلاً تلگرام)؛ null = فهرست سیستم. caption = متن همراه فایل. */
+    data class FileReady(val saved: Saved, val share: Boolean, val pkg: String? = null, val caption: String = "") : Event
     /** اجازه‌ی اعلان داده نشده؛ راهنمایی برای فعال‌سازی نشان بده. */
     data object NotifHint : Event
     data class BazaarBuy(val sku: String) : Event
@@ -666,7 +667,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun download(fileId: String, share: Boolean = false) {
+    fun download(fileId: String, share: Boolean = false, pkg: String? = null, caption: String = "") {
         viewModelScope.launch {
             // اگر نسخه‌ی محلی داریم، بدون اینترنت (و حتی بعد از ۲۴ ساعت) همان را در Downloads می‌گذاریم
             val app = getApplication<Application>()
@@ -675,7 +676,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     LocalFiles.read(app, fileId)?.let { Storage.save(app, it.name, it.mime, it.bytes) }
                 }
                 if (saved != null) {
-                    _events.trySend(Event.FileReady(saved, share))
+                    _events.trySend(Event.FileReady(saved, share, pkg, caption))
                     if (!share) askRateMaybe()
                     return@launch
                 }
@@ -687,7 +688,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // فایلی که در فهرست سرور هست حتماً وجود دارد؛ فقط فایلِ تازه‌ساخته (هنوز در فهرست نیامده) ممکن است چند ثانیه 404 بدهد
                 val listed = _state.value.files.any { it.id == fileId }
                 val r = Api.downloadFile(getApplication(), fileId, maxRetries = if (listed) 2 else 20)
-                _events.trySend(Event.FileReady(r, share))
+                _events.trySend(Event.FileReady(r, share, pkg, caption))
                 if (!share) askRateMaybe()
             } catch (e: ApiException) {
                 toast(e.message ?: "دانلود انجام نشد")
@@ -698,11 +699,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** دانلود نسخه‌ی PDF ارائه (ساخت روی سرور ممکن است تا یک دقیقه طول بکشد). */
-    fun downloadPdf(fileId: String, share: Boolean = false) {
+    fun downloadPdf(fileId: String, share: Boolean = false, pkg: String? = null, caption: String = "") {
         viewModelScope.launch {
             toast("در حال ساخت PDF؛ ممکن است تا یک دقیقه طول بکشد…")
             try {
-                _events.trySend(Event.FileReady(Api.downloadPdf(getApplication(), fileId), share))
+                _events.trySend(Event.FileReady(Api.downloadPdf(getApplication(), fileId), share, pkg, caption))
                 if (!share) askRateMaybe()
             } catch (e: ApiException) {
                 toast(e.message ?: "ساخت PDF انجام نشد")

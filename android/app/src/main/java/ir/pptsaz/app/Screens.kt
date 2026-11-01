@@ -942,6 +942,14 @@ private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extra
             }
         }
         job.done -> SurfaceCard {
+            var shareOpen by remember(job.id) { mutableStateOf(false) }
+            if (shareOpen) {
+                ShareDialog(canPdf = pdf, onDismiss = { shareOpen = false }) { pkg, asPdf ->
+                    shareOpen = false
+                    val cap = shareCaption(job.title)
+                    if (asPdf) vm.downloadPdf(job.id, share = true, pkg = pkg, caption = cap) else vm.download(job.id, share = true, pkg = pkg, caption = cap)
+                }
+            }
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(ex.successBg), contentAlignment = Alignment.Center) {
@@ -954,6 +962,7 @@ private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extra
                     IconButton(onClick = { vm.dismissJob() }) { AppIcon(AppIcons.Close, tint = cs.onSurfaceVariant, size = 20.dp, description = "بستن") }
                 }
                 GradientButton("دانلود ارائه (PPTX)", { vm.download(job.id) }, Modifier.fillMaxWidth(), icon = AppIcons.Download)
+                SoftButton("ارسال در تلگرام، ایتا، واتساپ…", { shareOpen = true }, Modifier.fillMaxWidth(), icon = AppIcons.Share)
                 SoftButton("پیش‌نمایش اسلایدها", { vm.openViewer(Viewer.Preview(job.id)) }, Modifier.fillMaxWidth(), icon = AppIcons.Eye)
                 if (pdf) SoftButton("دانلود نسخه‌ی PDF", { vm.downloadPdf(job.id) }, Modifier.fillMaxWidth(), icon = AppIcons.Doc)
                 job.handoutId?.let { hid -> SoftButton("دانلود جزوه (Word)", { vm.download(hid) }, Modifier.fillMaxWidth(), icon = AppIcons.Doc) }
@@ -1089,6 +1098,7 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
 private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf: Boolean = false, extraJobs: Map<String, String> = emptyMap()) {
     val cs = MaterialTheme.colorScheme
     var showPlayer by remember(f.id) { mutableStateOf(false) }
+    var shareOpen by remember(f.id) { mutableStateOf(false) }
     val (icon, brush) = when {
         f.poster -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
         f.handout -> AppIcons.Doc to Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFF97316)))
@@ -1124,7 +1134,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             if (f.audio == "podcast") {
                 IconButton(onClick = { showPlayer = !showPlayer }) { AppIcon(if (showPlayer) AppIcons.Close else PLAY_ICON, tint = cs.primary, description = if (showPlayer) "بستن پلیر" else "پخش پادکست") }
             }
-            IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
+            IconButton(onClick = { shareOpen = true }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "ارسال") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "دانلود") }
         }
         if (f.audio == "podcast" && showPlayer) {
@@ -1135,6 +1145,16 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             ExtraButtons(f.id, f.title, f.extras, extraJobs, vm, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp))
         }
     }
+    if (shareOpen) {
+        ShareDialog(
+            canPdf = pdf && !f.poster && !f.handout && f.audio.isEmpty(),
+            onDismiss = { shareOpen = false },
+        ) { pkg, asPdf ->
+            shareOpen = false
+            val cap = shareCaption(f.title)
+            if (asPdf) vm.downloadPdf(f.id, share = true, pkg = pkg, caption = cap) else vm.download(f.id, share = true, pkg = pkg, caption = cap)
+        }
+    }
 }
 
 /** ردیف فایلی که فقط نسخه‌ی محلی‌اش مانده (پیش‌نمایش نیاز به سرور دارد، پس نیست). */
@@ -1142,6 +1162,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
 private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
     val cs = MaterialTheme.colorScheme
     var confirm by remember { mutableStateOf(false) }
+    var shareOpen by remember(f.id) { mutableStateOf(false) }
     var showPlayer by remember(f.id) { mutableStateOf(false) }
     val (icon, brush) = when (f.kind) {
         "poster" -> AppIcons.Image to Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)))
@@ -1171,11 +1192,17 @@ private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
                 IconButton(onClick = { showPlayer = !showPlayer }) { AppIcon(if (showPlayer) AppIcons.Close else PLAY_ICON, tint = cs.primary, description = if (showPlayer) "بستن پلیر" else "پخش پادکست") }
             }
             IconButton(onClick = { confirm = true }) { AppIcon(AppIcons.Delete, tint = cs.onSurfaceVariant, description = "حذف از گوشی") }
-            IconButton(onClick = { vm.download(f.id, share = true) }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "اشتراک‌گذاری") }
+            IconButton(onClick = { shareOpen = true }) { AppIcon(AppIcons.Share, tint = cs.onSurfaceVariant, description = "ارسال") }
             FilledTonalIconButton(onClick = { vm.download(f.id) }) { AppIcon(AppIcons.Download, size = 22.dp, description = "ذخیره در دانلودها") }
         }
         if (f.kind == "podcast" && showPlayer) {
             PodcastPlayerCard(f.id, f.title.ifBlank { f.name }, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp), autoStart = true)
+        }
+    }
+    if (shareOpen) {
+        ShareDialog(canPdf = false, onDismiss = { shareOpen = false }) { pkg, _ ->
+            shareOpen = false
+            vm.download(f.id, share = true, pkg = pkg, caption = shareCaption(f.title))
         }
     }
     if (confirm) {

@@ -13,6 +13,17 @@
     <!-- پیگیری ساخت ارائه با Worker پیش‌زمینه (WorkManager، نوع dataSync) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- اندروید ۱۱+: برای نمایش پیام‌رسان‌های نصب‌شده در دیالوگ «ارسال ارائه» (ShareSheet.kt) -->
+    <queries>
+        <package android:name="org.telegram.messenger" />
+        <package android:name="org.telegram.messenger.web" />
+        <package android:name="ir.eitaa.messenger" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="ir.nasim" />
+        <package android:name="ir.resaneh1.iptv" />
+    </queries>
+
     <application
         android:name=".PptSazApp"
         android:allowBackup="false"

@@ -132,12 +132,22 @@ class MainActivity : ComponentActivity() {
         false
     }
 
-    private fun shareFile(f: Saved) {
+    /** pkg != null: مستقیم به همان برنامه (تلگرام، ایتا، واتساپ …) می‌فرستد؛ اگر نصب نبود یا قبول نکرد، فهرست سیستم باز می‌شود. */
+    private fun shareFile(f: Saved, pkg: String? = null, caption: String = "") {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = f.mime
             putExtra(Intent.EXTRA_STREAM, f.uri)
+            if (caption.isNotBlank()) putExtra(Intent.EXTRA_TEXT, caption)
             clipData = ClipData.newRawUri(f.name, f.uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        if (pkg != null) {
+            try {
+                startActivity(Intent(send).setPackage(pkg))
+                return
+            } catch (_: ActivityNotFoundException) {
+                // برنامه‌ی انتخابی فایل را نمی‌پذیرد؛ به فهرست سیستم برمی‌گردیم
+            }
         }
         try { startActivity(Intent.createChooser(send, "اشتراک‌گذاری")) } catch (e: ActivityNotFoundException) { vm.toast("برنامه‌ای برای اشتراک‌گذاری پیدا نشد") }
     }
@@ -330,7 +340,7 @@ class MainActivity : ComponentActivity() {
                                 is Event.FileReady -> {
                                     val f = e.saved
                                     when {
-                                        e.share -> shareFile(f)
+                                        e.share -> shareFile(f, e.pkg, e.caption)
                                         // فایل دیگر خودکار باز نمی‌شود؛ کاربر با دکمه‌ی «باز کردن» تصمیم می‌گیرد
                                         f.isPublic -> sayAction("ذخیره شد: " + f.name, "باز کردن") {
                                             if (!openFile(f)) say("برنامه‌ای برای باز کردن این فایل نصب نیست؛ فایل در پوشه‌ی دانلودها ذخیره شده است.")
