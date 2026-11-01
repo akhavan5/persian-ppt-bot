@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
@@ -152,7 +153,8 @@ object Notifier {
             .setCategory(Notification.CATEGORY_PROGRESS)
             .setStyle(style)
             .setShortCriticalText(if (indeterminate) "…" else "$pct٪".toFa())
-            .setRequestPromotedOngoing(true)
+            // setRequestPromotedOngoing فقط در SDK جدیدتر (36.1) هست؛ کلید extras در همه‌ی نسخه‌های اندروید ۱۶ کار می‌کند
+            .addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) })
     }
 
     private fun String.toFa(): String =
