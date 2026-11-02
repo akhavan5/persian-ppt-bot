@@ -61,8 +61,12 @@ export async function saveSettings(env: Env, userId: Uid, s: Settings) {
 export const SUPPORT_CONTACT = "@akhavan8";
 /** پشتیبانی در بله (کاربران بله به‌جای تلگرام به این حساب وصل می‌شوند) */
 export const SUPPORT_CONTACT_BALE = "@akhavan4";
+/** پشتیبانی در روبیکا (کاربران روبیکا به این حساب وصل می‌شوند؛ لینک روبیکا متن آماده ندارد) */
+export const SUPPORT_CONTACT_RUBIKA = "@akhavan7";
 const contactUrl = (userId: Uid, text: string) =>
-  isBaleId(userId)
+  isRubikaId(userId)
+    ? `https://rubika.ir/${SUPPORT_CONTACT_RUBIKA.slice(1)}`
+    : isBaleId(userId)
     ? `https://ble.ir/${SUPPORT_CONTACT_BALE.slice(1)}?text=${encodeURIComponent(text)}`
     : `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=${encodeURIComponent(text)}`;
 /** لینک پیام به پشتیبان با متن آماده‌ای که شناسه‌ی کاربر داخلش هست (کاربر فقط «ارسال» را می‌زند) */
