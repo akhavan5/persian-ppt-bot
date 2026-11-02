@@ -1,4 +1,4 @@
-import { isBaleId } from "./bale-format";
+import { BALE_ID_BASE, isBaleId } from "./bale-format";
 import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
@@ -321,10 +321,21 @@ export const releaseLock = (env: Env, userId: Uid) => env.KV.delete(lockKey(user
 
 // ---------- آمار ----------
 export type StatName = "started" | "ok" | "fail" | "newusers" | "newapp";
-export async function bumpStat(env: Env, name: StatName) {
-  const k = `stat:${name}:${today()}`;
-  const n = Number(await env.KV.get(k)) || 0;
-  await env.KV.put(k, String(n + 1), { expirationTtl: STAT_TTL });
+/** پلتفرم‌های سرویس: ربات تلگرام (و Mini App آن)، ربات بله، سایت، اپ اندروید */
+export type Platform = "tg" | "bale" | "web" | "app";
+export const PLATFORMS: Platform[] = ["tg", "bale", "web", "app"];
+export const isPlatform = (x: unknown): x is Platform => PLATFORMS.includes(x as Platform);
+/** پلتفرم از روی شناسه‌ی عددی گیرنده/کاربر ربات: شناسه‌های بله با BALE_ID_BASE جدا شده‌اند */
+export const botPlatform = (id: unknown): Platform => (isBaleId(id) ? "bale" : "tg");
+
+/** شمارنده‌ی روزانه: همیشه کل (stat:نام:تاریخ) و، اگر پلتفرم معلوم باشد، شمارنده‌ی همان پلتفرم (pst:پلتفرم:نام:تاریخ).
+ *  شمارنده‌ی کل از همه‌ی پلتفرم‌ها جداست تا آمار و نمای ماهانه‌ی قبلی دست‌نخورده بماند. */
+export async function bumpStat(env: Env, name: StatName, plat?: Platform) {
+  const keys = [`stat:${name}:${today()}`, ...(plat ? [`pst:${plat}:${name}:${today()}`] : [])];
+  await Promise.all(keys.map(async (k) => {
+    const n = Number(await env.KV.get(k)) || 0;
+    await env.KV.put(k, String(n + 1), { expirationTtl: STAT_TTL });
+  }));
 }
 
 /** آمار روزانه ۴۰۰ روز نگه داشته می‌شود (برای نمای ماهانه‌ی پنل مدیر؛ پیش‌تر ۶۰ روز بود) */
@@ -353,7 +364,7 @@ export async function touchUser(env: Env, userId: Uid, username?: string, name?:
   const cur = (await env.KV.get(k, "json")) as SeenUser | null;
   if (cur === null) {
     await env.KV.put(k, JSON.stringify({ t: new Date().toISOString(), u: username ?? null, n: name ?? "" }));
-    await bumpStat(env, "newusers").catch(() => {});
+    await bumpStat(env, "newusers", botPlatform(userId)).catch(() => {});
     return true; // کاربر جدید
   }
   if ((username ?? null) !== (cur.u ?? null) || (name && name !== cur.n)) {

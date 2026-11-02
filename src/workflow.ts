@@ -9,7 +9,7 @@ import { buildPptx } from "./pptx";
 import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
 import { getUserById } from "./auth";
 import { toFa } from "./util";
-import { adminIds, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
+import { adminIds, botPlatform, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
 import { BUY_SITE_NOTE, buyKbFor, fileNameWithSite, miniappUrl } from "./deck-service";
 import { getLinkedTg } from "./link";
 import { deckKeyboard, extraButtons, extrasHint, markExtra, type ExtraKind } from "./extras";
@@ -49,6 +49,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     const maxImages = Math.max(1, event.payload.maxImages ?? 1); // تلگرام: ۱ تصویر؛ وب: طبق پلن
     const contentOpts: ContentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, maxImages: settings.images ? maxImages : 0, source: event.payload.source || undefined };
     const web = event.payload.channel === "web";
+    const deckPlat = event.payload.plat ?? (web ? "web" : botPlatform(event.payload.tgId ?? userId)); // پلتفرم مبدأ برای آمار هفتگی (کارهای قدیمیِ در جریان plat ندارند)
     // کاربر دارای پلن (اعتبار این ارائه از پلن کم شده) ⇒ فایل‌ها بدون واترمارک؛ رایگان/هدیه ⇒ با نام سایت. نام فایل‌ها برای همه آدرس سایت دارد.
     const mark = event.payload.credit !== "plan";
     const handout = event.payload.handout; // جزوه‌ی Word همراه ارائه (اختیاری، ۱ اعتبار جدا)
@@ -272,7 +273,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       }).catch(() => {});
       await step.do("fail-cleanup", async () => {
         await releaseLock(this.env, userId);
-        await bumpStat(this.env, "fail").catch(() => {});
+        await bumpStat(this.env, "fail", deckPlat).catch(() => {});
       });
       throw e;
     }
@@ -280,7 +281,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     // خارج از try: خطا در این گام نباید باعث «برگشت اعتبار» بعد از ارسال موفق فایل شود
     await step.do("finish", async () => {
       await releaseLock(this.env, userId);
-      await bumpStat(this.env, "ok").catch(() => {});
+      await bumpStat(this.env, "ok", deckPlat).catch(() => {});
       await noteDeckDone(this.env, userId).catch((e) => console.error("noteDeckDone", e)); // قیف کاربران پنل مدیر
     });
     // اعلام تمام شدن اعتبار پلن (فقط ایمیل): اگر اعتبار این ارائه (یا پوستر/جزوه‌اش) از پلن کم شده و اکنون اعتبار پلن صفر است. بعد از «finish»، بدون تلاش مجدد؛ خطایش به اعتبار یا کار نمی‌رسد.

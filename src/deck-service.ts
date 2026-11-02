@@ -7,8 +7,8 @@ import type { Env } from "./env";
 import type { DeckParams, Mode, Settings } from "./types";
 import { MODES, isMode } from "./themes";
 import {
-  FREE_MAX_IMAGES, FREE_MAX_SLIDES, acquireLock, bumpStat, clampSlides, getSettings, imagesForSlides, isLocked, maxImagesFor, maxSlidesFor,
-  refundCredit, releaseLock, spendCredit,
+  FREE_MAX_IMAGES, FREE_MAX_SLIDES, acquireLock, botPlatform, bumpStat, clampSlides, getSettings, imagesForSlides, isLocked, maxImagesFor, maxSlidesFor,
+  refundCredit, releaseLock, spendCredit, type Platform,
 } from "./settings";
 import { PLANS } from "./payment";
 import { toFa } from "./util";
@@ -173,15 +173,16 @@ export const posterEnabled = (env: Env) => hasBrowser(env);
 export const audioEnabled = (env: Env) => !!env.AUDIO_WORKFLOW && ttsEnabled(env);
 export interface PosterWant { layout: "wide" | "tall" }
 
-export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** اعلان پایان کار در تلگرام (Mini App) */ notify?: boolean; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
+export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** پلتفرم مبدأ برای آمار؛ خالی = از روی کانال و شناسه */ plat?: Platform; /** اعلان پایان کار در تلگرام (Mini App) */ notify?: boolean; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
 
 /** ساخت نمونه‌ی Workflow. شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow. در صورت شکست، اعتبار برمی‌گردد و false برمی‌گرداند. */
 export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid: string | number, jobId: string, d: Delivery, poster?: PosterWant): Promise<boolean> {
   // متن اصلی کاربر برای گزارش مدیر (مثل تلگرام برای وب هم ثبت می‌شود). اگر فایل گذاشته، با 📎 مشخص می‌شود (و اگر متنی نداده، نام/موضوع فایل)
   const typed = (d.orig ?? (d.channel === "web" ? b.topic : "")).replace(/\s+/g, " ").trim();
   const orig = (b.source ? `📎 ${typed || b.topic}` : typed).slice(0, 300);
+  const plat: Platform = d.plat ?? (d.channel === "web" ? "web" : botPlatform(d.tgId ?? uid));
   const params: DeckParams = {
-    chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId, ...(d.notify ? { notify: true } : {}),
+    chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId, plat, ...(d.notify ? { notify: true } : {}),
     topic: b.topic, ...(orig ? { orig } : {}), ...(b.source ? { source: b.source } : {}), settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
     // پوستر همراه ارائه (همین Workflow؛ ۱ اعتبار جدا که beginDeck کسر کرده) با تصویر تزئینی ثابت
     ...(poster && b.posterQuota ? { poster: { layout: poster.layout, credit: b.posterQuota.source, day: b.posterQuota.day } } : {}),
@@ -200,6 +201,6 @@ export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid:
     await b.undo();
     return false;
   }
-  await bumpStat(env, "started").catch(() => {});
+  await bumpStat(env, "started", plat).catch(() => {});
   return true;
 }
