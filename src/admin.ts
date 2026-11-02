@@ -1,4 +1,5 @@
 import { BALE_ID_BASE, isBaleId } from "./bale-format";
+import { RUBIKA_ID_BASE, isRubikaId } from "./rubika-format";
 import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import {
@@ -32,6 +33,7 @@ const fa = (n: number | string) => toFa(String(n));
 /** لینک پروفایل: با نام کاربری → t.me/نام_کاربری، وگرنه لینک tg://user (برای کاربرانی که با ربات گفتگو داشته‌اند کار می‌کند) */
 const userLink = (id: Uid, name?: string | null, username?: string | null) => {
   if (typeof id === "string") return `<b>${esc(name || id)}</b> 🌐`; // کاربر وب: پروفایل تلگرام ندارد
+  if (isRubikaId(id)) return `<b>${esc(name || (username ? "@" + username : String(id)))}</b> (روبیکا)`; // کاربر روبیکا: لینک t.me / tg:// ندارد
   if (isBaleId(id)) return `<b>${esc(name || (username ? "@" + username : String(id)))}</b> (بله)`; // کاربر بله: لینک t.me / tg:// ندارد
   const uname = username && /^[A-Za-z0-9_]{3,64}$/.test(username) ? username : null;
   const label = esc(name || (uname ? "@" + uname : String(id)));
@@ -81,7 +83,8 @@ const APP_USER = "json_extract(v,'$.app') = 1";
 const WEB_NOT_APP = "COALESCE(json_extract(v,'$.app'),0) != 1";
 /** seen:<شناسه> — شناسه‌های بله از BALE_ID_BASE شروع می‌شوند (bale-format.ts)؛ تلگرام زیر آن است */
 const SEEN_TG = `CAST(substr(k,6) AS INTEGER) < ${BALE_ID_BASE}`;
-const SEEN_BALE = `CAST(substr(k,6) AS INTEGER) >= ${BALE_ID_BASE}`;
+const SEEN_BALE = `CAST(substr(k,6) AS INTEGER) >= ${BALE_ID_BASE} AND CAST(substr(k,6) AS INTEGER) < ${RUBIKA_ID_BASE}`;
+const SEEN_RUBIKA = `CAST(substr(k,6) AS INTEGER) >= ${RUBIKA_ID_BASE}`;
 const likeArg = (s: string) => "%" + s.replace(/[\\%_]/g, "\\$&") + "%";
 
 // ---------- گزارش اقدامات مدیر ----------
@@ -117,33 +120,17 @@ const cb = (text: string, data: string): Btn => ({ text, callback_data: data });
 
 // ---------- آمار به تفکیک پلتفرم (تلگرام / بله / وب / اپ اندروید) ----------
 // شمارنده‌ها را bumpStat (settings.ts) در pst:<پلتفرم>:<نام>:<روز> می‌نویسد؛ جمع کل همچنان در stat:<نام>:<روز> است.
-const PLAT_LABEL: Record<Platform, string> = { tg: "✈️ تلگرام", bale: "🟢 بله", web: "🌐 وب", app: "📱 اپ اندروید" };
+const PLAT_LABEL: Record<Platform, string> = { tg: "✈️ تلگرام", bale: "🟢 بله", rubika: "🟣 روبیکا", web: "🌐 وب", app: "📱 اپ اندروید" };
 type PlatCounts = Record<string, number>;
 /** هفته‌ی ایرانی از شنبه تا جمعه: چند روز از شنبه‌ی همین هفته گذشته (شنبه = ۱، جمعه = ۷؛ روز هفته به وقت ایران) */
 const WEEKDAY_IDX: Record<string, number> = { Sat: 0, Sun: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6 };
 const daysIntoWeek = () => (WEEKDAY_IDX[new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "Asia/Tehran" })] ?? 0) + 1;
-/** شروع (۰۰:۰۰ به وقت ایران، UTC+3:30) روزی که n-1 روز قبل از امروز است؛ برای n = روزهای گذشته از شنبه، همان شنبه */
-const tehranStartMs = (n: number) => {
-  const OFF = 3.5 * 3_600_000, DAY = 86_400_000;
-  return Math.floor((Date.now() + OFF) / DAY) * DAY - OFF - (n - 1) * DAY;
-};
-/** کاربران جدید هر پلتفرم از یک زمان به بعد، مستقیم از خود پروفایل‌ها (زمان اولین پیام و زمان ثبت‌نام)؛ پس از همان لحظه‌ی دیپلوی هم برای گذشته درست است.
- *  وب = ثبت‌نام از سایت (ایمیل/موبایل/گوگل)، اپ = ثبت‌نام از اپ اندروید؛ پروفایل خودکارِ کاربران ربات در وب شمرده نمی‌شود. */
-async function newUsersSince(env: Env, sinceMs: number): Promise<Record<Platform, number>> {
-  const iso = new Date(sinceMs).toISOString();
-  const seenQ = (only: string) => count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${only} AND json_extract(v,'$.t') >= ?3`, "seen:", "seen:" + MAXC, iso);
-  const webQ = (extra: string) => count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY} AND json_extract(v,'$.created') >= ?3 AND ${extra}`, "wu:", "wu:" + MAXC, sinceMs);
-  const [tg, bale, web, app] = await Promise.all([
-    seenQ(SEEN_TG), seenQ(SEEN_BALE), webQ("COALESCE(json_extract(v,'$.via'),'') != 'app'"), webQ("json_extract(v,'$.via') = 'app'"),
-  ]);
-  return { tg, bale, web, app };
-}
 const dayStr = (agoDays: number) => new Date(Date.now() - agoDays * 86_400_000).toISOString().slice(0, 10);
 
-/** جمع شمارنده‌های هر پلتفرم از «from روز پیش» (قدیمی‌تر) تا «to روز پیش» (جدیدتر)؛ ۰ = امروز، UTC مثل بقیه‌ی آمار */
+/** جمع شمارنده‌های هر پلتفرم برای بازه‌ی [از agoFrom تا agoTo روز پیش] (۰ = امروز، UTC مثل بقیه‌ی آمار) */
 async function platStats(env: Env, from: number, to: number): Promise<Record<Platform, PlatCounts>> {
   const out = Object.fromEntries(PLATFORMS.map((p) => [p, {} as PlatCounts])) as Record<Platform, PlatCounts>;
-  const lo = dayStr(from), hi = dayStr(to); // from = قدیمی‌تر (روزهای پیش بیشتر)، to = جدیدتر؛ lo ≤ روز ≤ hi
+  const lo = dayStr(to), hi = dayStr(from); // lo ≤ روز ≤ hi
   for (const r of await rows(env,
     "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND substr(k, -10) >= ?3 AND substr(k, -10) <= ?4 AND (exp IS NULL OR exp > ?5)",
     "pst:", "pst:" + MAXC, lo, hi, nowSec())) {
@@ -167,9 +154,8 @@ const platLine = (label: string, c: PlatCounts, prev?: PlatCounts) =>
   `${label}: ▶️ ${fa(c.started ?? 0)} · ✅ <b>${fa(c.ok ?? 0)}</b>${prev ? trend(c.ok ?? 0, prev.ok ?? 0) : ""} · ❌ ${fa(c.fail ?? 0)} · 🆕 ${fa(c.newusers ?? 0)}`;
 
 /** بلوک گزارش پلتفرمی برای بازه‌ی days روز اخیر: هر پلتفرم یک خط + جمع کل؛ prev = بازه‌ی قبلی هم‌اندازه برای روند */
-async function platformReport(env: Env, days: number, st: Record<string, Record<string, number>>, withTrend: boolean, shift = days, newUsers?: Record<Platform, number>): Promise<string> {
+async function platformReport(env: Env, days: number, st: Record<string, Record<string, number>>, withTrend: boolean, shift = days): Promise<string> {
   const [cur, prev] = await Promise.all([platStats(env, days - 1, 0), withTrend ? platStats(env, shift + days - 1, shift) : Promise.resolve(null)]);
-  if (newUsers) for (const p of PLATFORMS) cur[p].newusers = newUsers[p]; // شمارش مستقیم از پروفایل‌ها، نه شمارنده‌ی روزانه
   const total = sumDaysOf(st, 0, days - 1), totalPrev = withTrend ? sumDaysOf(st, shift, shift + days - 1) : undefined;
   const lines = PLATFORMS.map((p) => platLine(PLAT_LABEL[p], cur[p], prev?.[p]));
   lines.push(platLine("📊 <b>جمع کل</b>", total, totalPrev));
@@ -180,7 +166,7 @@ async function platformReport(env: Env, days: number, st: Record<string, Record<
 }
 
 async function homeScreen(env: Env): Promise<Screen> {
-  const [tgUsers, baleUsers, webUsers, appUsers, subs, banned, st, payIssues] = await Promise.all([
+  const [tgUsers, baleUsers, webUsers, appUsers, subs, banned, st, payIssues, rubikaUsers] = await Promise.all([
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_TG}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_BALE}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY} AND ${WEB_NOT_APP}`, "wu:", "wu:" + MAXC),
@@ -189,16 +175,18 @@ async function homeScreen(env: Env): Promise<Screen> {
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "ban:", "ban:" + MAXC),
     statsByDay(env),
     issueCount(env).catch(() => 0),
+    count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_RUBIKA}`, "seen:", "seen:" + MAXC),
   ]);
   const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
-  const nu = await newUsersSince(env, tehranStartMs(n));
-  const week = await platformReport(env, n, st, true, 7, nu);
-  const range = `${fmtDay(tehranStartMs(n))} تا ${fmtDay(Date.now())}`;
+  const week = await platformReport(env, n, st, true, 7);
+  const wk = await platStats(env, n - 1, 0);
+  const nu: Record<string, number> = Object.fromEntries(PLATFORMS.map((p) => [p, wk[p].newusers ?? 0]));
+  const range = `${fmtDay(Date.now() - (n - 1) * 86_400_000)} تا ${fmtDay(Date.now())}`;
   return {
     text:
       "🛠 <b>پنل مدیریت</b>\n\n" +
-      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg)}</b> · 🟢 <b>${fa(nu.bale)}</b> · 🌐 <b>${fa(nu.web)}</b> · 📱 <b>${fa(nu.app)}</b>  <i>(تلگرام · بله · وب · اپ)</i>\n` +
-      `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🌐 ${fa(webUsers)} · 📱 ${fa(appUsers)}\n` +
+      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🟣 <b>${fa(nu.rubika ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · روبیکا · وب · اپ)</i>\n` +
+      `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🟣 ${fa(rubikaUsers)} · 🌐 ${fa(webUsers)} · 📱 ${fa(appUsers)}\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
       `\n📅 <b>گزارش هفتگی</b> (شنبه تا امروز، ${range})\n${week}\n` +
@@ -234,7 +222,7 @@ async function statsByDay(env: Env): Promise<Record<string, Record<string, numbe
 }
 
 async function statsScreen(env: Env, days: number): Promise<Screen> {
-  const [st, tgUsers, baleUsers, webUsers, subs, bonusSum, bonusUsers, appUsers] = await Promise.all([
+  const [st, tgUsers, baleUsers, webUsers, subs, bonusSum, bonusUsers, appUsers, rubikaUsers] = await Promise.all([
     statsByDay(env),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_TG}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_BALE}`, "seen:", "seen:" + MAXC),
@@ -243,6 +231,7 @@ async function statsScreen(env: Env, days: number): Promise<Screen> {
     count(env, "SELECT SUM(CAST(v AS INTEGER)) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3)", "bonus:", "bonus:" + MAXC, nowSec()),
     count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND CAST(v AS INTEGER) > 0", "bonus:", "bonus:" + MAXC, nowSec()),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_USER}`, "wu:", "wu:" + MAXC),
+    count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_RUBIKA}`, "seen:", "seen:" + MAXC),
   ]);
   const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
   const sum = (n: string) => dates.reduce((a, d) => a + (st[d]?.[n] ?? 0), 0);
@@ -268,7 +257,7 @@ async function statsScreen(env: Env, days: number): Promise<Screen> {
       (rate === null ? "" : `\n📈 نرخ موفقیت: ${fa(rate)}٪`) +
       `\n\n<b>به تفکیک پلتفرم — ${label}</b>\n${byPlat}` +
       "\n\n<b>کل</b>\n" +
-      `👥 کاربران: ✈️ تلگرام ${fa(tgUsers)} · 🟢 بله ${fa(baleUsers)} · 🌐 وب ${fa(webUsers)} · 📱 اپ ${fa(appUsers)}\n` +
+      `👥 کاربران: ✈️ تلگرام ${fa(tgUsers)} · 🟢 بله ${fa(baleUsers)} · 🟣 روبیکا ${fa(rubikaUsers)} · 🌐 وب ${fa(webUsers)} · 📱 اپ ${fa(appUsers)}\n` +
       `👑 پلن‌های فعال: ${fa(subs)}\n` +
       `🎁 اعتبار هدیه/شارژِ مصرف‌نشده: ${fa(bonusSum)} (نزد ${fa(bonusUsers)} کاربر)\n\n` +
       "<b>ریز ۷ روز اخیر</b>\n" + daily.join("\n") +
@@ -288,13 +277,13 @@ const pager = (base: string, page: number, more: boolean): Btn[] => {
   return r;
 };
 
-type UsersKind = "t" | "b" | "w" | "a";
+type UsersKind = "t" | "b" | "r" | "w" | "a";
 async function usersScreen(env: Env, kind: UsersKind, page: number): Promise<Screen> {
-  const tabs: Btn[] = ([["t", "✈️ تلگرام"], ["b", "🟢 بله"], ["w", "🌐 وب"], ["a", "📱 اپ"]] as const).map(([k, l]) => cb(kind === k ? `• ${l}` : l, `ad:us:${k}:0`));
+  const tabs: Btn[] = ([["t", "✈️ تلگرام"], ["b", "🟢 بله"], ["r", "🟣 روبیکا"], ["w", "🌐 وب"], ["a", "📱 اپ"]] as const).map(([k, l]) => cb(kind === k ? `• ${l}` : l, `ad:us:${k}:0`));
   const items: { id: Uid; label: string; line: string }[] = [];
   let total = 0;
-  if (kind === "t" || kind === "b") {
-    const only = kind === "t" ? SEEN_TG : SEEN_BALE; // شناسه‌های بله از شناسه‌های تلگرام جدا هستند
+  if (kind === "t" || kind === "b" || kind === "r") {
+    const only = kind === "t" ? SEEN_TG : kind === "r" ? SEEN_RUBIKA : SEEN_BALE; // شناسه‌های بله از شناسه‌های تلگرام جدا هستند
     total = await count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${only}`, "seen:", "seen:" + MAXC);
     const rs = await rows(env, `SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND ${only} ORDER BY json_extract(v,'$.t') DESC LIMIT ?3 OFFSET ?4`, "seen:", "seen:" + MAXC, PAGE, page * PAGE);
     for (const r of rs) {
@@ -319,6 +308,7 @@ async function usersScreen(env: Env, kind: UsersKind, page: number): Promise<Scr
   }
   const head = kind === "t" ? "✈️ <b>کاربران تلگرام</b> (جدیدترین اول، به وقت ایران)"
     : kind === "b" ? "🟢 <b>کاربران بله</b> (جدیدترین اول، به وقت ایران)"
+    : kind === "r" ? "🟣 <b>کاربران روبیکا</b> (جدیدترین اول، به وقت ایران)"
     : kind === "a" ? "📱 <b>کاربران اپ اندروید</b> (🔗 = تلگرام هم وصل کرده)"
     : "🌐 <b>کاربران وب</b> (فقط سایت؛ کاربران اپ در تب 📱 هستند — 🔗 = تلگرام هم وصل کرده)";
   return {
@@ -359,7 +349,7 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
 
   const lines = [
     `👤 <b>${tgId ? userLink(tgId, name || "باز کردن پروفایل", seen?.u) : esc(name || "—")}</b>${admin ? " 👮 مدیر" : ""}`,
-    tgId ? `🆔 ${isBaleId(tgId) ? "بله" : "تلگرام"}: <code>${tgId}</code>${seen?.u ? ` · @${esc(seen.u)}` : ""}` : "🆔 تلگرام: وصل نشده",
+    tgId ? `🆔 ${isRubikaId(tgId) ? "روبیکا" : isBaleId(tgId) ? "بله" : "تلگرام"}: <code>${tgId}</code>${seen?.u ? ` · @${esc(seen.u)}` : ""}` : "🆔 تلگرام: وصل نشده",
     webId ? `🌐 پروفایل وب: <code>${webId}</code>` : "",
     web?.email ? `✉️ ایمیل: ${esc(web.email)}` : "",
     web?.mobile ? `📞 موبایل: ${esc(web.mobile)}` : "",
@@ -686,7 +676,7 @@ async function decksScreen(env: Env): Promise<Screen> {
   // نوع کاربر از روی خودِ حساب تشخیص داده می‌شود (نه از ثبت منبع هر ارائه):
   // وبی = از سایت ثبت‌نام کرده (ایمیل/موبایل/گوگل دارد)؛ تلگرامی = شناسه‌ی عددی یا پروفایل خودکار ربات. 🔗 = وبی که تلگرام هم وصل کرده
   const kindOf = async (uid: Uid): Promise<string> => {
-    if (typeof uid === "number") return isBaleId(uid) ? "🟢 بله‌ای" : "✈️ تلگرامی";
+    if (typeof uid === "number") return isRubikaId(uid) ? "🟣 روبیکایی" : isBaleId(uid) ? "🟢 بله‌ای" : "✈️ تلگرامی";
     const w = await getUserById(env, uid).catch(() => null);
     if (!w || !(w.email || w.mobile || w.google)) return "✈️ تلگرامی";
     const linked = Number(await env.KV.get(`w2tg:${uid}`).catch(() => null)) > 0;
@@ -910,7 +900,7 @@ const sendScreen = (env: Env, chatId: number, s: Screen) => sendMessage(env, cha
 
 // ---------- دستورهای متنی ----------
 export async function handleAdmin(env: Env, chatId: number, cmd: string, _args: string[], _raw = "", adminId = chatId) {
-  if (isBaleId(adminId)) return; // پنل مدیریت فقط در تلگرام است
+  if (isBaleId(adminId) || isRubikaId(adminId)) return; // پنل مدیریت فقط در تلگرام است
   await clearInput(env, adminId).catch(() => {});
   if (cmd === "/cancel") return sendMessage(env, chatId, "✅ لغو شد.");
   return sendScreen(env, chatId, await homeScreen(env)); // /admin و /panel
@@ -919,7 +909,7 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, _args: 
 // ---------- ورودی متنی منتظر ----------
 /** اگر مدیر قبلاً از پنل چیزی خواسته (جستجو، مقدار، متن)، این پیامش همان ورودی است. true = مصرف شد */
 export async function handleAdminInput(env: Env, chatId: number, adminId: number, text: string): Promise<boolean> {
-  if (isBaleId(adminId)) return false; // پنل مدیریت فقط در تلگرام است
+  if (isBaleId(adminId) || isRubikaId(adminId)) return false; // پنل مدیریت فقط در تلگرام است
   const p = json<Pending>(await env.KV.get(inKey(adminId)));
   if (!p) return false;
   await clearInput(env, adminId);
@@ -1010,7 +1000,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
   const chatId: number = cq.message.chat.id, mid: number = cq.message.message_id, adminId: number = cq.from.id;
   const answer = (text?: string, alert = false) =>
     tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
-  if (!isAdmin(env, adminId) || isBaleId(adminId)) return await answer(); // پنل مدیریت فقط در تلگرام است
+  if (!isAdmin(env, adminId) || isBaleId(adminId) || isRubikaId(adminId)) return await answer(); // پنل مدیریت فقط در تلگرام است
 
   const [, a, b, c] = String(cq.data ?? "").split(":");
   const show = async (s: Screen) => { await answer(); await editMessage(env, chatId, mid, s.text, toMarkup(s)); };
@@ -1027,7 +1017,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "h": return await show(await homeScreen(env));
       case "x": await answer(); return await tg(env, "deleteMessage", { chat_id: chatId, message_id: mid }).catch(() => {});
       case "st": return await show(await statsScreen(env, [1, 7, 30].includes(Number(b)) ? Number(b) : 7));
-      case "us": return await show(await usersScreen(env, b === "w" || b === "b" || b === "a" ? b : "t", Math.max(0, Math.min(2000, Number(c) || 0))));
+      case "us": return await show(await usersScreen(env, b === "w" || b === "b" || b === "r" || b === "a" ? b : "t", Math.max(0, Math.min(2000, Number(c) || 0))));
       case "sb": return await show(await subsScreen(env, Math.max(0, Math.min(2000, Number(b) || 0))));
       case "bn": return await show(await bannedScreen(env));
       case "dk": return await show(await decksScreen(env));

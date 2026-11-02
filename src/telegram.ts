@@ -1,5 +1,7 @@
 import type { Env } from "./env";
 import { BALE_API_DEFAULT, baleMarkup, baleText, fromBaleId, hasWebApp, isBaleId } from "./bale-format";
+import { isRubikaId } from "./rubika-format";
+import { rubikaSendFile, rubikaTg } from "./rubika-api";
 
 const apiBase = (env: Env) => env.TELEGRAM_API_BASE || "https://api.telegram.org";
 
@@ -8,18 +10,23 @@ export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;")
 // ---------- تلگرام یا بله؟ ----------
 // شناسه‌ی گیرنده‌ی بله با BALE_ID_BASE جمع شده (bale-format.ts)، پس هر ارسال فقط از روی chat_id مسیر خودش را پیدا می‌کند.
 // متدهای بدون chat_id (answerCallbackQuery، getFile، getMe) فقط داخل پردازش آپدیت بله صدا زده می‌شوند و از پرچم env.PLATFORM می‌فهمند.
-interface Route { bale: boolean; base: string; token: string }
+interface Route { bale: boolean; rubika: boolean; base: string; token: string }
 function route(env: Env, chatId?: unknown): Route {
   const known = chatId !== undefined && chatId !== null && chatId !== "";
+  // روبیکا: آدرس و توکن را rubika-api.ts خودش از env می‌خواند (متدها و قالب پاسخ با تلگرام فرق دارد)
+  if (known ? isRubikaId(chatId) : env.PLATFORM === "rubika") return { bale: false, rubika: true, base: "", token: "" };
   const bale = known ? isBaleId(chatId) : env.PLATFORM === "bale";
   return bale
-    ? { bale, base: (env.BALE_API_BASE || BALE_API_DEFAULT).replace(/\/+$/, ""), token: env.BALE_BOT_TOKEN ?? "" }
-    : { bale, base: apiBase(env), token: env.TELEGRAM_BOT_TOKEN };
+    ? { bale, rubika: false, base: (env.BALE_API_BASE || BALE_API_DEFAULT).replace(/\/+$/, ""), token: env.BALE_BOT_TOKEN ?? "" }
+    : { bale, rubika: false, base: apiBase(env), token: env.TELEGRAM_BOT_TOKEN };
 }
 /** نسخه‌ی env برای پردازش چیزی که از بله آمده (مثلاً خواندن فایل در Workflow)؛ برای گیرنده‌ی تلگرام همان env برمی‌گردد */
-export const envFor = (env: Env, chatId: unknown): Env => (isBaleId(chatId) && env.PLATFORM !== "bale" ? { ...env, PLATFORM: "bale" } : env);
+export const envFor = (env: Env, chatId: unknown): Env =>
+  isRubikaId(chatId) ? (env.PLATFORM !== "rubika" ? { ...env, PLATFORM: "rubika" } : env)
+  : isBaleId(chatId) && env.PLATFORM !== "bale" ? { ...env, PLATFORM: "bale" } : env;
 /** آدرس دانلود فایل (بعد از getFile)؛ پلتفرم از پرچم env.PLATFORM می‌آید (getFile شناسه‌ی چت ندارد) */
 export const fileUrl = (env: Env, filePath: string): string => {
+  if (/^https?:\/\//i.test(filePath)) return filePath; // روبیکا (getFile) آدرس کامل دانلود می‌دهد
   const r = route(env);
   return `${r.base}/file/bot${r.token}/${filePath}`;
 };
@@ -42,6 +49,7 @@ function baleParams(env: Env, method: string, body: Record<string, unknown>, web
 
 export async function tg<T = any>(env: Env, method: string, body: Record<string, unknown> = {}): Promise<T> {
   const r = route(env, body.chat_id ?? body.user_id);
+  if (r.rubika) return (await rubikaTg(env, method, body)) as T;
   const call = async (payload: unknown) => {
     const res = await fetch(`${r.base}/bot${r.token}/${method}`, {
       method: "POST",
@@ -97,6 +105,7 @@ const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.
 /** extra.reply_markup (مثلاً دکمه‌ی PDF) به‌صورت JSON در فرم فرستاده می‌شود؛ mime پیش‌فرض pptx است */
 export async function sendDocument(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { reply_markup?: unknown; mime?: string } = {}) {
   const rt = route(env, chatId);
+  if (rt.rubika) { await rubikaSendFile(env, chatId, data, filename, caption, "File", extra.reply_markup); return; }
   const form = mediaForm(env, rt, chatId, caption);
   if (extra.reply_markup) form.append("reply_markup", JSON.stringify(rt.bale ? baleMarkup(extra.reply_markup, siteOf(env)) : extra.reply_markup));
   form.append("document", new Blob([data], { type: extra.mime ?? PPTX_MIME }), filename);
@@ -111,6 +120,11 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
 export async function sendAudio(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { title?: string; performer?: string; duration?: number; mime?: string } = {}) {
   const mime = extra.mime ?? "audio/wav";
   const rt = route(env, chatId);
+  if (rt.rubika) { // موزیک؛ اگر قالب (مثلاً WAV) را نپذیرفت همان فایل به‌صورت سند می‌رود
+    try { await rubikaSendFile(env, chatId, data, filename, caption, "Music"); return; } catch (e) { console.error("rubika sendAudio", String(e).slice(0, 200)); }
+    await rubikaSendFile(env, chatId, data, filename, caption, "File");
+    return;
+  }
   const form = mediaForm(env, rt, chatId, caption);
   if (extra.title) form.append("title", extra.title.slice(0, 200));
   if (extra.performer) form.append("performer", extra.performer.slice(0, 100));
@@ -130,6 +144,11 @@ export async function sendAudio(env: Env, chatId: number, data: Uint8Array, file
 /** ارسال عکس (پیش‌نمایش داخل چت). سقف تلگرام: ۱۰ مگابایت و مجموع عرض+ارتفاع ≤ ۱۰۰۰۰ پیکسل */
 export async function sendPhoto(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, mime = "image/png") {
   const rt = route(env, chatId);
+  if (rt.rubika) {
+    try { await rubikaSendFile(env, chatId, data, filename, caption, "Image"); return; } catch (e) { console.error("rubika sendPhoto", String(e).slice(0, 200)); }
+    await rubikaSendFile(env, chatId, data, filename, caption, "File");
+    return;
+  }
   const form = mediaForm(env, rt, chatId, caption);
   form.append("photo", new Blob([data], { type: mime }), filename);
   const r = await fetch(`${rt.base}/bot${rt.token}/sendPhoto`, {

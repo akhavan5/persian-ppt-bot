@@ -16,6 +16,7 @@ import { appPushCommand } from "./push";
 import { appVerCommand } from "./app-version";
 import { editMessage, envFor, esc, sendDocument, sendMessage, tg } from "./telegram";
 import { isBaleId } from "./bale-format";
+import { isRubikaId } from "./rubika-format";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
@@ -514,8 +515,8 @@ async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chat
   await env.KV.delete(fbKey(userId)).catch(() => {});
   const rewarded = canReward && (await claimFeedbackReward(env, uid).catch((e) => { console.error("feedbackReward", e); return false; }));
   const from = msg.from;
-  const who = isBaleId(userId)
-    ? `${esc(displayName(from) || String(userId))} <i>(بله)</i>${from.username ? ` (@${esc(from.username)})` : ""}` // لینک tg://user برای کاربر بله کار نمی‌کند
+  const who = isBaleId(userId) || isRubikaId(userId)
+    ? `${esc(displayName(from) || String(userId))} <i>(${isRubikaId(userId) ? "روبیکا" : "بله"})</i>${from.username ? ` (@${esc(from.username)})` : ""}` // لینک tg://user برای کاربر بله کار نمی‌کند
     : `<a href="tg://user?id=${userId}">${esc(displayName(from) || String(userId))}</a>${from.username ? ` (@${esc(from.username)})` : ""}`;
   const out = `💬 <b>نظر کاربر</b>\n👤 ${who}\n🆔 <code>${userId}</code>\n📄 ارائه: ${esc(title)}${rewarded ? `\n🎁 ${toFa(String(FEEDBACK_CREDITS))} اعتبار هدیه داده شد` : ""}\n\n${esc(text.slice(0, 2000))}`;
   const adminKb = kb([[{ text: "👤 کارت کاربر", callback_data: `ad:nu:${userId}` }, { text: "🗂 فایل‌ها", callback_data: `ad:nd:${userId}` }]]);
@@ -567,15 +568,15 @@ async function showFiles(env: Env, chatId: number, uid: Uid) {
       ])));
 }
 async function showInvite(env: Env, chatId: number, userId: number) {
-  const bale = isBaleId(userId);
-  const me = await tg<{ username?: string }>(bale ? envFor(env, userId) : env, "getMe");
-  const link = bale ? `https://ble.ir/${me.username}?start=ref_${userId}` : `https://t.me/${me.username}?start=ref_${userId}`;
+  const bale = isBaleId(userId), rubika = isRubikaId(userId);
+  const me = await tg<{ username?: string }>(bale || rubika ? envFor(env, userId) : env, "getMe");
+  const link = rubika ? `https://rubika.ir/${me.username}?start=ref_${userId}` : bale ? `https://ble.ir/${me.username}?start=ref_${userId}` : `https://t.me/${me.username}?start=ref_${userId}`;
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
   const done = Math.min(REF_MAX, Number(await env.KV.get(`refc:${userId}`).catch(() => null)) || 0);
   return await sendMessage(env, chatId,
     `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد ربات شوند، <b>۱ اعتبار پلن پلاس</b> می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(REF_MAX / REF_EVERY))} اعتبار پلاس).\n\n` +
     `📊 دعوت‌های تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`,
-    bale ? undefined : kb([[{ text: "📤 ارسال به دوستان", url: share }]])); // دکمه‌ی اشتراک‌گذاری t.me فقط برای تلگرام
+    bale || rubika ? undefined : kb([[{ text: "📤 ارسال به دوستان", url: share }]])); // دکمه‌ی اشتراک‌گذاری t.me فقط برای تلگرام
 }
 async function showCredit(env: Env, chatId: number, uid: Uid, userId: number) {
   const granted = await grantDailyFree(env, uid).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز

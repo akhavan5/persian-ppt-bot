@@ -1,4 +1,5 @@
 import { BALE_ID_BASE, isBaleId } from "./bale-format";
+import { isRubikaId } from "./rubika-format";
 import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
@@ -322,11 +323,11 @@ export const releaseLock = (env: Env, userId: Uid) => env.KV.delete(lockKey(user
 // ---------- آمار ----------
 export type StatName = "started" | "ok" | "fail" | "newusers" | "newapp";
 /** پلتفرم‌های سرویس: ربات تلگرام (و Mini App آن)، ربات بله، سایت، اپ اندروید */
-export type Platform = "tg" | "bale" | "web" | "app";
-export const PLATFORMS: Platform[] = ["tg", "bale", "web", "app"];
+export type Platform = "tg" | "bale" | "rubika" | "web" | "app";
+export const PLATFORMS: Platform[] = ["tg", "bale", "rubika", "web", "app"];
 export const isPlatform = (x: unknown): x is Platform => PLATFORMS.includes(x as Platform);
 /** پلتفرم از روی شناسه‌ی عددی گیرنده/کاربر ربات: شناسه‌های بله با BALE_ID_BASE جدا شده‌اند */
-export const botPlatform = (id: unknown): Platform => (isBaleId(id) ? "bale" : "tg");
+export const botPlatform = (id: unknown): Platform => (isRubikaId(id) ? "rubika" : isBaleId(id) ? "bale" : "tg");
 
 /** شمارنده‌ی روزانه: همیشه کل (stat:نام:تاریخ) و، اگر پلتفرم معلوم باشد، شمارنده‌ی همان پلتفرم (pst:پلتفرم:نام:تاریخ).
  *  شمارنده‌ی کل از همه‌ی پلتفرم‌ها جداست تا آمار و نمای ماهانه‌ی قبلی دست‌نخورده بماند. */

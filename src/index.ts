@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { handleUpdate } from "./bot";
 import { baleEnabled, baleSecret, handleBaleUpdate, setupBale } from "./bale";
+import { handleRubikaUpdate, rubikaEnabled, rubikaSecret, setupRubika } from "./rubika";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
 import { withStore } from "./store";
@@ -129,6 +130,26 @@ export default {
         return noindex(new Response("forbidden", { status: 403 }));
       }
       return noindex(Response.json(await setupBale(env)));
+    }
+
+    // وبهوک روبیکا: راز بخشی از آدرس است (/rubika/<RUBIKA_WEBHOOK_SECRET>)؛ بدون RUBIKA_BOT_TOKEN همه‌چیز 403 است و تلگرام و بله بی‌تأثیر می‌مانند
+    const rubikaHook = url.pathname.match(/^\/rubika\/([A-Za-z0-9_-]{1,128})$/);
+    if (rubikaHook) {
+      if (req.method !== "POST") return noindex(new Response("method not allowed", { status: 405, headers: { allow: "POST" } }));
+      const secret = rubikaSecret(env);
+      if (!rubikaEnabled(env) || !secret || !safeEqual(rubikaHook[1], secret)) return noindex(new Response("forbidden", { status: 403 }));
+      const update = await req.json().catch(() => null);
+      if (update) ctx.waitUntil(handleRubikaUpdate(env, update)); // فوراً 200؛ کار اصلی بعد از پاسخ انجام می‌شود
+      return noindex(new Response("ok"));
+    }
+
+    // ثبت وبهوک روبیکا: یک بار در مرورگر باز کن → /rubika-setup?secret=<TELEGRAM_WEBHOOK_SECRET> (همان رمز /setup)
+    if (url.pathname === "/rubika-setup") {
+      const secret = url.searchParams.get("secret") ?? "";
+      if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
+        return noindex(new Response("forbidden", { status: 403 }));
+      }
+      return noindex(Response.json(await setupRubika(env)));
     }
 
     // ثبت وبهوک: یک بار در مرورگر باز کن → /setup?secret=<TELEGRAM_WEBHOOK_SECRET>

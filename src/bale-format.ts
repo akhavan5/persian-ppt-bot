@@ -10,12 +10,14 @@
  * شناسه‌ی کاربران تلگرام در عمل خیلی کمتر از ۱۰^۱۲ است؛ شناسه‌ی بله هم بسیار کمتر از ۱۰^۱۴.
  */
 
-export const BALE_ID_BASE = 100_000_000_000_000; // ۱۰^۱۴
+import { RUBIKA_ID_BASE } from "./rubika-format";
+
+export const BALE_ID_BASE = 100_000_000_000_000; // ۱۰^۱۴ (شناسه‌های بله در بازه‌ی [۱۰^۱۴، ۲×۱۰^۱۴)؛ روبیکا از RUBIKA_ID_BASE شروع می‌شود)
 export const BALE_API_DEFAULT = "https://tapi.bale.ai";
 
 export const isBaleId = (n: unknown): boolean => {
   const v = typeof n === "string" && /^\d+$/.test(n) ? Number(n) : n;
-  return typeof v === "number" && Number.isSafeInteger(v) && v >= BALE_ID_BASE;
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= BALE_ID_BASE && v < RUBIKA_ID_BASE;
 };
 export const toBaleId = (n: number): number => BALE_ID_BASE + n;
 export const fromBaleId = (n: number): number => n - BALE_ID_BASE;
