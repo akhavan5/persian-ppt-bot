@@ -132,7 +132,7 @@ export default {
       return noindex(Response.json(await setupBale(env)));
     }
 
-    // وبهوک روبیکا: راز بخشی از آدرس است (/rubika/<RUBIKA_WEBHOOK_SECRET>)؛ بدون RUBIKA_BOT_TOKEN همه‌چیز 403 است و تلگرام و بله بی‌تأثیر می‌مانند
+    // وبهوک روبیکا: راز بخشی از آدرس است (/rubika/<TELEGRAM_WEBHOOK_SECRET>)؛ بدون RUBIKA_BOT_TOKEN همه‌چیز 403 است و تلگرام و بله بی‌تأثیر می‌مانند
     const rubikaHook = url.pathname.match(/^\/rubika\/([A-Za-z0-9_-]{1,128})$/);
     if (rubikaHook) {
       if (req.method !== "POST") return noindex(new Response("method not allowed", { status: 405, headers: { allow: "POST" } }));

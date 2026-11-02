@@ -92,11 +92,10 @@ export interface Env {
   BALE_API_BASE?: string;
   /** ربات روبیکا (اختیاری): بدون RUBIKA_BOT_TOKEN ربات روبیکا خاموش است و رفتار تلگرام و بله هیچ تغییری نمی‌کند.
    *  RUBIKA_BOT_TOKEN: توکن بازو از @BotFather در روبیکا (secret)
-   *  RUBIKA_WEBHOOK_SECRET: بخش مخفی آدرس وبهوک (/rubika/<secret>)؛ روبیکا هدر محرمانه نمی‌فرستد. خالی = از TELEGRAM_WEBHOOK_SECRET استفاده می‌شود. فقط حروف/عدد/خط‌تیره/زیرخط، حداقل ۱۶ نویسه
+   *  راز آدرس وبهوک (/rubika/<secret>) همان TELEGRAM_WEBHOOK_SECRET است (روبیکا هدر محرمانه نمی‌فرستد)
    *  RUBIKA_WEBHOOK_BASE: دامنه‌ای که روبیکا به آن وبهوک می‌زند (پیش‌فرض SITE_URL)؛ باید از ایران قابل دسترس و HTTPS باشد
    *  RUBIKA_API_BASE: آدرس API روبیکا (پیش‌فرض https://botapi.rubika.ir، بدون /v3)؛ اگر Worker از خارج ایران به آن نرسید، آدرس یک رله‌ی ایرانی را بگذارید */
   RUBIKA_BOT_TOKEN?: string;
-  RUBIKA_WEBHOOK_SECRET?: string;
   RUBIKA_WEBHOOK_BASE?: string;
   RUBIKA_API_BASE?: string;
   /** پرچم داخلی (در wrangler تعریف نمی‌شود): env ساخته‌شده برای پردازش آپدیت بله؛ متدهای بدون chat_id مثل answerCallbackQuery و getFile با آن به بله می‌روند */

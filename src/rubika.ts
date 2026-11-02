@@ -2,7 +2,7 @@
  * ربات روبیکا: آپدیت‌های روبیکا به آپدیت هم‌شکل تلگرام تبدیل می‌شوند و همان bot.ts جواب می‌دهد
  * (فقط لایه‌ی ارسال در telegram.ts ← rubika-api.ts فرق دارد؛ منطق ربات و Workflowها دست‌نخورده است).
  *
- *  ۱) روبیکا هدر محرمانه نمی‌فرستد؛ راز بخشی از آدرس وبهوک است: /rubika/<RUBIKA_WEBHOOK_SECRET>
+ *  ۱) روبیکا هدر محرمانه نمی‌فرستد؛ راز بخشی از آدرس وبهوک است: /rubika/<TELEGRAM_WEBHOOK_SECRET>
  *  ۲) دو نوع آپدیت می‌آید: ReceiveUpdate (پیام و شروع ربات) و ReceiveInlineMessage (زدن دکمه‌ی شیشه‌ای)؛
  *     هر دو به همین یک آدرس ثبت می‌شوند و از روی شکل بدنه تشخیص داده می‌شوند.
  *  ۳) شناسه‌ی چت (b0…) به شناسه‌ی عددی تبدیل می‌شود (rubika-format.ts) و فقط گفتگوی خصوصی پاسخ داده می‌شود.
@@ -15,10 +15,9 @@ import { normalizeRubikaUpdate } from "./rubika-update";
 
 export { rubikaEnabled };
 
-/** راز آدرس وبهوک (فقط حروف/عدد/خط‌تیره/زیرخط، حداقل ۱۶ نویسه)؛ خالی = از TELEGRAM_WEBHOOK_SECRET */
+/** راز آدرس وبهوک: همان TELEGRAM_WEBHOOK_SECRET (بدون هیچ شرط طولی) */
 export function rubikaSecret(env: Env): string {
-  const s = (env.RUBIKA_WEBHOOK_SECRET || env.TELEGRAM_WEBHOOK_SECRET || "").trim();
-  return /^[A-Za-z0-9_-]{16,128}$/.test(s) ? s : "";
+  return (env.TELEGRAM_WEBHOOK_SECRET || "").trim();
 }
 
 /** آدرس کامل وبهوک که روبیکا به آن می‌زند (باید از ایران قابل دسترس و HTTPS باشد) */
@@ -45,7 +44,7 @@ export async function handleRubikaUpdate(env: Env, body: unknown): Promise<void>
 /** ثبت وبهوک و دستورها (با /rubika-setup یک بار در مرورگر) */
 export async function setupRubika(env: Env): Promise<{ ok: boolean; error?: string; bot?: string; webhook?: string }> {
   if (!rubikaEnabled(env)) return { ok: false, error: "RUBIKA_BOT_TOKEN تنظیم نشده است." };
-  if (!rubikaSecret(env)) return { ok: false, error: "RUBIKA_WEBHOOK_SECRET (یا TELEGRAM_WEBHOOK_SECRET) باید فقط حروف/عدد/خط‌تیره/زیرخط و حداقل ۱۶ نویسه باشد." };
+  if (!rubikaSecret(env)) return { ok: false, error: "TELEGRAM_WEBHOOK_SECRET تنظیم نشده است." };
   try {
     const me = await rubikaCall<any>(env, "getMe");
     const url = rubikaWebhookUrl(env);
