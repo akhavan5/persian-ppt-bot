@@ -46,14 +46,14 @@
   Content-Type: text/plain; charset=utf-8
   Cache-Control: public, max-age=86400
 
-# Telegram Mini App: Telegram Web صفحه را در iframe باز می‌کند؛ فقط خود تلگرام اجازه‌ی قاب‌گرفتن دارد. صفحه ایندکس نشود.
+# Telegram Mini App: Telegram Web صفحه را در iframe باز می‌کند؛ فقط تلگرام و بله اجازه‌ی قاب‌گرفتن دارند (Bale Web: web.bale.ai). صفحه ایندکس نشود.
 /app
   ! X-Frame-Options
-  Content-Security-Policy: frame-ancestors 'self' https://web.telegram.org https://webk.telegram.org https://webz.telegram.org https://*.telegram.org
+  Content-Security-Policy: frame-ancestors 'self' https://web.telegram.org https://webk.telegram.org https://webz.telegram.org https://*.telegram.org https://*.bale.ai https://*.ble.ir https://bale.ai https://ble.ir
   X-Robots-Tag: noindex, nofollow
   Cache-Control: no-cache
 /app.html
   ! X-Frame-Options
-  Content-Security-Policy: frame-ancestors 'self' https://web.telegram.org https://webk.telegram.org https://webz.telegram.org https://*.telegram.org
+  Content-Security-Policy: frame-ancestors 'self' https://web.telegram.org https://webk.telegram.org https://webz.telegram.org https://*.telegram.org https://*.bale.ai https://*.ble.ir https://bale.ai https://ble.ir
   X-Robots-Tag: noindex, nofollow
   Cache-Control: no-cache
