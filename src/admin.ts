@@ -171,11 +171,14 @@ async function homeScreen(env: Env): Promise<Screen> {
     issueCount(env).catch(() => 0),
   ]);
   const week = await platformReport(env, 7, st, true);
+  const wk = await platStats(env, 6, 0);
+  const nu: Record<string, number> = Object.fromEntries(PLATFORMS.map((p) => [p, wk[p].newusers ?? 0]));
   const range = `${fmtDay(Date.now() - 6 * 86_400_000)} تا ${fmtDay(Date.now())}`;
   return {
     text:
       "🛠 <b>پنل مدیریت</b>\n\n" +
-      `👥 کاربران: ✈️ <b>${fa(tgUsers)}</b> · 🟢 <b>${fa(baleUsers)}</b> · 🌐 <b>${fa(webUsers)}</b> · 📱 <b>${fa(appUsers)}</b>  <i>(تلگرام · بله · وب · اپ)</i>\n` +
+      `🆕 <b>کاربران جدید ۷ روز اخیر:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · وب · اپ)</i>\n` +
+      `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🌐 ${fa(webUsers)} · 📱 ${fa(appUsers)}\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
       `\n📅 <b>گزارش هفتگی</b> (۷ روز اخیر، ${range})\n${week}\n` +
