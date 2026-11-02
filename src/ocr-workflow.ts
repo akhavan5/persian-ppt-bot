@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import type { Uid } from "./settings";
 import { extractTelegramFile, type TgFileRef } from "./tg-file";
 import { finishFileUpload } from "./bot";
-import { editMessage, sendMessage } from "./telegram";
+import { editMessage, envFor, sendMessage } from "./telegram";
 import { withStore } from "./store";
 
 /** سقف آلبوم تلگرام ۱۰ مورد است */
@@ -19,7 +19,7 @@ export class OcrWorkflow extends WorkflowEntrypoint<Env, OcrParams> {
     const { chatId, userId, uid, ref, caption, waitId, group } = event.payload;
     try {
       if (group) return await this.runAlbum(step, { chatId, userId, uid, caption, waitId, group, first: ref });
-      const ex = await step.do("extract", { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, () => extractTelegramFile(this.env, ref, uid));
+      const ex = await step.do("extract", { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, () => extractTelegramFile(envFor(this.env, chatId), ref, uid));
       await step.do("wizard", { retries: { limit: 1, delay: "3 seconds" }, timeout: "1 minute" }, () => finishFileUpload(this.env, chatId, uid, userId, ref, caption, ex, waitId));
     } catch (e) {
       console.error("ocr workflow", e instanceof Error ? e.message.slice(0, 300) : e);
@@ -45,7 +45,7 @@ export class OcrWorkflow extends WorkflowEntrypoint<Env, OcrParams> {
     const parts: string[] = [];
     let skipped = 0, lastErr = "";
     for (let i = 0; i < items.length; i++) {
-      const ex = await step.do(`extract-${i}`, { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, () => extractTelegramFile(this.env, items[i].ref, uid));
+      const ex = await step.do(`extract-${i}`, { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, () => extractTelegramFile(envFor(this.env, chatId), items[i].ref, uid));
       if (ex.ok) { parts.push(ex.text); continue; }
       skipped += 1; lastErr = ex.error;
       if (/سقف روزانه/.test(ex.error)) { skipped += items.length - i - 1; break; } // سقف تمام شد؛ بقیه بی‌فایده است

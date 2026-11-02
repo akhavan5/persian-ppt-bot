@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { handleUpdate } from "./bot";
+import { baleEnabled, baleSecret, handleBaleUpdate, setupBale } from "./bale";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
 import { withStore } from "./store";
@@ -108,6 +109,26 @@ export default {
         if (chatId) await tg(env, "sendMessage", { chat_id: chatId, text: "⚠️ مشکلی پیش آمد. چند لحظه بعد دوباره امتحان کن." }).catch(() => {});
       }));
       return noindex(new Response("ok"));
+    }
+
+    // وبهوک بله: بله هدر محرمانه نمی‌فرستد، پس راز بخشی از آدرس است (/bale/<BALE_WEBHOOK_SECRET>). بدون BALE_BOT_TOKEN همه‌چیز 403 است و تلگرام بی‌تأثیر می‌ماند
+    const baleHook = url.pathname.match(/^\/bale\/([A-Za-z0-9_-]{1,128})$/);
+    if (baleHook) {
+      if (req.method !== "POST") return noindex(new Response("method not allowed", { status: 405, headers: { allow: "POST" } }));
+      const secret = baleSecret(env);
+      if (!baleEnabled(env) || !secret || !safeEqual(baleHook[1], secret)) return noindex(new Response("forbidden", { status: 403 }));
+      const update = await req.json().catch(() => null);
+      if (update) ctx.waitUntil(handleBaleUpdate(env, update)); // فوراً 200؛ کار اصلی بعد از پاسخ انجام می‌شود
+      return noindex(new Response("ok"));
+    }
+
+    // ثبت وبهوک بله: یک بار در مرورگر باز کن → /bale-setup?secret=<TELEGRAM_WEBHOOK_SECRET> (همان رمز /setup؛ نه رازِ آدرس وبهوک بله)
+    if (url.pathname === "/bale-setup") {
+      const secret = url.searchParams.get("secret") ?? "";
+      if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
+        return noindex(new Response("forbidden", { status: 403 }));
+      }
+      return noindex(Response.json(await setupBale(env)));
     }
 
     // ثبت وبهوک: یک بار در مرورگر باز کن → /setup?secret=<TELEGRAM_WEBHOOK_SECRET>

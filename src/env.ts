@@ -81,6 +81,18 @@ export interface Env {
   /** Workers AI (تولید تصویر)؛ در wrangler.jsonc با «ai» تعریف می‌شود و کلید جدا ندارد */
   AI?: Ai;
 
+  /** ربات بله (اختیاری): بدون BALE_BOT_TOKEN ربات بله خاموش است و رفتار تلگرام هیچ تغییری نمی‌کند.
+   *  BALE_BOT_TOKEN: توکن بازو از @botfather در بله (secret)
+   *  BALE_WEBHOOK_SECRET: بخش مخفی آدرس وبهوک (/bale/<secret>)؛ بله هدر محرمانه نمی‌فرستد. خالی = از TELEGRAM_WEBHOOK_SECRET استفاده می‌شود. فقط حروف/عدد/خط‌تیره/زیرخط، حداقل ۱۶ نویسه
+   *  BALE_WEBHOOK_BASE: دامنه‌ای که بله به آن وبهوک می‌زند (پیش‌فرض SITE_URL)؛ باید از ایران قابل دسترس و روی پورت ۴۴۳ یا ۸۸ باشد
+   *  BALE_API_BASE: آدرس API بله (پیش‌فرض https://tapi.bale.ai)؛ اگر Worker از خارج ایران به آن نرسید، آدرس یک رله‌ی ایرانی را بگذارید */
+  BALE_BOT_TOKEN?: string;
+  BALE_WEBHOOK_SECRET?: string;
+  BALE_WEBHOOK_BASE?: string;
+  BALE_API_BASE?: string;
+  /** پرچم داخلی (در wrangler تعریف نمی‌شود): env ساخته‌شده برای پردازش آپدیت بله؛ متدهای بدون chat_id مثل answerCallbackQuery و getFile با آن به بله می‌روند */
+  PLATFORM?: "bale";
+
   /** فقط برای تست محلی با سرور شبیه‌ساز تلگرام؛ در تولید تنظیم نکنید */
   TELEGRAM_API_BASE?: string;
 

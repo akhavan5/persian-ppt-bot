@@ -1,3 +1,4 @@
+import { isBaleId } from "./bale-format";
 import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import {
@@ -31,6 +32,7 @@ const fa = (n: number | string) => toFa(String(n));
 /** لینک پروفایل: با نام کاربری → t.me/نام_کاربری، وگرنه لینک tg://user (برای کاربرانی که با ربات گفتگو داشته‌اند کار می‌کند) */
 const userLink = (id: Uid, name?: string | null, username?: string | null) => {
   if (typeof id === "string") return `<b>${esc(name || id)}</b> 🌐`; // کاربر وب: پروفایل تلگرام ندارد
+  if (isBaleId(id)) return `<b>${esc(name || (username ? "@" + username : String(id)))}</b> (بله)`; // کاربر بله: لینک t.me / tg:// ندارد
   const uname = username && /^[A-Za-z0-9_]{3,64}$/.test(username) ? username : null;
   const label = esc(name || (uname ? "@" + uname : String(id)));
   return `<a href="${uname ? `https://t.me/${uname}` : `tg://user?id=${id}`}">${label}</a>`;

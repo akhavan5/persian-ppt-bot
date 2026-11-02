@@ -14,7 +14,8 @@ import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
 import { appVerCommand } from "./app-version";
-import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
+import { editMessage, envFor, esc, sendDocument, sendMessage, tg } from "./telegram";
+import { isBaleId } from "./bale-format";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
@@ -227,7 +228,8 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     await editMessage(env, chatId, mid,
       `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout !== false ? " + جزوه" : ""}${wantAudio ? " + اسلاید صوتی" : ""}${wantPodcast ? " + پادکست" : ""})…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${wantAudio || wantPodcast ? "\n🔊 صدا (اسلاید صوتی/پادکست) جدا و چند دقیقه بعد از ارائه می‌رسد." : ""}${creditLine}`,
       { reply_markup: { inline_keyboard: [] } });
-    const ok = await launchDeck(env, begin, uid, `d-${cq.id}`, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig },
+    const deckId = String(cq.id ?? "").length <= 24 && /^[\w-]+$/.test(String(cq.id ?? "")) ? `d-${cq.id}` : `d-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`; // شناسه‌ی ارائه در callback_data دکمه‌ها می‌آید (سقف ۶۴ بایت)؛ شناسه‌ی callback بله ممکن است بلند باشد
+    const ok = await launchDeck(env, begin, uid, deckId, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig },
       wantPoster && posterEnabled(env) ? { layout: p.poster as "wide" | "tall" } : undefined);
     if (!ok) {
       return await editMessage(env, chatId, mid, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.").catch(() => {});
@@ -512,7 +514,9 @@ async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chat
   await env.KV.delete(fbKey(userId)).catch(() => {});
   const rewarded = canReward && (await claimFeedbackReward(env, uid).catch((e) => { console.error("feedbackReward", e); return false; }));
   const from = msg.from;
-  const who = `<a href="tg://user?id=${userId}">${esc(displayName(from) || String(userId))}</a>${from.username ? ` (@${esc(from.username)})` : ""}`;
+  const who = isBaleId(userId)
+    ? `${esc(displayName(from) || String(userId))} <i>(بله)</i>${from.username ? ` (@${esc(from.username)})` : ""}` // لینک tg://user برای کاربر بله کار نمی‌کند
+    : `<a href="tg://user?id=${userId}">${esc(displayName(from) || String(userId))}</a>${from.username ? ` (@${esc(from.username)})` : ""}`;
   const out = `💬 <b>نظر کاربر</b>\n👤 ${who}\n🆔 <code>${userId}</code>\n📄 ارائه: ${esc(title)}${rewarded ? `\n🎁 ${toFa(String(FEEDBACK_CREDITS))} اعتبار هدیه داده شد` : ""}\n\n${esc(text.slice(0, 2000))}`;
   const adminKb = kb([[{ text: "👤 کارت کاربر", callback_data: `ad:nu:${userId}` }, { text: "🗂 فایل‌ها", callback_data: `ad:nd:${userId}` }]]);
   for (const id of adminIds(env)) await sendMessage(env, Number(id), out, adminKb).catch(() => {});
@@ -527,7 +531,7 @@ async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chat
 const HOME_TEXT = "🏠 <b>منوی اصلی</b>\nیکی از گزینه‌ها را بزن، یا همین‌جا <b>موضوع ارائه</b> را بنویس و بفرست.";
 function homeKb(env: Env, tgId: number, admin: boolean) {
   const rows: Btn[][] = [
-    [{ text: "📱 ساخت ارائه (اپ)", web_app: { url: `${miniappUrl(env)}/app` } } as Btn],
+    ...(isBaleId(tgId) ? [] : [[{ text: "📱 ساخت ارائه (اپ)", web_app: { url: `${miniappUrl(env)}/app` } } as Btn]]), // Mini App فقط در تلگرام؛ در بله دکمه‌ی «سایت» همان کار را می‌کند
     [{ text: "💳 اعتبار و پلن", callback_data: "h:credit" }, { text: "⚙️ تنظیمات", callback_data: "h:set" }],
     [{ text: "📁 فایل‌های من", callback_data: "h:files" }, { text: "🎁 دعوت دوستان", callback_data: "h:inv" }],
     [{ text: "🌐 سایت و خرید پلن", callback_data: "h:site" }, { text: "💬 پشتیبانی", url: supportLink(tgId) }],
@@ -537,6 +541,7 @@ function homeKb(env: Env, tgId: number, admin: boolean) {
 }
 
 async function showApp(env: Env, chatId: number) {
+  if (isBaleId(chatId)) return await showSite(env, chatId, chatId); // بله Mini App ما را ندارد؛ ورود خودکار به سایت (چت خصوصی: شناسه‌ی چت = شناسه‌ی کاربر)
   return await sendMessage(env, chatId, "📱 با دکمه‌ی زیر اپ ساخت ارائه باز می‌شود (ساخت، فایل‌ها، تنظیمات و اعتبار، همه با همین حساب).",
     { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(env)}/app` } }]] } });
 }
@@ -563,14 +568,15 @@ async function showFiles(env: Env, chatId: number, uid: Uid) {
       ])));
 }
 async function showInvite(env: Env, chatId: number, userId: number) {
-  const me = await tg<{ username?: string }>(env, "getMe");
-  const link = `https://t.me/${me.username}?start=ref_${userId}`;
+  const bale = isBaleId(userId);
+  const me = await tg<{ username?: string }>(bale ? envFor(env, userId) : env, "getMe");
+  const link = bale ? `https://ble.ir/${me.username}?start=ref_${userId}` : `https://t.me/${me.username}?start=ref_${userId}`;
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
   const done = Math.min(REF_MAX, Number(await env.KV.get(`refc:${userId}`).catch(() => null)) || 0);
   return await sendMessage(env, chatId,
     `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد ربات شوند، <b>۱ اعتبار پلن پلاس</b> می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(REF_MAX / REF_EVERY))} اعتبار پلاس).\n\n` +
     `📊 دعوت‌های تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`,
-    kb([[{ text: "📤 ارسال به دوستان", url: share }]]));
+    bale ? undefined : kb([[{ text: "📤 ارسال به دوستان", url: share }]])); // دکمه‌ی اشتراک‌گذاری t.me فقط برای تلگرام
 }
 async function showCredit(env: Env, chatId: number, uid: Uid, userId: number) {
   const granted = await grantDailyFree(env, uid).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز

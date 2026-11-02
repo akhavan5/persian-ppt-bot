@@ -11,7 +11,7 @@ import JSZip from "jszip";
 import type { Env } from "./env";
 import { ocrPdfRendered, ocrSmart, VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
-import { tg } from "./telegram";
+import { fileUrl, tg } from "./telegram";
 import { AUDIO_EXT, deepgramEnabled, transcribeAudio } from "./deepgram";
 
 export const TG_MAX_FILE = 20 * 1024 * 1024; // سقف دانلود Bot API رسمی تلگرام
@@ -215,8 +215,7 @@ export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: stri
     const info = await tg<{ file_path?: string; file_size?: number }>(env, "getFile", { file_id: ref.fileId });
     if (!info.file_path) return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
     if ((info.file_size ?? 0) > TG_MAX_FILE) return tooBigForTelegram(env, info.file_size ?? 0);
-    const base = env.TELEGRAM_API_BASE || "https://api.telegram.org";
-    const r = await fetch(`${base}/file/bot${env.TELEGRAM_BOT_TOKEN}/${info.file_path}`, { signal: AbortSignal.timeout(60_000) });
+    const r = await fetch(fileUrl(env, info.file_path), { signal: AbortSignal.timeout(60_000) }); // تلگرام یا بله (از پرچم env.PLATFORM)
     if (!r.ok) return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
     bytes = await r.arrayBuffer();
   } catch (e) {
