@@ -1,3 +1,4 @@
+import { isBaleId } from "./bale-format";
 import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
@@ -57,15 +58,19 @@ export async function saveSettings(env: Env, userId: Uid, s: Settings) {
 
 // ---------- تماس برای شارژ ----------
 export const SUPPORT_CONTACT = "@akhavan8";
+/** پشتیبانی در بله (کاربران بله به‌جای تلگرام به این حساب وصل می‌شوند) */
+export const SUPPORT_CONTACT_BALE = "@akhavan4";
+const contactUrl = (userId: Uid, text: string) =>
+  isBaleId(userId)
+    ? `https://ble.ir/${SUPPORT_CONTACT_BALE.slice(1)}?text=${encodeURIComponent(text)}`
+    : `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=${encodeURIComponent(text)}`;
 /** لینک پیام به پشتیبان با متن آماده‌ای که شناسه‌ی کاربر داخلش هست (کاربر فقط «ارسال» را می‌زند) */
 export const supportLink = (userId: Uid) =>
-  `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
-  encodeURIComponent(`سلام، می‌خواهم اعتبار ربات ساخت پاورپوینت را شارژ کنم.\nشناسه‌ی من: ${userId}`);
+  contactUrl(userId, `سلام، می‌خواهم اعتبار ربات ساخت پاورپوینت را شارژ کنم.\nشناسه‌ی من: ${userId}`);
 
-/** لینک تلگرام برای خرید پلن ماهانه (وقتی درگاه پرداخت فعال نیست) */
+/** لینک خرید پلن ماهانه (وقتی درگاه پرداخت فعال نیست) */
 export const planLink = (userId: Uid, name: string, price: number) =>
-  `https://t.me/${SUPPORT_CONTACT.slice(1)}?text=` +
-  encodeURIComponent(`سلام، می‌خواهم پلن ${name} (${price} هزار تومان در ماه) پاورپوینت‌ساز را بخرم.\nشناسه‌ی من: ${userId}`);
+  contactUrl(userId, `سلام، می‌خواهم پلن ${name} (${price} هزار تومان در ماه) پاورپوینت‌ساز را بخرم.\nشناسه‌ی من: ${userId}`);
 // ---------- مجوز، مدیر و مسدودسازی ----------
 const idList = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 export const adminIds = (env: Env) => idList(env.ADMIN_IDS);
