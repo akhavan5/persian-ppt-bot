@@ -9,11 +9,24 @@
  *  rb:a:<دستگیره‌ی جدید>  ← دستگیره‌ی قبلی؛ وقتی ویرایش دکمه ممکن نبود و پیام حذف و دوباره فرستاده شد، کارت قدیمی همان دستگیره را نگه می‌دارد
  */
 import type { Env } from "./env";
-import { RUBIKA_API_DEFAULT, hasLinkButton, rubikaKeypad, rubikaMsgHandle, rubikaText, type RubikaKeypad } from "./rubika-format";
+import { RUBIKA_API_DEFAULT, buildPlain, buildRich, htmlToRubika, rubikaKeypad, rubikaMsgHandle, rubikaText, type RubikaKeypad } from "./rubika-format";
 
 export const rubikaEnabled = (env: Env): boolean => !!env.RUBIKA_BOT_TOKEN;
 const siteOf = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
 const MSG_TTL = 7 * 86400;
+
+/** خلاصه‌ی درخواست برای لاگ خطا (بدون متن پیام، توکن و شناسه‌ها): طول متن و شکل دکمه‌ها (نوع:شناسه:طول متن) */
+function brief(b: Record<string, unknown>): string {
+  const o: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(b)) {
+    if (k === "text") o.textLen = String(v).length;
+    else if (k === "inline_keypad" || k === "chat_keypad") o[k] = ((v as any)?.rows ?? []).map((r: any) => (r.buttons ?? []).map((x: any) => `${x.type}:${x.id}:${String(x.button_text ?? "").length}${x.button_link ? ":" + JSON.stringify(x.button_link).length : ""}`));
+    else if (k === "metadata") o.metaParts = ((v as any)?.meta_data_parts ?? []).map((p: any) => `${p.type}@${p.from_index}+${p.length}`);
+    else if (k === "chat_id" || k === "message_id" || k === "file_id" || k === "reply_to_message_id") o[k] = String(v).slice(0, 4) + "…";
+    else o[k] = typeof v === "string" ? v.slice(0, 40) : v;
+  }
+  return JSON.stringify(o).slice(0, 600);
+}
 
 /** یک فراخوانی API روبیکا (همه‌ی متدها POST با JSON). پاسخ موفق: { status: "OK", data: {...} } */
 export async function rubikaCall<T = any>(env: Env, method: string, body: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
@@ -26,7 +39,7 @@ export async function rubikaCall<T = any>(env: Env, method: string, body: Record
   });
   const j = (await res.json().catch(() => ({ status: `HTTP_${res.status}` }))) as any;
   if (j?.status !== "OK") {
-    console.error("rubika api error", method, JSON.stringify(j).slice(0, 400));
+    console.error("rubika api error", method, JSON.stringify(j).slice(0, 400), "req:", brief(body));
     throw new Error(`Rubika ${method}: ${j?.status ?? res.status}${j?.dev_message ? ` ${String(j.dev_message).slice(0, 160)}` : ""}`);
   }
   return (j.data ?? {}) as T;
@@ -67,22 +80,40 @@ export async function callbackHandle(env: Env, chat: string, mid: string): Promi
 }
 
 // ---------- ارسال ----------
-const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
+const hasAnyKeypad = (m: unknown) => ((m as { inline_keyboard?: unknown[][] } | undefined)?.inline_keyboard ?? []).some((r) => r.length);
 
-/** پیام متنی با دکمه؛ اگر روبیکا دکمه‌ی لینک را نپذیرفت، یک بار با لینک‌های داخل متن دوباره می‌فرستد */
-async function sendText(env: Env, chat: string, html: string, markup: unknown, replyTo?: string): Promise<{ mid: string; k: 0 | 1 }> {
-  const attempt = async (links: "button" | "text") => {
-    const { keypad, extra } = rubikaKeypad(markup, siteOf(env), links);
-    const text = clip(rubikaText(html) + (extra ? `\n\n${extra}` : ""), 4096) || "…";
-    const d = await rubikaCall<{ message_id?: string | number }>(env, "sendMessage", {
-      chat_id: chat, text, ...(keypad ? { inline_keypad: keypad } : {}), ...(replyTo ? { reply_to_message_id: replyTo } : {}),
-    });
-    return { mid: String(d.message_id ?? ""), k: (keypad ? 1 : 0) as 0 | 1 };
-  };
-  try { return await attempt("button"); } catch (e) {
-    if (!hasLinkButton(markup)) throw e;
-    return await attempt("text");
+/**
+ * ارسال سه‌مرحله‌ای تا کاربر هیچ‌وقت بی‌پاسخ نماند (یک metadata نامعتبر کل پیام را رد می‌کند):
+ *  rich: متن + metadata (بولد، لینک و …)  ←  plain: متن ساده با دکمه‌ها  ←  bare: فقط متن، بدون هیچ دکمه
+ * مرحله‌ی rich فقط وقتی هست که چیزی برای قالب‌بندی باشد و bare فقط وقتی که دکمه‌ای در کار باشد.
+ */
+type Mode = "rich" | "plain" | "bare";
+async function staged<T>(rich: boolean, keypad: boolean, run: (m: Mode) => Promise<T>): Promise<T> {
+  const modes: Mode[] = [...(rich ? (["rich"] as Mode[]) : []), "plain", ...(keypad ? (["bare"] as Mode[]) : [])];
+  let err: unknown;
+  for (let i = 0; i < modes.length; i++) {
+    try { return await run(modes[i]); } catch (e) {
+      err = e;
+      if (i < modes.length - 1) console.error(`rubika: ${modes[i]} failed, retrying as ${modes[i + 1]}`);
+    }
   }
+  throw err;
+}
+
+/** پیام متنی با قالب‌بندی و دکمه (با سه مرحله‌ی بالا) */
+async function sendText(env: Env, chat: string, html: string, markup: unknown, replyTo?: string): Promise<{ mid: string; k: 0 | 1 }> {
+  const { keypad, links } = rubikaKeypad(markup, siteOf(env));
+  const base = htmlToRubika(html);
+  return await staged(base.parts.length > 0 || links.length > 0, !!keypad, async (mode) => {
+    const msg = mode === "rich" ? buildRich(base, links) : buildPlain(html, links);
+    const kp = mode === "bare" ? undefined : keypad;
+    const d = await rubikaCall<{ message_id?: string | number }>(env, "sendMessage", {
+      chat_id: chat, text: msg.text,
+      ...(msg.parts.length ? { metadata: { meta_data_parts: msg.parts } } : {}),
+      ...(kp ? { inline_keypad: kp } : {}), ...(replyTo ? { reply_to_message_id: replyTo } : {}),
+    });
+    return { mid: String(d.message_id ?? ""), k: (kp ? 1 : 0) as 0 | 1 };
+  });
 }
 
 let keypadMethod: string | null = null; // نام متدی که ویرایش دکمه با آن جواب داد (مستندات روبیکا دو نام آورده)
@@ -99,7 +130,7 @@ async function editKeypad(env: Env, chat: string, mid: string, keypad: RubikaKey
  * اگر ویرایش دکمه شدنی نبود و متن هم در دست بود، پیام حذف و با دکمه‌های تازه دوباره فرستاده می‌شود و دستگیره‌ی قبلی به آن اشاره می‌کند.
  */
 async function applyKeypad(env: Env, h: number, rec: MsgRec, markup: unknown, html?: string): Promise<void> {
-  const { keypad } = rubikaKeypad(markup, siteOf(env), "button");
+  const { keypad } = rubikaKeypad(markup, siteOf(env));
   if (keypad) {
     if (await editKeypad(env, rec.c, rec.m, keypad)) { if (!rec.k) await putMsg(env, h, { ...rec, k: 1 }); return; }
     if (html === undefined) return;
@@ -126,19 +157,15 @@ export async function rubikaSendFile(
   const uj = (await up.json().catch(() => ({}))) as any;
   const fileId = uj?.data?.file_id ?? uj?.file_id;
   if (!fileId) { console.error("rubika upload error", up.status, JSON.stringify(uj).slice(0, 300)); throw new Error(`Rubika upload: ${uj?.status ?? up.status}`); }
-  const attempt = async (links: "button" | "text") => {
-    const { keypad, extra } = rubikaKeypad(markup, siteOf(env), links);
-    const text = clip(rubikaText(caption) + (extra ? `\n\n${extra}` : ""), 1024);
+  const { keypad, links } = rubikaKeypad(markup, siteOf(env));
+  const s = await staged(false, !!keypad, async (mode) => { // کپشن فایل metadata ندارد؛ فقط ساده و بدون دکمه به‌عنوان مرحله‌ی آخر
+    const text = buildPlain(caption, links, 1024).text;
+    const kp = mode === "bare" ? undefined : keypad;
     const d = await rubikaCall<{ message_id?: string | number }>(env, "sendFile", {
-      chat_id: chat, file_id: fileId, ...(text ? { text } : {}), ...(keypad ? { inline_keypad: keypad } : {}),
+      chat_id: chat, file_id: fileId, ...(caption.trim() || links.length ? { text } : {}), ...(kp ? { inline_keypad: kp } : {}),
     }, 60_000);
-    return { mid: String(d.message_id ?? ""), k: (keypad ? 1 : 0) as 0 | 1 };
-  };
-  let s: { mid: string; k: 0 | 1 };
-  try { s = await attempt("button"); } catch (e) {
-    if (!hasLinkButton(markup)) throw e;
-    s = await attempt("text");
-  }
+    return { mid: String(d.message_id ?? ""), k: (kp ? 1 : 0) as 0 | 1 };
+  });
   return await newHandle(env, chat, s.mid, s.k);
 }
 
@@ -178,7 +205,7 @@ export async function rubikaTg(env: Env, method: string, body: Record<string, un
       const html = String(body.text ?? "");
       const hasMarkup = body.reply_markup !== undefined;
       try {
-        await rubikaCall(env, "editMessageText", { chat_id: rec.c, message_id: rec.m, text: clip(rubikaText(html), 4096) || "…" });
+        await rubikaCall(env, "editMessageText", { chat_id: rec.c, message_id: rec.m, text: rubikaText(html) });
       } catch (e) {
         if (!hasMarkup) throw e; // متن بدون تغییر + فقط دکمه‌ی تازه: خطای متن نادیده گرفته می‌شود
       }

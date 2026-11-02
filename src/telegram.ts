@@ -120,9 +120,8 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
 export async function sendAudio(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { title?: string; performer?: string; duration?: number; mime?: string } = {}) {
   const mime = extra.mime ?? "audio/wav";
   const rt = route(env, chatId);
-  if (rt.rubika) { // موزیک؛ اگر قالب (مثلاً WAV) را نپذیرفت همان فایل به‌صورت سند می‌رود
-    try { await rubikaSendFile(env, chatId, data, filename, caption, "Music"); return; } catch (e) { console.error("rubika sendAudio", String(e).slice(0, 200)); }
-    await rubikaSendFile(env, chatId, data, filename, caption, "File");
+  if (rt.rubika) { // روبیکا: «Music» فقط mp3 می‌پذیرد؛ بقیه (مثل WAV) به‌صورت فایل می‌روند
+    await rubikaSendFile(env, chatId, data, filename, caption, /\.mp3$/i.test(filename) ? "Music" : "File");
     return;
   }
   const form = mediaForm(env, rt, chatId, caption);
@@ -144,9 +143,8 @@ export async function sendAudio(env: Env, chatId: number, data: Uint8Array, file
 /** ارسال عکس (پیش‌نمایش داخل چت). سقف تلگرام: ۱۰ مگابایت و مجموع عرض+ارتفاع ≤ ۱۰۰۰۰ پیکسل */
 export async function sendPhoto(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, mime = "image/png") {
   const rt = route(env, chatId);
-  if (rt.rubika) {
-    try { await rubikaSendFile(env, chatId, data, filename, caption, "Image"); return; } catch (e) { console.error("rubika sendPhoto", String(e).slice(0, 200)); }
-    await rubikaSendFile(env, chatId, data, filename, caption, "File");
+  if (rt.rubika) { // روبیکا: «Image» فقط jpg/png/gif/webp تا ۱۰ مگابایت؛ غیر از آن به‌صورت فایل
+    await rubikaSendFile(env, chatId, data, filename, caption, /\.(png|jpe?g|gif|webp)$/i.test(filename) && data.length <= 10 * 1024 * 1024 ? "Image" : "File");
     return;
   }
   const form = mediaForm(env, rt, chatId, caption);
