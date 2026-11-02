@@ -119,6 +119,9 @@ const cb = (text: string, data: string): Btn => ({ text, callback_data: data });
 // شمارنده‌ها را bumpStat (settings.ts) در pst:<پلتفرم>:<نام>:<روز> می‌نویسد؛ جمع کل همچنان در stat:<نام>:<روز> است.
 const PLAT_LABEL: Record<Platform, string> = { tg: "✈️ تلگرام", bale: "🟢 بله", web: "🌐 وب", app: "📱 اپ اندروید" };
 type PlatCounts = Record<string, number>;
+/** هفته‌ی ایرانی از شنبه تا جمعه: چند روز از شنبه‌ی همین هفته گذشته (شنبه = ۱، جمعه = ۷؛ روز هفته به وقت ایران) */
+const WEEKDAY_IDX: Record<string, number> = { Sat: 0, Sun: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6 };
+const daysIntoWeek = () => (WEEKDAY_IDX[new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "Asia/Tehran" })] ?? 0) + 1;
 const dayStr = (agoDays: number) => new Date(Date.now() - agoDays * 86_400_000).toISOString().slice(0, 10);
 
 /** جمع شمارنده‌های هر پلتفرم برای بازه‌ی [از agoFrom تا agoTo روز پیش] (۰ = امروز، UTC مثل بقیه‌ی آمار) */
@@ -148,9 +151,9 @@ const platLine = (label: string, c: PlatCounts, prev?: PlatCounts) =>
   `${label}: ▶️ ${fa(c.started ?? 0)} · ✅ <b>${fa(c.ok ?? 0)}</b>${prev ? trend(c.ok ?? 0, prev.ok ?? 0) : ""} · ❌ ${fa(c.fail ?? 0)} · 🆕 ${fa(c.newusers ?? 0)}`;
 
 /** بلوک گزارش پلتفرمی برای بازه‌ی days روز اخیر: هر پلتفرم یک خط + جمع کل؛ prev = بازه‌ی قبلی هم‌اندازه برای روند */
-async function platformReport(env: Env, days: number, st: Record<string, Record<string, number>>, withTrend: boolean): Promise<string> {
-  const [cur, prev] = await Promise.all([platStats(env, days - 1, 0), withTrend ? platStats(env, days * 2 - 1, days) : Promise.resolve(null)]);
-  const total = sumDaysOf(st, 0, days - 1), totalPrev = withTrend ? sumDaysOf(st, days, days * 2 - 1) : undefined;
+async function platformReport(env: Env, days: number, st: Record<string, Record<string, number>>, withTrend: boolean, shift = days): Promise<string> {
+  const [cur, prev] = await Promise.all([platStats(env, days - 1, 0), withTrend ? platStats(env, shift + days - 1, shift) : Promise.resolve(null)]);
+  const total = sumDaysOf(st, 0, days - 1), totalPrev = withTrend ? sumDaysOf(st, shift, shift + days - 1) : undefined;
   const lines = PLATFORMS.map((p) => platLine(PLAT_LABEL[p], cur[p], prev?.[p]));
   lines.push(platLine("📊 <b>جمع کل</b>", total, totalPrev));
   // سهمی از جمع کل که پلتفرمش ثبت نشده (قبل از اضافه شدن این گزارش)
@@ -170,19 +173,20 @@ async function homeScreen(env: Env): Promise<Screen> {
     statsByDay(env),
     issueCount(env).catch(() => 0),
   ]);
-  const week = await platformReport(env, 7, st, true);
-  const wk = await platStats(env, 6, 0);
+  const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
+  const week = await platformReport(env, n, st, true, 7);
+  const wk = await platStats(env, n - 1, 0);
   const nu: Record<string, number> = Object.fromEntries(PLATFORMS.map((p) => [p, wk[p].newusers ?? 0]));
-  const range = `${fmtDay(Date.now() - 6 * 86_400_000)} تا ${fmtDay(Date.now())}`;
+  const range = `${fmtDay(Date.now() - (n - 1) * 86_400_000)} تا ${fmtDay(Date.now())}`;
   return {
     text:
       "🛠 <b>پنل مدیریت</b>\n\n" +
-      `🆕 <b>کاربران جدید ۷ روز اخیر:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · وب · اپ)</i>\n` +
+      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · وب · اپ)</i>\n` +
       `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🌐 ${fa(webUsers)} · 📱 ${fa(appUsers)}\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
-      `\n📅 <b>گزارش هفتگی</b> (۷ روز اخیر، ${range})\n${week}\n` +
-      "<i>▶️ شروع‌شده · ✅ موفق · ❌ ناموفق · 🆕 کاربر جدید · ▲▼ نسبت به ۷ روز قبل از آن.</i>\n\n" +
+      `\n📅 <b>گزارش هفتگی</b> (شنبه تا امروز، ${range})\n${week}\n` +
+      "<i>▶️ شروع‌شده · ✅ موفق · ❌ ناموفق · 🆕 کاربر جدید · ▲▼ نسبت به همین روزهای هفته‌ی قبل. هفته از شنبه شروع می‌شود.</i>\n\n" +
       "<i>یک بخش را انتخاب کن. برای مدیریت یک کاربر، شناسه یا نامش را در «جستجو» بنویس.</i>",
     kb: [
       [cb("📊 آمار پلتفرم‌ها", "ad:st:7"), cb("👥 کاربران", "ad:us:t:0")],
