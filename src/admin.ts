@@ -122,12 +122,28 @@ type PlatCounts = Record<string, number>;
 /** هفته‌ی ایرانی از شنبه تا جمعه: چند روز از شنبه‌ی همین هفته گذشته (شنبه = ۱، جمعه = ۷؛ روز هفته به وقت ایران) */
 const WEEKDAY_IDX: Record<string, number> = { Sat: 0, Sun: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6 };
 const daysIntoWeek = () => (WEEKDAY_IDX[new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "Asia/Tehran" })] ?? 0) + 1;
+/** شروع (۰۰:۰۰ به وقت ایران، UTC+3:30) روزی که n-1 روز قبل از امروز است؛ برای n = روزهای گذشته از شنبه، همان شنبه */
+const tehranStartMs = (n: number) => {
+  const OFF = 3.5 * 3_600_000, DAY = 86_400_000;
+  return Math.floor((Date.now() + OFF) / DAY) * DAY - OFF - (n - 1) * DAY;
+};
+/** کاربران جدید هر پلتفرم از یک زمان به بعد، مستقیم از خود پروفایل‌ها (زمان اولین پیام و زمان ثبت‌نام)؛ پس از همان لحظه‌ی دیپلوی هم برای گذشته درست است.
+ *  وب = ثبت‌نام از سایت (ایمیل/موبایل/گوگل)، اپ = ثبت‌نام از اپ اندروید؛ پروفایل خودکارِ کاربران ربات در وب شمرده نمی‌شود. */
+async function newUsersSince(env: Env, sinceMs: number): Promise<Record<Platform, number>> {
+  const iso = new Date(sinceMs).toISOString();
+  const seenQ = (only: string) => count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${only} AND json_extract(v,'$.t') >= ?3`, "seen:", "seen:" + MAXC, iso);
+  const webQ = (extra: string) => count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY} AND json_extract(v,'$.created') >= ?3 AND ${extra}`, "wu:", "wu:" + MAXC, sinceMs);
+  const [tg, bale, web, app] = await Promise.all([
+    seenQ(SEEN_TG), seenQ(SEEN_BALE), webQ("COALESCE(json_extract(v,'$.via'),'') != 'app'"), webQ("json_extract(v,'$.via') = 'app'"),
+  ]);
+  return { tg, bale, web, app };
+}
 const dayStr = (agoDays: number) => new Date(Date.now() - agoDays * 86_400_000).toISOString().slice(0, 10);
 
-/** جمع شمارنده‌های هر پلتفرم برای بازه‌ی [از agoFrom تا agoTo روز پیش] (۰ = امروز، UTC مثل بقیه‌ی آمار) */
+/** جمع شمارنده‌های هر پلتفرم از «from روز پیش» (قدیمی‌تر) تا «to روز پیش» (جدیدتر)؛ ۰ = امروز، UTC مثل بقیه‌ی آمار */
 async function platStats(env: Env, from: number, to: number): Promise<Record<Platform, PlatCounts>> {
   const out = Object.fromEntries(PLATFORMS.map((p) => [p, {} as PlatCounts])) as Record<Platform, PlatCounts>;
-  const lo = dayStr(to), hi = dayStr(from); // lo ≤ روز ≤ hi
+  const lo = dayStr(from), hi = dayStr(to); // from = قدیمی‌تر (روزهای پیش بیشتر)، to = جدیدتر؛ lo ≤ روز ≤ hi
   for (const r of await rows(env,
     "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND substr(k, -10) >= ?3 AND substr(k, -10) <= ?4 AND (exp IS NULL OR exp > ?5)",
     "pst:", "pst:" + MAXC, lo, hi, nowSec())) {
@@ -151,8 +167,9 @@ const platLine = (label: string, c: PlatCounts, prev?: PlatCounts) =>
   `${label}: ▶️ ${fa(c.started ?? 0)} · ✅ <b>${fa(c.ok ?? 0)}</b>${prev ? trend(c.ok ?? 0, prev.ok ?? 0) : ""} · ❌ ${fa(c.fail ?? 0)} · 🆕 ${fa(c.newusers ?? 0)}`;
 
 /** بلوک گزارش پلتفرمی برای بازه‌ی days روز اخیر: هر پلتفرم یک خط + جمع کل؛ prev = بازه‌ی قبلی هم‌اندازه برای روند */
-async function platformReport(env: Env, days: number, st: Record<string, Record<string, number>>, withTrend: boolean, shift = days): Promise<string> {
+async function platformReport(env: Env, days: number, st: Record<string, Record<string, number>>, withTrend: boolean, shift = days, newUsers?: Record<Platform, number>): Promise<string> {
   const [cur, prev] = await Promise.all([platStats(env, days - 1, 0), withTrend ? platStats(env, shift + days - 1, shift) : Promise.resolve(null)]);
+  if (newUsers) for (const p of PLATFORMS) cur[p].newusers = newUsers[p]; // شمارش مستقیم از پروفایل‌ها، نه شمارنده‌ی روزانه
   const total = sumDaysOf(st, 0, days - 1), totalPrev = withTrend ? sumDaysOf(st, shift, shift + days - 1) : undefined;
   const lines = PLATFORMS.map((p) => platLine(PLAT_LABEL[p], cur[p], prev?.[p]));
   lines.push(platLine("📊 <b>جمع کل</b>", total, totalPrev));
@@ -174,14 +191,13 @@ async function homeScreen(env: Env): Promise<Screen> {
     issueCount(env).catch(() => 0),
   ]);
   const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
-  const week = await platformReport(env, n, st, true, 7);
-  const wk = await platStats(env, n - 1, 0);
-  const nu: Record<string, number> = Object.fromEntries(PLATFORMS.map((p) => [p, wk[p].newusers ?? 0]));
-  const range = `${fmtDay(Date.now() - (n - 1) * 86_400_000)} تا ${fmtDay(Date.now())}`;
+  const nu = await newUsersSince(env, tehranStartMs(n));
+  const week = await platformReport(env, n, st, true, 7, nu);
+  const range = `${fmtDay(tehranStartMs(n))} تا ${fmtDay(Date.now())}`;
   return {
     text:
       "🛠 <b>پنل مدیریت</b>\n\n" +
-      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · وب · اپ)</i>\n` +
+      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg)}</b> · 🟢 <b>${fa(nu.bale)}</b> · 🌐 <b>${fa(nu.web)}</b> · 📱 <b>${fa(nu.app)}</b>  <i>(تلگرام · بله · وب · اپ)</i>\n` +
       `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🌐 ${fa(webUsers)} · 📱 ${fa(appUsers)}\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
