@@ -13,10 +13,9 @@ import { normalizeBaleUpdate } from "./bale-format";
 
 export const baleEnabled = (env: Env): boolean => !!env.BALE_BOT_TOKEN;
 
-/** راز آدرس وبهوک؛ فقط حروف/عدد/خط‌تیره/زیرخط و حداقل ۱۶ نویسه پذیرفته می‌شود (وگرنه وبهوک بله خاموش می‌ماند) */
+/** راز آدرس وبهوک: همان TELEGRAM_WEBHOOK_SECRET (بدون هیچ شرطی) */
 export function baleSecret(env: Env): string {
-  const s = (env.BALE_WEBHOOK_SECRET || env.TELEGRAM_WEBHOOK_SECRET || "").trim();
-  return /^[A-Za-z0-9_-]{16,128}$/.test(s) ? s : "";
+  return (env.TELEGRAM_WEBHOOK_SECRET || "").trim();
 }
 
 /** آدرس کامل وبهوک که به بله داده می‌شود (دامنه‌ی سایت؛ بله از ایران به آن می‌زند) */
@@ -42,7 +41,7 @@ export async function handleBaleUpdate(env: Env, update: unknown): Promise<void>
 /** ثبت وبهوک و دستورها روی بله (از /bale-setup صدا زده می‌شود) */
 export async function setupBale(env: Env): Promise<{ ok: boolean; error?: string; bot?: string; webhook?: string; pending?: number; last_error?: string }> {
   if (!baleEnabled(env)) return { ok: false, error: "BALE_BOT_TOKEN تنظیم نشده است." };
-  if (!baleSecret(env)) return { ok: false, error: "BALE_WEBHOOK_SECRET (یا TELEGRAM_WEBHOOK_SECRET) باید فقط شامل حروف انگلیسی/عدد/خط‌تیره/زیرخط و حداقل ۱۶ نویسه باشد." };
+  if (!baleSecret(env)) return { ok: false, error: "TELEGRAM_WEBHOOK_SECRET تنظیم نشده است." };
   const benv: Env = { ...env, PLATFORM: "bale" };
   try {
     const me = await tg<{ username?: string }>(benv, "getMe");

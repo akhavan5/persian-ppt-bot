@@ -112,7 +112,7 @@ export default {
       return noindex(new Response("ok"));
     }
 
-    // وبهوک بله: بله هدر محرمانه نمی‌فرستد، پس راز بخشی از آدرس است (/bale/<BALE_WEBHOOK_SECRET>). بدون BALE_BOT_TOKEN همه‌چیز 403 است و تلگرام بی‌تأثیر می‌ماند
+    // وبهوک بله: بله هدر محرمانه نمی‌فرستد، پس راز بخشی از آدرس است (/bale/<TELEGRAM_WEBHOOK_SECRET>). بدون BALE_BOT_TOKEN همه‌چیز 403 است و تلگرام بی‌تأثیر می‌ماند
     const baleHook = url.pathname.match(/^\/bale\/([A-Za-z0-9_-]{1,128})$/);
     if (baleHook) {
       if (req.method !== "POST") return noindex(new Response("method not allowed", { status: 405, headers: { allow: "POST" } }));
