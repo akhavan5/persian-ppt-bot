@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { BALE_API_DEFAULT, baleMarkup, baleText, fromBaleId, isBaleId } from "./bale-format";
+import { BALE_API_DEFAULT, baleMarkup, baleText, fromBaleId, hasWebApp, isBaleId } from "./bale-format";
 
 const apiBase = (env: Env) => env.TELEGRAM_API_BASE || "https://api.telegram.org";
 
@@ -29,27 +29,31 @@ const siteOf = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$
 const BALE_OPTIONAL = new Set(["answerCallbackQuery", "editMessageReplyMarkup", "editMessageCaption", "setMyCommands", "deleteMyCommands", "setChatMenuButton", "sendChatAction"]);
 
 /** پارامترهای تلگرام را به پارامترهای قابل‌فهم برای بله تبدیل می‌کند (بدون parse_mode: متن HTML به Markdown بله تبدیل می‌شود) */
-function baleParams(env: Env, method: string, body: Record<string, unknown>): Record<string, unknown> {
+function baleParams(env: Env, method: string, body: Record<string, unknown>, webApp = true): Record<string, unknown> {
   const b: Record<string, unknown> = { ...body };
   for (const k of ["parse_mode", "link_preview_options", "disable_web_page_preview", "caption_entities", "entities", "message_thread_id"]) delete b[k];
   if (isBaleId(b.chat_id)) b.chat_id = fromBaleId(Number(b.chat_id));
   if (isBaleId(b.user_id)) b.user_id = fromBaleId(Number(b.user_id));
   if (typeof b.text === "string") b.text = baleText(b.text).slice(0, 4096);
   if (typeof b.caption === "string" && method !== "editMessageCaption") b.caption = baleText(b.caption).slice(0, 1024);
-  if (b.reply_markup) b.reply_markup = baleMarkup(b.reply_markup, siteOf(env));
+  if (b.reply_markup) b.reply_markup = baleMarkup(b.reply_markup, siteOf(env), webApp);
   return b;
 }
 
 export async function tg<T = any>(env: Env, method: string, body: Record<string, unknown> = {}): Promise<T> {
   const r = route(env, body.chat_id ?? body.user_id);
-  const payload = r.bale ? baleParams(env, method, body) : body;
-  const res = await fetch(`${r.base}/bot${r.token}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const j = (await res.json().catch(() => ({ ok: false, description: `HTTP ${res.status}` }))) as any;
+  const call = async (payload: unknown) => {
+    const res = await fetch(`${r.base}/bot${r.token}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30_000),
+    });
+    return { res, j: (await res.json().catch(() => ({ ok: false, description: `HTTP ${res.status}` }))) as any };
+  };
+  let { res, j } = await call(r.bale ? baleParams(env, method, body) : body);
+  // اگر بله دکمه‌ی web_app (Mini App) را نپذیرفت، همان پیام یک بار با دکمه‌ی لینک ساده ارسال می‌شود تا کاربر بی‌پاسخ نماند
+  if (!j.ok && r.bale && hasWebApp(body.reply_markup)) ({ res, j } = await call(baleParams(env, method, body, false)));
   if (!j.ok) {
     const name = r.bale ? "bale" : "telegram";
     console.error(`${name} api error`, method, JSON.stringify(j).slice(0, 400));

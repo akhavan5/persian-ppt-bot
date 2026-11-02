@@ -531,7 +531,7 @@ async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chat
 const HOME_TEXT = "🏠 <b>منوی اصلی</b>\nیکی از گزینه‌ها را بزن، یا همین‌جا <b>موضوع ارائه</b> را بنویس و بفرست.";
 function homeKb(env: Env, tgId: number, admin: boolean) {
   const rows: Btn[][] = [
-    ...(isBaleId(tgId) ? [] : [[{ text: "📱 ساخت ارائه (اپ)", web_app: { url: `${miniappUrl(env)}/app` } } as Btn]]), // Mini App فقط در تلگرام؛ در بله دکمه‌ی «سایت» همان کار را می‌کند
+    [{ text: "📱 ساخت ارائه (اپ)", web_app: { url: `${miniappUrl(env)}/app` } } as Btn],
     [{ text: "💳 اعتبار و پلن", callback_data: "h:credit" }, { text: "⚙️ تنظیمات", callback_data: "h:set" }],
     [{ text: "📁 فایل‌های من", callback_data: "h:files" }, { text: "🎁 دعوت دوستان", callback_data: "h:inv" }],
     [{ text: "🌐 سایت و خرید پلن", callback_data: "h:site" }, { text: "💬 پشتیبانی", url: supportLink(tgId) }],
@@ -541,7 +541,6 @@ function homeKb(env: Env, tgId: number, admin: boolean) {
 }
 
 async function showApp(env: Env, chatId: number) {
-  if (isBaleId(chatId)) return await showSite(env, chatId, chatId); // بله Mini App ما را ندارد؛ ورود خودکار به سایت (چت خصوصی: شناسه‌ی چت = شناسه‌ی کاربر)
   return await sendMessage(env, chatId, "📱 با دکمه‌ی زیر اپ ساخت ارائه باز می‌شود (ساخت، فایل‌ها، تنظیمات و اعتبار، همه با همین حساب).",
     { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(env)}/app` } }]] } });
 }

@@ -104,13 +104,16 @@ export const baleText = (html: string): string => baleWording(htmlToBaleMd(html)
 
 type AnyBtn = { text?: string; callback_data?: string; url?: string; web_app?: { url?: string }; [k: string]: unknown };
 
-/** کیبورد اینلاین بله فقط text/url/callback_data دارد؛ دکمه‌ی web_app (Mini App تلگرام) به لینک سایت تبدیل می‌شود */
-export function baleMarkup(markup: unknown, siteUrl: string): unknown {
+/** دکمه‌ی web_app (Mini App) در بله هم باز می‌شود؛ با webApp=false (تلاش دوم بعد از خطا) به لینک ساده تبدیل می‌شود */
+export const hasWebApp = (markup: unknown): boolean =>
+  !!(markup as { inline_keyboard?: AnyBtn[][] } | undefined)?.inline_keyboard?.some((r) => r.some((b) => b.web_app));
+
+export function baleMarkup(markup: unknown, siteUrl: string, webApp = true): unknown {
   const mk = markup as { inline_keyboard?: AnyBtn[][] } | undefined;
   if (!mk || !Array.isArray(mk.inline_keyboard)) return markup;
   const rows = mk.inline_keyboard.map((row) => row.map((b): AnyBtn => {
     const text = baleWording(String(b.text ?? "").replace(/<[^>]+>/g, ""));
-    if (b.web_app) return { text, url: siteUrl };
+    if (b.web_app) return webApp && b.web_app.url ? { text, web_app: { url: b.web_app.url } } : { text, url: b.web_app.url || siteUrl };
     if (b.url) return { text, url: b.url };
     return { text, callback_data: String(b.callback_data ?? "").slice(0, 64) };
   })).filter((row) => row.length);

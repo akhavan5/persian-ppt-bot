@@ -40,7 +40,7 @@ export async function handleBaleUpdate(env: Env, update: unknown): Promise<void>
 }
 
 /** ثبت وبهوک و دستورها روی بله (از /bale-setup صدا زده می‌شود) */
-export async function setupBale(env: Env): Promise<{ ok: boolean; error?: string; bot?: string; webhook?: string; pending?: number }> {
+export async function setupBale(env: Env): Promise<{ ok: boolean; error?: string; bot?: string; webhook?: string; pending?: number; last_error?: string }> {
   if (!baleEnabled(env)) return { ok: false, error: "BALE_BOT_TOKEN تنظیم نشده است." };
   if (!baleSecret(env)) return { ok: false, error: "BALE_WEBHOOK_SECRET (یا TELEGRAM_WEBHOOK_SECRET) باید فقط شامل حروف انگلیسی/عدد/خط‌تیره/زیرخط و حداقل ۱۶ نویسه باشد." };
   const benv: Env = { ...env, PLATFORM: "bale" };
@@ -48,9 +48,9 @@ export async function setupBale(env: Env): Promise<{ ok: boolean; error?: string
     const me = await tg<{ username?: string }>(benv, "getMe");
     await tg(benv, "setWebhook", { url: baleWebhookUrl(env) });
     await tg(benv, "setMyCommands", { commands: BOT_COMMANDS }).catch(() => {}); // در مستندات بله نیست؛ اگر نبود بی‌اثر است
-    const info = await tg<{ url?: string; pending_update_count?: number }>(benv, "getWebhookInfo").catch(() => null);
+    const info = await tg<{ url?: string; pending_update_count?: number; last_error_message?: string }>(benv, "getWebhookInfo").catch(() => null);
     const host = (() => { try { return new URL(info?.url || baleWebhookUrl(env)).host; } catch { return ""; } })();
-    return { ok: true, bot: me.username ? `@${me.username}` : undefined, webhook: `https://${host}/bale/…`, pending: info?.pending_update_count };
+    return { ok: true, bot: me.username ? `@${me.username}` : undefined, webhook: `https://${host}/bale/…`, pending: info?.pending_update_count, last_error: info?.last_error_message };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message.slice(0, 300) : String(e) };
   }

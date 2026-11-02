@@ -291,7 +291,8 @@ const show = (el, on) => { el.hidden = !on; };
 // تلگرام initData و تم را در هش آدرس (#tgWebAppData=…) می‌دهد و رویدادها را با postEvent رد و بدل می‌کند؛ همان کاری که telegram-web-app.js می‌کند.
 const TG = (() => {
   const hp = new URLSearchParams(location.hash.slice(1));
-  const initData = hp.get("tgWebAppData") || store.get("tgInit") || "";
+  const BW = window.Bale && window.Bale.WebApp; // مینی‌اپ بله: همان پروتکل هش (#tgWebAppData=…)؛ اگر شیء Bale.WebApp هم باشد از آن هم استفاده می‌شود
+  const initData = hp.get("tgWebAppData") || (BW && BW.initData) || store.get("tgInit") || "";
   if (hp.get("tgWebAppData")) store.set("tgInit", initData);
   let themeRaw = hp.get("tgWebAppThemeParams") || store.get("tgTheme") || "";
   const ver = hp.get("tgWebAppVersion") || store.get("tgVer") || "0";
@@ -347,6 +348,7 @@ const TG = (() => {
   try { applyTheme(JSON.parse(themeRaw || "{}")); } catch {}
   if (inIframe) post("iframe_ready", { reload_supported: true });
   post("web_app_ready"); post("web_app_expand");
+  try { if (BW) { if (BW.ready) BW.ready(); if (BW.expand) BW.expand(); } } catch {}
   post("web_app_setup_swipe_behavior", { allow_vertical_swipe: false });
   paint();
 

@@ -15,6 +15,7 @@ import { buildDeckPdf, cachedPdf } from "./pdf";
 import { esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { wavSeconds } from "./wav";
 import { fileNameWithSite, siteHost, siteLoginUrl } from "./deck-service";
+import { toBaleId } from "./bale-format";
 
 const enc = new TextEncoder();
 const INIT_MAX_AGE = 86_400; // ثانیه؛ initData قدیمی‌تر از یک روز پذیرفته نمی‌شود
@@ -40,15 +41,17 @@ async function hmac(key: BufferSource, msg: string): Promise<ArrayBuffer> {
 export interface TgUser { id: number; first_name?: string; last_name?: string; username?: string; is_bot?: boolean }
 
 /** بررسی امضای initData طبق مستندات تلگرام؛ کاربر تلگرام یا null (امضا نادرست/منقضی) */
-export async function verifyInitData(botToken: string, initData: string, now = Date.now()): Promise<TgUser | null> {
+export async function verifyInitData(botToken: string, initData: string, now = Date.now(), bale = false): Promise<TgUser | null> {
   if (!botToken) return null;
   const p = new URLSearchParams(initData);
   const hash = p.get("hash") ?? "";
   if (!/^[0-9a-f]{64}$/.test(hash)) return null;
   p.delete("hash");
   const check = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join("\n");
-  const secret = await hmac(enc.encode("WebAppData"), botToken);
-  if (!safeEqual(hex(await hmac(secret, check)), hash)) return null;
+  // کلید امضا: تلگرام HMAC("WebAppData", توکن) است. مستندات بله شیوه‌ی ساخت کلید را صریح نمی‌نویسد؛ برای بله علاوه بر همان روش، خود توکن هم به‌عنوان کلید امتحان می‌شود
+  let okSig = safeEqual(hex(await hmac(await hmac(enc.encode("WebAppData"), botToken), check)), hash);
+  if (!okSig && bale) okSig = safeEqual(hex(await hmac(enc.encode(botToken), check)), hash);
+  if (!okSig) return null;
   const age = now / 1000 - Number(p.get("auth_date"));
   if (!Number.isFinite(age) || age > INIT_MAX_AGE || age < -300) return null;
   try {
@@ -81,8 +84,12 @@ export async function miniappLogin(req: Request, env: Env, ip: string): Promise<
   const b = (await req.json().catch(() => null)) as { initData?: unknown } | null;
   const initData = typeof b?.initData === "string" ? b.initData : "";
   if (initData.length < 20 || initData.length > 4_096) return err("اطلاعات ورود از تلگرام نیامد؛ Mini App را از داخل ربات باز کن.", 400);
-  const u = await verifyInitData(env.TELEGRAM_BOT_TOKEN, initData);
-  if (!u || u.is_bot) return err("ورود از تلگرام تایید نشد؛ Mini App را بسته و دوباره از داخل ربات باز کن.", 401);
+  let u = await verifyInitData(env.TELEGRAM_BOT_TOKEN, initData);
+  if (!u && env.BALE_BOT_TOKEN) { // Mini App بله: امضا با توکن ربات بله؛ شناسه‌ی کاربر مثل ربات بله با BALE_ID_BASE جمع می‌شود تا از تلگرام جدا بماند
+    const b = await verifyInitData(env.BALE_BOT_TOKEN, initData, Date.now(), true);
+    if (b) u = { ...b, id: toBaleId(b.id) };
+  }
+  if (!u || u.is_bot) return err("ورود از تلگرام/بله تایید نشد؛ Mini App را بسته و دوباره از داخل ربات باز کن.", 401);
   if (await hitLimit(env, `mal:t:${u.id}`, TG_LOGIN_MAX, 600)) return err("تعداد ورود زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);
 
   if (await isBanned(env, u.id)) return err("دسترسی شما مسدود شده است.", 403);
