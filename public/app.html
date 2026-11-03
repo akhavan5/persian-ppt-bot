@@ -173,8 +173,8 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <label class="sw" id="pRow" hidden><span>🖼 پوستر (اینفوگرافیک) <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="pOn" checked></label>
           <div id="pLay" style="padding-bottom:6px" hidden><select id="pChoice"><option value="wide">پوستر افقی (مناسب نمایش روی صفحه)</option><option value="tall">پوستر عمودی (مناسب پیام‌رسان)</option></select></div>
           <label class="sw"><span>📝 جزوه‌ی <bdi>Word</bdi> <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="hOn" checked></label>
-          <label class="sw" id="aRow" hidden><span>🔊 اسلاید صوتی <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="aOn" checked></label>
-          <label class="sw" id="cRow" hidden><span>🎙 پادکست <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="cOn" checked></label>
+          <label class="sw" id="aRow" hidden><span>🔊 اسلاید صوتی <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="aOn"></label>
+          <label class="sw" id="cRow" hidden><span>🎙 پادکست <span class="muted">· ۱ اعتبار جدا</span></span><input type="checkbox" id="cOn"></label>
         </div>
 
         <button class="btn" id="go" type="button" style="margin-top:12px">✨ بساز</button>
@@ -737,7 +737,7 @@ function renderMake() {
   show($("#pRow"), !!cfg.poster); show($("#pLay"), !!cfg.poster && $("#pOn").checked); show($("#linkBtn"), !!cfg.link && !srcText);
   $("#file").accept = FILE_ACCEPT + (cfg.voice ? "," + AUDIO_EXT.map((e) => "." + e).join(",") : "");
   $("#pick").textContent = cfg.voice ? "📎 آپلود فایل یا ویس (اختیاری)" : "📎 آپلود فایل (اختیاری)";
-  show($("#aRow"), !!cfg.audio); show($("#cRow"), !!cfg.audio); // اسلاید صوتی و پادکست: فقط وقتی سرور فعالشان کرده؛ پیش‌فرض روشن
+  show($("#aRow"), !!cfg.audio); show($("#cRow"), !!cfg.audio); // اسلاید صوتی و پادکست: فقط وقتی سرور فعالشان کرده؛ پیش‌فرض خاموش
   $("#pOn").onchange = () => show($("#pLay"), $("#pOn").checked);
   $("#examples").replaceChildren(...EXAMPLES.map((t) => h("button", { type: "button", onclick: () => { $("#topic").value = t; saveDraft(); TG.haptic("select"); } }, t)));
 }

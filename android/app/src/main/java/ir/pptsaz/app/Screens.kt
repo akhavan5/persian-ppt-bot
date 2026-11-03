@@ -424,7 +424,7 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
 
 /** وضعیت فرم «ساخت»؛ در AppViewModel نگه داشته می‌شود تا با عوض‌کردن تب و چرخش صفحه پاک نشود (و متن بلند وارد Bundle نشود). */
 @Stable
-class CreateForm(topic: String = "", source: String = "", handout: Boolean = true, poster: String = "wide", audio: Boolean = true, podcast: Boolean = true) {
+class CreateForm(topic: String = "", source: String = "", handout: Boolean = true, poster: String = "wide", audio: Boolean = false, podcast: Boolean = false) {
     var topic by mutableStateOf(topic)
     var source by mutableStateOf(source)
     var handout by mutableStateOf(handout)
@@ -438,8 +438,8 @@ class CreateForm(topic: String = "", source: String = "", handout: Boolean = tru
         source = ""
         handout = true
         poster = "wide"
-        audio = true
-        podcast = true
+        audio = false
+        podcast = false
     }
 }
 
@@ -838,7 +838,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                             )
                         }
                     }
-                    // اسلاید صوتی و پادکست (فقط وقتی سرور فعالشان کرده)؛ پیش‌فرض روشن، هرکدام ۱ اعتبار جدا
+                    // اسلاید صوتی و پادکست (فقط وقتی سرور فعالشان کرده)؛ پیش‌فرض خاموش، هرکدام ۱ اعتبار جدا
                     if (cfg.audio) {
                         HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                         ToggleRow(
