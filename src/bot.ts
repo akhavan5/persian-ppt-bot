@@ -108,7 +108,7 @@ function subMenu(env: Env, kind: string, s: Settings, caps: Caps) {
 }
 
 // ---------- انتخاب مرحله‌ای قبل از ساخت (مدل ← تعداد اسلاید ← اسلاید حاوی تصویر؟) ----------
-type Step = "model" | "slides" | "imgs" | "poster" | "handout" | "audio" | "podcast";
+type Step = "model" | "slides" | "imgs" | "extras";
 /** پوستر (اینفوگرافیک) همراه ارائه: none = نه، wide = افقی، tall = عمودی */
 type PosterChoice = "none" | "wide" | "tall";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
@@ -123,9 +123,7 @@ const stepsOf = (env: Env, p: Pending): Step[] => [
   ...(modelList(env).length > 1 ? (["model"] as Step[]) : []),
   ...(p.fixed ? [] : (["slides"] as Step[])),
   "imgs",
-  ...(posterEnabled(env) ? (["poster"] as Step[]) : []),
-  "handout",
-  ...(audioEnabled(env) ? (["audio", "podcast"] as Step[]) : []), // اسلاید صوتی و پادکست: فقط وقتی کلید Gemini و Workflow صدا وصل است
+  "extras", // پوستر، جزوه، اسلاید صوتی و پادکست در یک مرحله (آخرین مرحله؛ دکمه‌ی «شروع ساخت»)
 ];
 
 function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
@@ -144,30 +142,26 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   } else if (p.step === "slides") {
     ask = "📄 <b>تعداد اسلاید</b> را انتخاب کن:" + (MODES[p.mode ?? s.mode].minSlides ? `\n<i>${MODES[p.mode ?? s.mode].emoji} حالت ${MODES[p.mode ?? s.mode].name} حداقل ${toFa(String(MODES[p.mode ?? s.mode].minSlides))} اسلاید می‌سازد.</i>` : "");
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
-  } else if (p.step === "poster") {
-    ask = "🖼 <b>پوستر (اینفوگرافیک)</b> هم ساخته شود؟ (۱ اعتبار)\n<i>پوستر آموزشی آماده‌ی اشتراک‌گذاری و چاپ، با تیتر، بخش‌های رنگی، جدول و نکته‌ی پایانی. افقی برای نمایش روی صفحه و عمودی برای پیام‌رسان است.</i>";
+  } else if (p.step === "extras") {
+    const poster = p.poster ?? "none", hasPoster = posterEnabled(env), hasAudio = audioEnabled(env);
+    const n = (hasPoster && poster !== "none" ? 1 : 0) + (p.handout !== false ? 1 : 0) + (hasAudio && p.audio === true ? 1 : 0) + (hasAudio && p.podcast === true ? 1 : 0);
+    ask = "➕ <b>همراه ارائه چه چیزی ساخته شود؟</b> (اختیاری؛ هرکدام ۱ اعتبار جدا)\n"
+      + (hasPoster ? "🖼 <b>پوستر:</b> اینفوگرافیک آماده‌ی اشتراک‌گذاری و چاپ (افقی برای نمایش روی صفحه، عمودی برای پیام‌رسان)\n" : "")
+      + "📝 <b>جزوه:</b> جزوه‌ی Word حدود سه صفحه‌ای و قابل‌ویرایش\n"
+      + (hasAudio ? "🔊 <b>اسلاید صوتی:</b> PPTX با صدای گوینده در هر اسلاید (چند دقیقه بعد از ارائه، جدا می‌رسد)\n🎙 <b>پادکست:</b> گفت‌وگوی دو‌نفره درباره‌ی موضوع، به‌صورت فایل صوتی (چند دقیقه بعد از ارائه، جدا می‌رسد)\n" : "")
+      + `\n<i>${n ? `اعتبار اضافه‌ی انتخاب‌های فعلی: ${toFa(String(n))}` : "فعلاً فقط خود ارائه ساخته می‌شود."}</i>`;
     opts = [
-      [{ text: mark(p.poster === "wide", "🖥 پوستر افقی (پیش‌فرض) — ۱ اعتبار"), callback_data: "p:poster:wide" }],
-      [{ text: mark(p.poster === "tall", "📱 پوستر عمودی — ۱ اعتبار"), callback_data: "p:poster:tall" }],
-      [{ text: mark((p.poster ?? "none") === "none", "بدون پوستر"), callback_data: "p:poster:none" }],
-    ];
-  } else if (p.step === "handout") {
-    ask = "📝 <b>جزوه‌ی Word</b> هم ساخته شود؟ (۱ اعتبار)\n<i>جزوه‌ی مطالعه‌ی حدود سه صفحه‌ای به‌صورت فایل Word قابل‌ویرایش، شامل مقدمه، چند بخش توضیحی و نکات کلیدی.</i>" + (steps[steps.length - 1] === "handout" ? "\n<i>با انتخاب این گزینه ساخت شروع می‌شود.</i>" : "");
-    opts = [
-      [{ text: mark(p.handout !== false, "📝 با جزوه — ۱ اعتبار"), callback_data: "p:handout:1" }],
-      [{ text: mark(p.handout === false, "بدون جزوه"), callback_data: "p:handout:0" }],
-    ];
-  } else if (p.step === "audio") {
-    ask = "🔊 <b>اسلاید صوتی</b> هم ساخته شود؟ (۱ اعتبار)\n<i>همان ارائه به‌صورت PPTX که صدای گوینده داخل هر اسلاید گذاشته شده است؛ در حالت نمایش (Slide Show) خودکار پخش می‌شود و بعد از پایان صدا اسلاید عوض می‌شود. چند دقیقه بعد از ارائه، جدا می‌رسد.</i>";
-    opts = [
-      [{ text: mark(p.audio === true, "🔊 با اسلاید صوتی — ۱ اعتبار"), callback_data: "p:audio:1" }],
-      [{ text: mark(p.audio !== true, "بدون اسلاید صوتی"), callback_data: "p:audio:0" }],
-    ];
-  } else if (p.step === "podcast") {
-    ask = "🎙 <b>پادکست</b> هم ساخته شود؟ (۱ اعتبار)\n<i>گفت‌وگوی دو‌نفره درباره‌ی موضوع ارائه، به‌صورت فایل صوتی (حدود چند دقیقه). چند دقیقه بعد از ارائه، جدا می‌رسد. با انتخاب این گزینه ساخت شروع می‌شود.</i>";
-    opts = [
-      [{ text: mark(p.podcast === true, "🎙 با پادکست — ۱ اعتبار"), callback_data: "p:podcast:1" }],
-      [{ text: mark(p.podcast !== true, "بدون پادکست"), callback_data: "p:podcast:0" }],
+      ...(hasPoster ? [[
+        { text: mark(poster === "none", "بدون پوستر"), callback_data: "p:extras:poster-none" },
+        { text: mark(poster === "wide", "🖥 پوستر افقی"), callback_data: "p:extras:poster-wide" },
+        { text: mark(poster === "tall", "📱 پوستر عمودی"), callback_data: "p:extras:poster-tall" },
+      ]] : []),
+      [{ text: p.handout !== false ? "✔️ 📝 جزوه‌ی Word — ۱ اعتبار" : "📝 جزوه‌ی Word", callback_data: "p:extras:handout" }],
+      ...(hasAudio ? [
+        [{ text: p.audio === true ? "✔️ 🔊 اسلاید صوتی — ۱ اعتبار" : "🔊 اسلاید صوتی", callback_data: "p:extras:audio" }],
+        [{ text: p.podcast === true ? "✔️ 🎙 پادکست — ۱ اعتبار" : "🎙 پادکست", callback_data: "p:extras:podcast" }],
+      ] : []),
+      [{ text: "🚀 شروع ساخت", callback_data: "p:extras:go" }],
     ];
   } else {
     ask = "🖼 <b>اسلایدها حاوی تصویر باشند؟</b>" + (steps[steps.length - 1] === "imgs" ? "\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>" : "");
@@ -257,6 +251,7 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
     return await editMessage(env, chatId, mid, "✖️ لغو شد. هر وقت خواستی، موضوع جدید را بفرست.", { reply_markup: { inline_keyboard: [] } });
   }
 
+  if ((["poster", "handout", "audio", "podcast"] as string[]).includes(p.step)) p.step = "extras"; // ویزارد نیمه‌کاره‌ی قبل از ادغام مرحله‌ها
   const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);
   const steps = stepsOf(env, p);
   const render = async () => {
@@ -282,18 +277,15 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
     if (!(Number(b) >= 3)) return await answer();
     if (Number(b) > caps.maxSlides) return await answer(slidesLimitMsg(caps.maxSlides), true);
     p.slides = clampSlides(Number(b), caps.maxSlides); s.slides = p.slides; p.note = undefined;
-  } else if (a === "handout") {
-    if (b !== "0" && b !== "1") return await answer();
-    p.handout = b === "1";
-  } else if (a === "audio") {
-    if (b !== "0" && b !== "1") return await answer();
-    p.audio = b === "1";
-  } else if (a === "podcast") {
-    if (b !== "0" && b !== "1") return await answer();
-    p.podcast = b === "1";
-  } else if (a === "poster") {
-    if (b !== "none" && b !== "wide" && b !== "tall") return await answer();
-    p.poster = b;
+  } else if (a === "extras") {
+    // همه‌ی همراه‌ها در یک مرحله: دکمه‌ها فقط انتخاب را عوض می‌کنند و ساخت با «شروع ساخت» شروع می‌شود
+    if (b === "go") return await launchFromPending(env, cq, uid, tgId, chatId, mid, p, answer);
+    if (b === "handout") p.handout = p.handout === false;
+    else if (b === "audio" && audioEnabled(env)) p.audio = p.audio !== true;
+    else if (b === "podcast" && audioEnabled(env)) p.podcast = p.podcast !== true;
+    else if (posterEnabled(env) && (b === "poster-none" || b === "poster-wide" || b === "poster-tall")) p.poster = b.slice(7) as PosterChoice;
+    else return await answer();
+    return await render();
   } else if (a === "imgs") {
     if (!(Number.isInteger(Number(b)) && Number(b) >= 0)) return await answer();
     p.imgs = Number(b) > 0; s.images = p.imgs;
