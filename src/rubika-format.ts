@@ -9,12 +9,14 @@
  * مجموع هر شناسه کمتر از ۱۵ رقم می‌ماند، پس اتصال به حساب وب با normTgId در link.ts همان‌طور کار می‌کند.
  */
 
+import { EITAA_ID_BASE } from "./eitaa-format";
+
 export const RUBIKA_ID_BASE = 200_000_000_000_000; // ۲×۱۰^۱۴
 export const RUBIKA_API_DEFAULT = "https://botapi.rubika.ir";
 
 export const isRubikaId = (n: unknown): boolean => {
   const v = typeof n === "string" && /^\d+$/.test(n) ? Number(n) : n;
-  return typeof v === "number" && Number.isSafeInteger(v) && v >= RUBIKA_ID_BASE;
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= RUBIKA_ID_BASE && v < EITAA_ID_BASE; // بالاتر از آن شناسه‌ی ایتاست
 };
 
 /** SHA-256 ← عدد صحیح ۴۶ بیتی (کمتر از ۷٫۰۴×۱۰^۱۳) */

@@ -16,6 +16,8 @@ import { esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { wavSeconds } from "./wav";
 import { fileNameWithSite, siteHost, siteLoginUrl } from "./deck-service";
 import { toBaleId } from "./bale-format";
+import { isEitaaId, toEitaaId, validEitaaRawId } from "./eitaa-format";
+import { eitaaLink, eitaaWelcome } from "./eitaa";
 
 const enc = new TextEncoder();
 const INIT_MAX_AGE = 86_400; // ثانیه؛ initData قدیمی‌تر از یک روز پذیرفته نمی‌شود
@@ -38,7 +40,7 @@ async function hmac(key: BufferSource, msg: string): Promise<ArrayBuffer> {
   return crypto.subtle.sign("HMAC", k, enc.encode(msg));
 }
 
-export interface TgUser { id: number; first_name?: string; last_name?: string; username?: string; is_bot?: boolean }
+export interface TgUser { id: number; first_name?: string; last_name?: string; username?: string; is_bot?: boolean; allows_write_to_pm?: boolean }
 
 /** بررسی امضای initData طبق مستندات تلگرام؛ کاربر تلگرام یا null (امضا نادرست/منقضی) */
 export async function verifyInitData(botToken: string, initData: string, now = Date.now(), bale = false): Promise<TgUser | null> {
@@ -64,6 +66,8 @@ export async function verifyInitData(botToken: string, initData: string, now = D
  *  نه در هر باز شدن Mini App؛ هر کدام جدا خطایش را می‌خورد تا ورود خراب نشود. */
 async function dailyTouch(env: Env, u: TgUser, uid: string, name: string, startParam: string): Promise<void> {
   const isNew = await touchUser(env, u.id, u.username, name).catch((e) => { console.error("touchUser", e); return false; });
+  // ایتا: پیام خوش‌آمدگویی (الزام انتشار)؛ فقط اگر کاربر دسترسی ارسال پیام داده باشد
+  if (isEitaaId(u.id) && u.allows_write_to_pm) await eitaaWelcome(env, u.id).catch(() => {});
   await noteActive(env, u.id, u.username, name).catch((e) => console.error("noteActive", e));
   if ((await getLinkedTg(env, uid)) !== u.id) await env.KV.put(`w2tg:${uid}`, String(u.id)).catch(() => {});
   // دعوت از راه startapp=ref_<شناسه>: start_param داخل initData امضا شده است، پس قابل جعل نیست؛ مثل /start ربات فقط برای کاربر «جدید»
@@ -81,14 +85,23 @@ export async function miniappLogin(req: Request, env: Env, ip: string): Promise<
   // سقف IP فقط جلوی سیل درخواست را می‌گیرد و عمداً بالاست: پشت NAT یا پروکسی چند کاربر یک IP دارند. سقف دقیق بعد از تأیید امضا و بر پایه‌ی tgId است.
   if (await hitLimit(env, `mal:${ip}`, IP_LOGIN_MAX, 600)) return err("تعداد درخواست از این شبکه زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);
   if (Number(req.headers.get("content-length") ?? 0) > 8_000) return err("درخواست نامعتبر", 413);
-  const b = (await req.json().catch(() => null)) as { initData?: unknown } | null;
+  const b = (await req.json().catch(() => null)) as { initData?: unknown; platform?: unknown } | null;
   const initData = typeof b?.initData === "string" ? b.initData : "";
   if (initData.length < 20 || initData.length > 4_096) return err("اطلاعات ورود از تلگرام نیامد؛ Mini App را از داخل ربات باز کن.", 400);
-  let u = await verifyInitData(env.TELEGRAM_BOT_TOKEN, initData);
+  // ایتا: امضا با توکن برنامه‌ی ایتا (همان الگوریتم تلگرام)؛ شناسه با EITAA_ID_BASE جمع می‌شود. کلاینت ایتا platform را می‌فرستد تا اول همان امتحان شود؛ تصمیم همیشه با امضاست
+  const asEitaa = async (): Promise<TgUser | null> => {
+    if (!env.EITAA_APP_TOKEN) return null;
+    const x = await verifyInitData(env.EITAA_APP_TOKEN, initData);
+    return x && validEitaaRawId(x.id) ? { ...x, id: toEitaaId(x.id) } : null;
+  };
+  const eitaaFirst = b?.platform === "eitaa";
+  let u: TgUser | null = eitaaFirst ? await asEitaa() : null;
+  if (!u) u = await verifyInitData(env.TELEGRAM_BOT_TOKEN, initData);
   if (!u && env.BALE_BOT_TOKEN) { // Mini App بله: امضا با توکن ربات بله؛ شناسه‌ی کاربر مثل ربات بله با BALE_ID_BASE جمع می‌شود تا از تلگرام جدا بماند
-    const b = await verifyInitData(env.BALE_BOT_TOKEN, initData, Date.now(), true);
-    if (b) u = { ...b, id: toBaleId(b.id) };
+    const bb = await verifyInitData(env.BALE_BOT_TOKEN, initData, Date.now(), true);
+    if (bb) u = { ...bb, id: toBaleId(bb.id) };
   }
+  if (!u && !eitaaFirst) u = await asEitaa();
   if (!u || u.is_bot) return err("ورود از تلگرام/بله تایید نشد؛ Mini App را بسته و دوباره از داخل ربات باز کن.", 401);
   if (await hitLimit(env, `mal:t:${u.id}`, TG_LOGIN_MAX, 600)) return err("تعداد ورود زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);
 
@@ -126,6 +139,7 @@ export async function miniappSend(env: Env, user: WebUser, body: Record<string, 
   if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
   const tgId = await getLinkedTg(env, user.id);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
+  if (isEitaaId(tgId)) return err("در ایتا ارسال فایل به چت ممکن نیست؛ دکمه‌ی «دانلود» را بزن.", 409);
   if (await hitLimit(env, `mas:${user.id}`, 30, 3600) || await hitLimit(env, `mas:ip:${ip}`, 90, 3600)) return err("تعداد ارسال‌ها زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
   const f = await loadFileDirect(env, user.id, id);
   if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
@@ -163,6 +177,7 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
   if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
   const tgId = await getLinkedTg(env, user.id);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
+  if (isEitaaId(tgId)) return err("در ایتا ارسال PDF به چت ممکن نیست؛ فایل PPTX را دانلود کن.", 409);
   const name = (title: string) => fileNameWithSite(env, title, "pdf", "", 80);
   const cap = (title: string) => `📄 <b>${esc(title)}</b>\nنسخه‌ی PDF`;
   try {
@@ -191,6 +206,10 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
 export async function miniappInvite(env: Env, user: WebUser): Promise<Response> {
   const tgId = await getLinkedTg(env, user.id);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
+  if (isEitaaId(tgId)) { // ایتا: لینک مستقیم برنامک با startapp (فقط در برنامک کار می‌کند)
+    const base = eitaaLink(env);
+    return base ? json({ link: `${base}?startapp=ref_${tgId}`, max: REF_MAX, every: REF_EVERY }) : err("لینک دعوت در ایتا هنوز تنظیم نشده است.", 409);
+  }
   const me = await tg<{ username?: string }>(env, "getMe").catch(() => null);
   if (!me?.username) return err("ساخت لینک دعوت ممکن نشد؛ کمی بعد دوباره امتحان کن.", 502);
   return json({ link: `https://t.me/${me.username}?start=ref_${tgId}`, max: REF_MAX, every: REF_EVERY });
@@ -225,4 +244,12 @@ export async function miniappDownload(env: Env, token: string): Promise<Response
     "content-disposition": `attachment; filename="file.${/^[a-z0-9]{1,5}$/.test(ext) ? ext : "bin"}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
     "cache-control": "no-store", "x-content-type-options": "nosniff",
   } });
+}
+
+/** POST /api/miniapp/welcome — کلاینت ایتا بعد از موافقت کاربر با requestWriteAccess صدا می‌زند؛ پیام خوش‌آمدگویی (فقط یک بار برای هر کاربر) */
+export async function miniappWelcome(env: Env, user: WebUser): Promise<Response> {
+  const id = await getLinkedTg(env, user.id);
+  if (!id || !isEitaaId(id)) return json({ ok: true, sent: false });
+  if (await hitLimit(env, `mawel:${id}`, 5, 3600)) return json({ ok: true, sent: false });
+  return json({ ok: true, sent: await eitaaWelcome(env, id).catch(() => false) });
 }

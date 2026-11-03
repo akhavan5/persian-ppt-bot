@@ -228,6 +228,21 @@ export default {
       return new Response((await res.text()).replaceAll("__ORIGIN__", SITE), { status: 200, headers: h });
     }
 
+    // برنامک ایتا: همان صفحه‌ی /app با اسکریپت رسمی کیت توسعه‌ی ایتا (الزام مستند: اولین اسکریپت <head> و مستقیم از developer.eitaa.com).
+    // آدرس برنامک در «برنامک من» همین /eitaa است (بدون ریدایرکت). iframe وب ایتا هم باید مجاز باشد (frame-ancestors).
+    if (url.pathname === "/eitaa" && (req.method === "GET" || req.method === "HEAD")) {
+      const res = await env.ASSETS.fetch(new Request(`${url.origin}/app`, { headers: req.headers }));
+      if (!res.ok) return res;
+      const html = (await res.text()).replace(/<head[^>]*>/i, (m) => `${m}\n<script src="https://developer.eitaa.com/eitaa-web-app.js"></script>`);
+      const h = new Headers(res.headers);
+      for (const k of ["content-length", "content-encoding", "etag", "x-frame-options"]) h.delete(k);
+      h.set("content-type", "text/html; charset=utf-8");
+      h.set("cache-control", "no-cache");
+      h.set("x-robots-tag", "noindex, nofollow");
+      h.set("content-security-policy", "frame-ancestors 'self' https://eitaa.com https://*.eitaa.com");
+      return new Response(req.method === "HEAD" ? null : html, { status: 200, headers: h });
+    }
+
     // هر چیز دیگر: صفحه‌ی وب و فایل‌های استاتیک (پوشه‌ی public)
     return env.ASSETS.fetch(req);
   },

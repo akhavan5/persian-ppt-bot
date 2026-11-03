@@ -31,7 +31,7 @@ import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
 import { EXTRA_KINDS, missingExtras, startExtra } from "./extras";
-import { miniappBuy, miniappDlLink, miniappDownload, miniappInvite, miniappLogin, miniappPdf, miniappSend } from "./miniapp";
+import { miniappBuy, miniappDlLink, miniappDownload, miniappInvite, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
 
 const SEC_HEADERS = {
   "cache-control": "no-store",
@@ -166,6 +166,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
   if (path === "/api/miniapp/dl" && method === "POST") return miniappDlLink(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
+  if (path === "/api/miniapp/welcome" && method === "POST") return miniappWelcome(env, user);
   if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/invite" && method === "POST") return miniappInvite(env, user);
   if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
@@ -428,7 +429,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
 
   // شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow؛ پیشوندش شناسه‌ی کاربر است تا مالکیت بدون خواندن KV بررسی شود
   const jobId = `${user.id}-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
-  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "miniapp" ? "tg" : fromApp(req) ? "app" : "web", ...(b?.via === "miniapp" ? { notify: true } : {}) }, posterWant))) {
+  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? "tg" : fromApp(req) ? "app" : "web", ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) }, posterWant))) {
     return err("شروع ساخت ارائه ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن.", 503);
   }
   return json({ jobId });
@@ -541,7 +542,7 @@ async function startExtraJob(req: Request, env: Env, user: WebUser, deckId: stri
   const b = await readBody(req, 2_000);
   const kind = EXTRA_KINDS.find((k) => k === b?.kind);
   if (!kind) return err("نوع درخواست نامعتبر است.", 400);
-  const r = await startExtra(env, user.id, deckId, kind, { channel: "web", layout: b?.layout === "wide" ? "wide" : "tall", ...(b?.via === "miniapp" ? { notify: true } : {}) });
+  const r = await startExtra(env, user.id, deckId, kind, { channel: "web", layout: b?.layout === "wide" ? "wide" : "tall", ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) });
   if (!r.ok) return json({ error: r.error, ...(r.noCredit ? { noCredit: true, extras: true } : {}) }, r.status);
   return json({ jobId: r.jobId });
 }

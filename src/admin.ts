@@ -1,5 +1,6 @@
 import { BALE_ID_BASE, isBaleId } from "./bale-format";
 import { RUBIKA_ID_BASE, isRubikaId } from "./rubika-format";
+import { EITAA_ID_BASE, isEitaaId } from "./eitaa-format";
 import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import {
@@ -33,6 +34,7 @@ const fa = (n: number | string) => toFa(String(n));
 /** لینک پروفایل: با نام کاربری → t.me/نام_کاربری، وگرنه لینک tg://user (برای کاربرانی که با ربات گفتگو داشته‌اند کار می‌کند) */
 const userLink = (id: Uid, name?: string | null, username?: string | null) => {
   if (typeof id === "string") return `<b>${esc(name || id)}</b> 🌐`; // کاربر وب: پروفایل تلگرام ندارد
+  if (isEitaaId(id)) return `<b>${esc(name || (username ? "@" + username : String(id)))}</b> (ایتا)`;
   if (isRubikaId(id)) return `<b>${esc(name || (username ? "@" + username : String(id)))}</b> (روبیکا)`; // کاربر روبیکا: لینک t.me / tg:// ندارد
   if (isBaleId(id)) return `<b>${esc(name || (username ? "@" + username : String(id)))}</b> (بله)`; // کاربر بله: لینک t.me / tg:// ندارد
   const uname = username && /^[A-Za-z0-9_]{3,64}$/.test(username) ? username : null;
@@ -84,7 +86,7 @@ const WEB_NOT_APP = "COALESCE(json_extract(v,'$.app'),0) != 1";
 /** seen:<شناسه> — شناسه‌های بله از BALE_ID_BASE شروع می‌شوند (bale-format.ts)؛ تلگرام زیر آن است */
 const SEEN_TG = `CAST(substr(k,6) AS INTEGER) < ${BALE_ID_BASE}`;
 const SEEN_BALE = `CAST(substr(k,6) AS INTEGER) >= ${BALE_ID_BASE} AND CAST(substr(k,6) AS INTEGER) < ${RUBIKA_ID_BASE}`;
-const SEEN_RUBIKA = `CAST(substr(k,6) AS INTEGER) >= ${RUBIKA_ID_BASE}`;
+const SEEN_RUBIKA = `CAST(substr(k,6) AS INTEGER) >= ${RUBIKA_ID_BASE} AND CAST(substr(k,6) AS INTEGER) < ${EITAA_ID_BASE}`;
 const likeArg = (s: string) => "%" + s.replace(/[\\%_]/g, "\\$&") + "%";
 
 // ---------- گزارش اقدامات مدیر ----------
@@ -120,7 +122,7 @@ const cb = (text: string, data: string): Btn => ({ text, callback_data: data });
 
 // ---------- آمار به تفکیک پلتفرم (تلگرام / بله / وب / اپ اندروید) ----------
 // شمارنده‌ها را bumpStat (settings.ts) در pst:<پلتفرم>:<نام>:<روز> می‌نویسد؛ جمع کل همچنان در stat:<نام>:<روز> است.
-const PLAT_LABEL: Record<Platform, string> = { tg: "✈️ تلگرام", bale: "🟢 بله", rubika: "🟣 روبیکا", web: "🌐 وب", app: "📱 اپ اندروید" };
+const PLAT_LABEL: Record<Platform, string> = { tg: "✈️ تلگرام", bale: "🟢 بله", rubika: "🟣 روبیکا", eitaa: "🟠 ایتا", web: "🌐 وب", app: "📱 اپ اندروید" };
 type PlatCounts = Record<string, number>;
 /** هفته‌ی ایرانی از شنبه تا جمعه: چند روز از شنبه‌ی همین هفته گذشته (شنبه = ۱، جمعه = ۷؛ روز هفته به وقت ایران) */
 const WEEKDAY_IDX: Record<string, number> = { Sat: 0, Sun: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6 };
@@ -349,7 +351,7 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
 
   const lines = [
     `👤 <b>${tgId ? userLink(tgId, name || "باز کردن پروفایل", seen?.u) : esc(name || "—")}</b>${admin ? " 👮 مدیر" : ""}`,
-    tgId ? `🆔 ${isRubikaId(tgId) ? "روبیکا" : isBaleId(tgId) ? "بله" : "تلگرام"}: <code>${tgId}</code>${seen?.u ? ` · @${esc(seen.u)}` : ""}` : "🆔 تلگرام: وصل نشده",
+    tgId ? `🆔 ${isEitaaId(tgId) ? "ایتا" : isRubikaId(tgId) ? "روبیکا" : isBaleId(tgId) ? "بله" : "تلگرام"}: <code>${tgId}</code>${seen?.u ? ` · @${esc(seen.u)}` : ""}` : "🆔 تلگرام: وصل نشده",
     webId ? `🌐 پروفایل وب: <code>${webId}</code>` : "",
     web?.email ? `✉️ ایمیل: ${esc(web.email)}` : "",
     web?.mobile ? `📞 موبایل: ${esc(web.mobile)}` : "",
@@ -676,7 +678,7 @@ async function decksScreen(env: Env): Promise<Screen> {
   // نوع کاربر از روی خودِ حساب تشخیص داده می‌شود (نه از ثبت منبع هر ارائه):
   // وبی = از سایت ثبت‌نام کرده (ایمیل/موبایل/گوگل دارد)؛ تلگرامی = شناسه‌ی عددی یا پروفایل خودکار ربات. 🔗 = وبی که تلگرام هم وصل کرده
   const kindOf = async (uid: Uid): Promise<string> => {
-    if (typeof uid === "number") return isRubikaId(uid) ? "🟣 روبیکایی" : isBaleId(uid) ? "🟢 بله‌ای" : "✈️ تلگرامی";
+    if (typeof uid === "number") return isEitaaId(uid) ? "🟠 ایتایی" : isRubikaId(uid) ? "🟣 روبیکایی" : isBaleId(uid) ? "🟢 بله‌ای" : "✈️ تلگرامی";
     const w = await getUserById(env, uid).catch(() => null);
     if (!w || !(w.email || w.mobile || w.google)) return "✈️ تلگرامی";
     const linked = Number(await env.KV.get(`w2tg:${uid}`).catch(() => null)) > 0;

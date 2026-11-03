@@ -2,6 +2,8 @@ import type { Env } from "./env";
 import { BALE_API_DEFAULT, baleMarkup, baleText, fromBaleId, hasWebApp, isBaleId } from "./bale-format";
 import { isRubikaId } from "./rubika-format";
 import { rubikaSendFile, rubikaTg } from "./rubika-api";
+import { isEitaaId } from "./eitaa-format";
+import { eitaaTg } from "./eitaa";
 
 const apiBase = (env: Env) => env.TELEGRAM_API_BASE || "https://api.telegram.org";
 
@@ -48,6 +50,7 @@ function baleParams(env: Env, method: string, body: Record<string, unknown>, web
 }
 
 export async function tg<T = any>(env: Env, method: string, body: Record<string, unknown> = {}): Promise<T> {
+  if (isEitaaId(body.chat_id ?? body.user_id)) return (await eitaaTg(env, method, body)) as T; // ایتا: فقط متن (eitaa.ts)
   const r = route(env, body.chat_id ?? body.user_id);
   if (r.rubika) return (await rubikaTg(env, method, body)) as T;
   const call = async (payload: unknown) => {
@@ -104,6 +107,7 @@ const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.
 
 /** extra.reply_markup (مثلاً دکمه‌ی PDF) به‌صورت JSON در فرم فرستاده می‌شود؛ mime پیش‌فرض pptx است */
 export async function sendDocument(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { reply_markup?: unknown; mime?: string } = {}) {
+  if (isEitaaId(chatId)) throw new Error("Eitaa: ارسال فایل به چت پشتیبانی نمی‌شود");
   const rt = route(env, chatId);
   if (rt.rubika) { await rubikaSendFile(env, chatId, data, filename, caption, "File", extra.reply_markup); return; }
   const form = mediaForm(env, rt, chatId, caption);
@@ -119,6 +123,7 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
 /** ارسال فایل صوتی (پخش‌کننده‌ی تلگرام با عنوان و مدت). تلگرام رسماً MP3/M4A می‌خواهد؛ اگر WAV را نپذیرفت، همان فایل به‌صورت سند فرستاده می‌شود (باز هم داخل تلگرام پخش می‌شود). */
 export async function sendAudio(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { title?: string; performer?: string; duration?: number; mime?: string } = {}) {
   const mime = extra.mime ?? "audio/wav";
+  if (isEitaaId(chatId)) throw new Error("Eitaa: ارسال فایل به چت پشتیبانی نمی‌شود");
   const rt = route(env, chatId);
   if (rt.rubika) { // روبیکا: «Music» فقط mp3 می‌پذیرد؛ بقیه (مثل WAV) به‌صورت فایل می‌روند
     await rubikaSendFile(env, chatId, data, filename, caption, /\.mp3$/i.test(filename) ? "Music" : "File");

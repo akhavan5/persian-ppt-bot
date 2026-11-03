@@ -289,7 +289,94 @@ const show = (el, on) => { el.hidden = !on; };
 
 // ---------- ارتباط با تلگرام (بدون اسکریپت telegram.org؛ در ایران ممکن است فیلتر باشد) ----------
 // تلگرام initData و تم را در هش آدرس (#tgWebAppData=…) می‌دهد و رویدادها را با postEvent رد و بدل می‌کند؛ همان کاری که telegram-web-app.js می‌کند.
-const TG = (() => {
+// ---------- برنامک ایتا ----------
+// صفحه‌ی /eitaa همین فایل است با اسکریپت رسمی کیت توسعه‌ی ایتا در ابتدای <head> (index.ts). اگر window.Eitaa.WebApp و initData باشد، به‌جای پل تلگرام از SDK ایتا استفاده می‌شود.
+// ایتا فقط متن می‌فرستد (نه فایل)، پس «ارسال به چت» در ایتا همان دانلود است: downloadFile (اندروید، کیت ۱.۴+) و در غیر این صورت openLink به مرورگر بیرونی.
+const EW = window.Eitaa && window.Eitaa.WebApp;
+const IS_EITAA = !!(EW && EW.initData);
+const EITAA_ID_BASE = 300000000000000; // باید با eitaa-format.ts یکی باشد
+function makeEitaa(W) {
+  const t = (f) => { try { return f(); } catch { return undefined; } };
+  const since = (v) => !!t(() => W.isVersionAtLeast(v));
+  const isAndroid = /android/i.test(String(W.platform || ""));
+  const startParam = t(() => W.initDataUnsafe.start_param) || new URLSearchParams(location.search).get("tgWebAppStartParam") || "";
+  const hs = {};
+  const on = (type, f) => { (hs[type] = hs[type] || []).push(f); };
+  function applyTheme(p) {
+    if (!p) return;
+    const m = { bg_color: "--bg", text_color: "--fg", hint_color: "--hint", link_color: "--link", button_color: "--btn", button_text_color: "--btn-fg", secondary_bg_color: "--sec", section_bg_color: "--card", destructive_text_color: "--danger" };
+    const r = document.documentElement.style;
+    for (const [k, v] of Object.entries(m)) if (typeof p[k] === "string" && /^#[0-9a-f]{6}$/i.test(p[k])) r.setProperty(v, p[k]);
+    if (p.section_bg_color == null && p.bg_color) r.setProperty("--card", p.bg_color);
+    if (p.bg_color) r.setProperty("--line", "color-mix(in srgb, " + (p.hint_color || "#888") + " 28%, transparent)");
+  }
+  function paint() {
+    const cs = getComputedStyle(document.documentElement);
+    const hex = (n) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : null; };
+    const sec = hex("--sec"), card = hex("--card");
+    if (sec) { t(() => W.setHeaderColor(sec)); t(() => W.setBackgroundColor(sec)); }
+    if (card && since("1.3")) t(() => W.setBottomBarColor(card));
+  }
+  t(() => applyTheme(W.themeParams));
+  t(() => W.onEvent("themeChanged", () => { applyTheme(W.themeParams); paint(); }));
+  t(() => W.ready()); t(() => W.expand()); t(() => W.disableVerticalSwipes());
+  paint();
+
+  let mbKey = "";
+  const main = { ok: true, onPress: null, set(o) {
+    const k = JSON.stringify(o); if (k === mbKey) return; mbKey = k;
+    const B = W.MainButton; if (!B) return;
+    t(() => {
+      if (!o.visible) { B.hideProgress(); B.hide(); return; }
+      B.setText(String(o.text || "").slice(0, 64));
+      if (o.active) B.enable(); else B.disable();
+      if (o.progress) B.showProgress(false); else B.hideProgress();
+      B.show();
+    });
+  } };
+  t(() => W.MainButton.onClick(() => { if (main.onPress) main.onPress(); }));
+
+  let backKey = null;
+  const back = { onPress: null, set(v) { if (backKey === !!v) return; backKey = !!v; t(() => (v ? W.BackButton.show() : W.BackButton.hide())); } };
+  t(() => W.BackButton.onClick(() => { if (back.onPress) back.onPress(); }));
+
+  let closeKey = null;
+  const confirmClose = (v) => { if (closeKey === !!v) return; closeKey = !!v; t(() => (v ? W.enableClosingConfirmation() : W.disableClosingConfirmation())); };
+  const haptic = (kind) => t(() => {
+    const H = W.HapticFeedback; if (!H) return;
+    if (kind === "select") H.selectionChanged(); else if (kind === "light") H.impactOccurred("light"); else H.notificationOccurred(kind);
+  });
+  const cloud = { get: async () => "", set: async () => null }; // CloudStorage در ایتا نیست؛ پیش‌نویس فقط روی همین دستگاه (localStorage) می‌ماند
+
+  // دانلود: اندروید (کیت ۱.۴+) پنجره‌ی دانلود بومی؛ دسکتاپ/وب: لینک ۵ دقیقه‌ای در مرورگر بیرونی (فایل با content-disposition دانلود می‌شود)
+  const download = (url, name) => new Promise((res) => {
+    try {
+      if (isAndroid && since("1.4") && typeof W.downloadFile === "function") W.downloadFile({ url, file_name: name });
+      else W.openLink(url, { try_browser: true });
+      res("downloading");
+    } catch { res(null); }
+  });
+  const canPaste = !!(navigator.clipboard && navigator.clipboard.readText);
+  const readClipboard = () => (canPaste ? navigator.clipboard.readText() : Promise.resolve(null)).then((x) => x, () => null);
+  return {
+    initData: W.initData, startParam, since, on, main, back, confirmClose, haptic, cloud, download, paint, readClipboard, canPaste,
+    canDownload: false, // «ارسال به چت» در ایتا خودش دانلود است؛ دکمه‌ی دانلودِ جدا لازم نیست
+    via: "eitaa", idBase: EITAA_ID_BASE,
+    openTg(path) { t(() => W.openEitaaLink("https://eitaa.com" + path)); },
+    openLink(url) { t(() => W.openLink(url, { try_browser: true })); },
+    share(link) { // اشتراک‌گذاری لینک: کپی در کلیپ‌بورد
+      (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(link) : Promise.reject()).then(() => toast("🔗 لینک دعوت کپی شد؛ برای دوستانت بفرست"), () => toast(link));
+    },
+    // دسترسی ارسال پیام (برای اعلان‌ها و پیام خوش‌آمدگویی)؛ فقط یک بار پرسیده می‌شود
+    askWrite(cb) {
+      if (t(() => W.initDataUnsafe.user.allows_write_to_pm) || store.get("eWA")) return;
+      store.set("eWA", "1");
+      t(() => W.requestWriteAccess((ok) => { if (ok && cb) cb(); }));
+    },
+  };
+}
+
+const TG = IS_EITAA ? makeEitaa(EW) : (() => {
   const hp = new URLSearchParams(location.hash.slice(1));
   const BW = window.Bale && window.Bale.WebApp; // مینی‌اپ بله: همان پروتکل هش (#tgWebAppData=…)؛ اگر شیء Bale.WebApp هم باشد از آن هم استفاده می‌شود
   const initData = hp.get("tgWebAppData") || (BW && BW.initData) || store.get("tgInit") || "";
@@ -425,6 +512,9 @@ const TG = (() => {
     canDownload: since("8.0"),
     openTg(path) { if (window.TelegramWebviewProxy || inIframe) post("web_app_open_tg_link", { path_full: path }); else window.open("https://t.me" + path, "_blank"); },
     openLink(url) { if (window.TelegramWebviewProxy || inIframe) post("web_app_open_link", { url, try_instant_view: false }); else window.open(url, "_blank"); },
+    via: "miniapp", idBase: 0,
+    share(link) { TG.openTg("/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")); },
+    askWrite() {},
   };
 })();
 
@@ -437,7 +527,7 @@ const keep = {
   set(v) { try { if (v) localStorage.setItem(TOK_KEY, JSON.stringify(v)); else localStorage.removeItem(TOK_KEY); } catch {} },
 };
 const tgIdOf = (init) => { try { const u = JSON.parse(new URLSearchParams(init).get("user") || "null"); return u && Number.isSafeInteger(u.id) ? u.id : 0; } catch { return 0; } };
-const myTg = tgIdOf(TG.initData);
+const myTg = tgIdOf(TG.initData) ? tgIdOf(TG.initData) + TG.idBase : 0; // شناسه‌ی ایتا در سرور با پایه جمع می‌شود (EITAA_ID_BASE)
 function savedToken() {
   const k = keep.get();
   if (k && typeof k.t === "string" && myTg && k.tg === myTg) return k;
@@ -464,7 +554,7 @@ function login() {
   return loginP || (loginP = (async () => {
     try {
       const headers = { "content-type": "application/json" }; if (token) headers.authorization = "Bearer " + token;
-      const r = await netFetch("/api/auth/miniapp", { method: "POST", headers, body: JSON.stringify({ initData: TG.initData }) });
+      const r = await netFetch("/api/auth/miniapp", { method: "POST", headers, body: JSON.stringify({ initData: TG.initData, ...(IS_EITAA ? { platform: "eitaa" } : {}) }) });
       const d = await r.json().catch(() => null);
       if (!r.ok) { const e = new Error((d && d.error) || "ورود انجام نشد؛ دوباره امتحان کن."); e.status = r.status; throw e; }
       token = d.token; keep.set({ t: token, tg: myTg, at: Date.now() });
@@ -497,6 +587,13 @@ function showFail(e) {
   $("#failMsg").textContent = e.message;
   show($("#boot"), false); show($("#fail"), true);
 }
+// ایتا: متن دکمه‌های «ارسال … به چت» (که در ایتا دانلود است) و اشاره‌ی «تلگرام» اصلاح می‌شود؛ دکمه‌های ساخته‌شده‌ی بعدی هم با MutationObserver
+function eitaaTexts() {
+  const fix = (n) => { const v = n.nodeValue; const w = v.replace(/ارسال(.*?) به چت( ربات)?/g, "دانلود$1").replace(/در تلگرام/g, "در ایتا"); if (w !== v) n.nodeValue = w; };
+  const walk = (root) => { const it = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = it.nextNode())) fix(n); };
+  walk(document.body);
+  new MutationObserver((ms) => { for (const m of ms) for (const a of m.addedNodes) { if (a.nodeType === 3) fix(a); else if (a.nodeType === 1) walk(a); } }).observe(document.body, { childList: true, subtree: true });
+}
 async function boot() {
   show($("#fail"), false);
   if (!TG.initData) { show($("#boot"), false); show($("#outside"), true); return; }
@@ -514,6 +611,7 @@ async function boot() {
   show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
   show($("#go"), true); // دکمه‌ی داخل صفحه همیشه می‌ماند: اگر کلاینت تلگرام (یا نسخه‌های غیررسمی) رویداد دکمه‌ی اصلی را نرساند، ساخت باز هم کار کند
   show($("#pasteTopic"), TG.canPaste);
+  if (IS_EITAA) { eitaaTexts(); TG.askWrite(() => api("/api/miniapp/welcome", { method: "POST" }).catch(() => {})); }
   renderAll();
   if (!applyStart()) restoreDraft();
   if (!syncT) syncT = setInterval(syncUI, 500);
@@ -868,7 +966,7 @@ $("#go").onclick = async () => {
   if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
   try {
     const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: {
-      topic, slides: Number($("#slides").value), images: $("#imgs").value === "1", via: "miniapp",
+      topic, slides: Number($("#slides").value), images: $("#imgs").value === "1", via: TG.via,
       ...(srcText ? { source: srcText } : {}),
       ...(cfg.poster && $("#pOn").checked ? { poster: $("#pChoice").value } : {}),
       ...($("#hOn").checked ? { handout: true } : {}),
@@ -934,7 +1032,7 @@ function showDone(jobId, s, took = 0) {
   $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = (s.slides ? ` — ${fa(s.slides)} اسلاید` : "") + (took ? ` · ساخته‌شده در ${fmtDur(took)}` : "");
   $("#doneSend").onclick = (e) => sendToChat(jobId, e.currentTarget);
   const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg"), pdfBtn = $("#donePdf");
-  show(pdfBtn, !!cfg.poster); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
+  show(pdfBtn, !!cfg.poster && !IS_EITAA); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
   show(hBtn, s.handout === "ok" && !!s.handoutId); show(pBtn, s.poster === "ok" && !!s.posterId); show(img, false);
   if (!hBtn.hidden) hBtn.onclick = (e) => sendToChat(s.handoutId, e.currentTarget);
   if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
@@ -1050,6 +1148,7 @@ async function posterPreview(id) {
 
 // ارسال فایل توسط ربات به چت؛ ۴۰۴ تازه‌ساخت چند بار دوباره امتحان می‌شود
 async function sendToChat(id, btn, kind = "send") {
+  if (IS_EITAA) return kind === "pdf" ? toast("نسخه‌ی PDF در ایتا فعلاً در دسترس نیست؛ فایل PPTX را دانلود کن.") : dlFile(id, btn); // ایتا فایل به چت نمی‌فرستد
   return busy(btn, kind === "pdf" ? "در حال ساخت PDF…" : "در حال ارسال…", async () => {
     for (let i = 0; i < 10; i++) {
       try { await api("/api/miniapp/" + kind, { method: "POST", body: { id } }); toast("✅ فایل به چت ربات ارسال شد"); TG.haptic("success"); return; }
@@ -1067,7 +1166,7 @@ async function dlFile(id, btn) {
         const st = await TG.download(location.origin + d.path, d.name);
         if (st === "downloading") { TG.haptic("success"); toast("⬇️ دانلود شروع شد"); }
         else if (st === "cancelled") toast("دانلود لغو شد");
-        else toast("دانلود مستقیم ممکن نشد؛ «ارسال به چت» را بزن.");
+        else toast(IS_EITAA ? "دانلود شروع نشد؛ دوباره امتحان کن." : "دانلود مستقیم ممکن نشد؛ «ارسال به چت» را بزن.");
         return;
       } catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); return; } await sleep(3000); }
     }
@@ -1083,7 +1182,7 @@ const EXTRA_BTNS = {
 async function makeExtra(f, kind, layout, btn) {
   return busy(btn, "در حال شروع…", async () => {
     let r;
-    try { r = await api("/api/files/" + encodeURIComponent(f.id) + "/extra", { method: "POST", body: { kind, via: "miniapp", ...(layout ? { layout } : {}) } }); }
+    try { r = await api("/api/files/" + encodeURIComponent(f.id) + "/extra", { method: "POST", body: { kind, via: TG.via, ...(layout ? { layout } : {}) } }); }
     catch (e) {
       TG.haptic("error"); toast(e.message);
       if (e.data && e.data.noCredit) openPlans(); else if (e.status === 409 || e.status === 410) loadFiles();
@@ -1148,7 +1247,7 @@ async function loadFiles() {
         playBtn,
         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
-        !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
+        !f.poster && !f.handout && !f.audio && cfg.poster && !IS_EITAA ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
       f.extras && f.extras.length
         ? h("div", { class: "fx" },
           h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),
@@ -1233,7 +1332,7 @@ async function openBuy(btn) {
 $("#inv").onclick = (e) => busy(e.currentTarget, "در حال آماده‌سازی…", async () => {
   try {
     const d = await api("/api/miniapp/invite", { method: "POST" });
-    TG.openTg("/share/url?url=" + encodeURIComponent(d.link) + "&text=" + encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇"));
+    TG.share(d.link);
   } catch (err) { toast(err.message); }
 });
 $("#buy1").onclick = openPlans; // قبل از رفتن به مرورگر، جدول پلن‌ها نشان داده می‌شود
