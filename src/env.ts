@@ -98,7 +98,7 @@ export interface Env {
   RUBIKA_API_BASE?: string;
   /** برنامک ایتا (اختیاری): بدون EITAA_APP_TOKEN ورود از ایتا خاموش است و رفتار بقیه‌ی پلتفرم‌ها هیچ تغییری نمی‌کند.
    *  EITAA_APP_TOKEN: توکن برنامه از «برنامک من» ← تولید توکن (secret)؛ هم امضای initData و هم ارسال پیام (eitaayar.ir) با آن است
-   *  EITAA_MINIAPP_LINK: لینک مستقیم برنامک، مثل https://eitaa.com/pptsaz_app/main (برای لینک دعوت و پیام‌ها؛ اختیاری) */
+   *  EITAA_MINIAPP_LINK: لینک مستقیم برنامک، مثل https://eitaa.com/pptsaz_app/main (برای پیام‌ها؛ اختیاری) */
   EITAA_APP_TOKEN?: string;
   EITAA_MINIAPP_LINK?: string;
   /** پرچم داخلی (در wrangler تعریف نمی‌شود): env ساخته‌شده برای پردازش آپدیت بله؛ متدهای بدون chat_id مثل answerCallbackQuery و getFile با آن به بله می‌روند */

@@ -241,7 +241,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="invCard">
         <h2>🎁 دعوت دوستان</h2>
         <div class="muted">به‌ازای هر ۱۰ دوستی که با لینک تو وارد ربات شوند ۱ اعتبار پلن پلاس می‌گیری (تا سقف ۱۰۰ دعوت).</div>
         <button class="btn ghost" id="inv" type="button" style="margin-top:10px">📤 ارسال لینک دعوت به دوستان</button>
@@ -364,9 +364,6 @@ function makeEitaa(W) {
     via: "eitaa", idBase: EITAA_ID_BASE,
     openTg(path) { t(() => W.openEitaaLink("https://eitaa.com" + path)); },
     openLink(url) { t(() => W.openLink(url, { try_browser: true })); },
-    share(link) { // اشتراک‌گذاری لینک: کپی در کلیپ‌بورد
-      (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(link) : Promise.reject()).then(() => toast("🔗 لینک دعوت کپی شد؛ برای دوستانت بفرست"), () => toast(link));
-    },
     // دسترسی ارسال پیام (برای اعلان‌ها و پیام خوش‌آمدگویی)؛ فقط یک بار پرسیده می‌شود
     askWrite(cb) {
       if (t(() => W.initDataUnsafe.user.allows_write_to_pm) || store.get("eWA")) return;
@@ -1329,6 +1326,7 @@ async function openBuy(btn) {
     catch (e) { toast(e.message); }
   });
 }
+if (IS_EITAA) $("#invCard").hidden = true; // دعوت دوستان در ایتا پشتیبانی نمی‌شود
 $("#inv").onclick = (e) => busy(e.currentTarget, "در حال آماده‌سازی…", async () => {
   try {
     const d = await api("/api/miniapp/invite", { method: "POST" });

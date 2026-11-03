@@ -8,16 +8,16 @@
  */
 import type { Env } from "./env";
 import { createSession, getUserById, hitLimit, publicUser, randomToken, reuseSession, type WebUser } from "./auth";
-import { REF_MAX, REF_EVERY, displayName, referralMsg, isAdmin, isAllowed, isBanned, noteActive, rewardReferral, touchUser } from "./settings";
-import { ensureUid, getLinkedTg, resolveUid } from "./link";
+import { REF_MAX, REF_EVERY, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
+import { ensureUid, getLinkedTg } from "./link";
 import { listFiles, loadFileDirect } from "./files";
 import { buildDeckPdf, cachedPdf } from "./pdf";
-import { esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
+import { esc, sendAudio, sendDocument, tg } from "./telegram";
 import { wavSeconds } from "./wav";
 import { fileNameWithSite, siteHost, siteLoginUrl } from "./deck-service";
 import { toBaleId } from "./bale-format";
 import { isEitaaId, toEitaaId, validEitaaRawId } from "./eitaa-format";
-import { eitaaLink, eitaaWelcome } from "./eitaa";
+import { eitaaWelcome } from "./eitaa";
 
 const enc = new TextEncoder();
 const INIT_MAX_AGE = 86_400; // ثانیه؛ initData قدیمی‌تر از یک روز پذیرفته نمی‌شود
@@ -62,21 +62,14 @@ export async function verifyInitData(botToken: string, initData: string, now = D
   } catch { return null; }
 }
 
-/** نوشتن‌های جانبیِ ورود (کاربر دیده‌شده، فهرست «اخیر» مدیر، نگاشت تلگرام↔حساب، پاداش دعوت). روزی یک بار برای هر کاربر اجرا می‌شود،
+/** نوشتن‌های جانبیِ ورود (کاربر دیده‌شده، فهرست «اخیر» مدیر، نگاشت تلگرام↔حساب). روزی یک بار برای هر کاربر اجرا می‌شود،
  *  نه در هر باز شدن Mini App؛ هر کدام جدا خطایش را می‌خورد تا ورود خراب نشود. */
-async function dailyTouch(env: Env, u: TgUser, uid: string, name: string, startParam: string): Promise<void> {
-  const isNew = await touchUser(env, u.id, u.username, name).catch((e) => { console.error("touchUser", e); return false; });
+async function dailyTouch(env: Env, u: TgUser, uid: string, name: string): Promise<void> {
+  await touchUser(env, u.id, u.username, name).catch((e) => console.error("touchUser", e));
   // ایتا: پیام خوش‌آمدگویی (الزام انتشار)؛ فقط اگر کاربر دسترسی ارسال پیام داده باشد
   if (isEitaaId(u.id) && u.allows_write_to_pm) await eitaaWelcome(env, u.id).catch(() => {});
   await noteActive(env, u.id, u.username, name).catch((e) => console.error("noteActive", e));
   if ((await getLinkedTg(env, uid)) !== u.id) await env.KV.put(`w2tg:${uid}`, String(u.id)).catch(() => {});
-  // دعوت از راه startapp=ref_<شناسه>: start_param داخل initData امضا شده است، پس قابل جعل نیست؛ مثل /start ربات فقط برای کاربر «جدید»
-  const m = isNew ? /^ref_(\d{1,15})$/.exec(startParam) : null;
-  if (m) {
-    const inviter = Number(m[1]);
-    const r = await rewardReferral(env, inviter, u.id, await resolveUid(env, inviter)).catch(() => null);
-    if (r) await sendMessage(env, inviter, referralMsg(r)).catch(() => {});
-  }
 }
 
 /** POST /api/auth/miniapp {initData} ← {token, user}؛ توکن را کلاینت در هدر Authorization: Bearer می‌فرستد.
@@ -116,7 +109,7 @@ export async function miniappLogin(req: Request, env: Env, ip: string): Promise<
 
   // نوشتن‌های جانبی روزی یک بار (شمارنده‌ی اتمی D1: فقط اولین ورودِ هر ۲۴ ساعت از سقف ۱ رد می‌شود)
   if (!(await hitLimit(env, `mad:${u.id}`, 1, 86_400))) {
-    await dailyTouch(env, u, uid, name, new URLSearchParams(initData).get("start_param") ?? "");
+    await dailyTouch(env, u, uid, name);
   }
 
   const user = await getUserById(env, uid);
@@ -206,10 +199,7 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
 export async function miniappInvite(env: Env, user: WebUser): Promise<Response> {
   const tgId = await getLinkedTg(env, user.id);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
-  if (isEitaaId(tgId)) { // ایتا: لینک مستقیم برنامک با startapp (فقط در برنامک کار می‌کند)
-    const base = eitaaLink(env);
-    return base ? json({ link: `${base}?startapp=ref_${tgId}`, max: REF_MAX, every: REF_EVERY }) : err("لینک دعوت در ایتا هنوز تنظیم نشده است.", 409);
-  }
+  if (isEitaaId(tgId)) return err("دعوت دوستان در ایتا پشتیبانی نمی‌شود.", 409);
   const me = await tg<{ username?: string }>(env, "getMe").catch(() => null);
   if (!me?.username) return err("ساخت لینک دعوت ممکن نشد؛ کمی بعد دوباره امتحان کن.", 502);
   return json({ link: `https://t.me/${me.username}?start=ref_${tgId}`, max: REF_MAX, every: REF_EVERY });
