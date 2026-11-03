@@ -696,7 +696,7 @@ address{font-style:normal}
     <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfMob" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="09123456789" style="flex:1"><button class="btn ghost sm" id="pfMobSend" type="button">ارسال کد</button></div>
     <div class="row" id="pfCodeRow" style="gap:8px;margin-top:8px" hidden><input class="ltr" type="text" id="pfCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد ۶ رقمی" style="flex:1"><button class="btn sm" id="pfMobVerify" type="button">تایید</button></div>
   </div>
-  <label>تلگرام</label>
+  <label id="pfTgLabel">تلگرام</label>
   <div class="ltr muted" id="pfTgSet" style="padding:6px 2px" hidden></div>
   <div id="pfTgAdd" hidden>
     <p class="muted" style="margin:0 0 8px;font-size:.86rem">در ربات تلگرام دستور <b>/id</b> را بزن، آیدی عددی‌ات را اینجا وارد کن تا ربات یک کد ۶ رقمی برایت بفرستد. بعد از تایید، اعتبار و ارائه‌های ربات و سایت یکی می‌شود.</p>
@@ -954,7 +954,11 @@ function renderPfMobile() {
 }
 function renderPfTg() {
   const t = me.telegram;
-  $("#pfTgSet").textContent = t ? `✅ وصل است (${fa(t)})` : ""; show($("#pfTgSet"), !!t);
+  // حساب از بله/ایتا/روبیکا وصل شده؟ برچسب و شناسه‌ی همان پیام‌رسان نشان داده می‌شود (نه «تلگرام» و نه شناسه‌ی داخلی جمع‌شده با پایه)
+  const plat = t ? (me.telegramPlat || "tg") : "tg";
+  $("#pfTgLabel").textContent = { tg: "تلگرام", bale: "بله", eitaa: "ایتا", rubika: "روبیکا" }[plat] || "تلگرام";
+  const shown = plat === "tg" ? t : me.telegramShown;
+  $("#pfTgSet").textContent = t ? `✅ وصل است${shown ? ` (${fa(shown)})` : ""}` : ""; show($("#pfTgSet"), !!t);
   show($("#pfTgAdd"), !t);
   show($("#pfTgCodeRow"), false); $("#pfTg").value = ""; $("#pfTgCode").value = ""; $("#pfTgSend").disabled = false; $("#pfTgSend").textContent = "ارسال کد";
 }

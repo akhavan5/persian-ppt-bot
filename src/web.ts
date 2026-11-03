@@ -31,6 +31,9 @@ import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
 import { EXTRA_KINDS, missingExtras, startExtra } from "./extras";
+import { isBaleId, fromBaleId } from "./bale-format";
+import { isEitaaId, fromEitaaId } from "./eitaa-format";
+import { isRubikaId } from "./rubika-format";
 import { miniappBuy, miniappDlLink, miniappDownload, miniappInvite, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
 
 const SEC_HEADERS = {
@@ -336,7 +339,10 @@ async function me(env: Env, user: WebUser): Promise<Response> {
   const activeJob = running.busy ? running.jobId : null;
   return json({
     user: publicUser(user),
-    telegram, // آیدی عددی تلگرامِ وصل‌شده (یا null)
+    telegram, // آیدی عددی تلگرامِ وصل‌شده (یا null)؛ برای بله/ایتا/روبیکا همان شناسه‌ی داخلی (جمع‌شده با پایه) است
+    // پروفایل سایت: پیام‌رسانِ وصل‌شده ("tg" | "bale" | "eitaa" | "rubika") و شناسه‌ی واقعی خودش (روبیکا: null چون شناسه‌اش هش است)
+    telegramPlat: telegram ? (isEitaaId(telegram) ? "eitaa" : isRubikaId(telegram) ? "rubika" : isBaleId(telegram) ? "bale" : "tg") : null,
+    telegramShown: telegram ? (isEitaaId(telegram) ? fromEitaaId(telegram) : isRubikaId(telegram) ? null : isBaleId(telegram) ? fromBaleId(telegram) : telegram) : null,
     dailyFree,
     credit: c.unlimited
       ? { unlimited: true }
