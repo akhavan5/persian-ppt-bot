@@ -352,13 +352,15 @@ export async function bumpStat(env: Env, name: StatName, plat?: Platform) {
 const STAT_TTL = 60 * 60 * 24 * 400;
 
 /** ثبت یک ارائه‌ی موفق برای «قیف کاربران» پنل مدیر: act:<حساب> = {f: اولین ارائه، l: آخرین، n: تعداد} (ms).
- *  یک نوشتن اتمی؛ بدون TTL (یک ردیف کوچک برای هر حسابی که ارائه ساخته). */
-export async function noteDeckDone(env: Env, userId: Uid): Promise<void> {
+ *  یک نوشتن اتمی؛ بدون TTL (یک ردیف کوچک برای هر حسابی که ارائه ساخته).
+ *  خروجی: تعداد ارائه‌های موفق این حساب تا همین ارائه (۱ = اولین ارائه)؛ ۰ = نامشخص. برای تکمیل پاداش دعوت (referral.ts) به کار می‌رود. */
+export async function noteDeckDone(env: Env, userId: Uid): Promise<number> {
   const db = await rawDb(env);
   const now = Date.now();
-  await db.prepare(
-    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.l', ?3, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1)")
-    .bind(`act:${userId}`, JSON.stringify({ f: now, l: now, n: 1 }), now).run();
+  const row = await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.l', ?3, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1) RETURNING json_extract(v, '$.n') AS n")
+    .bind(`act:${userId}`, JSON.stringify({ f: now, l: now, n: 1 }), now).first<{ n: number }>();
+  return Math.max(0, Math.floor(Number(row?.n) || 0));
 }
 
 export interface SeenUser { t: string; u: string | null; n?: string }
@@ -404,7 +406,7 @@ export async function noteActive(env: Env, userId: Uid, username?: string, name?
 }
 
 // ---------- دعوت دوستان ----------
-// قانون: به ازای هر REF_EVERY (۱۰) دوستِ جدید که با لینک دعوت وارد شوند، ۱ اعتبار «پلن پلاس» به دعوت‌کننده داده می‌شود؛ حداکثر تا REF_MAX (۱۰۰) دعوت (= ۱۰ اعتبار پلاس).
+// قانون: به ازای هر REF_EVERY (۱۰) دوستِ جدید که با لینک دعوت وارد شوند و «اولین ارائه‌شان را بسازند»، ۱ اعتبار «پلن پلاس» به دعوت‌کننده داده می‌شود؛ حداکثر تا REF_MAX (۱۰۰) دعوت (= ۱۰ اعتبار پلاس).
 /** حداکثر تعداد دعوت‌هایی که شمرده می‌شوند (جلوگیری از سوءاستفاده با حساب‌های ساختگی) */
 export const REF_MAX = 100;
 /** هر چند دعوتِ موفق یک اعتبار پلن پلاس می‌دهد */
@@ -429,7 +431,28 @@ export async function grantPlanCredit(env: Env, userId: Uid, planId: string, day
 
 export interface RefResult { /** تعداد کل دعوت‌های موفق (بعد از این دعوت) */ count: number; /** با همین دعوت به مضرب REF_EVERY رسید و اعتبار پلاس داده شد */ plusGranted: boolean }
 
-/** ثبت یک دعوتِ جدید؛ هر کاربر جدید فقط یک بار حساب می‌شود. null = دعوت شمرده نشد (نامعتبر، تکراری یا رسیدن به سقف).
+// ورود با لینک دعوت فقط یک «دعوت در انتظار» ثبت می‌کند (holdReferral: refp:<دعوت‌شده> = <دعوت‌کننده>، ۳۰ روز اعتبار)؛ وقتی دوست اولین ارائه‌اش را ساخت،
+// referral.ts ← completeReferral آن را با rewardReferral به دعوتِ شمرده‌شده تبدیل می‌کند. حساب‌های ساختگی که هیچ ارائه‌ای نمی‌سازند چیزی نمی‌شمارند.
+const REF_PENDING_TTL = 30 * 86_400;
+const refPendingKey = (newUserId: number) => `refp:${newUserId}`;
+
+/** ثبت دعوت در انتظار برای کاربرِ تازه‌واردی که با لینک دعوت آمده (هنوز شمرده نمی‌شود). false = ثبت نشد (نامعتبر، تکراری یا دعوت‌کننده مسدود/ناشناس). */
+export async function holdReferral(env: Env, inviterId: number, newUserId: number): Promise<boolean> {
+  if (!Number.isSafeInteger(inviterId) || inviterId <= 0 || inviterId === newUserId) return false;
+  if ((await env.KV.get(`ref:${newUserId}`)) !== null) return false;     // قبلاً شمرده شده
+  if ((await env.KV.get(`seen:${inviterId}`)) === null) return false;    // دعوت‌کننده باید کاربر واقعی ربات باشد
+  if (await isBanned(env, inviterId)) return false;
+  await env.KV.put(refPendingKey(newUserId), String(inviterId), { expirationTtl: REF_PENDING_TTL });
+  return true;
+}
+/** دعوت‌کننده‌ی در انتظارِ این کاربر (اگر دارد) */
+export async function pendingInviter(env: Env, newUserId: number): Promise<number | null> {
+  const n = Number(await env.KV.get(refPendingKey(newUserId)).catch(() => null));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+export const clearPendingReferral = (env: Env, newUserId: number) => env.KV.delete(refPendingKey(newUserId));
+
+/** ثبت یک دعوتِ جدید (بعد از ساخت اولین ارائه‌ی دوست)؛ هر کاربر جدید فقط یک بار حساب می‌شود. null = دعوت شمرده نشد (نامعتبر، تکراری یا رسیدن به سقف).
  *  شمارنده‌ی دعوت‌کننده (refc:) با یک دستور SQL اتمی بالا می‌رود تا دعوت‌های هم‌زمان مضرب ۱۰ را جا نیندازند یا دوبار حساب نکنند.
  *  creditTo: اگر دعوت‌کننده حسابش را به وب وصل کرده، شناسه‌ی حساب وب (پلن و اعتبار روی حساب اصلی ثبت می‌شود). */
 export async function rewardReferral(env: Env, inviterId: number, newUserId: number, creditTo: Uid = inviterId): Promise<RefResult | null> {
@@ -452,15 +475,15 @@ export async function rewardReferral(env: Env, inviterId: number, newUserId: num
   return { count, plusGranted };
 }
 
-/** پیام تلگرام به دعوت‌کننده بعد از هر دعوتِ موفق */
+/** پیام تلگرام به دعوت‌کننده بعد از هر دعوتِ موفق (دوست اولین ارائه‌اش را ساخته) */
 export function referralMsg(r: RefResult): string {
   const c = toFa(String(r.count)), max = toFa(String(REF_MAX)), every = toFa(String(REF_EVERY));
   if (r.plusGranted) {
-    return `🎉 یکی از دوستانت با لینک تو وارد ربات شد و دعوت‌هایت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa("1")} اعتبار پلن پلاس</b> به‌خاطر هر ${every} دعوت به حسابت اضافه شد؛ با آن تا ${toFa(String(PLAN_MAX_SLIDES.plus))} اسلاید و مدل‌های ویژه را هم داری. برای دیدن اعتبار: /credit` +
+    return `🎉 یکی از دوستانت با لینک تو وارد ربات شد و اولین ارائه‌اش را ساخت؛ دعوت‌های موفقت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa("1")} اعتبار پلن پلاس</b> به‌خاطر هر ${every} دعوت به حسابت اضافه شد؛ با آن تا ${toFa(String(PLAN_MAX_SLIDES.plus))} اسلاید و مدل‌های ویژه را هم داری. برای دیدن اعتبار: /credit` +
       (r.count >= REF_MAX ? `\n\n✅ به سقف ${max} دعوت رسیدی و تمام پاداش‌ها را گرفتی. ممنون که ربات را معرفی کردی! 🙏` : "");
   }
   const left = REF_EVERY - (r.count % REF_EVERY);
-  return `🎉 یکی از دوستانت با لینک تو وارد ربات شد. دعوت‌های تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(left))} دعوت دیگر تا ${toFa("1")} اعتبار پلن پلاس.`;
+  return `🎉 یکی از دوستانت با لینک تو وارد ربات شد و اولین ارائه‌اش را ساخت. دعوت‌های موفق تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(left))} دعوت دیگر تا ${toFa("1")} اعتبار پلن پلاس.`;
 }
 
 export async function getUserSeen(env: Env, userId: Uid): Promise<SeenUser | null> {

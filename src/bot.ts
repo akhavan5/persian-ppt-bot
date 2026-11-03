@@ -4,7 +4,7 @@ import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
-  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_EVERY, REF_MAX, referralMsg, rewardReferral, displayName, noteActive, isWebId,
+  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_EVERY, REF_MAX, holdReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
@@ -39,7 +39,7 @@ const HELP =
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "🖼 چند عکس (مثلاً صفحه‌های یک جزوه) را <b>یک‌جا و به‌صورت آلبوم</b> انتخاب و بفرست (حداکثر ۱۰ عدد)؛ همه با هم خوانده می‌شوند و فقط <b>یک ارائه</b> ساخته می‌شود. عکس‌هایی که جدا از هم بفرستی هر کدام ارائه‌ی جداگانه حساب می‌شوند.\n\n" +
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
-  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دعوت = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
+  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دوستی که با لینک تو بیایند و اولین ارائه‌شان را بسازند = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
 /** خط ورودی صوتی فقط وقتی DEEPGRAM_API_KEY تنظیم است در راهنما می‌آید */
@@ -566,8 +566,8 @@ async function showInvite(env: Env, chatId: number, userId: number) {
   const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
   const done = Math.min(REF_MAX, Number(await env.KV.get(`refc:${userId}`).catch(() => null)) || 0);
   return await sendMessage(env, chatId,
-    `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد ربات شوند، <b>۱ اعتبار پلن پلاس</b> می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(REF_MAX / REF_EVERY))} اعتبار پلاس).\n\n` +
-    `📊 دعوت‌های تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`,
+    `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد ربات شوند و اولین ارائه‌شان را بسازند، <b>۱ اعتبار پلن پلاس</b> می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(REF_MAX / REF_EVERY))} اعتبار پلاس).\n\n` +
+    `📊 دعوت‌های موفق تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`,
     bale || rubika ? undefined : kb([[{ text: "📤 ارسال به دوستان", url: share }]])); // دکمه‌ی اشتراک‌گذاری t.me فقط برای تلگرام
 }
 async function showCredit(env: Env, chatId: number, uid: Uid, userId: number) {
@@ -626,11 +626,10 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (cmd === "/app") return await showApp(env, chatId);
   if (cmd === "/site") return await showSite(env, chatId, userId);
-  // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده، شمارنده‌ی دعوت‌کننده را بالا می‌برد؛ هر ۱۰ دعوت = ۱ اعتبار پلن پلاس (تا ۱۰۰ دعوت)
+  // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده فقط «دعوت در انتظار» ثبت می‌کند؛ وقتی اولین ارائه‌اش ساخته شد (referral.ts ← workflow.ts)
+  // شمارنده‌ی دعوت‌کننده بالا می‌رود؛ هر ۱۰ دعوت موفق = ۱ اعتبار پلن پلاس (تا ۱۰۰ دعوت)
   if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
-    const inviter = Number(args[0].slice(4));
-    const r = await rewardReferral(env, inviter, userId, await resolveUid(env, inviter)).catch((e) => { console.error("referral", e); return null; });
-    if (r) await sendMessage(env, inviter, referralMsg(r)).catch(() => {});
+    await holdReferral(env, Number(args[0].slice(4)), userId).catch((e) => console.error("referral hold", e));
   }
   if (cmd === "/files") return await showFiles(env, chatId, uid);
   if (cmd === "/invite") return await showInvite(env, chatId, userId);

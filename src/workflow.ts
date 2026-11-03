@@ -21,6 +21,7 @@ import { makeInfographic, renderInfographicImage } from "./infographic";
 import { buildDocx, imageInfo, makeHandout, type DocImage } from "./handout";
 import { withStore } from "./store";
 import { notifyPlanCreditsOut } from "./plan-notify";
+import { completeReferral } from "./referral";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
@@ -72,7 +73,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         const warn = c.total === 0 ? "⚠️ اعتبارت تمام شد." : "⚠️ فقط ۱ ارائه‌ی دیگر اعتبار داری.";
         const buyKb = await buyKbFor(this.env, userId, event.payload.tgId).catch(() => undefined);
         await editMessage(this.env, chatId, mid,
-          `${done}\n\n${warn}\n${BUY_SITE_NOTE}\n🎁 یا با /invite دوستانت را دعوت کن؛ هر ۱۰ دعوت = ۱ اعتبار پلن پلاس.`, buyKb).catch(() => {});
+          `${done}\n\n${warn}\n${BUY_SITE_NOTE}\n🎁 یا با /invite دوستانت را دعوت کن؛ هر ۱۰ دوستی که اولین ارائه‌شان را بسازند = ۱ اعتبار پلن پلاس.`, buyKb).catch(() => {});
       } else {
         await status(done);
       }
@@ -282,7 +283,9 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     await step.do("finish", async () => {
       await releaseLock(this.env, userId);
       await bumpStat(this.env, "ok", deckPlat).catch(() => {});
-      await noteDeckDone(this.env, userId).catch((e) => console.error("noteDeckDone", e)); // قیف کاربران پنل مدیر
+      const decks = await noteDeckDone(this.env, userId).catch((e) => { console.error("noteDeckDone", e); return 0; }); // قیف کاربران پنل مدیر
+      // دعوت دوستان: پاداش دعوت‌کننده با اولین ارائه‌ی دوستِ دعوت‌شده ثبت می‌شود (تا ارائه‌ی دوم: اگر این گام تکرار شد یا تکمیل بار قبل شکست خورد، دوباره تلاش می‌شود؛ تکمیل idempotent است)
+      if (decks > 0 && decks <= 2) await completeReferral(this.env, userId).catch((e) => console.error("completeReferral", e));
     });
     // اعلام تمام شدن اعتبار پلن (فقط ایمیل): اگر اعتبار این ارائه (یا پوستر/جزوه‌اش) از پلن کم شده و اکنون اعتبار پلن صفر است. بعد از «finish»، بدون تلاش مجدد؛ خطایش به اعتبار یا کار نمی‌رسد.
     if (credit === "plan" || poster?.credit === "plan" || handout?.credit === "plan" || audio?.credit === "plan" || podcast?.credit === "plan") {

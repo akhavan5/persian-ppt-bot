@@ -7,6 +7,7 @@ import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
 import { withStore } from "./store";
 import { remindExpiringPlans } from "./plan-notify";
 import { ACTIVATION_CRON, remindInactiveSignups } from "./activation-reminder";
+import { FEEDBACK_CRON, sendPlanFeedbackSurveys } from "./plan-feedback";
 import { handleWeb } from "./web";
 import { miniappUrl } from "./deck-service";
 import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from "./landing";
@@ -66,6 +67,11 @@ export default {
     // cron ساعتی: یادآوری فعال‌سازی (ثبت‌نام کرده ولی ظرف ۲۴ ساعت ارائه نساخته) با ایمیل + ربات؛ جدا از کارهای سنگین روزانه تا سقف زیردرخواست هر اجرا رعایت شود
     if (c.cron === ACTIVATION_CRON) {
       ctx.waitUntil(remindInactiveSignups(withStore(rawEnv)).then((r) => { if (r.sent) console.log("activation reminders", JSON.stringify(r)); }).catch((e) => console.error("activation reminders", String(e).slice(0, 200))));
+      return;
+    }
+    // cron ساعتی: نظرسنجی پایان پلن (ایمیل + ربات) برای کاربرانی که پلنشان تمام شده و تمدید نکرده‌اند؛ باید قبل از کارهای روزانه برگردد وگرنه هر ساعت اجرا می‌شوند
+    if (c.cron === FEEDBACK_CRON) {
+      ctx.waitUntil(sendPlanFeedbackSurveys(withStore(rawEnv)).then((r) => { if (r.sent) console.log("plan feedback surveys", JSON.stringify(r)); }).catch((e) => console.error("plan feedback surveys", String(e).slice(0, 200))));
       return;
     }
     ctx.waitUntil(withStore(rawEnv).KV.purge().catch((e) => console.error("purge", e)));
