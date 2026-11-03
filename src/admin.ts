@@ -129,10 +129,10 @@ const WEEKDAY_IDX: Record<string, number> = { Sat: 0, Sun: 1, Mon: 2, Tue: 3, We
 const daysIntoWeek = () => (WEEKDAY_IDX[new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "Asia/Tehran" })] ?? 0) + 1;
 const dayStr = (agoDays: number) => new Date(Date.now() - agoDays * 86_400_000).toISOString().slice(0, 10);
 
-/** جمع شمارنده‌های هر پلتفرم برای بازه‌ی [از agoFrom تا agoTo روز پیش] (۰ = امروز، UTC مثل بقیه‌ی آمار) */
+/** جمع شمارنده‌های هر پلتفرم برای بازه‌ی [from تا to روز پیش] (from ≥ to؛ ۰ = امروز، UTC مثل بقیه‌ی آمار) */
 async function platStats(env: Env, from: number, to: number): Promise<Record<Platform, PlatCounts>> {
   const out = Object.fromEntries(PLATFORMS.map((p) => [p, {} as PlatCounts])) as Record<Platform, PlatCounts>;
-  const lo = dayStr(to), hi = dayStr(from); // lo ≤ روز ≤ hi
+  const lo = dayStr(from), hi = dayStr(to); // from = قدیمی‌تر ⇒ lo ≤ روز ≤ hi
   for (const r of await rows(env,
     "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND substr(k, -10) >= ?3 AND substr(k, -10) <= ?4 AND (exp IS NULL OR exp > ?5)",
     "pst:", "pst:" + MAXC, lo, hi, nowSec())) {
