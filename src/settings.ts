@@ -64,8 +64,12 @@ export const SUPPORT_CONTACT = "@akhavan8";
 export const SUPPORT_CONTACT_BALE = "@akhavan4";
 /** پشتیبانی در روبیکا (کاربران روبیکا به این حساب وصل می‌شوند؛ لینک روبیکا متن آماده ندارد) */
 export const SUPPORT_CONTACT_RUBIKA = "@akhavan7";
+/** پشتیبانی در ایتا (کاربران برنامک ایتا به این حساب وصل می‌شوند؛ لینک ایتا متن آماده ندارد) */
+export const SUPPORT_CONTACT_EITAA = "@akhavan5";
 const contactUrl = (userId: Uid, text: string) =>
-  isRubikaId(userId)
+  isEitaaId(userId)
+    ? `https://eitaa.com/${SUPPORT_CONTACT_EITAA.slice(1)}`
+    : isRubikaId(userId)
     ? `https://rubika.ir/${SUPPORT_CONTACT_RUBIKA.slice(1)}`
     : isBaleId(userId)
     ? `https://ble.ir/${SUPPORT_CONTACT_BALE.slice(1)}?text=${encodeURIComponent(text)}`
