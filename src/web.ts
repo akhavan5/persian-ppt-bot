@@ -4,7 +4,7 @@ import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { TEMPLATES, isTemplate } from "./template";
 import {
-  DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
+  DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, botPlatform, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
   EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
 } from "./settings";
 import { modelList } from "./llm";
@@ -435,7 +435,9 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
 
   // شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow؛ پیشوندش شناسه‌ی کاربر است تا مالکیت بدون خواندن KV بررسی شود
   const jobId = `${user.id}-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
-  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? "tg" : fromApp(req) ? "app" : "web", ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) }, posterWant))) {
+  // Mini App در تلگرام، بله و روبیکا یک کلاینت است؛ پلتفرم واقعی از شناسه‌ی حساب لینک‌شده‌ی همان ورود (w2tg) می‌آید، نه ثابت «تلگرام»
+  const miniPlat = b?.via === "miniapp" ? botPlatform(await getLinkedTg(env, user.id).catch(() => null)) : "tg";
+  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? miniPlat : fromApp(req) ? "app" : "web", ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) }, posterWant))) {
     return err("شروع ساخت ارائه ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن.", 503);
   }
   return json({ jobId });
