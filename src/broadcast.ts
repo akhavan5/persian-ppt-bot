@@ -49,8 +49,25 @@ async function listUserIds(env: Env): Promise<number[]> {
     if (r.list_complete) break;
     cursor = (r as any).cursor;
   }
-  return ids.slice(0, MAX_USERS);
+  const dead = await blockedIds(env);
+  return ids.filter((id) => !dead.has(id)).slice(0, MAX_USERS); // کسانی که ربات را بلاک کرده‌اند از فهرست گیرندگان حذف می‌شوند
 }
+
+/** «blk:<شناسه>»: کاربری که ربات را بلاک کرده یا حسابش حذف شده؛ ۹۰ روز اعتبار دارد و با /start دوباره‌ی کاربر پاک می‌شود (نگاه کنید به bot.ts) */
+const BLK_TTL = 90 * 86_400;
+async function blockedIds(env: Env): Promise<Set<number>> {
+  const out = new Set<number>();
+  let cursor: string | undefined;
+  for (let i = 0; i < 40; i++) {
+    const r = await env.KV.list({ prefix: "blk:", cursor });
+    for (const k of r.keys) { const n = Number(k.name.slice(4)); if (Number.isSafeInteger(n) && n > 0) out.add(n); }
+    if (r.list_complete) break;
+    cursor = (r as any).cursor;
+  }
+  return out;
+}
+/** خطای تلگرام یعنی گیرنده دیگر قابل دسترس نیست (ربات را بلاک کرده، حسابش حذف شده یا گفتگو وجود ندارد) */
+const isGone = (e: unknown) => /bot was blocked by the user|user is deactivated|chat not found|bot can't initiate/i.test(String(e));
 
 const MAXC = "\u{10FFFF}";
 /** شناسه‌ی تلگرام کاربرانی که پروفایلشان (tg2w:) پلن فعال با اعتبار باقی‌مانده دارد.
@@ -109,6 +126,7 @@ async function sendOneCounted(env: Env, id: number, text: string, html?: string,
     } catch (e) {
       const wait = String(e).match(/retry after (\d+)/i);
       if (wait && attempt === 0) { await sleep(Math.min(Number(wait[1]), 20) * 1000 + 200); continue; }
+      if (isGone(e)) { calls++; await env.KV.put(`blk:${id}`, "1", { expirationTtl: BLK_TTL }).catch(() => {}); } // از ارسال‌های بعدی حذف می‌شود
       return { ok: false, calls }; // مثلاً کاربر ربات را بلاک کرده است
     }
   }
@@ -193,7 +211,7 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
   private async report(step: WorkflowStep, adminChatId: number, aud: Audience, t: { ok: number; failed: number; skipped: number }) {
     await step.do("report", async () => {
       await sendMessage(this.env, adminChatId,
-        `📣 <b>ارسال همگانی تمام شد</b> (${AUDIENCES[aud]})\n✅ موفق: ${toFa(String(t.ok))}\n❌ ناموفق: ${toFa(String(t.failed))} (معمولاً کاربرانی که ربات را بلاک کرده‌اند)` +
+        `📣 <b>ارسال همگانی تمام شد</b> (${AUDIENCES[aud]})\n✅ موفق: ${toFa(String(t.ok))}\n❌ ناموفق: ${toFa(String(t.failed))} (کاربرانی که ربات را بلاک کرده‌اند از فهرست گیرندگان حذف شدند و دیگر پیام نمی‌گیرند)` +
         (t.skipped ? `\n⛔️ مسدودشده (ارسال نشد): ${toFa(String(t.skipped))}` : ""));
     }).catch(() => {});
   }

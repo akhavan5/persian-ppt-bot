@@ -633,6 +633,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (cmd === "/invite") return await showInvite(env, chatId, userId);
 
   if (cmd === "/credit" || cmd === "/balance") return await showCredit(env, chatId, uid, userId);
+  if (cmd === "/start") await env.KV.delete(`blk:${userId}`).catch(() => {}); // اگر ربات را بلاک کرده بود و دوباره آمد (بلاک‌برداشتن = /start)، به فهرست پیام همگانی برمی‌گردد
   if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, helpText(env), homeKb(env, userId, admin));
   if (cmd === "/menu") return await sendMessage(env, chatId, HOME_TEXT, homeKb(env, userId, admin));
   if (cmd === "/settings") return await showSettings(env, chatId, uid);
