@@ -627,7 +627,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (cmd === "/app") return await showApp(env, chatId);
   if (cmd === "/site") return await showSite(env, chatId, userId);
   // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده فقط «دعوت در انتظار» ثبت می‌کند؛ وقتی اولین ارائه‌اش ساخته شد (referral.ts ← workflow.ts)
-  // شمارنده‌ی دعوت‌کننده بالا می‌رود؛ هر ۱۰ دعوت موفق = ۱ اعتبار پلن پلاس (تا ۱۰۰ دعوت)
+  // شمارنده‌ی دعوت‌کننده بالا می‌رود؛ هر ۵ دعوت موفق = ۱ اعتبار پلن پلاس (تا ۵۰ دعوت)
   if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
     await holdReferral(env, Number(args[0].slice(4)), userId).catch((e) => console.error("referral hold", e));
   }

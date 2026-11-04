@@ -195,7 +195,7 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
   }
 }
 
-/** POST /api/miniapp/invite — لینک دعوت اختصاصی (هر ۱۰ دوست جدید = ۱ اعتبار پلن پلاس تا ۱۰۰ دعوت؛ مثل /invite ربات) */
+/** POST /api/miniapp/invite — لینک دعوت اختصاصی (هر ۵ دوست جدید = ۱ اعتبار پلن پلاس تا ۵۰ دعوت؛ مثل /invite ربات) */
 export async function miniappInvite(env: Env, user: WebUser): Promise<Response> {
   const tgId = await getLinkedTg(env, user.id);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
