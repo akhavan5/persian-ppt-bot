@@ -11,8 +11,8 @@ import { sendReceipt } from "./email-receipt";
  */
 export interface Plan { id: string; name: string; price: number; credits: number; days: number; maxSlides: number; maxImages: number }
 export const PLANS: Plan[] = [
-  { id: "plus", name: "پلاس", price: 349, credits: 5, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
-  { id: "pro", name: "پرو", price: 499, credits: 10, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
+  { id: "plus", name: "پلاس", price: 349, credits: 7, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
+  { id: "pro", name: "پرو", price: 499, credits: 15, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
 ];
 
 /**
@@ -22,7 +22,7 @@ export const PLANS: Plan[] = [
  * - خرید پلنِ دیگر (پلاس←پرو یا پرو←پلاس): پلن قبلی با روز و اعتبار باقی‌مانده‌اش منقضی می‌شود و پلن جدید مثل پلن رایگان از همین لحظه با ۳۰ روز و اعتبار جدید شروع می‌شود.
  */
 /** اشتراک جدید از روی اشتراک فعال فعلی (خالص؛ بدون نوشتن). cur: پلنِ منقضی یا بدون اعتبار = null */
-/** سورپرایز خرید: بعد از هر خرید موفق پلن (درگاه، بازار، مایکت) یک اعتبار اضافه به حساب کاربر اضافه می‌شود (۵ ← ۶، ۱۰ ← ۱۱).
+/** سورپرایز خرید: بعد از هر خرید موفق پلن (درگاه، بازار، مایکت) یک اعتبار اضافه به حساب کاربر اضافه می‌شود (۷ ← ۸، ۱۵ ← ۱۶).
  *  عمداً در رسید، ایمیل، پیام‌ها و صفحه‌ی نتیجه‌ی پرداخت ذکر نمی‌شود؛ همه‌جا همان plan.credits نمایش داده می‌شود. */
 const PURCHASE_BONUS_CREDITS = 1;
 export function nextSub(cur: Sub | null, p: Plan, bonus = 0): Sub {
