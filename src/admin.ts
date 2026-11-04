@@ -200,7 +200,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       [cb("📣 پیام همگانی", "ad:bc"), cb("👑 پلن‌های فعال", "ad:sb:0")],
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
       [cb(`💰 پرداخت‌ها${payIssues ? ` 🚨${fa(payIssues)}` : ""}`, "ad:pm:s:0"), cb("🔻 قیف کاربران", "ad:fn:30"), cb("🎁 دعوت‌ها", "ad:iv:t:0")],
-      [cb("📱 اپ اندروید (نسخه و اعلان)", "ad:ap")],
+      [cb("📱 اپ اندروید (نسخه و اعلان)", "ad:ap"), cb("📧 خروجی ایمیل/موبایل", "ad:ex")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
     ],
   };
@@ -1043,6 +1043,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
       }
       case "se": return await prompt({ k: "search" }, "🔎 <b>جستجوی کاربر</b>\nشناسه‌ی عددی، شناسه‌ی w_…، @نام‌کاربری، یا بخشی از نام/ایمیل/موبایل را بفرست.", "ad:h");
       case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.\n\n💡 اگر <code>{invite}</code> را در متن بنویسی، برای هر کاربر جای آن همان پیام /invite او (لینک اختصاصی، شمارنده‌ی دعوت و دکمه‌ی ارسال به دوستان) قرار می‌گیرد.", "ad:h");
+      case "ex": await answer("⏳ در حال ساخت فایل‌ها…"); await exportContacts(env, chatId).catch(async (e) => { console.error("exportContacts", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
       case "ap": return await show(await appScreen(env));
       case "av": {
         const t = c === "all" ? "all" : isStoreId(c) ? c : null;
@@ -1123,6 +1124,57 @@ export async function handlePanelCallback(env: Env, cq: any) {
     console.error("admin panel", e);
     await answer("⚠️ خطا در اجرای عملیات؛ دوباره امتحان کن.", true);
   }
+}
+
+// ---------- خروجی مخاطبان: ایمیل‌ها برای کمپین Resend، موبایل‌ها برای پیامک ----------
+/** سلول CSV؛ raw=false: نویسه‌های آغازگر فرمول (= + - @) از ابتدای متن آزاد برداشته می‌شود تا در اکسل اجرا نشود */
+const csvCell = (s: unknown, raw = false) => {
+  let v = String(s ?? "").replace(/[\r\n]+/g, " ").trim();
+  if (!raw) v = v.replace(/^[=+\-@\t]+/, "");
+  return /[",]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
+const EMAIL_RE = /^[^\s@,"]+@[^\s@,"]+\.[^\s@,"]{2,}$/;
+/** دو فایل CSV می‌فرستد: ۱) resend-contacts.csv با ستون‌های email, first_name, last_name, unsubscribed (قالب واردکردن Resend)؛ ۲) mobiles.csv.
+ *  فقط ایمیل‌های تاییدشده؛ مسدودها و تکراری‌ها حذف می‌شوند. */
+async function exportContacts(env: Env, chatId: number) {
+  const d = await db(env);
+  const banned = new Set((await rows(env, "SELECT k FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) LIMIT 5000", "ban:", "ban:" + MAXC, nowSec())).map((r) => r.k.slice(4)));
+  const emails = new Map<string, string>(); // ایمیل → نام
+  const mobiles = new Map<string, string>(); // موبایل → نام
+  let last = "wu:", pages = 0, total = 0, unverified = 0, skippedBan = 0, bad = 0;
+  for (; pages < 40; pages++) {
+    const r = (await d.prepare(
+      "SELECT k, json_extract(v,'$.email') e, json_extract(v,'$.mobile') m, json_extract(v,'$.name') n, json_extract(v,'$.verified') ok FROM kv " +
+      "WHERE k > ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND (COALESCE(json_extract(v,'$.email'),'') != '' OR COALESCE(json_extract(v,'$.mobile'),'') != '') ORDER BY k LIMIT 1000",
+    ).bind(last, "wu:" + MAXC, nowSec()).all<{ k: string; e: string | null; m: string | null; n: string | null; ok: number | null }>()).results ?? [];
+    for (const u of r) {
+      total++;
+      if (banned.has(u.k.slice(3))) { skippedBan++; continue; }
+      const name = (u.n ?? "").trim();
+      const email = String(u.e ?? "").trim().toLowerCase();
+      if (email) {
+        if (!EMAIL_RE.test(email)) bad++;
+        else if (!u.ok) unverified++;
+        else if (!emails.has(email)) emails.set(email, name);
+      }
+      const mob = String(u.m ?? "").trim();
+      if (/^09\d{9}$/.test(mob) && !mobiles.has(mob)) mobiles.set(mob, name);
+    }
+    last = r.length ? r[r.length - 1].k : last;
+    if (r.length < 1000) break;
+  }
+  const enc = new TextEncoder();
+  const rc = ["email,first_name,last_name,unsubscribed"];
+  for (const [e, n] of emails) { const [f, ...rest] = n.split(/\s+/).filter(Boolean); rc.push(`${csvCell(e, true)},${csvCell(f ?? "")},${csvCell(rest.join(" "))},false`); }
+  const mc = ["mobile,phone_e164,name"];
+  for (const [m, n] of mobiles) mc.push(`${m},+98${m.slice(1)},${csvCell(n)}`);
+  await sendDocument(env, chatId, enc.encode(rc.join("\n") + "\n"), "resend-contacts.csv",
+    `📧 <b>${fa(emails.size)}</b> ایمیل تاییدشده (قالب واردکردن Resend)\nResend ← Audiences ← Add contacts ← Import CSV؛ ستون‌ها خودکار تطبیق می‌خورند.\nبرای کمپین حتماً لینک لغو عضویت <code>{{{RESEND_UNSUBSCRIBE_URL}}}</code> را در متن ایمیل بگذار.`, { mime: "text/csv" });
+  await sendDocument(env, chatId, enc.encode(mc.join("\n") + "\n"), "mobiles.csv",
+    `📱 <b>${fa(mobiles.size)}</b> شماره‌ی موبایل (برای پیامک؛ Resend فقط ایمیل می‌فرستد)`, { mime: "text/csv" });
+  await sendMessage(env, chatId,
+    `✅ خروجی آماده شد.\n👥 حساب‌های بررسی‌شده: ${fa(total)}\n⛔️ مسدود (حذف شد): ${fa(skippedBan)}\n✉️ ایمیل تاییدنشده (حذف شد): ${fa(unverified)}` + (bad ? `\n⚠️ ایمیل نامعتبر (حذف شد): ${fa(bad)}` : "") +
+    (pages >= 40 ? "\n⚠️ سقف ۴۰ هزار حساب رسید؛ ممکن است فهرست ناقص باشد." : ""));
 }
 
 /** دکمه‌های تایید/لغو پیام همگانی (فقط مدیر) */
