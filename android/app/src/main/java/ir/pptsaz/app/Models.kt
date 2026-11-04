@@ -53,6 +53,10 @@ data class Me(
     val activeJob: String?,
     val plans: List<PlanInfo>,
     val support: String,
+    /** تعداد ارائه‌های موفق (سرور)؛ برای یادآورهای محلی */
+    val decks: Int = 0,
+    /** حساب به پیام‌رسان وصل است (سرور برایش یادآور تلگرام می‌فرستد) */
+    val hasTelegram: Boolean = false,
 )
 
 /**
@@ -134,6 +138,8 @@ fun parseMe(j: JSONObject): Me? {
             PlanInfo(it.str("id"), it.str("name"), it.optInt("price"), it.optInt("credits"), it.optInt("days"), it.optInt("maxSlides"), it.optInt("maxImages"), it.str("url"))
         },
         support = j.str("support"),
+        decks = j.optInt("decks"),
+        hasTelegram = j.has("telegram") && !j.isNull("telegram"),
     )
 }
 

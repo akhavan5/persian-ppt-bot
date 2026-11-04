@@ -192,6 +192,11 @@ class MainActivity : ComponentActivity() {
             i.removeExtra("push_url")
             if (u.startsWith("https://")) vm.openUrl(u)
         }
+        // یادآور محلی با موضوع نمونه: فقط اگر فرم خالی است (پیش‌نویس کاربر پاک نشود)
+        i.getStringExtra("rem_topic")?.let { t ->
+            i.removeExtra("rem_topic")
+            if (vm.form.topic.isBlank()) vm.form.topic = t
+        }
         val tab = i.getIntExtra("tab", -1)
         if (tab in 0..3) {
             vm.setTab(tab)
@@ -264,6 +269,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         AppForeground.count++
+        Reminders.onOpen(this)
     }
 
     override fun onStop() {

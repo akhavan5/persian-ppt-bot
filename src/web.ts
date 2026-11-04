@@ -5,7 +5,7 @@ import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { TEMPLATES, isTemplate } from "./template";
 import {
   DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, botPlatform, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
-  EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings,
+  EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
 } from "./settings";
 import { modelList } from "./llm";
 import { appCrash } from "./app-crash";
@@ -333,7 +333,7 @@ async function tgLinkVerify(req: Request, env: Env, user: WebUser): Promise<Resp
 // ---------- وضعیت کاربر ----------
 async function me(env: Env, user: WebUser): Promise<Response> {
   const dailyFree = await grantDailyFree(env, user.id).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز؛ dailyFree=true یعنی همین حالا اضافه شد
-  const [c, settings, running, sub, maxSlides, maxImages, telegram] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id), getLinkedTg(env, user.id)]);
+  const [c, settings, running, sub, maxSlides, maxImages, telegram, decks] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id), getLinkedTg(env, user.id), getDeckCount(env, user.id).catch(() => 0)]);
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
   const activeJob = running.busy ? running.jobId : null;
@@ -344,6 +344,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     telegramPlat: telegram ? (isEitaaId(telegram) ? "eitaa" : isRubikaId(telegram) ? "rubika" : isBaleId(telegram) ? "bale" : "tg") : null,
     telegramShown: telegram ? (isEitaaId(telegram) ? fromEitaaId(telegram) : isRubikaId(telegram) ? null : isBaleId(telegram) ? fromBaleId(telegram) : telegram) : null,
     dailyFree,
+    decks, // تعداد ارائه‌های موفق (اپ اندروید برای یادآور فعال‌سازی)
     credit: c.unlimited
       ? { unlimited: true }
       : { unlimited: false, total: c.total, bonus: c.bonus, plan: c.plan },

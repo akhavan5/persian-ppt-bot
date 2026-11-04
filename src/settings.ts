@@ -363,6 +363,12 @@ export async function noteDeckDone(env: Env, userId: Uid): Promise<number> {
   return Math.max(0, Math.floor(Number(row?.n) || 0));
 }
 
+/** تعداد ارائه‌های موفق این حساب (از ردیف act:<حساب>؛ ۰ = هنوز نساخته). برای یادآور محلی اپ اندروید در /api/me. */
+export async function getDeckCount(env: Env, userId: Uid): Promise<number> {
+  const a = (await env.KV.get(`act:${userId}`, "json")) as { n?: number } | null;
+  return Math.max(0, Math.floor(Number(a?.n) || 0));
+}
+
 export interface SeenUser { t: string; u: string | null; n?: string }
 
 /** نام نمایشی کاربر تلگرام (نام + نام خانوادگی) */

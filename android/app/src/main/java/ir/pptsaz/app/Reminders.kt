@@ -1,0 +1,366 @@
+package ir.pptsaz.app
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import java.util.Calendar
+import java.util.concurrent.TimeUnit
+
+/**
+ * یادآورهای محلی (بدون سرور و FCM): همه‌چیز روی گوشی با WorkManager زمان‌بندی می‌شود.
+ *
+ *  act1 / act2    فعال‌سازی: ۲۴ ساعت و ۵ روز بعد از اولین ورود، اگر هنوز ارائه‌ای نساخته (فقط کاربرانِ بدون ایمیل و تلگرام؛
+ *                 بقیه از سرور ایمیل/تلگرام می‌گیرند). با اولین ارائه‌ی موفق لغو می‌شوند.
+ *  daily          اعتبار رایگان روزانه: وقتی اعتبار صفر است، فردا ساعت ۱۰ (بعد از ریست روزانه‌ی سرور = ۰۳:۳۰ تهران).
+ *  plan3 / plan1  ۳ روز و ۱ روز مانده به پایان پلن (با اعتبار استفاده‌نشده).
+ *  planout        اعتبار پلن تمام شده ولی روز مانده.
+ *  extras         ۱ تا ۲ روز بعد از ساخت ارائه: جزوه/پوستر/پادکست.
+ *  inactive7/21   ۷ و ۲۱ روز بعد از آخرین باز شدن اپ، با ایده‌ی فصلی.
+ *
+ * قواعد: ساعت ۹ تا ۲۱ تهران؛ حداکثر ۱ در روز و ۳ در هفته؛ «بازگشت» حداکثر ۲ بار در ماه؛ هر یادآور برای هر کلید فقط یک‌بار؛
+ * شرط هر یادآور هنگام نمایش دوباره از وضعیت ذخیره‌شده خوانده می‌شود (نه زمان زمان‌بندی)؛ اگر اپ باز است نشان داده نمی‌شود.
+ */
+object Reminders {
+    private const val CHANNEL = "reminders"
+    private const val HOUR = 3_600_000L
+    private const val DAY = 24 * HOUR
+    private const val TEHRAN = 12_600_000L // UTC+3:30 (ایران ساعت تابستانی ندارد)
+
+    private val KINDS = listOf("act1", "act2", "daily", "plan3", "plan1", "planout", "extras", "inactive7", "inactive21")
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("reminders", Context.MODE_PRIVATE)
+
+    fun enabled(ctx: Context): Boolean = prefs(ctx).getBoolean("on", true)
+
+    fun setEnabled(ctx: Context, on: Boolean) {
+        prefs(ctx).edit().putBoolean("on", on).apply()
+        if (!on) cancelAll(ctx)
+    }
+
+    // ------------------------------------------------------------------ زمان (تهران)
+
+    private fun dayStart(t: Long): Long = ((t + TEHRAN) / DAY) * DAY - TEHRAN
+    private fun hourOf(t: Long): Int = (((t + TEHRAN) % DAY) / HOUR).toInt()
+
+    /** اگر t بیرون از ۹ تا ۲۱ تهران است، به اولین ساعت ۱۰ بعدی می‌برد. */
+    private fun snap(t: Long): Long {
+        val h = hourOf(t)
+        return when {
+            h < 9 -> dayStart(t) + 10 * HOUR
+            h >= 21 -> dayStart(t) + DAY + 10 * HOUR
+            else -> t
+        }
+    }
+
+    /** اولین ساعت ۱۰ صبح تهران که از t کمتر نباشد. */
+    private fun next10(t: Long): Long {
+        val d = dayStart(t) + 10 * HOUR
+        return if (d >= t) d else d + DAY
+    }
+
+    private fun Int.fa(): String = toString().map { if (it in '0'..'9') '۰' + (it - '0') else it }.joinToString("")
+
+    // ------------------------------------------------------------------ رویدادهای اپ
+
+    /** هر بار که حساب از سرور خوانده می‌شود (باز شدن اپ، برگشت به اپ، بعد از ساخت یا خرید). */
+    fun onMe(ctx: Context, me: Me, dailyFreeOn: Boolean) {
+        try {
+            val p = prefs(ctx)
+            val now = System.currentTimeMillis()
+            val decks = maxOf(me.decks, p.getInt("decks", 0))
+            val contact = me.email.isNotBlank() || me.hasTelegram
+            val e = p.edit()
+            e.putBoolean("in", true)
+            if (!p.contains("first_seen")) e.putLong("first_seen", now)
+            e.putInt("decks", decks).putBoolean("contact", contact).putInt("credits", me.credits).putBoolean("unl", me.unlimited)
+            e.putLong("last_open", now)
+
+            // عکس لحظه‌ای پلن: برای تشخیص «اعتبار پلن تمام شد، روز مانده» (سرور چنین پلنی را دیگر «فعال» نمی‌داند)
+            val prevExp = p.getLong("plan_exp", 0L)
+            val prevCr = p.getInt("plan_credits", 0)
+            val planActive = me.planId != null && me.planExp > now
+            var planOutAt = 0L
+            if (planActive) {
+                e.putString("plan_id", me.planId).putLong("plan_exp", me.planExp).putInt("plan_credits", me.planCredits)
+                e.putString("plan_name", me.plans.firstOrNull { it.id == me.planId }?.name ?: "")
+            } else {
+                if (prevExp > now && prevCr > 0) {
+                    planOutAt = next10(now + 6 * HOUR)
+                    e.putLong("planout_exp", prevExp)
+                }
+                e.remove("plan_id").remove("plan_exp").remove("plan_credits").remove("plan_name")
+            }
+            e.apply()
+
+            if (!enabled(ctx)) { cancelAll(ctx); return }
+            val first = p.getLong("first_seen", now)
+
+            // فعال‌سازی
+            if (decks == 0 && !contact && !me.unlimited) {
+                if (first + DAY > now) schedule(ctx, "act1", snap(first + DAY), first + 4 * DAY)
+                if (first + 5 * DAY > now) schedule(ctx, "act2", snap(first + 5 * DAY), first + 8 * DAY)
+            } else {
+                cancel(ctx, "act1"); cancel(ctx, "act2")
+            }
+
+            // اعتبار رایگان روزانه
+            if (!me.unlimited && me.credits == 0 && dailyFreeOn) {
+                val boundary = (now / DAY + 1) * DAY // نیمه‌شب UTC = ۰۳:۳۰ تهران؛ ریست سهم روزانه‌ی سرور
+                val t = next10(boundary)
+                schedule(ctx, "daily", t, t + 2 * DAY)
+            } else cancel(ctx, "daily")
+
+            // انقضای پلن
+            if (planActive && me.planCredits > 0) {
+                val t3 = snap(me.planExp - 3 * DAY)
+                val t1 = snap(me.planExp - DAY)
+                if (t3 > now && t3 < me.planExp) schedule(ctx, "plan3", t3, me.planExp) else cancel(ctx, "plan3")
+                if (t1 > now && t1 < me.planExp) schedule(ctx, "plan1", t1, me.planExp) else cancel(ctx, "plan1")
+                cancel(ctx, "planout")
+            } else {
+                cancel(ctx, "plan3"); cancel(ctx, "plan1")
+                if (planOutAt > 0 && planOutAt < prevExp) schedule(ctx, "planout", planOutAt, prevExp)
+            }
+
+            scheduleInactive(ctx, now)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** باز شدن اپ (onStart): شمارنده‌ی «غیرفعال» از نو شروع می‌شود. */
+    fun onOpen(ctx: Context) {
+        try {
+            val p = prefs(ctx)
+            if (!p.getBoolean("in", false) || !enabled(ctx)) return
+            val now = System.currentTimeMillis()
+            p.edit().putLong("last_open", now).apply()
+            scheduleInactive(ctx, now)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun scheduleInactive(ctx: Context, lastOpen: Long) {
+        schedule(ctx, "inactive7", snap(lastOpen + 7 * DAY), lastOpen + 9 * DAY)
+        schedule(ctx, "inactive21", snap(lastOpen + 21 * DAY), lastOpen + 23 * DAY)
+    }
+
+    /** اولین (یا هر) ارائه‌ی موفق. */
+    fun onDeckDone(ctx: Context) {
+        try {
+            val p = prefs(ctx)
+            val now = System.currentTimeMillis()
+            p.edit().putInt("decks", p.getInt("decks", 0) + 1).putLong("deck_done_at", now).apply()
+            cancel(ctx, "act1"); cancel(ctx, "act2")
+            if (!enabled(ctx)) return
+            val t = snap(now + 30 * HOUR)
+            schedule(ctx, "extras", t, t + 3 * DAY)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** جزوه/پوستر/اسلاید صوتی/پادکستِ جدا ساخته شد: دیگر لازم نیست یادآوری شود. */
+    fun onExtraMade(ctx: Context) {
+        try {
+            prefs(ctx).edit().putLong("extra_made_at", System.currentTimeMillis()).apply()
+            cancel(ctx, "extras")
+        } catch (_: Exception) {
+        }
+    }
+
+    fun onLogout(ctx: Context) {
+        try {
+            cancelAll(ctx)
+            val on = enabled(ctx)
+            prefs(ctx).edit().clear().putBoolean("on", on).apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    // ------------------------------------------------------------------ زمان‌بندی
+
+    private fun schedule(ctx: Context, kind: String, at: Long, deadline: Long) {
+        val delay = (at - System.currentTimeMillis()).coerceAtLeast(60_000L)
+        val req = OneTimeWorkRequestBuilder<ReminderWorker>()
+            .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+            .setInputData(workDataOf("kind" to kind, "deadline" to deadline))
+            .build()
+        WorkManager.getInstance(ctx).enqueueUniqueWork("rem-$kind", ExistingWorkPolicy.REPLACE, req)
+    }
+
+    private fun cancel(ctx: Context, kind: String) {
+        WorkManager.getInstance(ctx).cancelUniqueWork("rem-$kind")
+    }
+
+    private fun cancelAll(ctx: Context) {
+        for (k in KINDS) cancel(ctx, k)
+    }
+
+    // ------------------------------------------------------------------ نمایش (از ReminderWorker)
+
+    private class Msg(val title: String, val body: String, val tab: Int, val topic: String? = null, val key: String = "")
+
+    /** شرط هنگام نمایش از وضعیت ذخیره‌شده خوانده می‌شود؛ null = دیگر لازم نیست. */
+    private fun build(ctx: Context, kind: String, deadline: Long, now: Long): Msg? {
+        val p = prefs(ctx)
+        if (!p.getBoolean("in", false)) return null
+        val decks = p.getInt("decks", 0)
+        val credits = p.getInt("credits", 0)
+        val lastOpen = p.getLong("last_open", 0L)
+        return when (kind) {
+            "act1" -> {
+                if (decks > 0 || p.getBoolean("contact", false)) return null
+                val title = if (credits > 0) "🎁 ${credits.fa()} ارائه‌ی رایگان منتظر توست" else "🎁 اولین ارائه‌ات منتظر توست"
+                Msg(title, "یه موضوع بنویس تا هوش مصنوعی در چند دقیقه همه‌ی اسلایدها رو برات آماده کنه.", 0)
+            }
+            "act2" -> {
+                if (decks > 0 || p.getBoolean("contact", false)) return null
+                val topic = SAMPLE_TOPICS[((now / DAY) % SAMPLE_TOPICS.size).toInt()]
+                Msg("یه ایده برای شروع ✨", "امتحانش کن: «$topic» — فقط بزن روش تا آماده‌ی ساخت بشه.", 0, topic)
+            }
+            "daily" -> {
+                if (p.getBoolean("unl", false) || credits > 0) return null
+                Msg("🎁 اعتبار رایگان امروزت آماده‌ست", "بیا یه ارائه‌ی تازه بساز؛ فقط چند دقیقه طول می‌کشه.", 0, key = dayStart(now).toString())
+            }
+            "plan3", "plan1" -> {
+                val exp = p.getLong("plan_exp", 0L)
+                val cr = p.getInt("plan_credits", 0)
+                if (exp != deadline || exp <= now || cr <= 0) return null
+                val name = p.getString("plan_name", "").orEmpty().ifEmpty { "ویژه" }
+                val title = if (kind == "plan3") "⏳ پلن $name ۳ روز دیگه تموم می‌شه" else "⏳ پلن $name فردا تموم می‌شه"
+                Msg(title, "${cr.fa()} اعتبار هنوز مونده؛ ازش استفاده کن یا پلن رو تمدید کن (اعتبار جدید روی باقی‌مانده جمع می‌شه).", 3, key = deadline.toString())
+            }
+            "planout" -> {
+                val exp = p.getLong("planout_exp", 0L)
+                if (exp != deadline || exp <= now || p.getString("plan_id", "").orEmpty().isNotEmpty()) return null
+                val days = ((exp - now + DAY - 1) / DAY).toInt().coerceAtLeast(1)
+                Msg("اعتبار پلنت تموم شد", "${days.fa()} روز از مدت پلنت مونده؛ با تمدید، ۳۰ روز تازه با اعتبار جدید می‌گیری.", 3, key = deadline.toString())
+            }
+            "extras" -> {
+                val doneAt = p.getLong("deck_done_at", 0L)
+                if (decks < 1 || doneAt == 0L || p.getLong("extra_made_at", 0L) >= doneAt) return null
+                Msg("ارائه‌ات رو کامل‌تر کن 📝", "برای ارائه‌ی اخیرت جزوه‌ی Word، پوستر یا پادکست هم بساز؛ هرکدام ۱ اعتبار جدا.", 1, key = doneAt.toString())
+            }
+            "inactive7", "inactive21" -> {
+                val days = if (kind == "inactive7") 7 else 21
+                if (lastOpen == 0L || now - lastOpen < days * DAY - HOUR) return null
+                val title = if (days == 7) "دلمون برات تنگ شده 👋" else "یه ایده‌ی تازه برای ارائه‌هات 💡"
+                Msg(title, seasonalIdea(), 0, key = lastOpen.toString())
+            }
+            else -> null
+        }
+    }
+
+    private val SAMPLE_TOPICS = listOf(
+        "فتوسنتز و نقش آن در حیات", "هوش مصنوعی در پزشکی", "تاریخ ایران باستان", "اصول مدیریت زمان", "تغییرات اقلیمی و راه‌حل‌ها",
+    )
+
+    /** ایده‌ی متناسب با فصل تحصیلی (بر اساس ماه و روز میلادی؛ تقریبی). */
+    private fun seasonalIdea(): String {
+        val c = Calendar.getInstance()
+        val md = (c.get(Calendar.MONTH) + 1) * 100 + c.get(Calendar.DAY_OF_MONTH)
+        return when {
+            md in 923..1116 -> "ترم تازه شروع شده؛ ارائه‌ی کلاسی‌ت رو توی چند دقیقه آماده کن."
+            md in 1117..1205 -> "هفته‌ی پژوهش نزدیکه؛ ارائه‌ی طرح یا مقاله‌ت رو با هوش مصنوعی بساز."
+            md >= 1206 || md <= 218 -> "امتحان‌ها نزدیکه؛ خلاصه‌ی درس‌هات رو به اسلاید تبدیل کن تا مرورش راحت‌تر بشه."
+            md in 219..420 -> "قبل از شلوغی پایان سال، ارائه‌ها و پروژه‌های عقب‌مونده‌ت رو سریع جمع کن."
+            md in 421..722 -> "فصل دفاع پایان‌نامه‌ست؛ ارائه‌ی دفاعت رو توی چند دقیقه بساز."
+            else -> "ترم جدید نزدیکه؛ از الان ارائه‌ی جلسه‌ی اولت رو آماده کن."
+        }
+    }
+
+    // ------------------------------------------------------------------ سقف‌ها
+
+    private fun logEntries(p: android.content.SharedPreferences, now: Long): List<Pair<Long, String>> =
+        p.getString("log", "").orEmpty().split(",").mapNotNull {
+            val i = it.indexOf(':')
+            val t = if (i > 0) it.substring(0, i).toLongOrNull() else null
+            if (t != null && now - t < 30 * DAY) t to it.substring(i + 1) else null
+        }
+
+    private fun capHit(log: List<Pair<Long, String>>, now: Long): Boolean {
+        val today = dayStart(now)
+        if (log.any { it.first >= today }) return true // حداکثر ۱ در روز
+        return log.count { now - it.first < 7 * DAY } >= 3 // حداکثر ۳ در هفته
+    }
+
+    fun fire(ctx: Context, kind: String, deadline: Long) {
+        val p = prefs(ctx)
+        val now = System.currentTimeMillis()
+        if (!enabled(ctx) || (deadline > 0 && now > deadline)) return
+        if (AppForeground.on) return // کاربر همین حالا در اپ است
+        val msg = build(ctx, kind, deadline, now) ?: return
+        if (!NotificationManagerCompat.from(ctx).areNotificationsEnabled()) return
+
+        val sentKey = "$kind|${msg.key}"
+        val sent = p.getStringSet("sent", emptySet()).orEmpty()
+        if (sentKey in sent) return
+
+        val window = snap(now)
+        if (window > now) { if (window < deadline || deadline == 0L) schedule(ctx, kind, window, deadline); return }
+
+        val log = logEntries(p, now)
+        if (kind.startsWith("inactive") && log.count { it.second.startsWith("inactive") } >= 2) return // «بازگشت» حداکثر ۲ بار در ماه
+        if (kind == "extras" && log.any { it.second == "extras" && now - it.first < 14 * DAY }) return
+        if (capHit(log, now)) {
+            val t = next10(dayStart(now) + DAY)
+            if (deadline == 0L || t < deadline) schedule(ctx, kind, t, deadline)
+            return
+        }
+
+        show(ctx, kind, msg)
+        val newLog = (log + (now to kind)).joinToString(",") { "${it.first}:${it.second}" }
+        // کلیدهای ارسال‌شده فقط تا ۶۰ کلید نگه داشته می‌شوند
+        val newSent = (sent + sentKey).toList().takeLast(60).toSet()
+        p.edit().putString("log", newLog).putStringSet("sent", newSent).apply()
+    }
+
+    private fun show(ctx: Context, kind: String, msg: Msg) {
+        val nm = NotificationManagerCompat.from(ctx)
+        if (Build.VERSION.SDK_INT >= 26) {
+            val sys = ctx.getSystemService(NotificationManager::class.java)
+            if (sys != null && sys.getNotificationChannel(CHANNEL) == null) {
+                sys.createNotificationChannel(
+                    NotificationChannel(CHANNEL, "یادآورها", NotificationManager.IMPORTANCE_DEFAULT)
+                        .apply { description = "یادآوری اعتبار رایگان، پایان پلن و ایده‌هایی برای ساخت ارائه" },
+                )
+            }
+        }
+        val id = 0x52454D + KINDS.indexOf(kind)
+        val i = Intent(ctx, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("tab", msg.tab)
+            if (msg.topic != null) putExtra("rem_topic", msg.topic)
+        }
+        val pi = PendingIntent.getActivity(ctx, id, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val b = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_notify)
+            .setContentTitle(msg.title)
+            .setContentText(msg.body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(msg.body))
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+        try { nm.notify(id, b.build()) } catch (_: SecurityException) {}
+    }
+}
+
+class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result {
+        val kind = inputData.getString("kind") ?: return Result.success()
+        try {
+            Reminders.fire(applicationContext, kind, inputData.getLong("deadline", 0L))
+        } catch (_: Exception) {
+        }
+        return Result.success()
+    }
+}
