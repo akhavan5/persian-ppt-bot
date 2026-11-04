@@ -13,7 +13,7 @@ object Draft {
         return CreateForm(
             topic = p.getString("topic", "").orEmpty(),
             source = p.getString("source", "").orEmpty(),
-            handout = p.getBoolean("handout", true),
+            handout = p.getBoolean("handout", false),
             poster = p.getString("poster", "wide").orEmpty(),
             audio = p.getBoolean("audio", false),
             podcast = p.getBoolean("podcast", false),

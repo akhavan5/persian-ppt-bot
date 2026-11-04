@@ -145,7 +145,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
     opts = chunk(WEB_SLIDE_CHOICES.map((n) => ({ text: lock(n > caps.maxSlides, mark(p.slides === n, toFa(String(n)))), callback_data: `p:slides:${n}` })), 5);
   } else if (p.step === "extras") {
     const poster = p.poster ?? "none", hasPoster = posterEnabled(env), hasAudio = audioEnabled(env);
-    const n = (hasPoster && poster !== "none" ? 1 : 0) + (p.handout !== false ? 1 : 0) + (hasAudio && p.audio === true ? 1 : 0) + (hasAudio && p.podcast === true ? 1 : 0);
+    const n = (hasPoster && poster !== "none" ? 1 : 0) + (p.handout === true ? 1 : 0) + (hasAudio && p.audio === true ? 1 : 0) + (hasAudio && p.podcast === true ? 1 : 0);
     ask = "➕ <b>همراه ارائه چه چیزی ساخته شود؟</b> (اختیاری؛ هرکدام ۱ اعتبار جدا)\n"
       + (hasPoster ? "🖼 <b>پوستر:</b> اینفوگرافیک آماده‌ی اشتراک‌گذاری و چاپ (افقی برای نمایش روی صفحه، عمودی برای پیام‌رسان)\n" : "")
       + "📝 <b>جزوه:</b> جزوه‌ی Word حدود سه صفحه‌ای و قابل‌ویرایش\n"
@@ -157,7 +157,7 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
         { text: mark(poster === "wide", "🖥 پوستر افقی"), callback_data: "p:extras:poster-wide" },
         { text: mark(poster === "tall", "📱 پوستر عمودی"), callback_data: "p:extras:poster-tall" },
       ]] : []),
-      [{ text: p.handout !== false ? "✔️ 📝 جزوه‌ی Word — ۱ اعتبار" : "📝 جزوه‌ی Word", callback_data: "p:extras:handout" }],
+      [{ text: p.handout === true ? "✔️ 📝 جزوه‌ی Word — ۱ اعتبار" : "📝 جزوه‌ی Word", callback_data: "p:extras:handout" }],
       ...(hasAudio ? [
         [{ text: p.audio === true ? "✔️ 🔊 اسلاید صوتی — ۱ اعتبار" : "🔊 اسلاید صوتی", callback_data: "p:extras:audio" }],
         [{ text: p.podcast === true ? "✔️ 🎙 پادکست — ۱ اعتبار" : "🎙 پادکست", callback_data: "p:extras:podcast" }],
@@ -202,7 +202,7 @@ function plansText(curId?: string): string {
 async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
   const wantPoster = p.poster === "wide" || p.poster === "tall";
   const wantAudio = p.audio === true && audioEnabled(env), wantPodcast = p.podcast === true && audioEnabled(env); // پیش‌فرض خاموش؛ فقط با انتخاب کاربر و فعال‌بودن TTS
-  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout !== false, audio: wantAudio, podcast: wantPodcast, slides: p.slides, images: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
+  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout === true, audio: wantAudio, podcast: wantPodcast, slides: p.slides, images: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
   if (!begin.ok) {
     const d = begin.denied;
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
@@ -222,7 +222,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     await answer();
     const creditLine = begin.quota.unlimited ? "" : `\n💳 اعتبار باقی‌مانده: ${toFa(String(begin.quota.left))}`;
     await editMessage(env, chatId, mid,
-      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout !== false ? " + جزوه" : ""}${wantAudio ? " + اسلاید صوتی" : ""}${wantPodcast ? " + پادکست" : ""})…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${wantAudio || wantPodcast ? "\n🔊 صدا (اسلاید صوتی/پادکست) جدا و چند دقیقه بعد از ارائه می‌رسد." : ""}${creditLine}`,
+      `⏳ در حال آماده‌سازی ارائه‌ی «${esc(begin.topic)}» (${toFa(String(begin.settings.slides))} اسلاید${wantPoster ? " + پوستر" : ""}${p.handout === true ? " + جزوه" : ""}${wantAudio ? " + اسلاید صوتی" : ""}${wantPodcast ? " + پادکست" : ""})…\nمعمولاً ۱ تا ۲ دقیقه طول می‌کشد.${wantAudio || wantPodcast ? "\n🔊 صدا (اسلاید صوتی/پادکست) جدا و چند دقیقه بعد از ارائه می‌رسد." : ""}${creditLine}`,
       { reply_markup: { inline_keyboard: [] } });
     const deckId = String(cq.id ?? "").length <= 24 && /^[\w-]+$/.test(String(cq.id ?? "")) ? `d-${cq.id}` : `d-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`; // شناسه‌ی ارائه در callback_data دکمه‌ها می‌آید (سقف ۶۴ بایت)؛ شناسه‌ی callback بله ممکن است بلند باشد
     const ok = await launchDeck(env, begin, uid, deckId, { chatId, statusMessageId: mid, channel: "telegram", tgId, orig: p.orig },
@@ -281,7 +281,7 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
   } else if (a === "extras") {
     // همه‌ی همراه‌ها در یک مرحله: دکمه‌ها فقط انتخاب را عوض می‌کنند و ساخت با «شروع ساخت» شروع می‌شود
     if (b === "go") return await launchFromPending(env, cq, uid, tgId, chatId, mid, p, answer);
-    if (b === "handout") p.handout = p.handout === false;
+    if (b === "handout") p.handout = p.handout !== true;
     else if (b === "audio" && audioEnabled(env)) p.audio = p.audio !== true;
     else if (b === "podcast" && audioEnabled(env)) p.podcast = p.podcast !== true;
     else if (posterEnabled(env) && (b === "poster-none" || b === "poster-wide" || b === "poster-tall")) p.poster = b.slice(7) as PosterChoice;
@@ -758,7 +758,7 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     imgs: wantsImgs(s),
     model: models.some((m) => m.id === s.model) ? (s.model as string) : (models[0]?.id ?? ""),
     poster: "wide", // پیش‌فرض: با پوستر افقی
-    handout: true, // جزوه‌ی Word: پیش‌فرض روشن
+    handout: false, // جزوه‌ی Word: پیش‌فرض خاموش (۱ اعتبار)
     audio: false, // اسلاید صوتی: پیش‌فرض خاموش (۱ اعتبار)
     podcast: false, // پادکست: پیش‌فرض خاموش (۱ اعتبار)
     step: "model",

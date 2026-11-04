@@ -1531,7 +1531,7 @@ function savePoster() {
   try { sessionStorage.setItem("poster", $("#pOn").checked ? $("#pChoice").value : ""); } catch {}
 }
 $("#pOn").addEventListener("change", savePoster);
-$("#hOn").checked = (() => { try { return sessionStorage.getItem("handout") !== "0"; } catch { return true; } })(); // پیش‌فرض: با جزوه
+$("#hOn").checked = (() => { try { return sessionStorage.getItem("handout") === "1"; } catch { return false; } })(); // پیش‌فرض: بدون جزوه
 $("#hOn").addEventListener("change", () => { try { sessionStorage.setItem("handout", $("#hOn").checked ? "1" : "0"); } catch {} });
 $("#pChoice").addEventListener("change", savePoster);
 $("#aOn").addEventListener("change", () => { try { sessionStorage.setItem("audio", $("#aOn").checked ? "1" : "0"); } catch {} });

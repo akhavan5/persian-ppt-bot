@@ -424,7 +424,7 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
 
 /** وضعیت فرم «ساخت»؛ در AppViewModel نگه داشته می‌شود تا با عوض‌کردن تب و چرخش صفحه پاک نشود (و متن بلند وارد Bundle نشود). */
 @Stable
-class CreateForm(topic: String = "", source: String = "", handout: Boolean = true, poster: String = "wide", audio: Boolean = false, podcast: Boolean = false) {
+class CreateForm(topic: String = "", source: String = "", handout: Boolean = false, poster: String = "wide", audio: Boolean = false, podcast: Boolean = false) {
     var topic by mutableStateOf(topic)
     var source by mutableStateOf(source)
     var handout by mutableStateOf(handout)
@@ -436,7 +436,7 @@ class CreateForm(topic: String = "", source: String = "", handout: Boolean = tru
     fun reset() {
         topic = ""
         source = ""
-        handout = true
+        handout = false
         poster = "wide"
         audio = false
         podcast = false
