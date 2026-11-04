@@ -20,6 +20,7 @@ import { isRubikaId } from "./rubika-format";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
+import { inviteBody, inviteShareUrl, telegramInviteLink } from "./invite-msg";
 import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { hasBrowser } from "./browser-api";
@@ -562,13 +563,10 @@ async function showFiles(env: Env, chatId: number, uid: Uid) {
 async function showInvite(env: Env, chatId: number, userId: number) {
   const bale = isBaleId(userId), rubika = isRubikaId(userId);
   const me = await tg<{ username?: string }>(bale || rubika ? envFor(env, userId) : env, "getMe");
-  const link = rubika ? `https://rubika.ir/${me.username}?start=ref_${userId}` : bale ? `https://ble.ir/${me.username}?start=ref_${userId}` : `https://t.me/${me.username}?start=ref_${userId}`;
-  const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")}`;
+  const link = rubika ? `https://rubika.ir/${me.username}?start=ref_${userId}` : bale ? `https://ble.ir/${me.username}?start=ref_${userId}` : telegramInviteLink(String(me.username), userId);
   const done = Math.min(REF_MAX, Number(await env.KV.get(`refc:${userId}`).catch(() => null)) || 0);
-  return await sendMessage(env, chatId,
-    `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد ربات شوند و اولین ارائه‌شان را بسازند، <b>۱ اعتبار پلن پلاس</b> می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(REF_MAX / REF_EVERY))} اعتبار پلاس).\n\n` +
-    `📊 دعوت‌های موفق تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`,
-    bale || rubika ? undefined : kb([[{ text: "📤 ارسال به دوستان", url: share }]])); // دکمه‌ی اشتراک‌گذاری t.me فقط برای تلگرام
+  return await sendMessage(env, chatId, inviteBody(link, done),
+    bale || rubika ? undefined : kb([[{ text: "📤 ارسال به دوستان", url: inviteShareUrl(link) }]])); // دکمه‌ی اشتراک‌گذاری t.me فقط برای تلگرام
 }
 async function showCredit(env: Env, chatId: number, uid: Uid, userId: number) {
   const granted = await grantDailyFree(env, uid).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز

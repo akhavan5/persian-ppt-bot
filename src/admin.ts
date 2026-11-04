@@ -1042,7 +1042,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
         return await show(await broadcastView(env, chatId, body));
       }
       case "se": return await prompt({ k: "search" }, "🔎 <b>جستجوی کاربر</b>\nشناسه‌ی عددی، شناسه‌ی w_…، @نام‌کاربری، یا بخشی از نام/ایمیل/موبایل را بفرست.", "ad:h");
-      case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.", "ad:h");
+      case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.\n\n💡 اگر <code>{invite}</code> را در متن بنویسی، برای هر کاربر جای آن همان پیام /invite او (لینک اختصاصی، شمارنده‌ی دعوت و دکمه‌ی ارسال به دوستان) قرار می‌گیرد.", "ad:h");
       case "ap": return await show(await appScreen(env));
       case "av": {
         const t = c === "all" ? "all" : isStoreId(c) ? c : null;
