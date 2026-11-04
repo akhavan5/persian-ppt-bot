@@ -10,7 +10,7 @@ import { hitLimit } from "./auth";
 import { PLANS } from "./payment";
 
 export const OCR_EXTRA = 15;
-const PRO_CREDITS = PLANS.find((p) => p.id === "pro")?.credits ?? 20;
+const PRO_CREDITS = PLANS.find((p) => p.id === "pro")?.credits ?? 10;
 export const OCR_CAP_NOTE = `سقف روزانه‌ی خواندن فایل = اعتبار ساخت ارائه‌ات + ${OCR_EXTRA.toLocaleString("fa-IR")} است و با شارژ اعتبار بیشتر می‌شود.`; // از روی OCR_EXTRA ساخته می‌شود تا با عدد هماهنگ بماند
 
 /** سقف امروز این کاربر (اعتبار باقی‌مانده‌ی ساخت ارائه + OCR_EXTRA؛ برای «نامحدود» ها: اعتبار پلن پرو + OCR_EXTRA) */
