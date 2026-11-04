@@ -20,8 +20,8 @@ import java.util.concurrent.TimeUnit
 /**
  * یادآورهای محلی (بدون سرور و FCM): همه‌چیز روی گوشی با WorkManager زمان‌بندی می‌شود.
  *
- *  act1 / act2    فعال‌سازی: ۲۴ ساعت و ۵ روز بعد از اولین ورود، اگر هنوز ارائه‌ای نساخته (فقط کاربرانِ بدون ایمیل و تلگرام؛
- *                 بقیه از سرور ایمیل/تلگرام می‌گیرند). با اولین ارائه‌ی موفق لغو می‌شوند.
+ *  act1 / act2    فعال‌سازی: ۲۴ ساعت و ۵ روز بعد از اولین ورود، اگر هنوز ارائه‌ای نساخته (برای همه‌ی کاربران اپ، مستقل از
+ *                 ایمیل/تلگرام). با اولین ارائه‌ی موفق لغو می‌شوند.
  *  daily          اعتبار رایگان روزانه: وقتی اعتبار صفر است، فردا ساعت ۱۰ (بعد از ریست روزانه‌ی سرور = ۰۳:۳۰ تهران).
  *  plan3 / plan1  ۳ روز و ۱ روز مانده به پایان پلن (با اعتبار استفاده‌نشده).
  *  planout        اعتبار پلن تمام شده ولی روز مانده.
@@ -40,13 +40,6 @@ object Reminders {
     private val KINDS = listOf("act1", "act2", "daily", "plan3", "plan1", "planout", "extras", "inactive7", "inactive21")
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("reminders", Context.MODE_PRIVATE)
-
-    fun enabled(ctx: Context): Boolean = prefs(ctx).getBoolean("on", true)
-
-    fun setEnabled(ctx: Context, on: Boolean) {
-        prefs(ctx).edit().putBoolean("on", on).apply()
-        if (!on) cancelAll(ctx)
-    }
 
     // ------------------------------------------------------------------ زمان (تهران)
 
@@ -79,11 +72,10 @@ object Reminders {
             val p = prefs(ctx)
             val now = System.currentTimeMillis()
             val decks = maxOf(me.decks, p.getInt("decks", 0))
-            val contact = me.email.isNotBlank() || me.hasTelegram
             val e = p.edit()
             e.putBoolean("in", true)
             if (!p.contains("first_seen")) e.putLong("first_seen", now)
-            e.putInt("decks", decks).putBoolean("contact", contact).putInt("credits", me.credits).putBoolean("unl", me.unlimited)
+            e.putInt("decks", decks).putInt("credits", me.credits).putBoolean("unl", me.unlimited)
             e.putLong("last_open", now)
 
             // عکس لحظه‌ای پلن: برای تشخیص «اعتبار پلن تمام شد، روز مانده» (سرور چنین پلنی را دیگر «فعال» نمی‌داند)
@@ -103,11 +95,10 @@ object Reminders {
             }
             e.apply()
 
-            if (!enabled(ctx)) { cancelAll(ctx); return }
             val first = p.getLong("first_seen", now)
 
             // فعال‌سازی
-            if (decks == 0 && !contact && !me.unlimited) {
+            if (decks == 0 && !me.unlimited) {
                 if (first + DAY > now) schedule(ctx, "act1", snap(first + DAY), first + 4 * DAY)
                 if (first + 5 * DAY > now) schedule(ctx, "act2", snap(first + 5 * DAY), first + 8 * DAY)
             } else {
@@ -142,7 +133,7 @@ object Reminders {
     fun onOpen(ctx: Context) {
         try {
             val p = prefs(ctx)
-            if (!p.getBoolean("in", false) || !enabled(ctx)) return
+            if (!p.getBoolean("in", false)) return
             val now = System.currentTimeMillis()
             p.edit().putLong("last_open", now).apply()
             scheduleInactive(ctx, now)
@@ -162,7 +153,6 @@ object Reminders {
             val now = System.currentTimeMillis()
             p.edit().putInt("decks", p.getInt("decks", 0) + 1).putLong("deck_done_at", now).apply()
             cancel(ctx, "act1"); cancel(ctx, "act2")
-            if (!enabled(ctx)) return
             val t = snap(now + 30 * HOUR)
             schedule(ctx, "extras", t, t + 3 * DAY)
         } catch (_: Exception) {
@@ -181,8 +171,7 @@ object Reminders {
     fun onLogout(ctx: Context) {
         try {
             cancelAll(ctx)
-            val on = enabled(ctx)
-            prefs(ctx).edit().clear().putBoolean("on", on).apply()
+            prefs(ctx).edit().clear().apply()
         } catch (_: Exception) {
         }
     }
@@ -219,12 +208,12 @@ object Reminders {
         val lastOpen = p.getLong("last_open", 0L)
         return when (kind) {
             "act1" -> {
-                if (decks > 0 || p.getBoolean("contact", false)) return null
+                if (decks > 0) return null
                 val title = if (credits > 0) "🎁 ${credits.fa()} ارائه‌ی رایگان منتظر توست" else "🎁 اولین ارائه‌ات منتظر توست"
                 Msg(title, "یه موضوع بنویس تا هوش مصنوعی در چند دقیقه همه‌ی اسلایدها رو برات آماده کنه.", 0)
             }
             "act2" -> {
-                if (decks > 0 || p.getBoolean("contact", false)) return null
+                if (decks > 0) return null
                 val topic = SAMPLE_TOPICS[((now / DAY) % SAMPLE_TOPICS.size).toInt()]
                 Msg("یه ایده برای شروع ✨", "امتحانش کن: «$topic» — فقط بزن روش تا آماده‌ی ساخت بشه.", 0, topic)
             }
@@ -297,7 +286,7 @@ object Reminders {
     fun fire(ctx: Context, kind: String, deadline: Long) {
         val p = prefs(ctx)
         val now = System.currentTimeMillis()
-        if (!enabled(ctx) || (deadline > 0 && now > deadline)) return
+        if (deadline > 0 && now > deadline) return
         if (AppForeground.on) return // کاربر همین حالا در اپ است
         val msg = build(ctx, kind, deadline, now) ?: return
         if (!NotificationManagerCompat.from(ctx).areNotificationsEnabled()) return

@@ -81,7 +81,6 @@ data class UiState(
     val files: List<FileItem> = emptyList(),
     val localFiles: List<LocalFile> = emptyList(), // نسخه‌های ذخیره‌شده روی گوشی (بعد از ۲۴ ساعت سرور هم می‌مانند)
     val promo: Boolean = true, // اعلان‌های اخبار و تخفیف (FCM)
-    val reminders: Boolean = true, // یادآورهای محلی (Reminders)
     val autoSave: Boolean = true, // ذخیره‌ی خودکار روی گوشی بعد از ساخت
     val filesLoading: Boolean = false,
     val tab: Int = 0,
@@ -181,7 +180,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Api.init(app)
-        _state.update { it.copy(files = FileCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app), promo = Push.promoEnabled(app), reminders = Reminders.enabled(app)) }
+        _state.update { it.copy(files = FileCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app), promo = Push.promoEnabled(app)) }
         viewModelScope.launch { CrashReporter.sendPending(app) }
         // ویجت صفحه‌ی اصلی: آخرین اعتبار (یا «خارج از حساب» = null) را برای ویجت نگه می‌دارد؛ حالت‌های Loading/Error نادیده گرفته می‌شوند
         viewModelScope.launch {
@@ -708,13 +707,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         Push.setPromo(app, on)
         _state.update { it.copy(promo = on) }
         viewModelScope.launch { Push.sync(app) }
-    }
-
-    fun setReminders(on: Boolean) {
-        val app = getApplication<Application>()
-        Reminders.setEnabled(app, on)
-        _state.update { it.copy(reminders = on) }
-        if (on) _state.value.me?.let { Reminders.onMe(app, it, (_state.value.config?.dailyFree ?: 0) > 0) }
     }
 
     fun setAutoSave(on: Boolean) {
