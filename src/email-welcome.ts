@@ -30,18 +30,18 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
 
   const stepRows = STEPS.map(([t, d], i) => `
             <tr>
-              <td width="44" valign="top" style="padding:0 0 18px 0;">
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-                  <td align="center" valign="middle" width="34" height="34" bgcolor="${SOFT}" style="width:34px;height:34px;border-radius:17px;background:${SOFT};color:${BLUE};font:700 15px/34px ${FONT};">${toFa(String(i + 1))}</td>
+              <td dir="rtl" width="44" valign="top" style="padding:0 0 18px 0;">
+                <table dir="rtl" role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                  <td dir="rtl" align="center" valign="middle" width="34" height="34" bgcolor="${SOFT}" style="width:34px;height:34px;border-radius:17px;background:${SOFT};color:${BLUE};font:700 15px/34px ${FONT};">${toFa(String(i + 1))}</td>
                 </tr></table>
               </td>
-              <td valign="top" style="padding:0 0 18px 0;font-family:${FONT};text-align:right;">
+              <td dir="rtl" valign="top" style="padding:0 0 18px 0;font-family:${FONT};text-align:right;">
                 <div style="font:700 15px/1.7 ${FONT};color:${INK};">${t}</div>
                 <div style="font:400 13px/1.9 ${FONT};color:${MUTED};">${d}</div>
               </td>
             </tr>`).join("");
 
-  const chip = (t: string, span = 1) => `<td width="${span === 2 ? 100 : 50}%" colspan="${span}" style="padding:0 0 10px 10px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="#ffffff" style="border:1px solid ${LINE};border-radius:12px;padding:10px 8px;font:600 13px/1.6 ${FONT};color:${INK};">${t}</td></tr></table></td>`;
+  const chip = (t: string, span = 1) => `<td dir="rtl" width="${span === 2 ? 100 : 50}%" colspan="${span}" style="padding:0 0 10px 10px;"><table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td dir="rtl" align="center" bgcolor="#ffffff" style="border:1px solid ${LINE};border-radius:12px;padding:10px 8px;font:600 13px/1.6 ${FONT};color:${INK};">${t}</td></tr></table></td>`;
   const chipRows = [0, 2, 4].map((i) => `<tr>${chip(FEATURES[i])}${chip(FEATURES[i + 1])}</tr>`).join("") + `<tr>${chip(FEATURES[6], 2)}</tr>`;
 
   const html = `<!doctype html>
@@ -53,25 +53,25 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
 <meta name="supported-color-schemes" content="light only">
 <title>${esc(subject)}</title>
 </head>
-<body style="margin:0;padding:0;background:#f1f5fb;-webkit-text-size-adjust:100%;">
+<body dir="rtl" style="margin:0;padding:0;background:#f1f5fb;-webkit-text-size-adjust:100%;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${pre}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f1f5fb" style="background:#f1f5fb;">
-<tr><td align="center" style="padding:28px 12px;">
-  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
+<table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f1f5fb" style="background:#f1f5fb;">
+<tr><td dir="rtl" align="center" style="padding:28px 12px;">
+  <table dir="rtl" role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
 
     <!-- سربرگ -->
-    <tr><td align="center" bgcolor="${BLUE}" style="background:${BLUE};background-image:linear-gradient(135deg,${BLUE} 0%,${CYAN} 100%);border-radius:22px 22px 0 0;padding:34px 24px 30px;">
+    <tr><td dir="rtl" align="center" bgcolor="${BLUE}" style="background:${BLUE};background-image:linear-gradient(135deg,${BLUE} 0%,${CYAN} 100%);border-radius:22px 22px 0 0;padding:34px 24px 30px;">
       <img src="${site}/icon-192.png" width="64" height="64" alt="${BRAND}" style="display:block;border:0;border-radius:16px;margin:0 auto 14px;">
       <div style="font:700 26px/1.5 ${FONT};color:#ffffff;">${n}، خوش آمدی! 👋</div>
       <div style="font:400 14px/1.9 ${FONT};color:#dbeafe;">به ${BRAND} پیوستی؛ ارائه‌ی فارسی بساز، بدون دردسر.</div>
     </td></tr>
 
     <!-- بدنه -->
-    <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:30px 28px 8px;font-family:${FONT};text-align:right;">
+    <tr><td dir="rtl" bgcolor="#ffffff" style="background:#ffffff;padding:30px 28px 8px;font-family:${FONT};text-align:right;">
 
       <!-- هدیه -->
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td align="center" bgcolor="${SOFT}" style="background:${SOFT};border:1px solid #cfe0ff;border-radius:18px;padding:20px 16px;">
+      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td dir="rtl" align="center" bgcolor="${SOFT}" style="background:${SOFT};border:1px solid #cfe0ff;border-radius:18px;padding:20px 16px;">
           <div style="font:600 13px/1.8 ${FONT};color:${MUTED};">هدیه‌ی ثبت‌نام</div>
           <div style="font:800 44px/1.3 ${FONT};color:${BLUE};">${credits} <span style="font:700 18px/1.3 ${FONT};color:${INK};">ارائه‌ی رایگان</span></div>
           <div style="font:400 12.5px/1.9 ${FONT};color:${MUTED};">اعتبار هدیه همین حالا به حسابت اضافه شده است.</div>
@@ -79,9 +79,9 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
       </tr></table>
 
       <!-- دکمه -->
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:26px 0 8px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td align="center" bgcolor="${BLUE}" style="border-radius:14px;background:${BLUE};background-image:linear-gradient(135deg,${BLUE},#1d4ed8);">
+      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td dir="rtl" align="center" style="padding:26px 0 8px;">
+        <table dir="rtl" role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td dir="rtl" align="center" bgcolor="${BLUE}" style="border-radius:14px;background:${BLUE};background-image:linear-gradient(135deg,${BLUE},#1d4ed8);">
             <a href="${site}/" target="_blank" style="display:inline-block;padding:15px 40px;font:700 16px/1.4 ${FONT};color:#ffffff;text-decoration:none;border-radius:14px;">ساخت اولین ارائه ←</a>
           </td>
         </tr></table>
@@ -89,18 +89,18 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
 
       <!-- مراحل -->
       <div style="font:700 17px/1.8 ${FONT};color:${INK};padding:22px 0 14px;">در سه قدم ارائه‌ات آماده است</div>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${stepRows}
+      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${stepRows}
       </table>
     </td></tr>
 
     <!-- امکانات -->
-    <tr><td bgcolor="#f8faff" style="background:#f8faff;padding:22px 28px 22px 18px;border-top:1px solid ${LINE};border-radius:0 0 22px 22px;font-family:${FONT};text-align:right;">
+    <tr><td dir="rtl" bgcolor="#f8faff" style="background:#f8faff;padding:22px 28px 22px 18px;border-top:1px solid ${LINE};border-radius:0 0 22px 22px;font-family:${FONT};text-align:right;">
       <div style="font:700 15px/1.8 ${FONT};color:${INK};padding:0 0 12px 10px;">کارهایی که می‌توانی بکنی</div>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${chipRows}</table>
+      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${chipRows}</table>
     </td></tr>
 
     <!-- پانوشت -->
-    <tr><td align="center" style="padding:20px 16px 4px;font:400 12px/2 ${FONT};color:#8a97ad;">
+    <tr><td dir="rtl" align="center" style="padding:20px 16px 4px;font:400 12px/2 ${FONT};color:#8a97ad;">
       این ایمیل را به‌خاطر ثبت‌نامت در <a href="${site}/" style="color:#8a97ad;">${site.replace(/^https?:\/\//, "")}</a> برایت فرستادیم.<br>
       سؤالی داشتی؟ همین ایمیل را پاسخ بده، می‌خوانیمش.
     </td></tr>

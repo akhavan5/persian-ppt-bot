@@ -51,33 +51,33 @@ export function receiptEmail(env: Env, name: string, r: Receipt): { subject: str
   const first = name.trim().split(/\s+/)[0]?.slice(0, 24) || "دوست عزیز";
   const tr = rows.map(([k, v]) => `
         <tr>
-          <td style="padding:11px 0;border-bottom:1px solid ${LINE};font:400 13px/1.8 ${FONT};color:${MUTED};text-align:right;">${k}</td>
-          <td style="padding:11px 0;border-bottom:1px solid ${LINE};font:700 13.5px/1.8 ${FONT};color:${INK};text-align:left;unicode-bidi:plaintext;">${esc(v)}</td>
+          <td dir="rtl" style="padding:11px 0;border-bottom:1px solid ${LINE};font:400 13px/1.8 ${FONT};color:${MUTED};text-align:right;">${k}</td>
+          <td dir="rtl" style="padding:11px 0;border-bottom:1px solid ${LINE};font:700 13.5px/1.8 ${FONT};color:${INK};text-align:left;unicode-bidi:plaintext;">${esc(v)}</td>
         </tr>`).join("");
   const html = `<!doctype html>
 <html lang="fa" dir="rtl">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>${esc(subject)}</title></head>
-<body style="margin:0;padding:0;background:#f1f5fb;-webkit-text-size-adjust:100%;">
+<body dir="rtl" style="margin:0;padding:0;background:#f1f5fb;-webkit-text-size-adjust:100%;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">پرداخت ${money(r.toman)} با موفقیت انجام شد و پلن ${esc(r.planName)} فعال است.</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f1f5fb" style="background:#f1f5fb;">
-<tr><td align="center" style="padding:28px 12px;">
-  <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
-    <tr><td align="center" bgcolor="${BLUE}" style="background:${BLUE};border-radius:20px 20px 0 0;padding:28px 20px;">
+<table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f1f5fb" style="background:#f1f5fb;">
+<tr><td dir="rtl" align="center" style="padding:28px 12px;">
+  <table dir="rtl" role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
+    <tr><td dir="rtl" align="center" bgcolor="${BLUE}" style="background:${BLUE};border-radius:20px 20px 0 0;padding:28px 20px;">
       <img src="${site}/icon-192.png" width="52" height="52" alt="${BRAND}" style="display:block;border:0;border-radius:13px;margin:0 auto 10px;">
       <div style="font:700 21px/1.6 ${FONT};color:#ffffff;">پرداخت موفق ✅</div>
       <div style="font:400 13.5px/1.9 ${FONT};color:#dbeafe;">${esc(first)}، ممنون از خریدت؛ پلن ${esc(r.planName)} فعال شد.</div>
     </td></tr>
-    <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:24px 26px 8px;font-family:${FONT};text-align:right;">
+    <tr><td dir="rtl" bgcolor="#ffffff" style="background:#ffffff;padding:24px 26px 8px;font-family:${FONT};text-align:right;">
       <div style="font:700 16px/1.8 ${FONT};color:${INK};padding-bottom:6px;">رسید خرید</div>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${tr}
+      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${tr}
       </table>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:24px 0 10px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td align="center" bgcolor="${BLUE}" style="border-radius:13px;background:${BLUE};"><a href="${site}/" target="_blank" style="display:inline-block;padding:13px 34px;font:700 15px/1.4 ${FONT};color:#ffffff;text-decoration:none;border-radius:13px;">ساخت ارائه ←</a></td>
+      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td dir="rtl" align="center" style="padding:24px 0 10px;">
+        <table dir="rtl" role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td dir="rtl" align="center" bgcolor="${BLUE}" style="border-radius:13px;background:${BLUE};"><a href="${site}/" target="_blank" style="display:inline-block;padding:13px 34px;font:700 15px/1.4 ${FONT};color:#ffffff;text-decoration:none;border-radius:13px;">ساخت ارائه ←</a></td>
         </tr></table>
       </td></tr></table>
     </td></tr>
-    <tr><td bgcolor="${SOFT}" align="center" style="background:${SOFT};border-radius:0 0 20px 20px;padding:16px 22px;font:400 12px/2 ${FONT};color:${MUTED};">
+    <tr><td dir="rtl" bgcolor="${SOFT}" align="center" style="background:${SOFT};border-radius:0 0 20px 20px;padding:16px 22px;font:400 12px/2 ${FONT};color:${MUTED};">
       این ایمیل رسید خرید توست؛ آن را نگه دار. برای پیگیری یا هر سؤالی، همین ایمیل را پاسخ بده.
     </td></tr>
   </table>
