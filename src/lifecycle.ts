@@ -6,11 +6,12 @@
  *    ex   ترویج پوستر/جزوه/اسلاید صوتی/پادکست: ۳ تا ۲۰ ساعت بعد از ارائه (متن ارائه فقط ۲۴ ساعت می‌ماند)، اگر برای آن ارائه همراهی نساخته و اعتبار دارد (ارائه‌ی ۱ تا ۵ کاربر).
  *    nx   «ارائه‌ی بعدی»: ۲ تا ۴ روز بعد از ارائه‌ی اول یا دوم، با یک نکته‌ی کاربردی.
  *    wb   بازگشت کاربر غیرفعال: ۱۴ و ۳۰ روز بعد از آخرین ارائه (فقط بدون پلن فعال)، با موضوع فصلی (ماه شمسی).
+ *    buy  پیشنهاد خرید پلن: ۴۸ ساعت یا بیشتر بعد از آخرین ارائه (حداکثر ۵ کاربر در هر اجرا و ۶۰ در روز، تازه‌ترین‌ها اول)، فقط برای کسی که هرگز پرداخت موفق نداشته و پلن فعال ندارد (کاربران قدیمی هم، بدون سقف بالا)؛ یک‌بار برای هر حساب و در «همه‌ی» کانال‌های موجود (ربات + اعلان وب + ایمیل).
  *    fl   ایمیلِ «فایل‌هایت آماده است»: حدود ۱ ساعت بعد از ساخت ارائه (تا ۲۰ ساعت بعد، چون فایل‌ها ۲۴ ساعت می‌مانند)؛ فقط ایمیل (بدون ربات و اعلان وب).
  *    inv  دعوت دوستان: یک‌بار برای کسی که ۲ تا ۶ ارائه ساخته و هنوز کسی را دعوت نکرده (فقط ربات؛ لینک دعوت مخصوص ربات است).
  *    rfn  یادآوری نرم به دعوت‌شده‌ای که با لینک دوست آمده ولی ۳ تا ۴۸ ساعت بعد هنوز ارائه‌ای نساخته (دعوتِ دوستش به ارائه‌ی او بسته است).
  *
- *  کانال: هر اعلان فقط به «یک» کانال می‌رسد، به ترتیب: ربات (تلگرام/بله/روبیکا/ایتا) ← اعلان وب (webpush.ts) ← ایمیل. اگر کانالی نرسید، کانال بعدی امتحان می‌شود.
+ *  کانال: هر اعلان به «همه‌ی» کانال‌هایی که کاربر دارد می‌رسد: ربات (تلگرام/بله/روبیکا/ایتا) + اعلان وب (webpush.ts) + ایمیل؛ موفق = حداقل یک کانال رسید. استثنا: نوت‌های only:"email" (مثل fl با پیوست) فقط ایمیل‌اند.
  *  سقف: غیر از پیگیری پرداخت، هر کاربر در ۲۰ ساعت حداکثر یک اعلان از این ماژول می‌گیرد (lcl:<حساب>)؛ فقط ساعت ۹ تا ۲۱ تهران.
  *  سقف زیردرخواست: هر اجرای Worker در پلن رایگان ۵۰ زیردرخواست دارد؛ همه‌ی کارها یک «بودجه‌ی» مشترک دارند و اگر تمام شود، بقیه به اجرای ساعت بعد می‌رود.
  *  هرگز خطا پرتاب نمی‌کند. env باید با withStore ساخته شده باشد. */
@@ -40,6 +41,9 @@ const MIN = 60_000, HOUR = 3_600_000, DAY = 24 * HOUR;
 const SUBREQUEST_BUDGET = 44;   // سقف ۵۰ زیردرخواست در پلن رایگان؛ ۶ تا برای ready()/خطاهای غیرمنتظره کنار گذاشته شده
 const MAX_ROWS = 8;             // حداکثر ردیف هر کار در هر اجرا
 const FL_MAX_BYTES = 15 * 1024 * 1024; // سقف پیوست (Resend: ۴۰ مگابایت بعد از base64؛ حافظه‌ی Worker هم محدود است)
+const BUY_TTL = 3650 * 86_400;  // نشانگر پیشنهاد خرید عملاً دائمی است (قدیمی‌ها هم یک‌بار می‌گیرند، نه هر سال)
+const BUY_PER_RUN = 5;          // حداکثر کاربر در هر اجرای ساعتی (هر کاربر تا ۷ زیردرخواست: ربات ۲ + اعلان وب ۴ + ایمیل ۱)
+const BUY_PER_DAY = 60;         // سقف روزانه؛ بک‌لاگ قدیمی‌ها در چند روز خالی می‌شود نه یک‌جا
 const DONE_TTL = 30 * 86_400;   // ثانیه
 const INV_TTL = 400 * 86_400;
 const RETRY_TTL = 2 * 3600;
@@ -79,20 +83,28 @@ function contactOf(c: Ctx, r: Base): Contact {
   return { uid: r.uid, name: u?.name ?? "", email: c.mailOn && u?.email ? u.email : "", tgId, push: !!r.push && webPushEnabled(c.env) };
 }
 
-/** یک اعلان فقط به اولین کانال سالم می‌رسد: ربات ← اعلان وب ← ایمیل. null = هیچ‌کدام نرسید یا بودجه تمام شد (skip) */
+/** اعلان به همه‌ی کانال‌های موجود می‌رسد (ربات + اعلان وب + ایمیل)؛ نوت‌های only:"email" فقط ایمیل. null = هیچ‌کدام نرسید یا بودجه تمام شد (skip) */
 async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" | "push" | "email" | "fail" | "skip"> {
+  if (n.only !== "email") {
+    let ok: "bot" | "push" | "email" | null = null, tried = false;
+    if (k.tgId && take(c, 2)) {
+      tried = true;
+      try { await sendMessage(c.env, k.tgId, n.tg, n.kb ? await n.kb(k) : undefined); ok ??= "bot"; }
+      catch (e) { console.error("lifecycle bot", String(e).slice(0, 160)); }
+    }
+    if (k.push && n.push && take(c, 4)) {
+      tried = true;
+      if ((await sendWebPush(c.env, k.uid, n.push)).ok > 0) ok ??= "push";
+    }
+    if (k.email && n.mail && take(c, 1)) {
+      tried = true;
+      const m = render(c.env, n.mail.subject, n.mail.m);
+      if (await sendEmail(c.env, { to: k.email, ...m, tag: n.tag, idempotencyKey: `lc-${key}`.slice(0, 250) })) ok ??= "email";
+    }
+    return ok ?? (tried ? "fail" : "skip");
+  }
+  // فقط نوت‌های «فقط ایمیل» (مثل fl با پیوست) به اینجا می‌رسند
   let tried = false;
-  if (k.tgId && n.only !== "email") {
-    if (!take(c, 2)) return "skip";
-    tried = true;
-    try { await sendMessage(c.env, k.tgId, n.tg, n.kb ? await n.kb(k) : undefined); return "bot"; }
-    catch (e) { console.error("lifecycle bot", String(e).slice(0, 160)); }
-  }
-  if (k.push && n.push && n.only !== "email") {
-    if (!take(c, 4)) return tried ? "fail" : "skip";
-    tried = true;
-    if ((await sendWebPush(c.env, k.uid, n.push)).ok > 0) return "push";
-  }
   if (k.email && n.mail) {
     if (!take(c, 1)) return tried ? "fail" : "skip";
     tried = true;
@@ -127,6 +139,8 @@ interface Job<R extends Base> {
   /** کلید نشانگر «فرستاده شد» */
   marker: (r: R) => string;
   doneTtl?: number;
+  /** سقف ردیف این کار در هر اجرا (کمتر از MAX_ROWS) برای کارهای پرحجم */
+  maxRows?: number;
   /** معاف از سقف «۱ اعلان در ۲۰ ساعت» (فقط تراکنشی‌ها) */
   urgent?: boolean;
   note: (c: Ctx, r: R, k: Contact) => Note | null | Promise<Note | null>;
@@ -137,7 +151,7 @@ const put = (c: Ctx, key: string, val: string, ttl: number) =>
 
 async function runJob<R extends Base>(c: Ctx, job: Job<R>): Promise<number> {
   if (c.left < 5) return 0;
-  const limit = Math.max(1, Math.min(MAX_ROWS, Math.floor((c.left - 2) / 2)));
+  const limit = Math.max(1, Math.min(job.maxRows ?? MAX_ROWS, Math.floor((c.left - 2) / 2)));
   take(c, 1);
   let rows: R[] = [];
   try {
@@ -394,6 +408,56 @@ ORDER BY x.k LIMIT ?3`,
   },
 };
 
+// کار ۳٫۷: پیشنهاد خرید ۴۸ ساعته؛ یک‌بار برای هر حساب (مثل بقیه، در همه‌ی کانال‌ها)
+const buyJob: Job<ActRow> = {
+  name: "buy", doneTtl: BUY_TTL, maxRows: BUY_PER_RUN,
+  sql: `
+SELECT ${ACT_COLS()}
+${ACT_FROM("json_extract(v,'$.l') <= ?4")}
+WHERE ${notMarked("'lc:buy:' || x.u")}
+  AND ${noActivePlan("x.u")}
+  AND NOT EXISTS (SELECT 1 FROM kv q WHERE ${rng("q.k", "pay:")} AND json_extract(q.v,'$.uid') = x.u AND json_extract(q.v,'$.state') = 'paid')
+  AND NOT EXISTS (SELECT 1 FROM kv n WHERE n.k = 'ban:' || x.u)
+  -- فقط حساب‌هایی که حداقل یک کانال دارند؛ بقیه ردیف و سهمیه مصرف نکنند
+  AND (EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || x.u)
+    OR EXISTS (SELECT 1 FROM kv p WHERE p.k = 'wps:' || x.u AND (p.exp IS NULL OR p.exp > ?1))
+    OR EXISTS (SELECT 1 FROM kv w WHERE w.k = 'wu:' || x.u AND COALESCE(json_extract(w.v,'$.email'), '') <> ''))
+  AND ${notCapped("x.u")}
+ORDER BY json_extract(x.v,'$.l') DESC
+-- سقف روزانه: تعداد پیشنهادهای واقعاً فرستاده‌شده (نشانگر «1») در ۲۴ ساعت گذشته از سقف کم می‌شود
+LIMIT MIN(?3, MAX(0, ?6 - (SELECT COUNT(*) FROM kv m WHERE ${rng("m.k", "lc:buy:")} AND m.v = '1' AND m.exp > ?5)))`,
+  // ?4 = ۴۸ ساعت پیش (بدون سقف بالا: قدیمی‌ها هم می‌گیرند)؛ تازه‌ترین‌ها اول. ?5 = آستانه‌ی «امروز» روی exp نشانگرها (ثانیه)، ?6 = سقف روزانه
+  extra: (now) => [now - 48 * HOUR, Math.floor(now / 1000) + BUY_TTL - 86_400, BUY_PER_DAY],
+  marker: (r) => `lc:buy:${r.uid}`,
+  note: (c, r, k) => {
+    const [plus, pro] = [PLANS.find((p) => p.id === "plus"), PLANS.find((p) => p.id === "pro")];
+    if (!plus || !pro) return null;
+    const fa = (n: number) => toFa(String(n));
+    const line = (p: typeof plus) => `پلن ${p.name}: ${fa(p.price)} هزار تومان، ${fa(p.credits)} ارائه در ماه، تا ${fa(p.maxSlides)} اسلاید`;
+    return {
+      tag: "buy-offer-48h",
+      tg: [
+        "🚀 <b>ارائه‌های بیشتر و بلندتر می‌خواهی؟</b>",
+        "",
+        `دو روز از آخرین ارائه‌ات گذشته. با پلن ماهانه تعداد ارائه و اسلاید بیشتری داری:`,
+        `• ${tgEsc(line(plus))}`,
+        `• ${tgEsc(line(pro))}`,
+      ].join("\n"),
+      kb: async (kk) => buyKbFor(c.env, kk.uid, kk.tgId ?? undefined),
+      mail: {
+        subject: `پلن ماهانه برای ارائه‌های بیشتر — ${BRAND}`,
+        m: {
+          href: utm(c.env, "buy48", "/?buy=1"), head: "ارائه‌های بیشتر و بلندتر 🚀", sub: `${firstName(k.name)}، دو روز از آخرین ارائه‌ات گذشته.`,
+          paras: ["با پلن ماهانه می‌توانی ارائه‌ی بیشتری در ماه و با اسلاید بیشتر بسازی."],
+          rows: [[`پلن ${plus.name}`, `${fa(plus.price)} هزار تومان — ${fa(plus.credits)} ارائه`], [`پلن ${pro.name}`, `${fa(pro.price)} هزار تومان — ${fa(pro.credits)} ارائه`]],
+          cta: "دیدن پلن‌ها ←", color: "#2563eb", foot: "این پیشنهاد فقط یک‌بار فرستاده می‌شود.", preview: "پلن‌های ماهانه برای ساخت ارائه‌ی بیشتر.",
+        },
+      },
+      push: { title: "ارائه‌های بیشتر و بلندتر می‌خواهی؟", body: `${line(plus)}؛ ${line(pro)}.`, url: "/?buy=1", tag: "buy48" },
+    };
+  },
+};
+
 // کار ۴: «ارائه‌ی بعدی» برای کاربر تازه‌کار (۱ تا ۲ ارائه)
 const nxJob: Job<ActRow> = {
   name: "nx",
@@ -545,7 +609,7 @@ export async function runLifecycle(env: Env): Promise<Record<string, number>> {
     await env.KV.ready();
     const c: Ctx = { env, now, nowSec: Math.floor(now / 1000), left: SUBREQUEST_BUDGET, mailOn, botNames: new Map() };
     // پرداخت و هشدار اعتبار همیشه اول؛ بقیه هر ساعت با ترتیب چرخشی تا هیچ‌کدام گرسنه نماند
-    const rest: Job<any>[] = [flJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, rfnJob];
+    const rest: Job<any>[] = [flJob, buyJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, rfnJob];
     const shift = Math.floor(now / HOUR) % rest.length;
     const order: Job<any>[] = [payJob, lowJob, ...rest.slice(shift), ...rest.slice(0, shift)];
     for (const job of order) {
