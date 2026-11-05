@@ -433,7 +433,7 @@ LIMIT MIN(?3, MAX(0, ?6 - (SELECT COUNT(*) FROM kv m WHERE ${rng("m.k", "lc:buy:
     const [plus, pro] = [PLANS.find((p) => p.id === "plus"), PLANS.find((p) => p.id === "pro")];
     if (!plus || !pro) return null;
     const fa = (n: number) => toFa(String(n));
-    const line = (p: typeof plus) => `پلن ${p.name}: ${fa(p.price)} هزار تومان، ${fa(p.credits)} ارائه در ماه، تا ${fa(p.maxSlides)} اسلاید`;
+    const line = (p: typeof plus) => `پلن ${p.name}: ${fa(p.credits)} ارائه در ماه، تا ${fa(p.maxSlides)} اسلاید`;
     return {
       tag: "buy-offer-48h",
       tg: [
@@ -449,7 +449,7 @@ LIMIT MIN(?3, MAX(0, ?6 - (SELECT COUNT(*) FROM kv m WHERE ${rng("m.k", "lc:buy:
         m: {
           href: utm(c.env, "buy48", "/?buy=1"), head: "ارائه‌های بیشتر و بلندتر 🚀", sub: `${firstName(k.name)}، دو روز از آخرین ارائه‌ات گذشته.`,
           paras: ["با پلن ماهانه می‌توانی ارائه‌ی بیشتری در ماه و با اسلاید بیشتر بسازی."],
-          rows: [[`پلن ${plus.name}`, `${fa(plus.price)} هزار تومان — ${fa(plus.credits)} ارائه`], [`پلن ${pro.name}`, `${fa(pro.price)} هزار تومان — ${fa(pro.credits)} ارائه`]],
+          rows: [[`پلن ${plus.name}`, `${fa(plus.credits)} ارائه`], [`پلن ${pro.name}`, `${fa(pro.credits)} ارائه`]],
           cta: "دیدن پلن‌ها ←", color: "#2563eb", foot: "این پیشنهاد فقط یک‌بار فرستاده می‌شود.", preview: "پلن‌های ماهانه برای ساخت ارائه‌ی بیشتر.",
         },
       },
