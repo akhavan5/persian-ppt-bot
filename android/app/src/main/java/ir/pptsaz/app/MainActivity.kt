@@ -407,8 +407,8 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // درخواست امتیاز: بعد از چند بار گرفتن خروجی، حداکثر دو بار با فاصله؛ هم‌زمان با پنجره‌ی دیگری نشان داده نمی‌شود
-                    if (st.rateAsk && saveDialog == null && !st.updateDialog) {
+                    // درخواست امتیاز: بعد از اولین دانلود (یا دیدن فایل داخل اپ وقتی دانلودی نبوده)، حداکثر ۱۰ بار با فاصله‌ی ۷ روز؛ هم‌زمان با پنجره‌ی دیگری یا نمایشگر باز نشان داده نمی‌شود
+                    if (st.rateAsk && saveDialog == null && !st.updateDialog && st.viewer == null) {
                         AlertDialog(
                             onDismissRequest = { vm.rateLater() },
                             title = { Text("نظرتان درباره‌ی پاورپوینت‌ساز؟") },

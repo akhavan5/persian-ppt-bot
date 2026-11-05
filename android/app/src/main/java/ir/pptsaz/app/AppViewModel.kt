@@ -982,7 +982,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun closeViewer() {
+        val wasOpen = _state.value.viewer != null
         _state.update { it.copy(viewer = null) }
+        // دیدن فایل داخل اپ (بدون دانلود) هم یک استفاده حساب می‌شود؛ پنجره بعد از بسته شدن نمایشگر می‌آید
+        if (wasOpen && RatePrompt.onView(getApplication())) _state.update { it.copy(rateAsk = true) }
     }
 
     // ------------------------------------------------------------ پروفایل
