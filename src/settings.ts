@@ -106,6 +106,9 @@ export const DAILY_FREE_CREDITS = 1;
 export const DAILY_FREE_MSG = "🎁 اعتبار رایگان امروزت اضافه شد! ۱ ارائه‌ی رایگان داری؛ همین حالا موضوع ارائه‌ات را بفرست.\nهر روز ۱ اعتبار رایگان هدیه می‌گیری. موجودی: /credit";
 
 export const today = () => new Date().toISOString().slice(0, 10);
+/** روزِ شمارنده‌های آمار (YYYY-MM-DD) به وقت ایران (UTC+3:30، بدون ساعت تابستانی). پیش‌تر UTC بود و بین ۰۰:۰۰ تا ۰۳:۳۰ بامداد ایران
+ *  آمار به روز قبل می‌رفت ⇒ در پنل (که هفته را به وقت ایران حساب می‌کند) جمعه به هفته‌ی جدید قاطی می‌شد. today() برای سهمیه‌ی روزانه همان UTC می‌ماند. */
+export const statDay = (ms: number = Date.now()) => new Date(ms + 12_600_000).toISOString().slice(0, 10);
 const bonusKey = (userId: Uid) => `bonus:${userId}`;
 
 export async function getBonus(env: Env, userId: Uid): Promise<number> {
@@ -342,7 +345,8 @@ export const botPlatform = (id: unknown): Platform => (isEitaaId(id) ? "eitaa" :
 /** شمارنده‌ی روزانه: همیشه کل (stat:نام:تاریخ) و، اگر پلتفرم معلوم باشد، شمارنده‌ی همان پلتفرم (pst:پلتفرم:نام:تاریخ).
  *  شمارنده‌ی کل از همه‌ی پلتفرم‌ها جداست تا آمار و نمای ماهانه‌ی قبلی دست‌نخورده بماند. */
 export async function bumpStat(env: Env, name: StatName, plat?: Platform) {
-  const keys = [`stat:${name}:${today()}`, ...(plat ? [`pst:${plat}:${name}:${today()}`] : [])];
+  const day = statDay();
+  const keys = [`stat:${name}:${day}`, ...(plat ? [`pst:${plat}:${name}:${day}`] : [])];
   await Promise.all(keys.map(async (k) => {
     const n = Number(await env.KV.get(k)) || 0;
     await env.KV.put(k, String(n + 1), { expirationTtl: STAT_TTL });
@@ -508,7 +512,7 @@ export async function getStats(env: Env, days = 7) {
     cursor = (r as any).cursor;
   }
   const names: StatName[] = ["started", "ok", "fail", "newusers"];
-  const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
+  const dates = Array.from({ length: days }, (_, i) => statDay(Date.now() - i * 86_400_000));
   const rows = await Promise.all(dates.map((d) => Promise.all(names.map(async (n) => Number(await env.KV.get(`stat:${n}:${d}`)) || 0))));
   const pack = (v: number[]) => ({ started: v[0], ok: v[1], fail: v[2], newusers: v[3] });
   const week = pack(names.map((_, j) => rows.reduce((a, r) => a + r[j], 0)));

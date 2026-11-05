@@ -5,7 +5,7 @@ import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import {
   PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
-  setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, type Platform, type Uid,
+  setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, statDay, type Platform, type Uid,
 } from "./settings";
 import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
 import { resolveUid } from "./link";
@@ -130,9 +130,9 @@ type PlatCounts = Record<string, number>;
 /** هفته‌ی ایرانی از شنبه تا جمعه: چند روز از شنبه‌ی همین هفته گذشته (شنبه = ۱، جمعه = ۷؛ روز هفته به وقت ایران) */
 const WEEKDAY_IDX: Record<string, number> = { Sat: 0, Sun: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6 };
 const daysIntoWeek = () => (WEEKDAY_IDX[new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "Asia/Tehran" })] ?? 0) + 1;
-const dayStr = (agoDays: number) => new Date(Date.now() - agoDays * 86_400_000).toISOString().slice(0, 10);
+const dayStr = (agoDays: number) => statDay(Date.now() - agoDays * 86_400_000); // روز آمار به وقت ایران (هم‌راستا با daysIntoWeek)
 
-/** جمع شمارنده‌های هر پلتفرم برای بازه‌ی [from تا to روز پیش] (from ≥ to؛ ۰ = امروز، UTC مثل بقیه‌ی آمار) */
+/** جمع شمارنده‌های هر پلتفرم برای بازه‌ی [from تا to روز پیش] (from ≥ to؛ ۰ = امروز، روز آمار به وقت ایران) */
 async function platStats(env: Env, from: number, to: number): Promise<Record<Platform, PlatCounts>> {
   const out = Object.fromEntries(PLATFORMS.map((p) => [p, {} as PlatCounts])) as Record<Platform, PlatCounts>;
   const lo = dayStr(from), hi = dayStr(to); // from = قدیمی‌تر ⇒ lo ≤ روز ≤ hi
@@ -242,15 +242,15 @@ async function statsScreen(env: Env, days: number): Promise<Screen> {
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_RUBIKA}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_EITAA}`, "seen:", "seen:" + MAXC),
   ]);
-  const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
+  const dates = Array.from({ length: days }, (_, i) => dayStr(i));
   const sum = (n: string) => dates.reduce((a, d) => a + (st[d]?.[n] ?? 0), 0);
   const ok = sum("ok"), fail = sum("fail");
   const rate = ok + fail > 0 ? Math.round((ok / (ok + fail)) * 100) : null;
-  const label = days === 1 ? "امروز (UTC)" : `${fa(days)} روز اخیر`;
+  const label = days === 1 ? "امروز" : `${fa(days)} روز اخیر`;
   const byPlat = await platformReport(env, days, st, days > 1);
 
   // ریز روزانه‌ی ۷ روز اخیر (همیشه)، به همراه نمودار متنی تعداد ارائه‌های موفق
-  const last7 = Array.from({ length: 7 }, (_, i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
+  const last7 = Array.from({ length: 7 }, (_, i) => dayStr(i));
   const peak = Math.max(1, ...last7.map((d) => st[d]?.ok ?? 0));
   const bar = (n: number) => "▰".repeat(Math.round((n / peak) * 8)) + "▱".repeat(8 - Math.round((n / peak) * 8));
   const daily = last7.map((d) => {
