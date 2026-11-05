@@ -17,6 +17,7 @@ import { hasBrowser } from "./browser-api";
 import { putPushToken } from "./push";
 import { removeWebSub, saveWebSub, webPushEnabled } from "./webpush";
 import { getAppVersions } from "./app-version";
+import { appFields, appPlatform, parseAppUA } from "./app-ua";
 import {
   authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, emailOtpEnabled, getUserByEmail, getUserByMobile, googleCallback,
   googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtp,
@@ -141,7 +142,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/webpush/key" && method === "GET") return json({ key: webPushEnabled(env) ? env.VAPID_PUBLIC_KEY!.trim() : null });
 
   const user = await authUser(env, req);
-  if (user && fromApp(req) && !user.app) { user.app = true; await saveWebUser(env, user).catch(() => {}); } // علامت «کاربر اپ» برای پنل مدیر (یک‌بار نوشته می‌شود)
+  if (user) await noteApp(env, user, req); // علامت «کاربر اپ» و فروشگاه/نسخه برای پنل مدیر (فقط هنگام تغییر نوشته می‌شود)
   if (path === "/api/app/pay-report" && method === "POST") return payReport(env, user, req, clientIp(req)); // خطای پرداخت سمت اپ (بدون ورود هم پذیرفته می‌شود)
   if (path === "/api/me" && method === "GET") {
     if (!user) return json({ user: null });
@@ -245,7 +246,7 @@ async function googleExchange(req: Request, env: Env): Promise<Response> {
   const b = await readBody(req, 2_000);
   const r = await googleAppExchange(env, String(b?.code ?? ""));
   if (!r) return err("لینک ورود منقضی شده است؛ دوباره امتحان کن.", 401);
-  if (fromApp(req) && !r.user.app) { r.user.app = true; await saveWebUser(env, r.user).catch(() => {}); }
+  await noteApp(env, r.user, req);
   return json({ user: publicUser(r.user), created: false }, 200, { "set-cookie": sessionCookie(r.token) });
 }
 
@@ -254,13 +255,26 @@ async function googleToken(req: Request, env: Env): Promise<Response> {
   const b = await readBody(req, 8_000);
   const r = await googleLoginWithIdToken(env, String(b?.idToken ?? ""));
   if ("error" in r) return err(r.error, r.status);
-  if (fromApp(req) && !r.user.app) { r.user.app = true; await saveWebUser(env, r.user).catch(() => {}); }
+  await noteApp(env, r.user, req);
   return json({ user: publicUser(r.user), created: Date.now() - r.user.created < 5000 }, 200, { "set-cookie": sessionCookie(r.token) });
 }
 
 /** ورود/ثبت‌نام یکپارچه: حساب موجود ⇒ ورود؛ وگرنه حساب جدید با همین شماره ساخته می‌شود */
-/** درخواست از اپ اندروید؟ اپ در User-Agent عبارت PptSazApp/<نسخه> می‌فرستد (فقط برای آمار؛ امنیتی نیست) */
-const fromApp = (req: Request) => /PptSazApp\//.test(req.headers.get("user-agent") ?? "");
+/** درخواست از اپ اندروید؟ اپ در User-Agent عبارت PptSazApp/<نسخه> (<فروشگاه>; Android <نسخه>) می‌فرستد (فقط برای آمار؛ امنیتی نیست).
+ *  نسخه‌های قدیمی اپ فقط «PptSazApp/<نسخه>» دارند ⇒ store = null. */
+const appUA = (req: Request) => parseAppUA(req.headers.get("user-agent"));
+const fromApp = (req: Request) => appUA(req) !== null;
+
+/** علامت «کاربر اپ» + فروشگاه/نسخه‌ی اپ/نسخه‌ی اندروید روی حساب؛ فقط وقتی چیزی عوض شده باشد نوشته می‌شود */
+async function noteApp(env: Env, user: WebUser, req: Request): Promise<void> {
+  const a = appUA(req);
+  if (!a) return;
+  const f = appFields(a);
+  let changed = !user.app;
+  user.app = true;
+  for (const [k, v] of Object.entries(f)) if ((user as any)[k] !== v) { (user as any)[k] = v; changed = true; }
+  if (changed) await saveWebUser(env, user).catch(() => {});
+}
 
 async function otpVerify(req: Request, env: Env): Promise<Response> {
   const b = await readBody(req);
@@ -278,11 +292,10 @@ async function otpVerify(req: Request, env: Env): Promise<Response> {
     const day = new Date().toISOString().slice(0, 10);
     if (await hitLimit(env, `rg:${clientIp(req)}:${day}`, 5, 172_800)) return err("تعداد ثبت‌نام از این شبکه امروز به سقف رسیده است.", 429);
     user = email
-      ? await createUser(env, { email, emailVerified: true, name: email.split("@")[0], via: fromApp(req) ? "app" : undefined })
-      : await createUser(env, { mobile: mobile!, name: `کاربر ${mobile!.slice(-4)}`, via: fromApp(req) ? "app" : undefined });
-  } else if (fromApp(req) && !user.app) {
-    user.app = true;
-    await saveWebUser(env, user).catch(() => {});
+      ? await createUser(env, { email, emailVerified: true, name: email.split("@")[0], via: fromApp(req) ? "app" : undefined, appUA: appUA(req) })
+      : await createUser(env, { mobile: mobile!, name: `کاربر ${mobile!.slice(-4)}`, via: fromApp(req) ? "app" : undefined, appUA: appUA(req) });
+  } else {
+    await noteApp(env, user, req);
   }
   const token = await createSession(env, user.id);
   return json({ user: publicUser(user), created: Date.now() - user.created < 5000 }, 200, { "set-cookie": sessionCookie(token) });
@@ -453,8 +466,9 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   // شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow؛ پیشوندش شناسه‌ی کاربر است تا مالکیت بدون خواندن KV بررسی شود
   const jobId = `${user.id}-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
   // Mini App در تلگرام، بله و روبیکا یک کلاینت است؛ پلتفرم واقعی از شناسه‌ی حساب لینک‌شده‌ی همان ورود (w2tg) می‌آید، نه ثابت «تلگرام»
+  const ua = appUA(req);
   const miniPlat = b?.via === "miniapp" ? botPlatform(await getLinkedTg(env, user.id).catch(() => null)) : "tg";
-  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? miniPlat : fromApp(req) ? "app" : "web", ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) }, posterWant))) {
+  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? miniPlat : ua ? appPlatform(ua) : "web", ...(ua && b?.via !== "eitaa" && b?.via !== "miniapp" ? { appv: ua.ver, ...(ua.android ? { andv: ua.android } : {}) } : {}), ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) }, posterWant))) {
     return err("شروع ساخت ارائه ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن.", 503);
   }
   return json({ jobId });

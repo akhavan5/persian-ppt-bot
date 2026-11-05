@@ -19,8 +19,8 @@ android {
         applicationId = "ir.pptsaz.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
         // اعلان FCM: از متغیرهای محیطی (GitHub Secrets) می‌آید؛ خالی = اعلان خاموش. فایل google-services.json لازم نیست.
         for (k in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {
             buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim().replace("\"", "") + "\"")
@@ -32,11 +32,14 @@ android {
     productFlavors {
         create("bazaar") {
             dimension = "store"
+            // نام فروشگاه در User-Agent اپ (PptSazApp/<نسخه> (bazaar; Android <نسخه>)) برای آمار جدای پنل مدیر
+            buildConfigField("String", "STORE", "\"bazaar\"")
             // کلید عمومی RSA پرداخت درون‌برنامه‌ای کافه‌بازار (کلید عمومی است؛ محرمانه نیست)
             buildConfigField("String", "BAZAAR_RSA_KEY", "\"MIHNMA0GCSqGSIb3DQEBAQUAA4G7ADCBtwKBrwDXfSTtYYKzEZfiN3uOiRiZL6B6VeaYy3sKYGufqwD5pu4sYNmCSfth7VE1dedYe/ylS5+lvjiQkwZog7HRNuPuG2gntNnYT5WbuMqJScB7u9cEj1vpmk3ENuuGp5ngCtk45jtAdSZ408ZDYZqpWjCJZ65lMCZsf8SBVV6YISYlLb0fM85fL9GQhbLLIHb8JeCPbHhoqAqsWcXvzcJR97qHopblekWaMRtdRayinYECAwEAAQ==\"")
         }
         create("myket") {
             dimension = "store"
+            buildConfigField("String", "STORE", "\"myket\"")
             // کتابخانه‌ی پرداخت مایکت مجوز و queries خودش را با این placeholderها به manifest اضافه می‌کند (ir.mservices.market.BILLING)
             manifestPlaceholders["marketApplicationId"] = "ir.mservices.market"
             manifestPlaceholders["marketBindAddress"] = "ir.mservices.market.InAppBillingService.BIND"

@@ -173,7 +173,7 @@ export const posterEnabled = (env: Env) => hasBrowser(env);
 export const audioEnabled = (env: Env) => !!env.AUDIO_WORKFLOW && ttsEnabled(env);
 export interface PosterWant { layout: "wide" | "tall" }
 
-export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** پلتفرم مبدأ برای آمار؛ خالی = از روی کانال و شناسه */ plat?: Platform; /** اعلان پایان کار در تلگرام (Mini App) */ notify?: boolean; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
+export interface Delivery { chatId: number; statusMessageId: number; channel: "web" | "telegram"; tgId?: number; /** پلتفرم مبدأ برای آمار؛ خالی = از روی کانال و شناسه */ plat?: Platform; /** نسخه‌ی اپ و اندروید (فقط از اپ) برای گزارش مدیر */ appv?: string; andv?: string; /** اعلان پایان کار در تلگرام (Mini App) */ notify?: boolean; /** متن اصلی کاربر برای گزارش مدیر */ orig?: string }
 
 /** ساخت نمونه‌ی Workflow. شناسه‌ی کار = شناسه‌ی نمونه‌ی Workflow. در صورت شکست، اعتبار برمی‌گردد و false برمی‌گرداند. */
 export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid: string | number, jobId: string, d: Delivery, poster?: PosterWant): Promise<boolean> {
@@ -182,7 +182,7 @@ export async function launchDeck(env: Env, b: Extract<Begin, { ok: true }>, uid:
   const orig = (b.source ? `📎 ${typed || b.topic}` : typed).slice(0, 300);
   const plat: Platform = d.plat ?? (d.channel === "web" ? "web" : botPlatform(d.tgId ?? uid));
   const params: DeckParams = {
-    chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId, plat, ...(d.notify ? { notify: true } : {}),
+    chatId: d.chatId, statusMessageId: d.statusMessageId, userId: uid, channel: d.channel, tgId: d.tgId, plat, ...(d.appv ? { appv: d.appv } : {}), ...(d.andv ? { andv: d.andv } : {}), ...(d.notify ? { notify: true } : {}),
     topic: b.topic, ...(orig ? { orig } : {}), ...(b.source ? { source: b.source } : {}), settings: b.settings, maxImages: b.imageCount, credit: b.quota.source, day: b.quota.day,
     // پوستر همراه ارائه (همین Workflow؛ ۱ اعتبار جدا که beginDeck کسر کرده) با تصویر تزئینی ثابت
     ...(poster && b.posterQuota ? { poster: { layout: poster.layout, credit: b.posterQuota.source, day: b.posterQuota.day } } : {}),

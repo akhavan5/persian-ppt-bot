@@ -91,7 +91,9 @@ export async function loadPreviewImage(env: Env, userId: Uid, id: string, slide:
 }
 
 // ---------- گزارش ۱۰ ارائه‌ی اخیر (برای مدیر) ----------
-export interface DeckLog { id: string; userId: Uid; n: string; u: string | null; title: string; slides: number; t: number; /** ورودی اصلی کاربر (کوتاه) */ o?: string }
+export interface DeckLog { id: string; userId: Uid; n: string; u: string | null; title: string; slides: number; t: number; /** ورودی اصلی کاربر (کوتاه) */ o?: string;
+  /** پلتفرم ساخت ارائه (tg | bale | rubika | eitaa | web | bazaar | myket | app)؛ رکوردهای قدیمی ندارند */ p?: string;
+  /** نسخه‌ی اپ و نسخه‌ی اندروید (فقط ارائه‌های ساخته‌شده از اپ جدید) */ av?: string; an?: string }
 const LOG_KEY = "recent:decks";
 const LOG_MAX = 10;
 

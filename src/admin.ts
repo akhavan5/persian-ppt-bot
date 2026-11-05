@@ -5,11 +5,11 @@ import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
 import {
   PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
-  setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, type Platform, type Uid,
+  setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, type Platform, type Uid,
 } from "./settings";
 import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
 import { resolveUid } from "./link";
-import { getDeckLog, listFiles, loadFile } from "./files";
+import { getDeckLog, listFiles, loadFile, type DeckLog } from "./files";
 import { hasKey, modelList } from "./llm";
 import { PLANS, activatePlan, payEnabled } from "./payment";
 import { runningJob } from "./deck-service";
@@ -81,6 +81,8 @@ async function rows(env: Env, sql: string, ...binds: unknown[]): Promise<{ k: st
 const WEB_ONLY =
   "(COALESCE(json_extract(v,'$.email'),'') != '' OR COALESCE(json_extract(v,'$.mobile'),'') != '' OR json_extract(v,'$.google') IS NOT NULL)";
 const APP_USER = "json_extract(v,'$.app') = 1";
+const APP_BAZAAR = "json_extract(v,'$.store') = 'bazaar'";
+const APP_MYKET = "json_extract(v,'$.store') = 'myket'";
 /** کاربر وبِ «فقط سایت»: اپ اندروید را هرگز استفاده نکرده (تا هر نفر در گزارش پلتفرمی یک بار شمرده شود) */
 const WEB_NOT_APP = "COALESCE(json_extract(v,'$.app'),0) != 1";
 /** seen:<شناسه> — شناسه‌های بله از BALE_ID_BASE شروع می‌شوند (bale-format.ts)؛ تلگرام زیر آن است */
@@ -123,7 +125,7 @@ const cb = (text: string, data: string): Btn => ({ text, callback_data: data });
 
 // ---------- آمار به تفکیک پلتفرم (تلگرام / بله / وب / اپ اندروید) ----------
 // شمارنده‌ها را bumpStat (settings.ts) در pst:<پلتفرم>:<نام>:<روز> می‌نویسد؛ جمع کل همچنان در stat:<نام>:<روز> است.
-const PLAT_LABEL: Record<Platform, string> = { tg: "✈️ تلگرام", bale: "🟢 بله", rubika: "🟣 روبیکا", eitaa: "🟠 ایتا", web: "🌐 وب", app: "📱 اپ اندروید" };
+const PLAT_LABEL: Record<Platform, string> = { tg: "✈️ تلگرام", bale: "🟢 بله", rubika: "🟣 روبیکا", eitaa: "🟠 ایتا", web: "🌐 وب", bazaar: "📱 اپ بازار", myket: "📱 اپ مایکت", app: "📱 اپ قدیمی (فروشگاه نامشخص)" };
 type PlatCounts = Record<string, number>;
 /** هفته‌ی ایرانی از شنبه تا جمعه: چند روز از شنبه‌ی همین هفته گذشته (شنبه = ۱، جمعه = ۷؛ روز هفته به وقت ایران) */
 const WEEKDAY_IDX: Record<string, number> = { Sat: 0, Sun: 1, Mon: 2, Tue: 3, Wed: 4, Thu: 5, Fri: 6 };
@@ -169,7 +171,7 @@ async function platformReport(env: Env, days: number, st: Record<string, Record<
 }
 
 async function homeScreen(env: Env): Promise<Screen> {
-  const [tgUsers, baleUsers, webUsers, appUsers, subs, banned, st, payIssues, rubikaUsers, eitaaUsers] = await Promise.all([
+  const [tgUsers, baleUsers, webUsers, appUsers, subs, banned, st, payIssues, rubikaUsers, eitaaUsers, bazaarUsers, myketUsers] = await Promise.all([
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_TG}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_BALE}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY} AND ${WEB_NOT_APP}`, "wu:", "wu:" + MAXC),
@@ -180,6 +182,8 @@ async function homeScreen(env: Env): Promise<Screen> {
     issueCount(env).catch(() => 0),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_RUBIKA}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_EITAA}`, "seen:", "seen:" + MAXC),
+    count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_BAZAAR}`, "wu:", "wu:" + MAXC),
+    count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_MYKET}`, "wu:", "wu:" + MAXC),
   ]);
   const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
   const week = await platformReport(env, n, st, true, 7);
@@ -189,8 +193,8 @@ async function homeScreen(env: Env): Promise<Screen> {
   return {
     text:
       "🛠 <b>پنل مدیریت</b>\n\n" +
-      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🟣 <b>${fa(nu.rubika ?? 0)}</b> · 🟠 <b>${fa(nu.eitaa ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · روبیکا · ایتا · وب · اپ)</i>\n` +
-      `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🟣 ${fa(rubikaUsers)} · 🟠 ${fa(eitaaUsers)} · 🌐 ${fa(webUsers)} · 📱 ${fa(appUsers)}\n` +
+      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🟣 <b>${fa(nu.rubika ?? 0)}</b> · 🟠 <b>${fa(nu.eitaa ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 بازار <b>${fa(nu.bazaar ?? 0)}</b> · 📱 مایکت <b>${fa(nu.myket ?? 0)}</b> · 📱 اپ قدیمی <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · روبیکا · ایتا · وب · اپ بازار · اپ مایکت · اپ قدیمی)</i>\n` +
+      `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🟣 ${fa(rubikaUsers)} · 🟠 ${fa(eitaaUsers)} · 🌐 ${fa(webUsers)} · 📱 اپ ${fa(appUsers)} (بازار ${fa(bazaarUsers)} · مایکت ${fa(myketUsers)}؛ بقیه از نسخه‌ی قدیمی)\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
       `\n📅 <b>گزارش هفتگی</b> (شنبه تا امروز، ${range})\n${week}\n` +
@@ -361,7 +365,8 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
     webId ? `🌐 پروفایل وب: <code>${webId}</code>` : "",
     web?.email ? `✉️ ایمیل: ${esc(web.email)}` : "",
     web?.mobile ? `📞 موبایل: ${esc(web.mobile)}` : "",
-    web?.app ? `📱 منبع: اپ اندروید${web.via === "app" ? " (ثبت‌نام از اپ)" : " (ثبت‌نام از وب، از اپ هم وارد شده)"}` : "",
+    web?.app ? `📱 منبع: اپ اندروید${web.store ? ` ${STORE_NAMES[web.store]}` : ""}${web.via === "app" ? " (ثبت‌نام از اپ)" : " (ثبت‌نام از وب، از اپ هم وارد شده)"}` : "",
+    web?.app && (web.appv || web.andv) ? `📲 نسخه‌ی اپ: <code>${esc(web.appv ?? "—")}</code> · اندروید: <code>${esc(web.andv ?? "—")}</code>` : "",
     seen ? `🕒 اولین پیام: ${fmtTime(seen.t)}` : web ? `🕒 ثبت‌نام: ${fmtTime(web.created)}` : "",
     "",
     `💳 اعتبار: <b>${creditLine}</b>`,
@@ -691,11 +696,17 @@ async function decksScreen(env: Env): Promise<Screen> {
     return (linked ? "🌐 وبی 🔗" : "🌐 وبی") + (w.app ? " 📱" : "");
   };
   const kinds = new Map<string, string>();
-  for (const x of list) if (!kinds.has(String(x.userId))) kinds.set(String(x.userId), await kindOf(x.userId));
+  // رکوردهای جدید پلتفرم خودِ ارائه را دارند (x.p)؛ فقط رکوردهای قدیمی از روی نوع حساب حدس زده می‌شوند
+  for (const x of list) if (!x.p && !kinds.has(String(x.userId))) kinds.set(String(x.userId), await kindOf(x.userId));
+  const platTag = (x: DeckLog, kind?: string) => {
+    if (!x.p || !isPlatform(x.p)) return kind ?? "—";
+    const dev = x.av || x.an ? ` <code>${esc(x.av ?? "")}${x.an ? `${x.av ? " · " : ""}A${esc(x.an)}` : ""}</code>` : "";
+    return PLAT_LABEL[x.p] + dev;
+  };
   const lines = list.map((x, i) =>
     `${fa(i + 1)}. <b>${esc(x.title.slice(0, 60))}</b> (${fa(x.slides)} اسلاید)\n` +
     `    👤 ${typeof x.userId === "number" ? userLink(x.userId, x.n, x.u) : `<b>${esc(x.n || String(x.userId))}</b>`}` +
-    ` · ${kinds.get(String(x.userId))} · <code>${x.userId}</code> · 🕒 ${fmtTime(x.t)}` +
+    ` · ${platTag(x, kinds.get(String(x.userId)))} · <code>${x.userId}</code> · 🕒 ${fmtTime(x.t)}` +
     (x.o ? `\n    ✍️ <i>${esc(x.o.slice(0, 120))}</i>` : ""));
   // فایل‌ها فقط ۲۴ ساعت (و حداکثر ۹ فایل آخر هر کاربر؛ پلاس ۱۸ و پرو ۳۰) نگه داشته می‌شوند؛ برای قدیمی‌تر دکمه‌ی دریافت نمی‌گذاریم
   const fresh = Date.now() - 24 * 3600 * 1000;

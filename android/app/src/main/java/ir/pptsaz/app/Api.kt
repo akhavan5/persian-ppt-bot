@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.webkit.CookieManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -58,9 +59,11 @@ class PrefsCookieJar(context: Context) : CookieJar {
 
 object Api {
     const val BASE = "https://pptsaz.ir"
-    // نسخه‌ی واقعی اپ در User-Agent می‌رود (سرور فقط وجود «PptSazApp/» را بررسی می‌کند)؛ برای تشخیص نسخه‌ی کاربر در لاگ‌ها مفید است
+    // نسخه‌ی اپ، فروشگاه و نسخه‌ی اندروید در User-Agent می‌رود: «PptSazApp/1.0.4 (myket; Android 14)».
+    // سرور فقط برای آمار و گزارش مدیر می‌خواند (فروشگاه فقط از نسخه‌ای که این قالب را می‌فرستد به بعد شمرده می‌شود)
     private val UA: String =
-        "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 PptSazApp/" + BuildConfig.VERSION_NAME
+        "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 " +
+            "PptSazApp/${BuildConfig.VERSION_NAME} (${BuildConfig.STORE}; Android ${Build.VERSION.RELEASE})"
     private const val NO_NET = "اتصال برقرار نشد. اینترنت خود را بررسی کنید."
 
     private lateinit var jar: PrefsCookieJar
