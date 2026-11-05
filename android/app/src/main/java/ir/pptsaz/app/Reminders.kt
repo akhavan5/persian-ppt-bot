@@ -27,6 +27,9 @@ import java.util.concurrent.TimeUnit
  *  planout        اعتبار پلن تمام شده ولی روز مانده.
  *  extras         ۱ تا ۲ روز بعد از ساخت ارائه: جزوه/پوستر/پادکست.
  *  inactive7/21   ۷ و ۲۱ روز بعد از آخرین باز شدن اپ، با ایده‌ی فصلی.
+ *  files1         ۱ ساعت بعد از ساخت ارائه: «فایل‌هایت آماده‌ی دانلود است» (همتای ایمیل سرور؛ تا ۲۰ ساعت مهلت چون فایل‌ها ۲۴ ساعت می‌مانند).
+ *  buy48          پیشنهاد خرید پلن: ۴۸ ساعت بعد از آخرین ارائه، فقط اگر پلن فعال ندارد و هرگز پلن نداشته؛ یک‌بار برای هر دستگاه
+ *                 (کاربران قدیمی که زمان آخرین ارائه‌شان ثبت نشده، ۴۸ ساعت بعد از اولین باز شدنِ نسخه‌ی جدید).
  *
  * قواعد: ساعت ۹ تا ۲۱ تهران؛ حداکثر ۱ در روز و ۳ در هفته؛ «بازگشت» حداکثر ۲ بار در ماه؛ هر یادآور برای هر کلید فقط یک‌بار؛
  * شرط هر یادآور هنگام نمایش دوباره از وضعیت ذخیره‌شده خوانده می‌شود (نه زمان زمان‌بندی)؛ اگر اپ باز است نشان داده نمی‌شود.
@@ -37,7 +40,7 @@ object Reminders {
     private const val DAY = 24 * HOUR
     private const val TEHRAN = 12_600_000L // UTC+3:30 (ایران ساعت تابستانی ندارد)
 
-    private val KINDS = listOf("act1", "act2", "daily", "plan3", "plan1", "planout", "extras", "inactive7", "inactive21")
+    private val KINDS = listOf("act1", "act2", "daily", "plan3", "plan1", "planout", "extras", "inactive7", "inactive21", "files1", "buy48")
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("reminders", Context.MODE_PRIVATE)
 
@@ -93,6 +96,7 @@ object Reminders {
                 }
                 e.remove("plan_id").remove("plan_exp").remove("plan_credits").remove("plan_name")
             }
+            if (me.planId != null) e.putBoolean("ever_plan", true) // یک‌بار پلن داشته؛ پیشنهاد خرید ۴۸ ساعته دیگر نمی‌رود
             e.apply()
 
             val first = p.getLong("first_seen", now)
@@ -125,6 +129,14 @@ object Reminders {
             }
 
             scheduleInactive(ctx, now)
+
+            // پیشنهاد خرید برای کاربران قدیمی: ارائه ساخته‌اند ولی زمان آخرین ارائه روی گوشی ثبت نشده (فقط یک‌بار زمان‌بندی می‌شود)
+            if (decks > 0 && !me.unlimited && !planActive && !p.getBoolean("ever_plan", false) && !p.getBoolean("buy48_done", false) &&
+                p.getLong("deck_done_at", 0L) == 0L && !p.getBoolean("buy48_legacy", false)
+            ) {
+                p.edit().putBoolean("buy48_legacy", true).apply()
+                schedule(ctx, "buy48", snap(now + 2 * DAY), now + 9 * DAY)
+            }
         } catch (_: Exception) {
         }
     }
@@ -155,6 +167,12 @@ object Reminders {
             cancel(ctx, "act1"); cancel(ctx, "act2")
             val t = snap(now + 30 * HOUR)
             schedule(ctx, "extras", t, t + 3 * DAY)
+            // ۱ ساعت بعد: فایل‌هایت آماده‌ی دانلود است (تا ۲۰ ساعت، قبل از پاک‌شدن ۲۴ ساعته‌ی فایل‌ها)
+            schedule(ctx, "files1", snap(now + HOUR), now + 20 * HOUR)
+            // ۴۸ ساعت بعد از آخرین ارائه: پیشنهاد خرید (با هر ارائه‌ی تازه از نو شمرده می‌شود)
+            if (!p.getBoolean("unl", false) && p.getString("plan_id", "").orEmpty().isEmpty() &&
+                !p.getBoolean("ever_plan", false) && !p.getBoolean("buy48_done", false)
+            ) schedule(ctx, "buy48", snap(now + 2 * DAY), now + 9 * DAY)
         } catch (_: Exception) {
         }
     }
@@ -240,6 +258,19 @@ object Reminders {
                 if (decks < 1 || doneAt == 0L || p.getLong("extra_made_at", 0L) >= doneAt) return null
                 Msg("ارائه‌ات رو کامل‌تر کن 📝", "برای ارائه‌ی اخیرت جزوه‌ی Word، پوستر یا پادکست هم بساز؛ هرکدام ۱ اعتبار جدا.", 1, key = doneAt.toString())
             }
+            "files1" -> {
+                val doneAt = p.getLong("deck_done_at", 0L)
+                if (decks < 1 || doneAt == 0L) return null
+                if (lastOpen - doneAt >= 30 * 60_000L) return null // بعد از ساخت دوباره اپ را باز کرده و فایل‌ها را دیده
+                Msg("فایل ارائه‌ات آماده‌ی دانلوده 📂", "فایل‌های ساخته‌شده ۲۴ ساعت می‌مونن؛ اگه هنوز نگرفتیش از بخش فایل‌ها دانلودش کن.", 1, key = doneAt.toString())
+            }
+            "buy48" -> {
+                if (p.getBoolean("buy48_done", false) || p.getBoolean("unl", false) || p.getBoolean("ever_plan", false)) return null
+                if (decks < 1 || p.getString("plan_id", "").orEmpty().isNotEmpty()) return null
+                val doneAt = p.getLong("deck_done_at", 0L)
+                if (doneAt != 0L && now - doneAt < 2 * DAY - HOUR) return null // ارائه‌ی تازه‌تری ساخته شده؛ زمان‌بندی جدیدش جداست
+                Msg("🚀 ارائه‌های بیشتر و بلندتر می‌خوای؟", "با پلن ماهانه ارائه و اسلاید بیشتری داری؛ پلن‌ها رو ببین.", 3, key = "once")
+            }
             "inactive7", "inactive21" -> {
                 val days = if (kind == "inactive7") 7 else 21
                 if (lastOpen == 0L || now - lastOpen < days * DAY - HOUR) return null
@@ -311,7 +342,7 @@ object Reminders {
         val newLog = (log + (now to kind)).joinToString(",") { "${it.first}:${it.second}" }
         // کلیدهای ارسال‌شده فقط تا ۶۰ کلید نگه داشته می‌شوند
         val newSent = (sent + sentKey).toList().takeLast(60).toSet()
-        p.edit().putString("log", newLog).putStringSet("sent", newSent).apply()
+        p.edit().putString("log", newLog).putStringSet("sent", newSent).also { if (kind == "buy48") it.putBoolean("buy48_done", true) }.apply()
     }
 
     private fun show(ctx: Context, kind: String, msg: Msg) {
