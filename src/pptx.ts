@@ -135,7 +135,13 @@ class Builder {
   }
 
   // ---------- ابزارهای پایه ----------
-  private txt(s: string) { return this.digits ? toFa(String(s)) : String(s); }
+  private txt(s: string) {
+    let t = String(s);
+    // B Nazanin / B Titr گلیف همزه‌ی ترکیبی (U+0654/U+0655، مثل «درباره‌ٔ») را ندارند و PowerPoint «دایره‌ی نقطه‌چین» نشان می‌دهد؛
+    // علامت (و نیم‌فاصله‌ی پیش از آن) حذف می‌شود: «درباره‌ٔ مشکلات» ← «درباره مشکلات»
+    if (isBFont(this.font)) t = t.replace(/‌?[ٕٔ]/g, "");
+    return this.digits ? toFa(t) : t;
+  }
   /** متن سلول جدول؛ در فونت B تکه‌های لاتین/علامت‌های ناموجود با Times New Roman (وگرنه مربع می‌شوند) */
   private cellRuns(text: string, size: number, color: string, bold: boolean): any {
     const t = this.txt(text);
