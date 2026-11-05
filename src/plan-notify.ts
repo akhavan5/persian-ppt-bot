@@ -1,6 +1,6 @@
 /** اعلان‌های پلن ماهانه:
  *  ۱) یادآوری ۷ روز و یادآوری آخر (کمتر از ۱ روز) مانده به پایان پلن (ایمیل + ربات تلگرام؛ هر کدام که برای حساب موجود باشد) — از cron روزانه (remindExpiringPlans)
- *  ۲) اعلام تمام شدن اعتبار پلن (فقط ایمیل) — بعد از ساخت ارائه‌ای که آخرین اعتبار پلن را مصرف کرده (notifyPlanCreditsOut)
+ *  ۲) اعلام تمام شدن اعتبار پلن (ایمیل + ربات تلگرام) — بعد از ساخت ارائه‌ای که آخرین اعتبار پلن را مصرف کرده (notifyPlanCreditsOut)
  *  هر اعلان (هر کدام از دو یادآوری) برای هر دوره‌ی پلن فقط یک‌بار فرستاده می‌شود (نشانگر در KV با کلید شامل پایان پلن)؛ با تمدید، پایان پلن عوض می‌شود و دوره‌ی بعد دوباره اعلام می‌گیرد.
  *  هرگز خطا پرتاب نمی‌کند و کار اصلی (ساخت ارائه، cron) را خراب نمی‌کند. بدون RESEND_API_KEY ایمیل بی‌اثر است. */
 import type { Env } from "./env";
@@ -202,7 +202,7 @@ export async function remindExpiringPlans(env: Env): Promise<{ scanned: number; 
   return { scanned, sent };
 }
 
-// ---------- ۲) اعلام تمام شدن اعتبار پلن (فقط ایمیل) ----------
+// ---------- ۲) اعلام تمام شدن اعتبار پلن (ایمیل + ربات) ----------
 export function creditsOutEmail(env: Env, name: string, s: Sub, now = Date.now()) {
   const pn = planName(s);
   const left = Math.max(1, Math.ceil((s.exp - now) / DAY));
@@ -220,6 +220,17 @@ export function creditsOutEmail(env: Env, name: string, s: Sub, now = Date.now()
   });
 }
 
+export function creditsOutTelegram(s: Sub, now = Date.now()): string {
+  const left = Math.max(1, Math.ceil((s.exp - now) / DAY));
+  return [
+    `🎟 <b>اعتبار پلن ${tgEsc(planName(s))} تمام شد</b>`,
+    "",
+    `آخرین اعتبار پلن مصرف شد؛ مدت پلن تا <b>${tgEsc(faDate(s.exp))}</b> (${toFa(String(left))} روز دیگر) باقی است ولی تا اعتبار جدیدی نداشته باشی، حسابت مثل پلن رایگان کار می‌کند.`,
+    "",
+    "با تمدید پلن، ۳۰ روز به مدت پلن فعلی اضافه می‌شود و امکانات پلن (اسلاید و تصویر بیشتر، مدل‌های ویژه) برمی‌گردد.",
+  ].join("\n");
+}
+
 /** بعد از ساخت ارائه صدا زده می‌شود (فقط وقتی اعتبارِ این ارائه از پلن کم شده): اگر اعتبار پلن اکنون صفر است و پلن هنوز تمام نشده، ایمیل می‌رود. */
 export async function notifyPlanCreditsOut(env: Env, uid: Uid): Promise<void> {
   try {
@@ -228,9 +239,17 @@ export async function notifyPlanCreditsOut(env: Env, uid: Uid): Promise<void> {
     const key = `planout:${uid}:${s.exp}`;
     if (await env.KV.get(key)) return;
     const mail = await emailOf(env, uid);
-    if (!mail) return;
-    const m = creditsOutEmail(env, mail.name, s);
-    const ok = await sendEmail(env, { to: mail.to, ...m, tag: "plan-credits-out", idempotencyKey: `plan-out-${uid}-${s.exp}`.slice(0, 256) });
+    const tgId = isWebId(uid) ? await getLinkedTg(env, String(uid)) : null; // ربات: همان کانالی که یادآوری پایان پلن هم می‌گیرد
+    if (!mail && !tgId) return;
+    const jobs: Promise<boolean>[] = [];
+    if (mail) jobs.push(sendEmail(env, { to: mail.to, ...creditsOutEmail(env, mail.name, s), tag: "plan-credits-out", idempotencyKey: `plan-out-${uid}-${s.exp}`.slice(0, 256) }));
+    if (tgId) {
+      jobs.push((async () => {
+        await sendMessage(env, tgId, creditsOutTelegram(s), await buyKbFor(env, uid, tgId));
+        return true;
+      })().catch((e) => { console.error("credits-out telegram", String(e).slice(0, 200)); return false; }));
+    }
+    const ok = (await Promise.all(jobs)).some(Boolean);
     if (ok) await env.KV.put(key, "1", { expiration: Math.floor(s.exp / 1000) + 86_400 });
   } catch (e) {
     console.error("notifyPlanCreditsOut", String(e).slice(0, 300));

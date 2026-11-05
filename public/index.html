@@ -1209,7 +1209,7 @@ function openBuy(why = "") {
 }
 $("#creditChip").onclick = () => openBuy();
 $("#upgradeBtn").onclick = () => openBuy();
-async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderCredit(); } } catch {} }
+async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderCredit(); if (window.pptPush) window.pptPush.refresh(); } } catch {} }
 
 let pendingPlan = null;
 async function buyPlan(id, btn) {
@@ -1621,6 +1621,7 @@ async function track(jobId, resumed = false) {
         pDl.hidden = false; pDl.onclick = (ev) => download(s.posterId, ev.currentTarget);
       }
       jobView("done"); loadFiles(); trackAudio(s);
+      if (window.pptPush) setTimeout(function () { window.pptPush.offer(); }, 1500); // اعلان وب: پیشنهاد (یک‌بار در ۱۴ روز) بعد از اولین ارائه‌ی موفق
     } else { $("#jobErrText").textContent = s.message; jobView("err"); }
     return;
   }

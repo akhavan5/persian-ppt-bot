@@ -23,6 +23,7 @@ import { PLANS } from "./payment";
 import { inviteBody, inviteShareUrl, telegramInviteLink } from "./invite-msg";
 import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
+import { notifyInviterJoined } from "./referral";
 import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
 import { deepgramEnabled } from "./deepgram";
@@ -627,7 +628,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده فقط «دعوت در انتظار» ثبت می‌کند؛ وقتی اولین ارائه‌اش ساخته شد (referral.ts ← workflow.ts)
   // شمارنده‌ی دعوت‌کننده بالا می‌رود؛ هر ۵ دعوت موفق = ۱ اعتبار پلن پلاس (تا ۵۰ دعوت)
   if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
-    await holdReferral(env, Number(args[0].slice(4)), userId).catch((e) => console.error("referral hold", e));
+    const inviter = Number(args[0].slice(4));
+    // دعوت‌کننده همان لحظه خبردار می‌شود که دوستش وارد شده؛ پاداش هنوز به ساخت اولین ارائه‌ی دوست بسته است
+    if (await holdReferral(env, inviter, userId).catch((e) => { console.error("referral hold", e); return false; })) await notifyInviterJoined(env, inviter);
   }
   if (cmd === "/files") return await showFiles(env, chatId, uid);
   if (cmd === "/invite") return await showInvite(env, chatId, userId);

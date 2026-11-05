@@ -125,6 +125,54 @@
     });
   }
 
+  // ---------- اعلان وب (Web Push) ----------
+  // سرور فقط وقتی VAPID دارد کلید می‌دهد؛ بدون آن هیچ‌چیز نشان داده نمی‌شود. اجازه‌ی مرورگر فقط بعد از اولین ارائه‌ی موفق و با کلیک کاربر خواسته می‌شود.
+  var PUSH_KEY = "pwa_push_dismissed";
+  function pushOk() { return !inTelegram && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && (location.protocol === "https:" || location.hostname === "localhost"); }
+  function pushDismissed() { try { return Date.now() - (+localStorage.getItem(PUSH_KEY) || 0) < 14 * 864e5; } catch (e) { return false; } }
+  function u8(b64) {
+    var s = b64.replace(/-/g, "+").replace(/_/g, "/"); s += "===".slice((s.length + 3) % 4);
+    var raw = atob(s), out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function postSub(sub) {
+    return fetch("/api/webpush/sub", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) })
+      .then(function (r) { return r.ok; }).catch(function () { return false; });
+  }
+  function getKey() {
+    return fetch("/api/webpush/key", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (j) { return j && j.key; }).catch(function () { return null; });
+  }
+  // اشتراک را بساز/تمدید کن و به حساب واردشده وصل کن (بعد از ورود و بعد از هر ارائه؛ بی‌صدا، فقط وقتی اجازه از قبل داده شده)
+  function pushRefresh() {
+    if (!pushOk() || Notification.permission !== "granted") return Promise.resolve(false);
+    return getKey().then(function (key) {
+      if (!key) return false;
+      return navigator.serviceWorker.ready.then(function (reg) {
+        return reg.pushManager.getSubscription().then(function (sub) { return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(key) }); });
+      }).then(postSub);
+    }).catch(function () { return false; });
+  }
+  function pushEnable() {
+    if (!pushOk()) return Promise.resolve(false);
+    return Notification.requestPermission().then(function (p) { return p === "granted" ? pushRefresh() : false; }).catch(function () { return false; });
+  }
+  // بعد از ارائه‌ی موفق صدا زده می‌شود؛ فقط یک‌بار در ۱۴ روز و فقط اگر اجازه هنوز پرسیده نشده
+  function pushOffer() {
+    if (!pushOk()) return;
+    if (Notification.permission === "granted") { pushRefresh(); return; }
+    if (Notification.permission !== "default" || pushDismissed()) return;
+    getKey().then(function (key) {
+      if (!key) return;
+      box({
+        id: "pwa-push", title: "وقتی ارائه آماده شد خبرت کنیم؟", msg: "اعلان مرورگر؛ هر وقت خواستی از تنظیمات مرورگر خاموشش کن.", label: "روشن کن", top: true,
+        onAction: function () { try { localStorage.setItem(PUSH_KEY, String(Date.now())); } catch (e) {} drop("pwa-push"); pushEnable(); },
+        onClose: function () { try { localStorage.setItem(PUSH_KEY, String(Date.now())); } catch (e) {} },
+      });
+    });
+  }
+  window.pptPush = { supported: pushOk, offer: pushOffer, refresh: pushRefresh, enable: pushEnable };
+
   if (standalone || inTelegram) return;
 
   // ---------- پیشنهاد نصب ----------

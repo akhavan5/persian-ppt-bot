@@ -354,12 +354,14 @@ const STAT_TTL = 60 * 60 * 24 * 400;
 /** ثبت یک ارائه‌ی موفق برای «قیف کاربران» پنل مدیر: act:<حساب> = {f: اولین ارائه، l: آخرین، n: تعداد} (ms).
  *  یک نوشتن اتمی؛ بدون TTL (یک ردیف کوچک برای هر حسابی که ارائه ساخته).
  *  خروجی: تعداد ارائه‌های موفق این حساب تا همین ارائه (۱ = اولین ارائه)؛ ۰ = نامشخص. برای تکمیل پاداش دعوت (referral.ts) به کار می‌رود. */
-export async function noteDeckDone(env: Env, userId: Uid): Promise<number> {
+export async function noteDeckDone(env: Env, userId: Uid, deckId?: string): Promise<number> {
   const db = await rawDb(env);
   const now = Date.now();
+  // d = شناسه‌ی آخرین ارائه (برای اعلان «پوستر/جزوه/پادکست» در lifecycle.ts؛ متن ارائه فقط ۲۴ ساعت می‌ماند)
+  const d = deckId && /^[\w-]{1,100}$/.test(deckId) ? deckId : null;
   const row = await db.prepare(
-    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.l', ?3, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1) RETURNING json_extract(v, '$.n') AS n")
-    .bind(`act:${userId}`, JSON.stringify({ f: now, l: now, n: 1 }), now).first<{ n: number }>();
+    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.l', ?3, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1, '$.d', COALESCE(?4, json_extract(v, '$.d'))) RETURNING json_extract(v, '$.n') AS n")
+    .bind(`act:${userId}`, JSON.stringify({ f: now, l: now, n: 1, ...(d ? { d } : {}) }), now, d).first<{ n: number }>();
   return Math.max(0, Math.floor(Number(row?.n) || 0));
 }
 

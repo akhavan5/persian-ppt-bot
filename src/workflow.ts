@@ -22,6 +22,7 @@ import { buildDocx, imageInfo, makeHandout, type DocImage } from "./handout";
 import { withStore } from "./store";
 import { notifyPlanCreditsOut } from "./plan-notify";
 import { completeReferral } from "./referral";
+import { sendWebPush } from "./webpush";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
@@ -283,7 +284,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     await step.do("finish", async () => {
       await releaseLock(this.env, userId);
       await bumpStat(this.env, "ok", deckPlat).catch(() => {});
-      const decks = await noteDeckDone(this.env, userId).catch((e) => { console.error("noteDeckDone", e); return 0; }); // قیف کاربران پنل مدیر
+      const decks = await noteDeckDone(this.env, userId, event.instanceId).catch((e) => { console.error("noteDeckDone", e); return 0; }); // قیف کاربران پنل مدیر
       // دعوت دوستان: پاداش دعوت‌کننده با اولین ارائه‌ی دوستِ دعوت‌شده ثبت می‌شود (تا ارائه‌ی دوم: اگر این گام تکرار شد یا تکمیل بار قبل شکست خورد، دوباره تلاش می‌شود؛ تکمیل idempotent است)
       if (decks > 0 && decks <= 2) await completeReferral(this.env, userId).catch((e) => console.error("completeReferral", e));
     });
@@ -302,6 +303,14 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         const text = `✅ <b>${esc(built.title)}</b> آماده شد (${toFa(String(built.slides))} اسلاید${extras.length ? " + " + extras.join(" + ") : ""}).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`;
         await sendMessage(this.env, tgChat, text, { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(this.env)}/app` } }]] } });
       }).catch((e) => console.error("notify-app", String(e).slice(0, 200)));
+    }
+
+    // اعلان وب (PWA): کاربر وب که تب را بسته از آماده شدن ارائه خبردار می‌شود. اگر تب باز و دیده‌شدنی باشد، سرویس‌ورکر اعلان را نشان نمی‌دهد (sw.js).
+    // Mini App پیام تلگرام خودش را دارد؛ بدون اشتراک ثبت‌شده یا بدون VAPID هیچ کاری نمی‌کند و خطایش به نتیجه‌ی کار اثر ندارد.
+    if (web && !event.payload.notify && typeof userId === "string") {
+      await step.do("notify-webpush", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+        await sendWebPush(this.env, userId, { title: "ارائه‌ات آماده شد ✅", body: `${built.title} (${toFa(String(built.slides))} اسلاید)؛ برای گرفتن فایل بزن.`, url: "/", tag: "deck-done" });
+      }).catch((e) => console.error("notify-webpush", String(e).slice(0, 200)));
     }
 
     // خروجی نمونه‌ی Workflow؛ وضعیت وب از همین‌جا خوانده می‌شود

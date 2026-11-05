@@ -3,7 +3,7 @@
    - فایل‌های استاتیک (فونت، آیکون، jszip): اول کش
    - دریافت فایل/متن/لینک از منوی «اشتراک‌گذاری» گوشی و سیستم (Share Target)
    - /api و تلگرام و درخواست‌های غیر GET (جز Share Target) هرگز کش نمی‌شوند */
-const VERSION = "v2";
+const VERSION = "v3";
 const STATIC = "pptsaz-static-" + VERSION;
 const PAGES = "pptsaz-pages-" + VERSION;
 const SHARE = "pptsaz-share";
@@ -34,6 +34,46 @@ self.addEventListener("activate", (e) => {
       for (const k of await caches.keys()) if (k.startsWith("pptsaz-") && !keep.has(k)) await caches.delete(k);
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable().catch(() => {});
       await self.clients.claim();
+    })()
+  );
+});
+
+// اعلان وب (webpush.ts): سرور بدنه‌ی رمزشده‌ی {title, body, url, tag} می‌فرستد. اعلان «ارائه آماده شد» وقتی تب باز و در دید کاربر است نشان داده نمی‌شود (خود صفحه نتیجه را نشان می‌دهد).
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = {}; }
+  e.waitUntil(
+    (async () => {
+      if (d.tag === "deck-done") {
+        const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        if (wins.some((w) => w.visibilityState === "visible" && w.focused)) return;
+      }
+      await self.registration.showNotification(d.title || "پاورپوینت‌ساز فارسی", {
+        body: d.body || "",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: d.tag || "ppt",
+        dir: "rtl",
+        lang: "fa",
+        data: { url: typeof d.url === "string" ? d.url : "/" },
+      });
+    })()
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  let target = new URL("/", self.location.origin);
+  try {
+    const u = new URL((e.notification.data && e.notification.data.url) || "/", self.location.origin);
+    if (u.origin === self.location.origin) target = u; // فقط همین سایت
+  } catch { /* آدرس نامعتبر: صفحه‌ی اصلی */ }
+  e.waitUntil(
+    (async () => {
+      const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const w = wins.find((c) => new URL(c.url).origin === self.location.origin);
+      if (w) { await w.focus(); if (w.navigate && new URL(w.url).pathname !== target.pathname) await w.navigate(target.href).catch(() => {}); return; }
+      await self.clients.openWindow(target.href);
     })()
   );
 });

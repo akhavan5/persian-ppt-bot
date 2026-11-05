@@ -15,6 +15,7 @@ import { renderPreview } from "./preview";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hasBrowser } from "./browser-api";
 import { putPushToken } from "./push";
+import { removeWebSub, saveWebSub, webPushEnabled } from "./webpush";
 import { getAppVersions } from "./app-version";
 import {
   authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, emailOtpEnabled, getUserByEmail, getUserByMobile, googleCallback,
@@ -137,6 +138,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
   }
 
+  if (path === "/api/webpush/key" && method === "GET") return json({ key: webPushEnabled(env) ? env.VAPID_PUBLIC_KEY!.trim() : null });
+
   const user = await authUser(env, req);
   if (user && fromApp(req) && !user.app) { user.app = true; await saveWebUser(env, user).catch(() => {}); } // علامت «کاربر اپ» برای پنل مدیر (یک‌بار نوشته می‌شود)
   if (path === "/api/app/pay-report" && method === "POST") return payReport(env, user, req, clientIp(req)); // خطای پرداخت سمت اپ (بدون ورود هم پذیرفته می‌شود)
@@ -160,6 +163,19 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   const pd = method === "GET" ? path.match(/^\/api\/files\/([\w-]{1,100})\/pdf$/) : null;
   if (pd) return deckPdf(env, user, pd[1]);
 
+  // اعلان وب (PWA/مرورگر؛ webpush.ts): کلید عمومی VAPID، ثبت و حذف اشتراک دستگاه
+  if (path === "/api/webpush/sub" && method === "POST") {
+    if (!webPushEnabled(env)) return err("اعلان وب فعال نیست.", 503);
+    if (await hitLimit(env, `wpsub:${user.id}`, 30, 3600)) return err("تعداد درخواست زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
+    const b = await readBody(req, 3_000);
+    const bad = await saveWebSub(env, user.id, b?.subscription);
+    return bad ? err(bad, 400) : json({ ok: true });
+  }
+  if (path === "/api/webpush/unsub" && method === "POST") {
+    const b = await readBody(req, 3_000);
+    await removeWebSub(env, user.id, b?.endpoint);
+    return json({ ok: true });
+  }
   if (path === "/api/app/push" && method === "POST") {
     // ثبت/تمدید/حذف توکن FCM دستگاه (اپ اندروید)؛ promo = اعلان تبلیغاتی/خبری روشن است
     const b = await readBody(req, 2_000);

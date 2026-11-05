@@ -143,6 +143,11 @@ export interface Env {
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   EMAIL_REPLY_TO?: string;
+  /** اعلان وب (Web Push برای PWA/مرورگر؛ webpush.ts): کلید عمومی (۶۵ بایت) و خصوصی (۳۲ بایت) VAPID به‌صورت base64url. ساخت: `npx tsx scripts/vapid-keys.ts`.
+   *  بدون این دو، اعلان وب خاموش است. VAPID_SUBJECT اختیاری: mailto:… یا آدرس سایت (پیش‌فرض SITE_URL). کلید خصوصی را به‌صورت secret بگذارید. */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
   /** ورود با پیامک یک‌بارمصرف (OTP) از وب‌سرویس s.api.ir؛ بدون SMS_API_TOKEN ورود با شماره‌ی موبایل غیرفعال است */
   SMS_API_TOKEN?: string;
   /** اختیاری: آدرس وب‌سرویس (پیش‌فرض https://s.api.ir/api/sw1/SmsOTP) */

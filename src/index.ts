@@ -7,6 +7,7 @@ import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
 import { withStore } from "./store";
 import { remindExpiringPlans } from "./plan-notify";
 import { ACTIVATION_CRON, remindInactiveSignups } from "./activation-reminder";
+import { LIFECYCLE_CRON, runLifecycle } from "./lifecycle";
 import { FEEDBACK_CRON, sendPlanFeedbackSurveys } from "./plan-feedback";
 import { handleWeb } from "./web";
 import { miniappUrl } from "./deck-service";
@@ -67,6 +68,11 @@ export default {
     // cron ساعتی: یادآوری فعال‌سازی (ثبت‌نام کرده ولی ظرف ۲۴ ساعت ارائه نساخته) با ایمیل + ربات؛ جدا از کارهای سنگین روزانه تا سقف زیردرخواست هر اجرا رعایت شود
     if (c.cron === ACTIVATION_CRON) {
       ctx.waitUntil(remindInactiveSignups(withStore(rawEnv)).then((r) => { if (r.sent) console.log("activation reminders", JSON.stringify(r)); }).catch((e) => console.error("activation reminders", String(e).slice(0, 200))));
+      return;
+    }
+    // cron ساعتی: اعلان‌های چرخه‌ی عمر (پرداخت نیمه‌کاره، کم‌شدن اعتبار پلن، پوستر/جزوه، ارائه‌ی بعدی، بازگشت، دعوت دوستان) با بودجه‌ی زیردرخواست مشترک؛ lifecycle.ts
+    if (c.cron === LIFECYCLE_CRON) {
+      ctx.waitUntil(runLifecycle(withStore(rawEnv)).then((r) => { if (Object.keys(r).length) console.log("lifecycle", JSON.stringify(r)); }).catch((e) => console.error("lifecycle", String(e).slice(0, 200))));
       return;
     }
     // cron ساعتی: نظرسنجی پایان پلن (ایمیل + ربات) برای کاربرانی که پلنشان تمام شده و تمدید نکرده‌اند؛ باید قبل از کارهای روزانه برگردد وگرنه هر ساعت اجرا می‌شوند
