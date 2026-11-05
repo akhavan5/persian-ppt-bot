@@ -14,6 +14,8 @@ export interface EmailMsg {
   tag?: string;
   /** کلید یکتا: اگر همان ایمیل دوباره (مثلاً با تلاش مجدد) درخواست شود، Resend فقط یک‌بار می‌فرستد */
   idempotencyKey?: string;
+  /** پیوست‌ها؛ content = base64 (سقف کل ایمیل در Resend ۴۰ مگابایت است) */
+  attachments?: { filename: string; content: string }[];
 }
 
 export const siteOf = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
@@ -45,8 +47,9 @@ export async function sendEmail(env: Env, m: EmailMsg): Promise<boolean> {
         text: m.text,
         ...(env.EMAIL_REPLY_TO?.trim() ? { reply_to: env.EMAIL_REPLY_TO.trim() } : {}),
         ...(m.tag ? { tags: [{ name: "type", value: m.tag }] } : {}),
+        ...(m.attachments?.length ? { attachments: m.attachments } : {}),
       }),
-      signal: AbortSignal.timeout(6000), // ثبت‌نام منتظر ایمیل نمی‌ماند
+      signal: AbortSignal.timeout(m.attachments?.length ? 25000 : 6000), // ثبت‌نام منتظر ایمیل نمی‌ماند؛ آپلود پیوست زمان بیشتری می‌خواهد
     });
     if (!r.ok) {
       console.error("resend", r.status, (await r.text().catch(() => "")).slice(0, 300));
@@ -57,4 +60,11 @@ export async function sendEmail(env: Env, m: EmailMsg): Promise<boolean> {
     console.error("resend", e);
     return false;
   }
+}
+
+/** بایت‌ها → base64 (تکه‌تکه تا حافظه‌ی رشته‌ی میانی بزرگ نشود) */
+export function toBase64(buf: ArrayBuffer): string {
+  const u = new Uint8Array(buf), parts: string[] = [];
+  for (let i = 0; i < u.length; i += 0x8000) parts.push(String.fromCharCode(...u.subarray(i, i + 0x8000)));
+  return btoa(parts.join(""));
 }

@@ -6,6 +6,7 @@
  *    ex   ترویج پوستر/جزوه/اسلاید صوتی/پادکست: ۳ تا ۲۰ ساعت بعد از ارائه (متن ارائه فقط ۲۴ ساعت می‌ماند)، اگر برای آن ارائه همراهی نساخته و اعتبار دارد (ارائه‌ی ۱ تا ۵ کاربر).
  *    nx   «ارائه‌ی بعدی»: ۲ تا ۴ روز بعد از ارائه‌ی اول یا دوم، با یک نکته‌ی کاربردی.
  *    wb   بازگشت کاربر غیرفعال: ۱۴ و ۳۰ روز بعد از آخرین ارائه (فقط بدون پلن فعال)، با موضوع فصلی (ماه شمسی).
+ *    fl   ایمیلِ «فایل‌هایت آماده است»: حدود ۱ ساعت بعد از ساخت ارائه (تا ۲۰ ساعت بعد، چون فایل‌ها ۲۴ ساعت می‌مانند)؛ فقط ایمیل (بدون ربات و اعلان وب).
  *    inv  دعوت دوستان: یک‌بار برای کسی که ۲ تا ۶ ارائه ساخته و هنوز کسی را دعوت نکرده (فقط ربات؛ لینک دعوت مخصوص ربات است).
  *    rfn  یادآوری نرم به دعوت‌شده‌ای که با لینک دوست آمده ولی ۳ تا ۴۸ ساعت بعد هنوز ارائه‌ای نساخته (دعوتِ دوستش به ارائه‌ی او بسته است).
  *
@@ -16,7 +17,8 @@
 import type { Env } from "./env";
 import type { WebUser } from "./auth";
 import { envFor, esc as tgEsc, sendMessage, tg } from "./telegram";
-import { BRAND, emailEnabled, sendEmail, siteOf } from "./email";
+import { BRAND, emailEnabled, sendEmail, siteOf, toBase64 } from "./email";
+import { loadFileDirect } from "./files";
 import { inSendHours } from "./activation-reminder";
 import { faDate, firstName, render } from "./plan-notify";
 import { buyKbFor, miniappUrl } from "./deck-service";
@@ -37,6 +39,7 @@ export const LIFECYCLE_CRON = "37 * * * *";
 const MIN = 60_000, HOUR = 3_600_000, DAY = 24 * HOUR;
 const SUBREQUEST_BUDGET = 44;   // سقف ۵۰ زیردرخواست در پلن رایگان؛ ۶ تا برای ready()/خطاهای غیرمنتظره کنار گذاشته شده
 const MAX_ROWS = 8;             // حداکثر ردیف هر کار در هر اجرا
+const FL_MAX_BYTES = 15 * 1024 * 1024; // سقف پیوست (Resend: ۴۰ مگابایت بعد از base64؛ حافظه‌ی Worker هم محدود است)
 const DONE_TTL = 30 * 86_400;   // ثانیه
 const INV_TTL = 400 * 86_400;
 const RETRY_TTL = 2 * 3600;
@@ -59,6 +62,10 @@ interface Note {
   mail?: { subject: string; m: Mail };
   /** اعلان وب؛ undefined = ندارد */
   push?: WebPushMsg;
+  /** فقط از همین کانال بفرست (مثلاً ایمیل) و سراغ ربات/اعلان وب نرو */
+  only?: "email";
+  /** پیوست ایمیل (base64) */
+  attach?: { filename: string; content: string }[];
 }
 
 const botReady = (env: Env, id: number): boolean =>
@@ -75,13 +82,13 @@ function contactOf(c: Ctx, r: Base): Contact {
 /** یک اعلان فقط به اولین کانال سالم می‌رسد: ربات ← اعلان وب ← ایمیل. null = هیچ‌کدام نرسید یا بودجه تمام شد (skip) */
 async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" | "push" | "email" | "fail" | "skip"> {
   let tried = false;
-  if (k.tgId) {
+  if (k.tgId && n.only !== "email") {
     if (!take(c, 2)) return "skip";
     tried = true;
     try { await sendMessage(c.env, k.tgId, n.tg, n.kb ? await n.kb(k) : undefined); return "bot"; }
     catch (e) { console.error("lifecycle bot", String(e).slice(0, 160)); }
   }
-  if (k.push && n.push) {
+  if (k.push && n.push && n.only !== "email") {
     if (!take(c, 4)) return tried ? "fail" : "skip";
     tried = true;
     if ((await sendWebPush(c.env, k.uid, n.push)).ok > 0) return "push";
@@ -90,7 +97,7 @@ async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" 
     if (!take(c, 1)) return tried ? "fail" : "skip";
     tried = true;
     const m = render(c.env, n.mail.subject, n.mail.m);
-    if (await sendEmail(c.env, { to: k.email, ...m, tag: n.tag, idempotencyKey: `lc-${key}`.slice(0, 250) })) return "email";
+    if (await sendEmail(c.env, { to: k.email, ...m, tag: n.tag, attachments: n.attach, idempotencyKey: `lc-${key}`.slice(0, 250) })) return "email";
   }
   return "fail";
 }
@@ -342,6 +349,51 @@ ORDER BY x.k LIMIT ?3`,
   },
 };
 
+// کار ۳٫۵: ایمیل «فایل‌هایت آماده است» حدود ۱ ساعت بعد از ساخت ارائه (فقط ایمیل؛ cron ساعتی ⇒ ۱ تا ۲ ساعت بعد، در ساعت‌های مجاز ارسال)
+const flJob: Job<ActRow> = {
+  name: "fl",
+  sql: `
+SELECT ${ACT_COLS()}
+${ACT_FROM("json_extract(v,'$.d') IS NOT NULL AND json_extract(v,'$.l') <= ?4 AND json_extract(v,'$.l') > ?5")}
+WHERE ${notMarked("'lc:fl:' || x.u || ':' || x.d")}
+ORDER BY x.k LIMIT ?3`,
+  // ۲۰ ساعت: بعد از آن فایل‌ها (نگه‌داری ۲۴ ساعته) رو به پاک‌شدن‌اند و ایمیل بی‌فایده است
+  extra: (now) => [now - 1 * HOUR, now - 20 * HOUR],
+  marker: (r) => `lc:fl:${r.uid}:${r.d}`,
+  note: async (c, r, k) => {
+    if (!k.email) return null;
+    let left = 23;
+    try { left = Math.max(1, Math.round((JSON.parse(r.v).l + 24 * HOUR - c.now) / HOUR)); } catch { /* پیش‌فرض */ }
+    const lf = toFa(String(left));
+    // فایل PPTX همان ارائه از KV فایل‌ها (۱ زیردرخواست)؛ اگر نبود/بزرگ بود/بودجه تمام شد، ایمیل بدون پیوست و فقط با لینک می‌رود
+    let attach: { filename: string; content: string }[] | undefined;
+    if (r.d && take(c, 1)) {
+      try {
+        const f = await loadFileDirect(c.env, r.uid, String(r.d));
+        if (f && f.data.byteLength <= FL_MAX_BYTES) attach = [{ filename: f.entry.name, content: toBase64(f.data) }];
+      } catch (e) { console.error("lifecycle fl attach", String(e).slice(0, 160)); }
+    }
+    return {
+      tag: "files-ready",
+      tg: "",
+      only: "email",
+      attach,
+      mail: {
+        subject: `فایل ارائه‌ات آماده است — ${BRAND}`,
+        m: {
+          href: utm(c.env, "files"), head: "فایل‌هایت آماده است 📂", sub: `${firstName(k.name)}، ارائه‌ات یک ساعت پیش ساخته شد.`,
+          paras: [
+            attach ? "فایل PPTX ارائه‌ات به همین ایمیل پیوست شده است." : "فایل ارائه‌ات در سایت آماده‌ی دانلود است.",
+            `فایل‌های ساخته‌شده ۲۴ ساعت در سایت نگه‌داری می‌شوند؛ تا حدود ${lf} ساعت دیگر می‌توانی دوباره از آنجا بگیری‌شان.`,
+          ],
+          rows: [["پیوست", attach ? "فایل PPTX" : "ندارد؛ از سایت دانلود کن"], ["زمان باقی‌مانده در سایت", `حدود ${lf} ساعت`]],
+          cta: "دیدن و دانلود فایل‌ها ←", color: "#2563eb", foot: "این ایمیل فقط یک‌بار برای هر ارائه فرستاده می‌شود.", preview: "فایل PPTX ارائه‌ات پیوست شده است.",
+        },
+      },
+    };
+  },
+};
+
 // کار ۴: «ارائه‌ی بعدی» برای کاربر تازه‌کار (۱ تا ۲ ارائه)
 const nxJob: Job<ActRow> = {
   name: "nx",
@@ -493,7 +545,7 @@ export async function runLifecycle(env: Env): Promise<Record<string, number>> {
     await env.KV.ready();
     const c: Ctx = { env, now, nowSec: Math.floor(now / 1000), left: SUBREQUEST_BUDGET, mailOn, botNames: new Map() };
     // پرداخت و هشدار اعتبار همیشه اول؛ بقیه هر ساعت با ترتیب چرخشی تا هیچ‌کدام گرسنه نماند
-    const rest: Job<any>[] = [exJob, nxJob, wbJob(14), wbJob(30), invJob, rfnJob];
+    const rest: Job<any>[] = [flJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, rfnJob];
     const shift = Math.floor(now / HOUR) % rest.length;
     const order: Job<any>[] = [payJob, lowJob, ...rest.slice(shift), ...rest.slice(0, shift)];
     for (const job of order) {
