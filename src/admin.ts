@@ -172,7 +172,7 @@ async function platformReport(env: Env, days: number, st: Record<string, Record<
 }
 
 async function homeScreen(env: Env): Promise<Screen> {
-  const [tgUsers, baleUsers, webUsers, appUsers, subs, banned, st, payIssues, rubikaUsers, eitaaUsers, bazaarUsers, myketUsers] = await Promise.all([
+  const [tgUsers, baleUsers, webUsers, appUsers, subs, banned, st, payIssues, rubikaUsers, eitaaUsers, bazaarUsers, myketUsers, chatUsers] = await Promise.all([
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_TG}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_BALE}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY} AND ${WEB_NOT_APP}`, "wu:", "wu:" + MAXC),
@@ -185,6 +185,7 @@ async function homeScreen(env: Env): Promise<Screen> {
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_EITAA}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_BAZAAR}`, "wu:", "wu:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_MYKET}`, "wu:", "wu:" + MAXC),
+    supportOverview(env).then((o) => o.users).catch(() => 0),
   ]);
   const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
   const week = await platformReport(env, n, st, true, 7);
@@ -197,6 +198,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🟣 <b>${fa(nu.rubika ?? 0)}</b> · 🟠 <b>${fa(nu.eitaa ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 بازار <b>${fa(nu.bazaar ?? 0)}</b> · 📱 مایکت <b>${fa(nu.myket ?? 0)}</b> · 📱 اپ قدیمی <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · روبیکا · ایتا · وب · اپ بازار · اپ مایکت · اپ قدیمی)</i>\n` +
       `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🟣 ${fa(rubikaUsers)} · 🟠 ${fa(eitaaUsers)} · 🌐 ${fa(webUsers)} · 📱 اپ ${fa(appUsers)} (بازار ${fa(bazaarUsers)} · مایکت ${fa(myketUsers)}؛ بقیه از نسخه‌ی قدیمی)\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
+      `👥 کاربرانِ دارای گفتگو: <b>${fa(chatUsers)}</b>\n` +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
       `\n📅 <b>گزارش هفتگی</b> (شنبه تا امروز، ${range})\n${week}\n` +
       "<i>▶️ شروع‌شده · ✅ موفق · ❌ ناموفق · 🆕 کاربر جدید · ▲▼ نسبت به همین روزهای هفته‌ی قبل. هفته از شنبه شروع می‌شود.</i>\n\n" +
