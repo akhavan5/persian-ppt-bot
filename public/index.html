@@ -1237,6 +1237,8 @@ function handleTgLogin() {
   const q = new URLSearchParams(location.search);
   if (q.get("login") === "expired") { history.replaceState(null, "", "/"); toast("لینک ورود منقضی شده؛ در ربات دوباره دکمه‌ی خرید یا /site را بزن."); return; }
   if (q.get("buy")) { history.replaceState(null, "", "/"); if (me) openBuy(); else openAuth("register", "برای خرید پلن وارد شو یا ثبت‌نام کن."); }
+  // از ویجت چت پشتیبانی (مهمان): /?login=chat پنجره‌ی ورود را باز می‌کند
+  if (q.get("login") === "chat") { history.replaceState(null, "", "/"); if (!me) openAuth("register", "برای گفتگو با دستیار هوشمند وارد شو یا ثبت‌نام کن؛ ۳ ارائه‌ی رایگان هم هدیه می‌گیری."); }
 }
 function handlePayReturn() {
   const q = new URLSearchParams(location.search), p = q.get("pay");

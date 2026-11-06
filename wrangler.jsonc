@@ -42,10 +42,6 @@
   // Workers AI برای تولید تصویر اسلاید (بدون کلید API جدا)
   "ai": { "binding": "AI" },
 
-  // چت پشتیبانی: جستجوی هوشمند در محتوای سایت (Cloudflare AI Search). اول در داشبورد (AI ← AI Search) یک instance با نام pptsaz-site بساز
-  // و منبعش را وب‌سایت pptsaz.ir بگذار؛ بعد این خط را از کامنت دربیاور. بدون آن دستیار فقط با دانش ثابت جواب می‌دهد.
-  "ai_search": [{ "binding": "SITE_SEARCH", "instance_name": "pptsaz-site" }],
-
   "workflows": [
     { "name": "persian-ppt-deck", "binding": "DECK_WORKFLOW", "class_name": "DeckWorkflow" },
     { "name": "persian-ppt-broadcast", "binding": "BROADCAST_WORKFLOW", "class_name": "BroadcastWorkflow" },

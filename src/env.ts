@@ -17,8 +17,6 @@ export interface Env {
   ASSETS: Fetcher;
   /** Browser Rendering (مرورگر بدون‌سر کلودفلر) برای ساخت PDF در ربات تلگرام؛ در wrangler.jsonc با کلید browser تعریف می‌شود */
   BROWSER?: Fetcher;
-  /** اختیاری: Cloudflare AI Search (instance بسته‌به نام در wrangler.jsonc: ai_search). دستیار چت پشتیبانی از آن برای پیدا کردن مطالب مرتبط سایت (بلاگ، لندینگ، FAQ) استفاده می‌کند؛ بدون آن فقط از دانش ثابت جواب می‌دهد. */
-  SITE_SEARCH?: { search(opts: Record<string, unknown>): Promise<{ chunks?: { text?: string; score?: number; item?: { key?: string } }[] }> };
   /** اختیاری: حساب‌های کلودفلر پشتیبان برای مرورگر (وقتی binding به سقف ۴۲۹ می‌خورد). هر خط یا «;» یک حساب: ACCOUNT_ID|API_TOKEN (توکن با دسترسی Browser Rendering - Edit) */
   BROWSER_ACCOUNTS?: string;
   /** اختیاری: api ⇒ PDF و پوستر فقط از BROWSER_ACCOUNTS ساخته می‌شود و binding نادیده گرفته می‌شود (OCR همچنان از binding استفاده می‌کند). خالی = اول binding، با خطا حساب‌های پشتیبان */

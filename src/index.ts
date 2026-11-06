@@ -205,8 +205,7 @@ export default {
       return new Response(`<html>\n    <head>\n        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">\n    </head>\n    <body>Verification: 85baee77d3c502ea</body>\n</html>\n`, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "public, max-age=3600" } });
     }
     // سئو: robots و sitemap با دامنه‌ی واقعی سایت ساخته می‌شوند
-    // آدرس مستقیم workers.dev (مثلاً خزنده‌ی Cloudflare AI Search): sitemap با همان آدرس ساخته می‌شود تا خزنده از دامنه‌اش بیرون نرود؛ دامنه‌ی اصلی و nginx همان SITE می‌مانند
-    const SMAP = url.hostname.endsWith(".workers.dev") ? url.origin : SITE;
+    const SMAP = SITE;
     if (url.pathname === "/robots.txt") {
       return new Response(`User-agent: *\nAllow: /\n# یاندکس: پارامتر topic (پیشنهاد موضوع روی صفحه‌ی اصلی) صفحه‌ی تکراری حساب نشود\nClean-param: topic /\n\nSitemap: ${SMAP}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }

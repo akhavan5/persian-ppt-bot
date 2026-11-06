@@ -8,7 +8,7 @@ import {
   EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
 } from "./settings";
 import { modelList } from "./llm";
-import { supportPoll, supportSend } from "./support-chat";
+import { supportHistory, supportSend } from "./support-chat";
 import { appCrash } from "./app-crash";
 import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
@@ -126,9 +126,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     });
   }
 
-  // چت پشتیبانی سایت (دستیار هوشمند + ارجاع به مدیر)؛ بدون نیاز به ورود
+  // چت پشتیبانی سایت (فقط دستیار هوشمند؛ موضوع‌های خاص به مدیر ارجاع می‌شود)؛ فقط کاربر واردشده، روزی حداکثر ۱۰ پیام (ورود را خود پردازنده‌ها چک می‌کنند)
   if (path === "/api/support/send" && method === "POST") return supportSend(req, env, clientIp(req));
-  if (path === "/api/support/poll" && method === "GET") return supportPoll(env, url);
+  if (path === "/api/support/history" && method === "GET") return supportHistory(req, env);
 
   // دانلود مستقیم Mini App: کلاینت تلگرام هدر ندارد؛ فقط توکن کوتاه‌مدت اعتبار است
   if (path.startsWith("/api/miniapp/dl/") && method === "GET") return miniappDownload(env, path.slice("/api/miniapp/dl/".length));
