@@ -58,7 +58,7 @@
   var fab = el("button", "pps-fab"); fab.type = "button"; fab.setAttribute("aria-label", "گفتگو با دستیار هوشمند"); fab.setAttribute("aria-expanded", "false");
   fab.append(el("b", "", "💬"), el("span", "", "پشتیبانی"));
   var panel = el("div", "pps-panel"); panel.hidden = true; panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "گفتگو با دستیار هوشمند");
-  var hd = el("div", "pps-hd"), av = el("div", "pps-av", "🤖"), ht = el("div", "pps-ht"); av.setAttribute("aria-hidden", "true"); ht.append(el("b", "", "پشتیبانی پاورپوینت‌ساز"), el("span", "", "دستیار هوشمند · پاسخ فوری"));
+  var hd = el("div", "pps-hd"), av = el("div", "pps-av", "👨‍💼"), ht = el("div", "pps-ht"); av.setAttribute("aria-hidden", "true"); ht.append(el("b", "", "پشتیبانی پاورپوینت‌ساز"), el("span", "", "دستیار هوشمند · پاسخ فوری"));
   var xb = el("button", "pps-x", "✕"); xb.type = "button"; xb.setAttribute("aria-label", "بستن");
   hd.append(av, ht, xb);
   var list = el("div", "pps-list"); list.setAttribute("aria-live", "polite");
