@@ -72,6 +72,9 @@ interface Note {
   attach?: { filename: string; content: string }[];
 }
 
+const GONE_RE = /bot was blocked by the user|user is deactivated|chat not found|bot can't initiate/i;
+const BLK_TTL = 90 * 86_400;
+
 const botReady = (env: Env, id: number): boolean =>
   isBaleId(id) ? !!env.BALE_BOT_TOKEN : isRubikaId(id) ? !!env.RUBIKA_BOT_TOKEN : isEitaaId(id) ? !!env.EITAA_APP_TOKEN : !!env.TELEGRAM_BOT_TOKEN;
 
@@ -90,7 +93,11 @@ async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" 
     if (k.tgId && take(c, 2)) {
       tried = true;
       try { await sendMessage(c.env, k.tgId, n.tg, n.kb ? await n.kb(k) : undefined); ok ??= "bot"; }
-      catch (e) { console.error("lifecycle bot", String(e).slice(0, 160)); }
+      catch (e) {
+        console.error("lifecycle bot", String(e).slice(0, 160));
+        // گیرنده دیگر در دسترس نیست (ربات را بلاک کرده/حسابش حذف شده): از ارسال‌های بعدی حذف شود (مثل broadcast.ts)؛ با /start برمی‌گردد
+        if (GONE_RE.test(String(e))) await c.env.KV.put(`blk:${k.tgId}`, "1", { expirationTtl: BLK_TTL }).catch(() => {});
+      }
     }
     if (k.push && n.push && take(c, 4)) {
       tried = true;
