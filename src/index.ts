@@ -205,11 +205,13 @@ export default {
       return new Response(`<html>\n    <head>\n        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">\n    </head>\n    <body>Verification: 85baee77d3c502ea</body>\n</html>\n`, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "public, max-age=3600" } });
     }
     // سئو: robots و sitemap با دامنه‌ی واقعی سایت ساخته می‌شوند
+    // آدرس مستقیم workers.dev (مثلاً خزنده‌ی Cloudflare AI Search): sitemap با همان آدرس ساخته می‌شود تا خزنده از دامنه‌اش بیرون نرود؛ دامنه‌ی اصلی و nginx همان SITE می‌مانند
+    const SMAP = url.hostname.endsWith(".workers.dev") ? url.origin : SITE;
     if (url.pathname === "/robots.txt") {
-      return new Response(`User-agent: *\nAllow: /\n# یاندکس: پارامتر topic (پیشنهاد موضوع روی صفحه‌ی اصلی) صفحه‌ی تکراری حساب نشود\nClean-param: topic /\n\nSitemap: ${SITE}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`User-agent: *\nAllow: /\n# یاندکس: پارامتر topic (پیشنهاد موضوع روی صفحه‌ی اصلی) صفحه‌ی تکراری حساب نشود\nClean-param: topic /\n\nSitemap: ${SMAP}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     if (url.pathname === "/sitemap.xml") {
-      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n${landingSitemapEntries(SITE)}${blogSitemapEntries(SITE)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${SMAP}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n${landingSitemapEntries(SMAP)}${blogSitemapEntries(SMAP)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     // فید RSS وبلاگ
     if (url.pathname === "/feed.xml" && (req.method === "GET" || req.method === "HEAD")) {
