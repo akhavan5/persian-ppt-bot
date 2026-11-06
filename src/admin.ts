@@ -9,6 +9,7 @@ import {
 } from "./settings";
 import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
 import { resolveUid } from "./link";
+import { DAILY_LIMIT, loadSupportConv, supportOverview, supportUsers } from "./support-chat";
 import { getDeckLog, listFiles, loadFile, type DeckLog } from "./files";
 import { hasKey, modelList } from "./llm";
 import { PLANS, activatePlan, payEnabled } from "./payment";
@@ -205,6 +206,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       [cb("🔎 جستجوی کاربر", "ad:se"), cb("🗂 ارائه‌های اخیر", "ad:dk")],
       [cb("📣 پیام همگانی", "ad:bc"), cb("👑 پلن‌های فعال", "ad:sb:0")],
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
+      [cb("💬 پشتیبانی سایت", "ad:sc:r:0")],
       [cb(`💰 پرداخت‌ها${payIssues ? ` 🚨${fa(payIssues)}` : ""}`, "ad:pm:s:0"), cb("🔻 قیف کاربران", "ad:fn:30"), cb("🎁 دعوت‌ها", "ad:iv:t:0")],
       [cb("📱 اپ اندروید (نسخه و اعلان)", "ad:ap"), cb("📧 خروجی ایمیل/موبایل", "ad:ex")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
@@ -393,10 +395,71 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
   if (tgId) row2.push(cb("✉️ پیام به کاربر", `ad:m:${key}`));
   if (row2.length) kb.push(row2);
   const row3: Btn[] = [cb("🗂 فایل‌ها", `ad:ud:${key}`)];
+  if (webId) row3.push(cb("💬 گفتگوی پشتیبانی", `ad:sv:${webId}:999`));
   if (job.busy) row3.push(cb("🔓 آزاد کردن قفل", `ad:ul:${key}`));
   kb.push(row3);
   kb.push([cb("🔄 تازه‌سازی", `ad:u:${key}`), ...backHome]);
   return { text, kb };
+}
+
+// ---------- پشتیبانی سایت (چت هوشمند): آمار به ازای کاربر + نمایش کل گفتگو ----------
+async function supportScreen(env: Env, mode: "r" | "n", page: number): Promise<Screen> {
+  const [ov, list] = await Promise.all([supportOverview(env), supportUsers(env, mode, page, PAGE)]);
+  const lines: string[] = [];
+  const btns: Btn[][] = [];
+  for (let i = 0; i < list.items.length; i++) {
+    const { uid, st } = list.items[i];
+    const u = await getUserById(env, uid).catch(() => null);
+    const label = u?.name || u?.email || u?.mobile || uid;
+    const num = fa(page * PAGE + i + 1);
+    lines.push(`${num}. <b>${esc(label)}</b>${u?.email && u.name ? ` · ${esc(u.email)}` : ""}\n    💬 <b>${fa(st.n)}</b> پیام${st.f ? ` · 📨 ${fa(st.f)} ارجاع` : ""} · 🕒 ${fmtTime(st.t)}`);
+    btns.push([cb(`${num}. ${label.slice(0, 28)} (${fa(st.n)})`, `ad:sv:${uid}:999`)]);
+  }
+  return {
+    text:
+      "💬 <b>پشتیبانی سایت (چت هوشمند)</b>\n\n" +
+      `👥 کاربرانِ دارای گفتگو: <b>${fa(ov.users)}</b>\n` +
+      `✉️ کل پیام‌های کاربران: <b>${fa(ov.msgs)}</b> · 📨 ارجاع به مدیر: <b>${fa(ov.refs)}</b>\n` +
+      `📅 پیام‌های امروز: <b>${fa(ov.today)}</b> <i>(سقف هر کاربر در روز: ${fa(DAILY_LIMIT)})</i>\n\n` +
+      `<b>${mode === "n" ? "بیشترین پیام" : "آخرین فعالیت"}</b>\n` +
+      (lines.length ? lines.join("\n") : "هنوز گفتگویی ثبت نشده است.") +
+      "\n\n<i>روی نام هر کاربر بزن تا کل گفتگویش را ببینی.</i>",
+    kb: [
+      [cb(mode === "r" ? "• 🕒 آخرین فعالیت" : "🕒 آخرین فعالیت", "ad:sc:r:0"), cb(mode === "n" ? "• 🔢 بیشترین پیام" : "🔢 بیشترین پیام", "ad:sc:n:0")],
+      ...btns,
+      pager(`ad:sc:${mode}`, page, (page + 1) * PAGE < list.total),
+      [cb("🔄 تازه‌سازی", `ad:sc:${mode}:${page}`), ...backHome],
+    ].filter((r) => r.length),
+  };
+}
+
+/** کل گفتگوی یک کاربر؛ چون پیام تلگرام محدود است صفحه‌صفحه (قدیمی ← جدید) نمایش داده می‌شود. page بزرگ = آخرین صفحه */
+async function supportConvScreen(env: Env, uid: string, page: number): Promise<Screen> {
+  const [conv, u] = await Promise.all([loadSupportConv(env, uid), getUserById(env, uid).catch(() => null)]);
+  const who = `${esc(u?.name || u?.email || u?.mobile || uid)}${u?.email && u.name ? ` · ${esc(u.email)}` : ""}${u?.mobile ? ` · ${esc(u.mobile)}` : ""}`;
+  const back: Btn[] = [cb("🔙 فهرست پشتیبانی", "ad:sc:r:0"), cb("👤 کارت کاربر", `ad:u:${uid}`)];
+  if (!conv || !conv.m.length) return { text: `💬 <b>گفتگوی پشتیبانی</b>\n👤 ${who}\n\nگفتگویی ثبت نشده یا منقضی شده است.`, kb: [back, backHome] };
+  const blocks = conv.m.map((x) => {
+    const head = x.r === "u" ? "👤 <b>کاربر</b>" : x.f ? "🤖 <b>دستیار</b> 📨 <i>ارجاع‌شده</i>" : "🤖 <b>دستیار</b>";
+    return `${head} · <i>${fmtTime(x.ts)}</i>\n${esc(x.t.slice(0, 1600))}`;
+  });
+  const pages: string[][] = [[]];
+  let size = 0;
+  for (const b of blocks) {
+    if (size + b.length > 3200 && pages[pages.length - 1].length) { pages.push([]); size = 0; }
+    pages[pages.length - 1].push(b); size += b.length + 2;
+  }
+  const p = Math.max(0, Math.min(pages.length - 1, page));
+  const nav: Btn[] = [];
+  if (p > 0) nav.push(cb("◀️ قدیمی‌تر", `ad:sv:${uid}:${p - 1}`));
+  if (p < pages.length - 1) nav.push(cb("جدیدتر ▶️", `ad:sv:${uid}:${p + 1}`));
+  return {
+    text:
+      `💬 <b>گفتگوی پشتیبانی</b>\n👤 ${who}\n🆔 <code>${esc(uid)}</code>\n` +
+      `✉️ ${fa(conv.m.filter((x) => x.r === "u").length)} پیام کاربر · ${fa(conv.m.length)} پیام کل · صفحه ${fa(p + 1)} از ${fa(pages.length)}\n` +
+      `──────────\n${pages[p].join("\n\n")}`,
+    kb: [nav, back, [cb("🔄 تازه‌سازی", `ad:sv:${uid}:${p}`), ...backHome]].filter((r) => r.length),
+  };
 }
 
 // ---------- گزارش دعوت دوستان ----------
@@ -1045,6 +1108,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "x": await answer(); return await tg(env, "deleteMessage", { chat_id: chatId, message_id: mid }).catch(() => {});
       case "st": return await show(await statsScreen(env, [1, 7, 30].includes(Number(b)) ? Number(b) : 7));
       case "us": return await show(await usersScreen(env, b === "w" || b === "b" || b === "r" || b === "e" || b === "a" ? b : "t", Math.max(0, Math.min(2000, Number(c) || 0))));
+      case "sc": return await show(await supportScreen(env, b === "n" ? "n" : "r", Math.max(0, Math.min(2000, Number(c) || 0))));
       case "sb": return await show(await subsScreen(env, Math.max(0, Math.min(2000, Number(b) || 0))));
       case "bn": return await show(await bannedScreen(env));
       case "dk": return await show(await decksScreen(env));
@@ -1112,6 +1176,14 @@ export async function handlePanelCallback(env: Env, cq: any) {
     switch (a) {
       case "u": return await show(await userCard(env, id));
       case "ud": return await show(await userFilesScreen(env, id));
+      case "sv": case "sn": {
+        // شناسه‌ی گفتگوی پشتیبانی همیشه شناسه‌ی پروفایل وب است؛ اگر شناسه‌ی تلگرام آمد به پروفایل وبِ وصل‌شده تبدیل می‌شود
+        const wid = typeof id === "string" ? id : (await identify(env, id)).webId;
+        if (!wid) { await answer("این کاربر پروفایل وب (چت پشتیبانی) ندارد.", true); return; }
+        const scr = await supportConvScreen(env, wid, Math.max(0, Math.min(500, Number(c) || 0)));
+        if (a === "sn") { await answer(); return void (await sendScreen(env, chatId, scr)); } // از اعلان ارجاع: پیام جدید، تا اعلان سر جایش بماند
+        return await show(scr);
+      }
       // از پیام «نظر کاربر»: کارت/فایل‌های کاربر به‌صورت پیام جدید می‌آید تا متن نظر سر جایش بماند
       case "nu": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userCard(env, id)));
       case "nd": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userFilesScreen(env, id)));

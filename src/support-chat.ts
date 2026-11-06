@@ -33,9 +33,10 @@ interface Msg { r: "u" | "a"; t: string; ts: number; f?: 1 }
 interface Conv { uid: string; m: Msg[]; c: number; u: number }
 
 export const DAILY_LIMIT = 10; // سقف پیام کاربر در روز (به وقت ایران)
-const TTL = 30 * 86400;
+const TTL = 90 * 86400; // گفتگو ۹۰ روز نگه داشته می‌شود تا مدیر بتواند مرور کند
 const MAX_TEXT = 600;
-const MAX_STORED = 60; // فقط آخرین ۶۰ پیام نگه داشته می‌شود (قدیمی‌ترها حذف می‌شوند)
+const MAX_STORED = 200; // فقط آخرین ۲۰۰ پیام نگه داشته می‌شود (قدیمی‌ترها حذف می‌شوند)
+const USER_VIEW = 60; // کاربر فقط آخرین ۶۰ پیام را در چت می‌بیند
 const HISTORY_FOR_MODEL = 12;
 const convKey = (uid: string) => `sc:u:${uid}`;
 const quotaKey = (uid: string) => `scd:${uid}:${statDay()}`;
@@ -51,6 +52,59 @@ const clean = (s: string, max: number) => s.replace(/[\u0000-\u0008\u000B\u000C\
 const load = async (env: Env, uid: string) => (await env.KV.get(convKey(uid), "json")) as Conv | null;
 const save = (env: Env, c: Conv) => env.KV.put(convKey(c.uid), JSON.stringify(c), { expirationTtl: TTL });
 
+
+// ---------- آمار پشتیبانی به ازای کاربر (برای پنل مدیر؛ بدون انقضا) ----------
+/** n = تعداد پیام‌های کاربر، f = تعداد پاسخ‌های ارجاع‌شده، s = اولین پیام، t = آخرین پیام */
+export interface SupportStat { n: number; f: number; s: number; t: number }
+const statKey = (uid: string) => `scs:${uid}`;
+const MAXC = "\u{10FFFF}";
+
+/** گفتگوی کامل یک کاربر برای پنل مدیر */
+export const loadSupportConv = (env: Env, uid: string) => load(env, uid);
+
+/** گفتگوهای قدیمی که هنوز شمارنده ندارند را از روی خود گفتگو شمارنده‌دار می‌کند (هر بار حداکثر ۵۰ تا) */
+async function backfillSupportStats(env: Env): Promise<void> {
+  await env.KV.ready();
+  const rs = (await env.DB.prepare(
+    "SELECT c.k AS k, c.v AS v FROM kv c LEFT JOIN kv s ON s.k = 'scs:' || substr(c.k, 6) WHERE c.k >= ?1 AND c.k < ?2 AND (c.exp IS NULL OR c.exp > ?3) AND s.k IS NULL LIMIT 50",
+  ).bind("sc:u:", "sc:u:" + MAXC, Math.floor(Date.now() / 1000)).all<{ k: string; v: string }>()).results ?? [];
+  for (const r of rs) {
+    try {
+      const c = JSON.parse(r.v) as Conv;
+      const uid = r.k.slice(5);
+      const st: SupportStat = { n: c.m.filter((x) => x.r === "u").length, f: c.m.filter((x) => x.f).length, s: c.c, t: c.u };
+      await env.KV.put(statKey(uid), JSON.stringify(st));
+    } catch { /* ردیف خراب نادیده گرفته می‌شود */ }
+  }
+}
+
+export async function supportOverview(env: Env): Promise<{ users: number; msgs: number; refs: number; today: number }> {
+  await backfillSupportStats(env).catch(() => {});
+  const one = async (sql: string, ...b: unknown[]) => Number((await env.DB.prepare(sql).bind(...b).first<{ c: number | null }>())?.c ?? 0);
+  const [users, msgs, refs, today] = await Promise.all([
+    one("SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "scs:", "scs:" + MAXC),
+    one("SELECT SUM(json_extract(v,'$.n')) c FROM kv WHERE k >= ?1 AND k < ?2", "scs:", "scs:" + MAXC),
+    one("SELECT SUM(json_extract(v,'$.f')) c FROM kv WHERE k >= ?1 AND k < ?2", "scs:", "scs:" + MAXC),
+    // سهمیه‌ی امروزِ همه‌ی کاربران (scd:<uid>:<روز>) = پیام‌های امروز
+    one("SELECT SUM(CAST(v AS INTEGER)) c FROM kv WHERE k >= ?1 AND k < ?2 AND k LIKE ?3", "scd:", "scd:" + MAXC, `%:${statDay()}`),
+  ]);
+  return { users, msgs, refs, today };
+}
+
+/** فهرست کاربران پشتیبانی: mode "r" = آخرین فعالیت، "n" = بیشترین پیام */
+export async function supportUsers(env: Env, mode: "r" | "n", page: number, per: number): Promise<{ total: number; items: { uid: string; st: SupportStat }[] }> {
+  await env.KV.ready();
+  const total = Number((await env.DB.prepare("SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2").bind("scs:", "scs:" + MAXC).first<{ c: number }>())?.c ?? 0);
+  const order = mode === "n" ? "json_extract(v,'$.n') DESC, json_extract(v,'$.t') DESC" : "json_extract(v,'$.t') DESC";
+  const rs = (await env.DB.prepare(`SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 ORDER BY ${order} LIMIT ?3 OFFSET ?4`)
+    .bind("scs:", "scs:" + MAXC, per, page * per).all<{ k: string; v: string }>()).results ?? [];
+  const items: { uid: string; st: SupportStat }[] = [];
+  for (const r of rs) {
+    try { items.push({ uid: r.k.slice(4), st: JSON.parse(r.v) as SupportStat }); } catch { /* خراب */ }
+  }
+  return { total, items };
+}
+
 // ---------- سهمیه‌ی روزانه ----------
 async function quotaUsed(env: Env, uid: string): Promise<number> {
   return Math.max(0, Number(await env.KV.get(quotaKey(uid))) || 0);
@@ -62,7 +116,7 @@ async function refundQuota(env: Env, uid: string): Promise<void> {
 }
 const remainingOf = (used: number) => Math.max(0, DAILY_LIMIT - used);
 const view = (c: Conv | null, used: number) => ({
-  msgs: (c?.m ?? []).map(({ r, t, f }) => ({ r, t, f: f ? 1 : 0 })),
+  msgs: (c?.m ?? []).slice(-USER_VIEW).map(({ r, t, f }) => ({ r, t, f: f ? 1 : 0 })),
   remaining: remainingOf(used),
   limit: DAILY_LIMIT,
 });
@@ -216,7 +270,7 @@ async function notifyAdmins(env: Env, user: WebUser, c: Conv, refer: string): Pr
     `📨 <b>ارجاع از چت هوشمند سایت</b>\n🏷 ${REFER_LABEL[refer] ?? REFER_LABEL.other}\n` +
     `👤 ${esc(user.name || user.email || user.mobile || user.id)} · <code>${esc(user.id)}</code>${contact ? `\n${contact}` : ""}\n\n${last}\n\n` +
     `<i>پاسخ از طریق ایمیل/موبایل/تلگرامِ همین کاربر داده می‌شود؛ این چت پاسخ دستی ندارد.</i>`;
-  const buttons = [[{ text: "👤 کارت کاربر", callback_data: `ad:u:${user.id}` }]];
+  const buttons = [[{ text: "👤 کارت کاربر", callback_data: `ad:u:${user.id}` }, { text: "💬 کل گفتگو", callback_data: `ad:sn:${user.id}` }]];
   await Promise.allSettled(adminIds(env).map((id) => sendMessage(env, Number(id), text, { reply_markup: { inline_keyboard: buttons } })));
 }
 
@@ -242,6 +296,8 @@ export async function supportSend(req: Request, env: Env, ip: string): Promise<R
 
   const now = Date.now();
   const conv: Conv = (await load(env, user.id)) ?? { uid: user.id, m: [], c: now, u: now };
+  const priorN = conv.m.filter((x) => x.r === "u").length; // برای کاربرانی که پیش از شمارنده گفتگو داشته‌اند
+  const priorF = conv.m.filter((x) => x.f).length;
   conv.m.push({ r: "u", t: text, ts: now });
   conv.u = now;
 
@@ -250,6 +306,11 @@ export async function supportSend(req: Request, env: Env, ip: string): Promise<R
   conv.m.push({ r: "a", t: r.text, ts: Date.now(), ...(r.refer ? { f: 1 as const } : {}) });
   if (conv.m.length > MAX_STORED) conv.m = conv.m.slice(-MAX_STORED);
   await save(env, conv);
+  try {
+    const old = (await env.KV.get(statKey(user.id), "json")) as SupportStat | null;
+    const st: SupportStat = { n: (old?.n ?? priorN) + 1, f: (old?.f ?? priorF) + (r.refer ? 1 : 0), s: old?.s ?? conv.c, t: now };
+    await env.KV.put(statKey(user.id), JSON.stringify(st)); // بدون انقضا
+  } catch (e) { console.error("support stat", String(e).slice(0, 200)); }
 
   // حداکثر ۳ ارجاع در روز برای هر کاربر (جلوی پرشدن پیام‌های مدیر)
   if (r.refer && !(await hitLimit(env, `scn:${user.id}:${statDay()}`, 3, 172_800))) await notifyAdmins(env, user, conv, r.refer);
