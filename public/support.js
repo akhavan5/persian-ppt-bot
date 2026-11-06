@@ -38,13 +38,11 @@
     "#ppsc textarea{flex:1;font:inherit;color:inherit;border:1px solid var(--line,#e3e9f5);border-radius:12px;padding:8px 10px;background:var(--bg,#f8faff);resize:none;max-height:90px}" +
     "#ppsc textarea:focus{outline:2px solid var(--primary,#2563eb);outline-offset:-1px}#ppsc textarea:disabled{opacity:.6}" +
     "#ppsc .send{border:0;border-radius:12px;padding:9px 14px;color:#fff;font-weight:700;background:var(--primary,#2563eb)}#ppsc .send:disabled{opacity:.5;cursor:default}" +
-    "#ppsc .cnt{margin:6px 2px 0;color:var(--muted,#5b6b86);font-size:12px;text-align:center}" +
     "@media (prefers-reduced-motion:no-preference){#ppsc .panel{animation:ppscIn .18s ease-out}@keyframes ppscIn{from{opacity:0;transform:translateY(8px)}}}" +
     "@media (max-width:480px){#ppsc{left:12px}#ppsc .fab span{display:none}#ppsc .fab{padding:14px}}";
   document.head.appendChild(css);
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-  function fa(n) { return String(n).replace(/\d/g, function (d) { return "۰۱۲۳۴۵۶۷۸۹"[+d]; }); }
 
   var root = el("div"); root.id = "ppsc";
   var fab = el("button", "fab"); fab.type = "button"; fab.setAttribute("aria-label", "گفتگو با دستیار هوشمند"); fab.setAttribute("aria-expanded", "false");
@@ -58,8 +56,7 @@
   var row = el("div", "row"), ta = el("textarea"); ta.rows = 1; ta.maxLength = 600; ta.placeholder = "پیامت را بنویس…"; ta.setAttribute("aria-label", "پیام");
   var send = el("button", "send", "ارسال"); send.type = "button";
   row.append(ta, send);
-  var cnt = el("div", "cnt");
-  ft.append(row, cnt);
+  ft.append(row);
   panel.append(hd, list, ft);
   root.append(panel, fab);
 
@@ -95,8 +92,7 @@
     list.scrollTop = list.scrollHeight;
     var out = remaining <= 0;
     ta.disabled = out; send.disabled = busy || out;
-    ta.placeholder = out ? "سهمیه‌ی امروز تمام شد" : "پیامت را بنویس…";
-    cnt.textContent = out ? "سقف " + fa(limit) + " پیام امروز تمام شد؛ فردا دوباره می‌توانی گفتگو کنی." : "پیام‌های باقی‌مانده‌ی امروز: " + fa(remaining) + " از " + fa(limit);
+    ta.placeholder = out ? "سقف پیام امروز تمام شد؛ فردا دوباره بپرس" : "پیامت را بنویس…";
   }
 
   function apply(d) {
