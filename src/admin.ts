@@ -3,6 +3,7 @@ import { RUBIKA_ID_BASE, isRubikaId } from "./rubika-format";
 import { EITAA_ID_BASE, isEitaaId } from "./eitaa-format";
 import type { Env } from "./env";
 import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
+import { adminReply } from "./support-chat";
 import {
   PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
   setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, statDay, type Platform, type Uid,
@@ -114,7 +115,7 @@ async function identify(env: Env, id: Uid): Promise<Ident> {
 const cardId = (i: Ident): Uid => i.tgId ?? (i.webId as string);
 
 // ---------- ورودی متنی منتظر (جستجو، اعتبار دلخواه، پیام به کاربر، پیام همگانی) ----------
-type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "ver"; s: StoreId | "all" } | { k: "pushw" };
+type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "sc"; cid: string } | { k: "ver"; s: StoreId | "all" } | { k: "pushw" };
 const inKey = (adminId: number) => `adm:in:${adminId}`;
 const setInput = (env: Env, adminId: number, p: Pending) => env.KV.put(inKey(adminId), JSON.stringify(p), { expirationTtl: 600 });
 const clearInput = (env: Env, adminId: number) => env.KV.delete(inKey(adminId));
@@ -943,6 +944,14 @@ export async function handleAdminInput(env: Env, chatId: number, adminId: number
 
   if (p.k === "bc") { await previewBroadcast(env, chatId, text.trim()); return true; }
 
+  if (p.k === "sc") {
+    if (text.length > 1500) { await sendMessage(env, chatId, "متن بیش از حد طولانی است (حداکثر ۱۵۰۰ کاراکتر)."); return true; }
+    const ok = await adminReply(env, p.cid, text.trim());
+    await sendMessage(env, chatId, ok ? "✅ پاسخ در چت سایت نمایش داده می‌شود." : "⌛️ این گفتگو منقضی شده یا پیدا نشد.");
+    if (ok) await logAction(env, adminId, `پاسخ به چت سایت (${text.length} نویسه)`);
+    return true;
+  }
+
   if (p.k === "msg") {
     const who = await identify(env, p.id);
     if (!who.tgId) { await sendMessage(env, chatId, "این کاربر تلگرام وصل‌شده ندارد."); return true; }
@@ -1116,6 +1125,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "nu": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userCard(env, id)));
       case "nd": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userFilesScreen(env, id)));
       case "cr": return await prompt({ k: "cr", id }, `✏️ <b>اعتبار دلخواه</b> برای <code>${id}</code>\nیک عدد بفرست؛ مثلاً <code>25</code> یا <code>-3</code>.`, `ad:u:${id}`);
+      case "sc": return await prompt({ k: "sc", cid: String(b ?? "").slice(0, 24) }, "💬 <b>پاسخ به گفتگوی سایت</b>\nمتن پاسخ را بفرست؛ در ویجت چت همان کاربر نمایش داده می‌شود.", "ad:h");
       case "m": return await prompt({ k: "msg", id }, `✉️ <b>پیام به کاربر</b> <code>${id}</code>\nمتن پیام را بفرست.`, `ad:u:${id}`);
       case "g": {
         const n = Math.trunc(Number(c));

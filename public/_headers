@@ -34,6 +34,9 @@
 /pwa.js
   Cache-Control: public, max-age=3600
 
+/support.js
+  Cache-Control: public, max-age=3600
+
 /offline.html
   X-Robots-Tag: noindex, nofollow
   Cache-Control: public, max-age=3600

@@ -204,7 +204,7 @@ function shell(site: string, current: string, main: string): string {
 </header>
 ${main}
 ${renderFooter()}
-<script src="/pwa.js" defer></script>
+<script src="/pwa.js" defer></script><script src="/support.js" defer></script>
 </body>
 </html>
 `;
