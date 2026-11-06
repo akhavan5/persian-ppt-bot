@@ -33,9 +33,9 @@ interface Msg { r: "u" | "a"; t: string; ts: number; f?: 1 }
 interface Conv { uid: string; m: Msg[]; c: number; u: number }
 
 export const DAILY_LIMIT = 10; // سقف پیام کاربر در روز (به وقت ایران)
-const TTL = 90 * 86400; // گفتگو ۹۰ روز نگه داشته می‌شود تا مدیر بتواند مرور کند
+const TTL = 30 * 86400; // گفتگو ۹۰ روز نگه داشته می‌شود تا مدیر بتواند مرور کند
 const MAX_TEXT = 600;
-const MAX_STORED = 200; // فقط آخرین ۲۰۰ پیام نگه داشته می‌شود (قدیمی‌ترها حذف می‌شوند)
+const MAX_STORED = 60; // فقط آخرین ۲۰۰ پیام نگه داشته می‌شود (قدیمی‌ترها حذف می‌شوند)
 const USER_VIEW = 60; // کاربر فقط آخرین ۶۰ پیام را در چت می‌بیند
 const HISTORY_FOR_MODEL = 12;
 const convKey = (uid: string) => `sc:u:${uid}`;
