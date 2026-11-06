@@ -120,7 +120,7 @@ class MainActivity : ComponentActivity() {
         try { startActivity(i) } catch (_: Exception) {}
     }
 
-    private fun openFile(f: Saved): Boolean = try {
+    private fun openFile(f: Saved, retried: Boolean = false): Boolean = try {
         startActivity(
             Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(f.uri, f.mime)
@@ -130,10 +130,23 @@ class MainActivity : ComponentActivity() {
         true
     } catch (e: ActivityNotFoundException) {
         false
+    } catch (e: SecurityException) {
+        // دسترسی به آدرس MediaStore رد شد (کرش گزارش‌شده روی شیائومی): با کپی موقتی FileProvider یک بار دوباره تلاش می‌کنیم
+        val c = if (retried) null else Storage.cacheCopy(this, f)
+        if (c != null) openFile(c, retried = true) else { vm.toast("باز کردن فایل ممکن نشد؛ فایل در پوشه‌ی دانلودها ذخیره شده است."); true }
     }
 
     /** pkg != null: مستقیم به همان برنامه (تلگرام، ایتا، واتساپ …) می‌فرستد؛ اگر نصب نبود یا قبول نکرد، فهرست سیستم باز می‌شود. */
-    private fun shareFile(f: Saved, pkg: String? = null, caption: String = "") {
+    private fun shareFile(f: Saved, pkg: String? = null, caption: String = "", retried: Boolean = false) {
+        try {
+            shareFileUnsafe(f, pkg, caption)
+        } catch (e: SecurityException) {
+            val c = if (retried) null else Storage.cacheCopy(this, f)
+            if (c != null) shareFile(c, pkg, caption, retried = true) else vm.toast("اشتراک‌گذاری فایل ممکن نشد")
+        }
+    }
+
+    private fun shareFileUnsafe(f: Saved, pkg: String?, caption: String) {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = f.mime
             putExtra(Intent.EXTRA_STREAM, f.uri)

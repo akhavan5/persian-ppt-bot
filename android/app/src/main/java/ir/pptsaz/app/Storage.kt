@@ -70,6 +70,20 @@ object Storage {
         return Saved(uri, mime, name, isPublic = Build.VERSION.SDK_INT >= 29)
     }
 
+    /**
+     * کپی موقتی فایل در کش اپ با آدرس FileProvider؛ وقتی startActivity با آدرس MediaStore به SecurityException می‌خورد
+     * (در اندروید ۱۱+ و به‌ویژه MIUI/HyperOS گاهی مالکیت ردیف Downloads عوض می‌شود) از این استفاده می‌شود.
+     * اگر کپی ممکن نشد null برمی‌گرداند.
+     */
+    fun cacheCopy(ctx: Context, f: Saved): Saved? = try {
+        val dir = File(ctx.cacheDir, "share").apply { mkdirs() }
+        dir.listFiles()?.forEach { if (System.currentTimeMillis() - it.lastModified() > 3_600_000L) it.delete() }
+        val out = uniqueFile(dir, cleanName(f.name, f.mime))
+        val inp = ctx.contentResolver.openInputStream(f.uri) ?: throw IOException("open source failed")
+        inp.use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+        Saved(FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", out), f.mime, f.name, isPublic = false)
+    } catch (_: Exception) { null }
+
     /** محتوای فایل ذخیره‌شده را به مقصدی که کاربر با «ذخیره در گوشی» انتخاب کرده کپی می‌کند. */
     fun copyTo(ctx: Context, src: Uri, dest: Uri) {
         val inp = ctx.contentResolver.openInputStream(src) ?: throw IOException("open source failed")

@@ -5,4 +5,6 @@
     <files-path name="downloads_internal" path="downloads/" />
     <!-- عکسی که با دوربین گرفته می‌شود -->
     <cache-path name="camera" path="camera/" />
+    <!-- کپی موقتی برای باز کردن/اشتراک‌گذاری وقتی دسترسی به آدرس MediaStore رد می‌شود (مثلاً بعضی گوشی‌های شیائومی) -->
+    <cache-path name="share" path="share/" />
 </paths>
