@@ -261,10 +261,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun sendOtp(mobile: String) {
-        val m = normalizeIranMobile(mobile)
+    /** id: موبایل یا ایمیل (مثل وب در یک کادر). */
+    fun sendOtp(id: String) {
+        val m = normalizeLoginId(id)
         if (m == null) {
-            toast("شماره‌ی موبایل معتبر نیست؛ مثل 09123456789 بنویسید")
+            toast(if ('@' in id) "ایمیل معتبر نیست؛ مثل name@example.com بنویسید" else "شماره‌ی موبایل معتبر نیست؛ مثل 09123456789 بنویسید")
             return
         }
         viewModelScope.launch {
@@ -272,7 +273,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 Api.otpSend(m)
                 _state.update { it.copy(busy = false, otpSent = true, otpTick = it.otpTick + 1) }
-                toast("کد تأیید ارسال شد")
+                toast(if ('@' in m) "کد به ایمیلتان فرستاده شد" else "کد تأیید ارسال شد")
             } catch (e: ApiException) {
                 _state.update { it.copy(busy = false) }
                 toast(e.message ?: "")
@@ -297,11 +298,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(otpSent = false) }
     }
 
-    fun verifyOtp(mobile: String, code: String) {
+    fun verifyOtp(id: String, code: String) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                Api.otpVerify(normalizeIranMobile(mobile) ?: normDigits(mobile), normDigits(code))
+                Api.otpVerify(normalizeLoginId(id) ?: normDigits(id), normDigits(code))
                 // تا آماده‌شدن صفحه‌ی اصلی روی همان صفحه‌ی کد با حالت «در حال ورود» می‌مانیم؛
                 // قبلاً otpSent زودتر false می‌شد و چند ثانیه صفحه‌ی شماره دوباره دیده می‌شد
                 load()
@@ -999,8 +1000,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** موبایل (09…) یا ایمیلِ تمیزشده؛ نامعتبر = null */
     private fun normContact(kind: String, raw: String): String? =
-        if (kind == "email") raw.trim().lowercase().takeIf { it.length <= 254 && Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$").matches(it) }
-        else normalizeIranMobile(raw)
+        if (kind == "email") normalizeEmail(raw) else normalizeIranMobile(raw)
 
     /** ثبت موبایل/ایمیل در پروفایل ← ۱: ارسال کد (پیامک یا ایمیل). onDone(true) = کد فرستاده شد. */
     fun sendContactCode(kind: String, raw: String, onDone: (Boolean) -> Unit) {

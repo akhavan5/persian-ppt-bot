@@ -29,6 +29,7 @@ data class Config(
     val audio: Boolean = false, // اسلاید صوتی و پادکست همراه ارائه (سرور Gemini TTS دارد)
     val voice: Boolean = false, // ورودی صوتی: فایل صوتی/ویس به متن (سرور کلید Deepgram دارد)
     val googleClientId: String = "", // خالی = ورود با گوگل خاموش
+    val emailOtp: Boolean = false, // ورود/ثبت‌نام با کد ایمیلی (مثل وب؛ در همان کادر موبایل)
 )
 
 data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "",
@@ -105,6 +106,7 @@ fun parseConfig(j: JSONObject): Config {
         audio = j.optBoolean("audio"),
         voice = j.optBoolean("voice"),
         googleClientId = if (j.optBoolean("google")) j.str("googleClientId") else "",
+        emailOtp = j.optBoolean("emailOtp"),
         dailyFree = j.optInt("dailyFree"),
         bazaar = j.optBoolean(Store.ID), // «bazaar» در نسخه‌ی بازار، «myket» در نسخه‌ی مایکت
         latestVersion = storeVer?.optInt("latest") ?: appObj?.optInt("latest") ?: 0,
@@ -178,6 +180,13 @@ fun normDigits(s: String): String = buildString {
  * شماره‌ی موبایل ایران را به شکل استاندارد 09xxxxxxxxx برمی‌گرداند؛ اگر معتبر نبود null.
  * ورودی‌های قابل قبول: 09123456789، 9123456789، +989123456789، 00989123456789، 989123456789 (با ارقام فارسی و فاصله/خط تیره).
  */
+/** ایمیلِ تمیزشده (حروف کوچک)؛ نامعتبر = null. */
+fun normalizeEmail(raw: String): String? =
+    raw.trim().lowercase().takeIf { it.length <= 254 && Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$").matches(it) }
+
+/** کادر ورود مثل وب هم موبایل می‌گیرد هم ایمیل: اگر «@» داشته باشد ایمیل است. نامعتبر = null. */
+fun normalizeLoginId(raw: String): String? = if ('@' in raw) normalizeEmail(raw) else normalizeIranMobile(raw)
+
 fun normalizeIranMobile(raw: String): String? {
     var d = normDigits(raw).filter { it.isDigit() || it == '+' }
     d = when {

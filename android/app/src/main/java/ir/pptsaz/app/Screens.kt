@@ -102,6 +102,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -267,11 +268,15 @@ private fun ErrorScreen(st: UiState, vm: AppViewModel) {
 
 @Composable
 fun LoginScreen(st: UiState, vm: AppViewModel) {
-    var mobile by rememberSaveable { mutableStateOf("") }
+    var ident by rememberSaveable { mutableStateOf("") } // موبایل یا ایمیل (مثل وب در یک کادر)
     var code by rememberSaveable { mutableStateOf("") }
     var left by rememberSaveable { mutableStateOf(0) } // ثانیه‌های مانده تا امکان «ارسال دوباره‌ی کد»
-    val norm = normalizeIranMobile(mobile)
     val otpOn = st.config?.otp != false
+    val emailOn = st.config?.emailOtp == true
+    val anyOn = otpOn || emailOn
+    val isEmail = '@' in ident
+    // موبایل فقط اگر ورود پیامکی روشن است و ایمیل فقط اگر ورود ایمیلی روشن است معتبر شمرده می‌شود
+    val norm = normalizeLoginId(ident)?.takeIf { if (isEmail) emailOn else otpOn }
     // با هر ارسال کد، شمارش معکوس از اول شروع می‌شود
     LaunchedEffect(st.otpSent, st.otpTick) {
         if (st.otpSent) {
@@ -288,7 +293,7 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
         if (c != null) {
             code = c
             vm.consumeSmsCode()
-            if (norm != null && !st.busy) vm.verifyOtp(norm, c)
+            if (norm != null && !isEmail && !st.busy) vm.verifyOtp(norm, c)
         }
     }
     val cs = MaterialTheme.colorScheme
@@ -302,13 +307,13 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
             Box(Modifier.align(Alignment.TopStart).offset(x = (-50).dp, y = (-30).dp).size(190.dp).background(Color.White.copy(alpha = 0.08f), CircleShape))
             Box(Modifier.align(Alignment.BottomEnd).offset(x = 40.dp, y = 40.dp).size(150.dp).background(Color.White.copy(alpha = 0.08f), CircleShape))
             Column(
-                Modifier.fillMaxWidth().statusBarsPadding().padding(start = 28.dp, end = 28.dp, top = 36.dp, bottom = 56.dp),
+                Modifier.fillMaxWidth().statusBarsPadding().padding(start = 28.dp, end = 28.dp, top = 20.dp, bottom = 36.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(Modifier.size(76.dp).clip(RoundedCornerShape(24.dp)).background(Color.White), contentAlignment = Alignment.Center) {
-                    AppIcon(AppIcons.Slides, tint = Color(0xFF2563EB), size = 40.dp)
+                Box(Modifier.size(60.dp).clip(RoundedCornerShape(20.dp)).background(Color.White), contentAlignment = Alignment.Center) {
+                    AppIcon(AppIcons.Slides, tint = Color(0xFF2563EB), size = 32.dp)
                 }
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(12.dp))
                 Text("پاورپوینت‌ساز", style = MaterialTheme.typography.headlineMedium, color = Color.White)
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -318,55 +323,63 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
             }
         }
 
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 28.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 22.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val googleId = st.config?.googleClientId.orEmpty()
-            if (!otpOn && googleId.isEmpty()) {
+            if (!anyOn && googleId.isEmpty()) {
                 SurfaceCard(color = cs.errorContainer, borderColor = null) {
                     Text(
                         "ورود با پیامک فعلاً در دسترس نیست. لطفاً از سایت pptsaz.ir استفاده کنید.",
                         color = cs.onErrorContainer, modifier = Modifier.padding(16.dp),
                     )
                 }
-            } else if (otpOn) {
+            } else if (anyOn) {
                 val fieldStyle: TextStyle = MaterialTheme.typography.titleLarge.copy(textAlign = TextAlign.Center, textDirection = TextDirection.Ltr)
                 AnimatedContent(targetState = st.otpSent, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) }, label = "otp") { sent ->
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         if (!sent) {
                             Text("ورود یا ثبت‌نام", style = MaterialTheme.typography.titleLarge)
-                            Text("شماره‌ی موبایل خود را وارد کنید تا کد تأیید برایتان پیامک شود.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                when {
+                                    otpOn && emailOn -> "شماره‌ی موبایل یا ایمیل خود را وارد کنید تا کد تأیید برایتان ارسال شود."
+                                    emailOn -> "ایمیل خود را وارد کنید تا کد تأیید برایتان ارسال شود."
+                                    else -> "شماره‌ی موبایل خود را وارد کنید تا کد تأیید برایتان پیامک شود."
+                                },
+                                color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                            )
+                            val badId = if (isEmail) ident.substringAfter('@').contains('.') && norm == null else ident.length >= 10 && norm == null
                             OutlinedTextField(
-                                value = mobile,
-                                onValueChange = { mobile = it.filter { c -> c.isDigit() || c == '+' }.take(14) },
-                                placeholder = { Text("09123456789", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                                value = ident,
+                                onValueChange = {
+                                    ident = if (emailOn) it.filter { c -> !c.isWhitespace() }.take(254)
+                                    else it.filter { c -> c.isDigit() || c == '+' }.take(14)
+                                },
+                                placeholder = {
+                                    Text(
+                                        when {
+                                            otpOn && emailOn -> "09123456789  یا  name@example.com"
+                                            emailOn -> "name@example.com"
+                                            else -> "09123456789"
+                                        },
+                                        Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
+                                        style = if (otpOn && emailOn) MaterialTheme.typography.bodyMedium else LocalTextStyle.current,
+                                    )
+                                },
                                 textStyle = fieldStyle,
                                 singleLine = true,
                                 enabled = !st.busy,
-                                isError = mobile.length >= 10 && norm == null,
-                                supportingText = { if (mobile.length >= 10 && norm == null) Text("شماره‌ی موبایل معتبر نیست؛ مثل 09123456789") },
+                                isError = badId,
+                                supportingText = {
+                                    if (badId) Text(if (isEmail) "ایمیل معتبر نیست؛ مثل name@example.com" else "شماره‌ی موبایل معتبر نیست؛ مثل 09123456789")
+                                },
                                 shape = RoundedCornerShape(18.dp),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done),
+                                keyboardOptions = KeyboardOptions(keyboardType = if (emailOn) KeyboardType.Email else KeyboardType.Phone, imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(onDone = { if (norm != null) vm.sendOtp(norm) }),
-                                modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.PhoneNumber },
+                                modifier = Modifier.fillMaxWidth().semantics { contentType = if (isEmail) ContentType.EmailAddress else ContentType.PhoneNumber },
                             )
                             GradientButton("ارسال کد تأیید", { norm?.let { vm.sendOtp(it) } }, Modifier.fillMaxWidth(), enabled = norm != null, loading = st.busy)
-                            val linkColor = cs.primary
-                            Text(
-                                buildAnnotatedString {
-                                    append("با ادامه، ")
-                                    withLink(
-                                        LinkAnnotation.Clickable(
-                                            tag = "privacy",
-                                            styles = TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)),
-                                        ) { vm.openUrl(Api.BASE + "/privacy") },
-                                    ) { append("شرایط استفاده و حریم خصوصی") }
-                                    append(" را می‌پذیرم.")
-                                },
-                                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
-                                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
-                            )
                         } else {
                             Text("کد تأیید را وارد کنید", style = MaterialTheme.typography.titleLarge)
-                            Text("کد به شماره‌ی " + (norm ?: mobile).faStr() + " ارسال شد.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                            Text(if (isEmail) "کد به ایمیل " + (norm ?: ident) + " ارسال شد." else "کد به شماره‌ی " + (norm ?: ident).faStr() + " ارسال شد.", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                             OutlinedTextField(
                                 value = code,
                                 onValueChange = { code = it.filter { c -> c.isDigit() }.take(8) },
@@ -375,12 +388,12 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                                 singleLine = true,
                                 shape = RoundedCornerShape(18.dp),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { if (code.length >= 4 && !st.busy) vm.verifyOtp(mobile, code) }),
+                                keyboardActions = KeyboardActions(onDone = { if (code.length >= 4 && !st.busy) vm.verifyOtp(ident, code) }),
                                 modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.SmsOtpCode },
                             )
-                            GradientButton("ورود", { vm.verifyOtp(mobile, code) }, Modifier.fillMaxWidth(), enabled = code.length >= 4, loading = st.busy)
+                            GradientButton("ورود", { vm.verifyOtp(ident, code) }, Modifier.fillMaxWidth(), enabled = code.length >= 4, loading = st.busy)
                             TextButton(
-                                onClick = { vm.sendOtp(mobile) }, enabled = left == 0 && !st.busy,
+                                onClick = { vm.sendOtp(norm ?: ident) }, enabled = left == 0 && !st.busy,
                                 modifier = Modifier.align(Alignment.CenterHorizontally),
                             ) {
                                 AppIcon(AppIcons.Refresh, size = 18.dp)
@@ -390,17 +403,17 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                             TextButton(onClick = { vm.editMobile() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                                 AppIcon(AppIcons.Edit, size = 18.dp)
                                 Spacer(Modifier.width(6.dp))
-                                Text("ویرایش شماره")
+                                Text(if (isEmail) "ویرایش ایمیل" else "ویرایش شماره")
                             }
                         }
                     }
                 }
             }
 
-            if (googleId.isNotEmpty() && !(otpOn && st.otpSent)) {
+            if (googleId.isNotEmpty() && !(anyOn && st.otpSent)) {
                 val ctx = LocalContext.current
                 val scope = rememberCoroutineScope()
-                if (otpOn) {
+                if (anyOn) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         HorizontalDivider(Modifier.weight(1f))
                         Text("یا", color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -414,7 +427,25 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                     enabled = !st.busy,
                     shape = RoundedCornerShape(18.dp),
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) { Text("ورود با حساب گوگل", style = MaterialTheme.typography.titleSmall) }
+                ) { Text("ورود با گوگل (جیمیل)", style = MaterialTheme.typography.titleSmall) }
+            }
+
+            if (!(anyOn && st.otpSent)) {
+                val linkColor = cs.primary
+                Text(
+                    buildAnnotatedString {
+                        append("با ادامه، ")
+                        withLink(
+                            LinkAnnotation.Clickable(
+                                tag = "privacy",
+                                styles = TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)),
+                            ) { vm.openUrl(Api.BASE + "/privacy") },
+                        ) { append("شرایط استفاده و حریم خصوصی") }
+                        append(" را می‌پذیرم.")
+                    },
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

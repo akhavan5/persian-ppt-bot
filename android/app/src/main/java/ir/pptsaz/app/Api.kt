@@ -124,12 +124,13 @@ object Api {
     /** null یعنی وارد نشده‌اید. */
     suspend fun me(): Me? = parseMe(call("GET", "/api/me"))
 
-    suspend fun otpSend(mobile: String) {
-        call("POST", "/api/auth/otp/send", JSONObject().put("mobile", mobile))
+    /** ورود با کد: id موبایل (پیامک) یا ایمیل (اگر «@» دارد)؛ سرور از روی کلید body تشخیص می‌دهد. */
+    suspend fun otpSend(id: String) {
+        call("POST", "/api/auth/otp/send", JSONObject().put(if ('@' in id) "email" else "mobile", id))
     }
 
-    suspend fun otpVerify(mobile: String, code: String) {
-        call("POST", "/api/auth/otp/verify", JSONObject().put("mobile", mobile).put("code", code))
+    suspend fun otpVerify(id: String, code: String) {
+        call("POST", "/api/auth/otp/verify", JSONObject().put(if ('@' in id) "email" else "mobile", id).put("code", code))
     }
 
     /** ورود با ID token گوگل (گرفته‌شده داخل اپ)؛ سرور توکن را اعتبارسنجی و نشست می‌سازد. */
