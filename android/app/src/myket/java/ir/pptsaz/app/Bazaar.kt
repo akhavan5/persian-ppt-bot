@@ -240,8 +240,29 @@ class BazaarBilling(
         }
     }
 
+    /** consume(Purchase) در کتابخانه‌ی مایکت package-private است (فقط consumeAsync عمومی است)؛ با reflection صدایش می‌زنیم (کلاس‌های مایکت در proguard-rules.pro نگه داشته می‌شوند). */
+    private val consumeMethod: java.lang.reflect.Method? by lazy {
+        try { IabHelper::class.java.getDeclaredMethod("consume", Purchase::class.java).apply { isAccessible = true } } catch (_: Throwable) { null }
+    }
+
     private fun consumeSafely(h: IabHelper, p: Purchase, cb: (Boolean) -> Unit) {
-        safely({ h.consume(p) }) { err ->
+        val m = consumeMethod
+        if (m == null) {
+            // نسخه‌ای از کتابخانه بدون این متد: به consumeAsync برمی‌گردیم (خطر کرش بسیار کم‌تر از queryInventory است ولی صفر نیست)
+            try {
+                h.consumeAsync(p, IabHelper.OnConsumeFinishedListener { _, r -> cb(r.isSuccess) })
+            } catch (_: Throwable) {
+                cb(false)
+            }
+            return
+        }
+        safely({
+            try {
+                m.invoke(h, p)
+            } catch (e: java.lang.reflect.InvocationTargetException) {
+                throw e.targetException ?: e // خطای واقعی (NPE سرویس قطع‌شده، IabException…) تا serviceLost تشخیصش بدهد
+            }
+        }) { err ->
             if (err != null) serviceLost(h, err)
             cb(err == null)
         }
