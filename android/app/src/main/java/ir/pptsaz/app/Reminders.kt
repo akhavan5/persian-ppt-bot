@@ -30,6 +30,8 @@ import java.util.concurrent.TimeUnit
  *  files1         ۱ ساعت بعد از ساخت ارائه: «فایل‌هایت آماده‌ی دانلود است» (همتای ایمیل سرور؛ تا ۲۰ ساعت مهلت چون فایل‌ها ۲۴ ساعت می‌مانند).
  *  buy48          پیشنهاد خرید پلن: ۴۸ ساعت بعد از آخرین ارائه، فقط اگر پلن فعال ندارد و هرگز پلن نداشته؛ یک‌بار برای هر دستگاه
  *                 (کاربران قدیمی که زمان آخرین ارائه‌شان ثبت نشده، ۴۸ ساعت بعد از اولین باز شدنِ نسخه‌ی جدید).
+ *  pf             هدیه‌ی تکمیل پروفایل (همتای اعلان «profile-gift» سرور): ۲۶ ساعت تا ۸ روز بعد از آخرین ارائه، فقط اگر سرور هنوز
+ *                 هدیه‌ی ثبت موبایل/ایمیل را قابل‌دریافت می‌داند (giftAvailable)؛ یک‌بار برای هر دستگاه؛ با ثبت و تایید لغو می‌شود.
  *
  * قواعد: ساعت ۹ تا ۲۱ تهران؛ حداکثر ۱ در روز و ۳ در هفته؛ «بازگشت» حداکثر ۲ بار در ماه؛ هر یادآور برای هر کلید فقط یک‌بار؛
  * شرط هر یادآور هنگام نمایش دوباره از وضعیت ذخیره‌شده خوانده می‌شود (نه زمان زمان‌بندی)؛ اگر اپ باز است نشان داده نمی‌شود.
@@ -40,7 +42,7 @@ object Reminders {
     private const val DAY = 24 * HOUR
     private const val TEHRAN = 12_600_000L // UTC+3:30 (ایران ساعت تابستانی ندارد)
 
-    private val KINDS = listOf("act1", "act2", "daily", "plan3", "plan1", "planout", "extras", "inactive7", "inactive21", "files1", "buy48")
+    private val KINDS = listOf("act1", "act2", "daily", "plan3", "plan1", "planout", "extras", "inactive7", "inactive21", "files1", "buy48", "pf")
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("reminders", Context.MODE_PRIVATE)
 
@@ -80,6 +82,8 @@ object Reminders {
             if (!p.contains("first_seen")) e.putLong("first_seen", now)
             e.putInt("decks", decks).putInt("credits", me.credits).putBoolean("unl", me.unlimited)
             e.putLong("last_open", now)
+            e.putBoolean("gift", me.giftAvailable && me.giftCredits > 0 && me.giftMissing.isNotEmpty())
+                .putInt("gift_credits", me.giftCredits).putString("gift_missing", me.giftMissing.joinToString(","))
 
             // عکس لحظه‌ای پلن: برای تشخیص «اعتبار پلن تمام شد، روز مانده» (سرور چنین پلنی را دیگر «فعال» نمی‌داند)
             val prevExp = p.getLong("plan_exp", 0L)
@@ -130,6 +134,9 @@ object Reminders {
 
             scheduleInactive(ctx, now)
 
+            // هدیه‌ی تکمیل پروفایل: با ثبت موبایل/ایمیل (giftAvailable=false) لغو می‌شود
+            if (p.getBoolean("gift", false)) scheduleGift(ctx, p, now) else cancel(ctx, "pf")
+
             // پیشنهاد خرید برای کاربران قدیمی: ارائه ساخته‌اند ولی زمان آخرین ارائه روی گوشی ثبت نشده (فقط یک‌بار زمان‌بندی می‌شود)
             if (decks > 0 && !me.unlimited && !planActive && !p.getBoolean("ever_plan", false) && !p.getBoolean("buy48_done", false) &&
                 p.getLong("deck_done_at", 0L) == 0L && !p.getBoolean("buy48_legacy", false)
@@ -139,6 +146,15 @@ object Reminders {
             }
         } catch (_: Exception) {
         }
+    }
+
+    /** ۲۶ ساعت تا ۸ روز بعد از آخرین ارائه. فقط وقتی زمان هنوز نرسیده زمان‌بندی می‌شود تا فراخوانی‌های پیاپی onMe کار در حال انتظار را عقب نیندازد. */
+    private fun scheduleGift(ctx: Context, p: android.content.SharedPreferences, now: Long) {
+        val doneAt = p.getLong("deck_done_at", 0L)
+        if (doneAt == 0L || p.getInt("decks", 0) < 1) return
+        val at = snap(doneAt + 26 * HOUR)
+        val deadline = doneAt + 8 * DAY
+        if (at > now && at < deadline) schedule(ctx, "pf", at, deadline)
     }
 
     /** باز شدن اپ (onStart): شمارنده‌ی «غیرفعال» از نو شروع می‌شود. */
@@ -169,6 +185,7 @@ object Reminders {
             schedule(ctx, "extras", t, t + 3 * DAY)
             // ۱ ساعت بعد: فایل‌هایت آماده‌ی دانلود است (تا ۲۰ ساعت، قبل از پاک‌شدن ۲۴ ساعته‌ی فایل‌ها)
             schedule(ctx, "files1", snap(now + HOUR), now + 20 * HOUR)
+            if (p.getBoolean("gift", false)) scheduleGift(ctx, p, now)
             // ۴۸ ساعت بعد از آخرین ارائه: پیشنهاد خرید (با هر ارائه‌ی تازه از نو شمرده می‌شود)
             if (!p.getBoolean("unl", false) && p.getString("plan_id", "").orEmpty().isEmpty() &&
                 !p.getBoolean("ever_plan", false) && !p.getBoolean("buy48_done", false)
@@ -270,6 +287,18 @@ object Reminders {
                 val doneAt = p.getLong("deck_done_at", 0L)
                 if (doneAt != 0L && now - doneAt < 2 * DAY - HOUR) return null // ارائه‌ی تازه‌تری ساخته شده؛ زمان‌بندی جدیدش جداست
                 Msg("🚀 ارائه‌های بیشتر و بلندتر می‌خوای؟", "با پلن ماهانه ارائه و اسلاید بیشتری داری؛ پلن‌ها رو ببین.", 3, key = "once")
+            }
+            "pf" -> {
+                val doneAt = p.getLong("deck_done_at", 0L)
+                if (!p.getBoolean("gift", false) || decks < 1 || doneAt == 0L) return null
+                if (now < doneAt + 26 * HOUR - HOUR || now > doneAt + 8 * DAY) return null // ارائه‌ی تازه‌تری ساخته شده؛ زمان‌بندی جدیدش جداست
+                val missing = p.getString("gift_missing", "").orEmpty().split(",").filter { it.isNotEmpty() }
+                if (missing.isEmpty()) return null
+                val n = p.getInt("gift_credits", 0).fa()
+                val both = missing.size > 1
+                val what = if (both) "شماره‌ی موبایل و ایمیل" else if (missing[0] == "mobile") "شماره‌ی موبایل" else "ایمیل"
+                val gift = if (both) "$n اعتبار هدیه برای هر مورد" else "$n اعتبار هدیه"
+                Msg("🎁 هدیه‌ی تکمیل پروفایل", "با ثبت و تایید $what، $gift بگیر (برای هر مورد فقط یک‌بار).", 3, key = "once")
             }
             "inactive7", "inactive21" -> {
                 val days = if (kind == "inactive7") 7 else 21
