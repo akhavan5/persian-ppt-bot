@@ -31,6 +31,14 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .btn{font:700 .95rem Vazirmatn,Tahoma,sans-serif;border:0;border-radius:12px;padding:11px 16px;background:var(--btn);color:var(--btn-fg);width:100%;cursor:pointer}
 .btn.ghost{background:var(--sec);color:var(--fg);border:1px solid var(--line)}
 .btn.sm{width:auto;padding:6px 12px;font-size:.82rem;border-radius:9px}
+/* نظر کاربر کنار ارائه (امتیاز ستاره‌ای + متن؛ اعتبار هدیه‌ی یک‌باره) */
+.fbBox{margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:12px;background:var(--sec)}
+.fbBox h3{margin:0 0 2px;font-size:.95rem}
+.fbStars{display:flex;gap:2px;margin:8px 0;direction:ltr;justify-content:flex-end}
+.fbStars button{background:none;border:0;padding:2px 5px;font-size:1.8rem;line-height:1;cursor:pointer;color:var(--line)}
+.fbStars button.on{color:#f59e0b}
+.fbBox textarea{min-height:76px;background:var(--card)}
+.fbGift{margin:8px 0 0;font-size:.84rem;color:var(--ok)}
 /* پلیر پادکست (blob با هدر Authorization گرفته می‌شود چون تگ audio نمی‌تواند هدر بفرستد) */
 .ppList{display:grid;gap:8px;margin-top:10px}.ppList:empty{display:none}
 .pp{background:var(--sec);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:grid;gap:6px}
@@ -215,6 +223,18 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <div id="doneExtraJobs"></div>
         <div class="fx" id="doneExtras" hidden></div>
         <img class="poster" id="posterImg" alt="پوستر" hidden>
+        <div class="fbBox" id="fbBox">
+          <div id="fbForm">
+            <h3>💬 نظرت درباره‌ی این ارائه چیست؟</h3>
+            <div class="muted">امتیاز بده و اگر خواستی بنویس چه چیزی خوب بود یا بهتر می‌شد؛ تک‌تک نظرها را خودمان می‌خوانیم.</div>
+            <div class="fbStars" id="fbStars" role="radiogroup" aria-label="امتیاز از ۱ تا ۵"></div>
+            <textarea id="fbText" maxlength="1500" placeholder="نظرت را اینجا بنویس (اختیاری اگر امتیاز دادی)…"></textarea>
+            <div class="fbGift" id="fbGift" hidden>🎁 با ثبت نظرت <b id="fbGiftN">۱</b> اعتبار رایگان هدیه می‌گیری (فقط یک‌بار).</div>
+            <div class="err" id="fbErr" hidden></div>
+            <button class="btn" id="fbSend" type="button" style="margin-top:10px">ارسال نظر</button>
+          </div>
+          <div id="fbThanks" hidden><h3 id="fbThanksTxt">🙏 ممنون از نظرت!</h3></div>
+        </div>
       </div>
 
       <div class="card" id="jobErr" hidden><b>⚠️ ساخت ارائه ناموفق بود</b><div class="err" id="jobErrText"></div></div>
@@ -1028,6 +1048,33 @@ async function track(jobId, resumed = false) {
   if (my === tracking) { jobTimer(false); $("#go").disabled = false; view(null); }
 }
 
+// ---------- نظر کاربر کنار ارائه (مینی‌اپ تلگرام و برنامک ایتا) ----------
+let fbRating = 0, fbTitle = "";
+function fbPaint() { document.querySelectorAll("#fbStars button").forEach((b) => { const on = Number(b.dataset.v) <= fbRating; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(Number(b.dataset.v) === fbRating)); }); }
+function fbReset(title) {
+  fbRating = 0; fbTitle = title || "";
+  const st = $("#fbStars");
+  if (!st.childElementCount) for (let v = 5; v >= 1; v--) { const b = document.createElement("button"); b.type = "button"; b.dataset.v = String(v); b.textContent = "★"; b.setAttribute("role", "radio"); b.setAttribute("aria-label", fa(v) + " از ۵"); b.onclick = () => { fbRating = v; fbPaint(); TG.haptic("select"); }; st.appendChild(b); }
+  fbPaint();
+  $("#fbText").value = ""; show($("#fbErr"), false);
+  const gift = !!(me && me.feedback && me.feedback.available);
+  show($("#fbGift"), gift); if (gift) $("#fbGiftN").textContent = fa(me.feedback.credits || 1);
+  const btn = $("#fbSend"); btn.disabled = false; btn.textContent = "ارسال نظر"; btn.onclick = fbSubmit;
+  show($("#fbForm"), true); show($("#fbThanks"), false);
+}
+async function fbSubmit() {
+  const text = $("#fbText").value.trim(), err = $("#fbErr"), btn = $("#fbSend");
+  if (!text && !fbRating) { err.textContent = "لطفاً امتیاز بده یا نظرت را بنویس."; show(err, true); return; }
+  show(err, false); btn.disabled = true; btn.textContent = "در حال ارسال…";
+  try {
+    const r = await api("/api/feedback", { method: "POST", body: { text, rating: fbRating, title: fbTitle, via: IS_EITAA ? "eitaa" : "telegram" } });
+    $("#fbThanksTxt").textContent = r.rewarded ? "🙏 ممنون از نظرت! 🎁 " + fa(r.credits || 1) + " اعتبار رایگان به حسابت اضافه شد." : "🙏 ممنون از نظرت! به دست ما رسید.";
+    show($("#fbForm"), false); show($("#fbThanks"), true); TG.haptic("success");
+    if (me) me.feedback = { available: false, credits: (me.feedback && me.feedback.credits) || 1 };
+    refreshMe();
+  } catch (e) { err.textContent = e.message || "ارسال نشد؛ دوباره امتحان کن."; show(err, true); btn.disabled = false; btn.textContent = "ارسال نظر"; TG.haptic("error"); }
+}
+
 function showDone(jobId, s, took = 0) {
   lastTopic = $("#topic").value.trim(); TG.haptic("success");
   const dl = $("#doneDl"); show(dl, TG.canDownload); dl.onclick = (e) => dlFile(jobId, e.currentTarget);
@@ -1040,6 +1087,7 @@ function showDone(jobId, s, took = 0) {
   if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
   const warn = [s.poster === "failed" ? "ساخت پوستر ناموفق بود و اعتبارش برگشت." : "", s.handout === "failed" ? "ساخت جزوه ناموفق بود و اعتبارش برگشت." : ""].filter(Boolean).join(" ");
   $("#doneWarn").textContent = warn; show($("#doneWarn"), !!warn);
+  fbReset(s.title);
   trackAudio(s);
   $("#done").dataset.job = jobId; doneExtras([]); loadFiles(); // دکمه‌های «ساخت جداگانه» بعد از رسیدن فهرست فایل‌ها (loadFiles → doneExtras) پر می‌شوند
   view("done"); $("#done").scrollIntoView({ behavior: "smooth", block: "center" });

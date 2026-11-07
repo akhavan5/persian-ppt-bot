@@ -11,6 +11,7 @@ import {
 import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
 import { appCrash } from "./app-crash";
+import { feedbackInfo, submitFeedback } from "./feedback";
 import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { listSamples, sampleLabel } from "./samples";
@@ -191,6 +192,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     const bad = await putPushToken(env, b?.token, b?.promo !== false, b?.remove === true, user.id);
     return bad ? err(bad, 400) : json({ ok: true });
   }
+  if (path === "/api/feedback" && method === "POST") return submitFeedback(env, user, await readBody(req, 6_000)); // نظر کنار ارائه (سایت/مینی‌اپ/ایتا) + هدیه‌ی یک‌باره
   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
   if (path === "/api/miniapp/dl" && method === "POST") return miniappDlLink(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
@@ -362,6 +364,7 @@ async function tgLinkVerify(req: Request, env: Env, user: WebUser): Promise<Resp
 async function me(env: Env, user: WebUser): Promise<Response> {
   const dailyFree = await grantDailyFree(env, user.id).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز؛ dailyFree=true یعنی همین حالا اضافه شد
   const [c, settings, running, sub, maxSlides, maxImages, telegram, decks] = await Promise.all([getCredit(env, user.id), getSettings(env, user.id), runningJob(env, user.id), getActiveSub(env, user.id), maxSlidesFor(env, user.id), maxImagesFor(env, user.id), getLinkedTg(env, user.id), getDeckCount(env, user.id).catch(() => 0)]);
+  const feedback = await feedbackInfo(env, user); // available=true ⇒ ثبت نظر هنوز اعتبار هدیه دارد
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
   const activeJob = running.busy ? running.jobId : null;
@@ -374,6 +377,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     dailyFree,
     // هدیه‌ی تکمیل پروفایل: available=true یعنی با ثبت و تایید یکی از موارد missing (mobile/email) هنوز می‌شود credits اعتبار گرفت؛ note = جمله‌ی کنار هدیه
     contactReward: { ...(await contactRewardInfo(env, user)), note: CONTACT_REWARD_NOTE },
+    feedback,
     decks, // تعداد ارائه‌های موفق (اپ اندروید برای یادآور فعال‌سازی)
     credit: c.unlimited
       ? { unlimited: true }

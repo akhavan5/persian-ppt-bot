@@ -214,6 +214,14 @@ details>summary::after{content:"▾";color:var(--muted)} details[open]>summary::
 #setBox[open]>summary{margin-bottom:14px}
 #setBox[open]>summary::after{content:"بستن ▴";background:#fff;color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
 .doneBtns{display:flex;flex-wrap:wrap;gap:8px}.fontNote{margin:12px 0 0;line-height:1.9}
+/* نظر کاربر کنار ارائه (امتیاز ستاره‌ای + متن؛ اعتبار هدیه‌ی یک‌باره) */
+.fbBox{margin-top:16px;padding:14px;border:1px dashed var(--line);border-radius:14px;background:var(--soft)}
+.fbBox h3{margin:0 0 4px;font-size:1rem}
+.fbStars{display:flex;gap:4px;margin:10px 0;direction:ltr;justify-content:flex-end}
+.fbStars button{background:none;border:0;padding:2px 4px;font-size:1.7rem;line-height:1;cursor:pointer;color:#cbd5e1;box-shadow:none}
+.fbStars button.on{color:#f59e0b}
+.fbBox textarea{min-height:80px}
+.fbGift{margin:8px 0 0;font-size:.88rem;color:var(--ok)}
 /* پلیر پادکست (تگ audio + کنترل‌های سفارشی؛ نوار زمان همیشه چپ‌به‌راست مثل پخش‌کننده‌های رایج) */
 .ppList{display:grid;gap:10px;margin:12px 0 0}.ppList:empty{display:none}
 .pp{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px}
@@ -448,6 +456,18 @@ address{font-style:normal}
       <p class="muted" id="donePodcastFail" hidden>⚠️ شروع ساخت پادکست ناموفق بود؛ ارائه‌ات آماده است و اعتبار پادکست برگردانده شد.</p>
       <p class="muted" id="donePosterFail" hidden>⚠️ ساخت پوستر ناموفق بود؛ ارائه‌ات آماده است و اعتبار پوستر برگردانده شد.</p>
       <p class="muted fontNote" id="doneFont" hidden>🔤 برای نمایش درست فایل PPTX روی دستگاهت، فونت <b id="doneFontName">Vazirmatn</b> را نصب کن: <a id="doneFontLink" href="/fonts/Vazirmatn.zip" download>دانلود مستقیم فونت</a>. پیش‌نمایش و PDF بدون نصب فونت درست دیده می‌شوند.</p>
+      <div class="fbBox" id="fbBox">
+        <div id="fbForm">
+          <h3>💬 نظرت درباره‌ی این ارائه چیست؟</h3>
+          <div class="muted" style="font-size:.88rem">امتیاز بده و اگر خواستی بنویس چه چیزی خوب بود یا بهتر می‌شد؛ تک‌تک نظرها را خودمان می‌خوانیم.</div>
+          <div class="fbStars" id="fbStars" role="radiogroup" aria-label="امتیاز از ۱ تا ۵"></div>
+          <textarea id="fbText" maxlength="1500" placeholder="نظرت را اینجا بنویس (اختیاری اگر امتیاز دادی)…"></textarea>
+          <p class="fbGift" id="fbGift" hidden>🎁 با ثبت نظرت <b id="fbGiftN">۱</b> اعتبار رایگان هدیه می‌گیری (فقط یک‌بار).</p>
+          <div class="msg err" id="fbErr" hidden></div>
+          <button class="btn" id="fbSend" type="button" style="margin-top:10px">ارسال نظر</button>
+        </div>
+        <div id="fbThanks" hidden><h3 id="fbThanksTxt">🙏 ممنون از نظرت!</h3></div>
+      </div>
     </div>
     <div id="jobErr" hidden><div class="msg err" id="jobErrText"></div></div>
   </section>
@@ -1239,6 +1259,34 @@ function openBuy(why = "") {
 }
 $("#creditChip").onclick = () => openBuy();
 $("#upgradeBtn").onclick = () => openBuy();
+// ---------- نظر کاربر کنار ارائه ----------
+let fbRating = 0, fbTitle = "";
+function fbPaint() { document.querySelectorAll("#fbStars button").forEach((b) => { const on = Number(b.dataset.v) <= fbRating; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(Number(b.dataset.v) === fbRating)); }); }
+function fbReset(title) {
+  fbRating = 0; fbTitle = title || "";
+  const st = $("#fbStars");
+  if (!st.childElementCount) for (let v = 5; v >= 1; v--) { const b = document.createElement("button"); b.type = "button"; b.dataset.v = String(v); b.textContent = "★"; b.setAttribute("role", "radio"); b.setAttribute("aria-label", fa(v) + " از ۵"); b.onclick = () => { fbRating = v; fbPaint(); }; st.appendChild(b); }
+  fbPaint();
+  $("#fbText").value = ""; $("#fbErr").hidden = true;
+  const gift = !!(me && me.feedback && me.feedback.available);
+  $("#fbGift").hidden = !gift; if (gift) $("#fbGiftN").textContent = fa(me.feedback.credits || 1);
+  $("#fbSend").disabled = false; $("#fbSend").textContent = "ارسال نظر";
+  $("#fbForm").hidden = false; $("#fbThanks").hidden = true;
+}
+async function fbSubmit() {
+  const text = $("#fbText").value.trim(), err = $("#fbErr"), btn = $("#fbSend");
+  if (!text && !fbRating) { err.textContent = "لطفاً امتیاز بده یا نظرت را بنویس."; err.hidden = false; return; }
+  err.hidden = true; btn.disabled = true; btn.textContent = "در حال ارسال…";
+  try {
+    const r = await api("/api/feedback", { method: "POST", body: { text, rating: fbRating, title: fbTitle, via: "web" } });
+    $("#fbThanksTxt").textContent = r.rewarded ? "🙏 ممنون از نظرت! 🎁 " + fa(r.credits || 1) + " اعتبار رایگان به حسابت اضافه شد." : "🙏 ممنون از نظرت! به دست ما رسید.";
+    $("#fbForm").hidden = true; $("#fbThanks").hidden = false;
+    if (me) me.feedback = { available: false, credits: (me.feedback && me.feedback.credits) || 1 };
+    refreshMe();
+  } catch (e) { err.textContent = e.message || "ارسال نشد؛ دوباره امتحان کن."; err.hidden = false; btn.disabled = false; btn.textContent = "ارسال نظر"; }
+}
+document.addEventListener("DOMContentLoaded", () => { const b = $("#fbSend"); if (b) b.onclick = fbSubmit; });
+
 async function refreshMe() { try { const r = await api("/api/me"); if (r.user) { me = r; renderCredit(); if (window.pptPush) window.pptPush.refresh(); } } catch {} }
 
 let pendingPlan = null;
@@ -1654,6 +1702,7 @@ async function track(jobId, resumed = false) {
         img.src = src;
         pDl.hidden = false; pDl.onclick = (ev) => download(s.posterId, ev.currentTarget);
       }
+      fbReset(s.title);
       jobView("done"); loadFiles(); trackAudio(s);
       if (window.pptPush) setTimeout(function () { window.pptPush.offer(); }, 1500); // اعلان وب: پیشنهاد (یک‌بار در ۱۴ روز) بعد از اولین ارائه‌ی موفق
     } else { $("#jobErrText").textContent = s.message; jobView("err"); }
