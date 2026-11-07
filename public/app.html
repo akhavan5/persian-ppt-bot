@@ -25,7 +25,7 @@ h2{font-size:1rem;margin:0 0 8px}
 .row>*{min-width:0}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 label.f{display:block;font-size:.82rem;color:var(--hint);margin:0 0 2px}
-textarea,select,input[type=url]{width:100%;font:inherit;font-size:16px;color:var(--fg);background:var(--sec);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+textarea,select,input[type=url],input.pfIn{width:100%;font:inherit;font-size:16px;color:var(--fg);background:var(--sec);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
 textarea{min-height:104px;resize:vertical}
 textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-offset:-1px}
 .btn{font:700 .95rem Vazirmatn,Tahoma,sans-serif;border:0;border-radius:12px;padding:11px 16px;background:var(--btn);color:var(--btn-fg);width:100%;cursor:pointer}
@@ -240,6 +240,10 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
           <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
         </div>
+      </div>
+      <div class="card" id="pfCard">
+        <h2>👤 پروفایل</h2>
+        <div id="pfBody"></div>
       </div>
       <div class="card" id="invCard">
         <h2>🎁 دعوت دوستان</h2>
@@ -637,7 +641,7 @@ async function refreshMe() {
     const r = await api("/api/me");
     if (!r.user) return;
     const lim = r.maxSlides !== me.maxSlides || r.maxImages !== me.maxImages; // مثلاً بعد از خرید پلن
-    me = r; renderHead(); renderCreditInfo();
+    me = r; renderHead(); renderCreditInfo(); renderProfile();
     if (lim) renderMake(); // انتخاب‌های فعلی فرم حفظ می‌شود (prevS/prevI)
   } catch {}
 }
@@ -1306,7 +1310,7 @@ function renderSettings() {
   show($("#modelBox"), (cfg.models || []).length > 1);
   fill("#model", (cfg.models || []).map((m) => [m.id, m.name + (m.free === false ? " (ویژه)" : "")]), s.model || (cfg.models.find((m) => m.free !== false) || cfg.models[0] || {}).id);
   for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
-  renderCreditInfo();
+  renderCreditInfo(); renderProfile();
 }
 async function save(patch) {
   try { me.settings = (await api("/api/settings", { method: "PUT", body: patch })).settings; renderSettings(); toast("ذخیره شد ✓"); TG.haptic("select"); } // فقط تب تنظیمات دوباره رندر می‌شود؛ انتخاب‌های تب «ساخت» دست نمی‌خورد
@@ -1325,6 +1329,65 @@ async function openBuy(btn) {
     try { const d = await api("/api/miniapp/buy", { method: "POST" }); TG.openLink(d.url); }
     catch (e) { toast(e.message); }
   });
+}
+// ---------- پروفایل: ثبت موبایل (کد پیامکی) و ایمیل (کد ایمیلی) + هدیه‌ی تکمیل پروفایل (همان API سایت و اپ اندروید) ----------
+let pf = null; // فرم باز: { kind: "mobile"|"email", step: "v"|"c", v, c }
+const toEn = (x) => String(x).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+const pfValue = () => pf.kind === "mobile" ? toEn(pf.v).replace(/[\s-]/g, "") : toEn(pf.v).trim().toLowerCase();
+function renderProfile() {
+  const box = $("#pfBody"); if (!box || !me || !me.user) return;
+  const u = me.user, cr = me.contactReward || {}, miss = cr.missing || [];
+  const row = (kind, icon, label, val) => h("div", { class: "sw" },
+    h("span", {}, `${icon} ${label}: `, val ? h("bdi", { dir: "ltr" }, String(val)) : "ثبت نشده", val ? " ✅" : ""),
+    !val && miss.includes(kind) && !(pf && pf.kind === kind)
+      ? h("button", { class: "btn ghost sm", type: "button", onclick: () => { pf = { kind, step: "v", v: "", c: "" }; renderProfile(); } }, "ثبت")
+      : null);
+  const kids = [
+    h("div", { class: "muted", style: "margin-bottom:4px" }, "نام: " + (u.name || "—")),
+    row("mobile", "📱", "موبایل", u.mobile),
+    row("email", "✉️", "ایمیل", u.email),
+  ];
+  if (cr.available && cr.credits > 0) {
+    kids.push(h("div", { class: "muted", style: "margin-top:8px;line-height:1.9" },
+      `🎁 با ثبت و تأیید هر مورد، ${fa(cr.credits)} اعتبار هدیه می‌گیری (برای هر مورد فقط یک‌بار).`, cr.note ? [h("br"), cr.note] : null));
+  }
+  if (pf) {
+    const isM = pf.kind === "mobile";
+    const form = h("div", { style: "margin-top:10px;display:grid;gap:8px" });
+    if (pf.step === "v") {
+      form.append(
+        h("label", { class: "f", for: "pfV" }, isM ? "شماره‌ی موبایل (کد پیامک می‌شود)" : "ایمیل (کد به ایمیلت فرستاده می‌شود)"),
+        h("input", { class: "pfIn", id: "pfV", type: isM ? "tel" : "email", inputmode: isM ? "tel" : "email", autocomplete: isM ? "tel" : "email", dir: "ltr",
+          placeholder: isM ? "09123456789" : "name@example.com", value: pf.v, oninput: (e) => { pf.v = e.target.value; } }),
+        h("button", { class: "btn", type: "button", onclick: (e) => busy(e.currentTarget, "در حال ارسال…", async () => {
+          const v = pfValue();
+          if (!v) return toast(isM ? "شماره‌ی موبایل را وارد کن." : "ایمیل را وارد کن.");
+          try { await api("/api/auth/otp/send", { method: "POST", body: { [pf.kind]: v } }); pf.step = "c"; pf.c = ""; toast(isM ? "کد پیامک شد" : "کد به ایمیلت فرستاده شد"); renderProfile(); }
+          catch (err) { toast(err.message); }
+        }) }, "ارسال کد"),
+        h("button", { class: "btn ghost", type: "button", onclick: () => { pf = null; renderProfile(); } }, "انصراف"));
+    } else {
+      form.append(
+        h("div", { class: "muted" }, "کد ارسال‌شده به ", h("bdi", { dir: "ltr" }, pfValue()), " را وارد کن."),
+        h("input", { class: "pfIn", id: "pfC", type: "text", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "8", dir: "ltr", placeholder: "••••••", value: pf.c,
+          oninput: (e) => { pf.c = e.target.value; } }),
+        h("button", { class: "btn", type: "button", onclick: (e) => busy(e.currentTarget, "در حال ثبت…", async () => {
+          const code = toEn(pf.c).replace(/\s/g, "");
+          if (code.length < 4) return toast("کد را وارد کن.");
+          try {
+            const r = await api("/api/profile/" + pf.kind, { method: "POST", body: { [pf.kind]: pfValue(), code } });
+            if (r.user) me.user = r.user;
+            pf = null;
+            toast(r.reward > 0 ? `🎁 ${fa(r.reward)} اعتبار هدیه گرفتی` : "ثبت شد ✓");
+            TG.haptic("select");
+            await refreshMe(); renderProfile();
+          } catch (err) { toast(err.message); }
+        }) }, "تأیید و ثبت"),
+        h("button", { class: "btn ghost", type: "button", onclick: () => { pf.step = "v"; renderProfile(); } }, "ویرایش " + (isM ? "شماره" : "ایمیل")));
+    }
+    kids.push(form);
+  }
+  box.replaceChildren(...kids);
 }
 if (IS_EITAA) $("#invCard").hidden = true; // دعوت دوستان در ایتا پشتیبانی نمی‌شود
 $("#inv").onclick = (e) => busy(e.currentTarget, "در حال آماده‌سازی…", async () => {
