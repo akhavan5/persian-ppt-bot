@@ -15,7 +15,9 @@ import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
 import { appVerCommand } from "./app-version";
-import { editMessage, envFor, esc, sendDocument, sendMessage, tg } from "./telegram";
+import { editMessage, envFor, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
+import { wavSeconds } from "./wav";
+import { siteHost } from "./deck-service";
 import { isBaleId } from "./bale-format";
 import { isRubikaId } from "./rubika-format";
 import { toEn, toFa } from "./util";
@@ -438,7 +440,16 @@ async function handleCallback(env: Env, cq: any) {
     // ارائه‌ی دوباره‌فرستاده‌شده: دکمه‌ی همراه‌هایی که هنوز ساخته نشده‌اند (پوستر، جزوه، اسلاید صوتی، پادکست) زیرش هم می‌آید
     const sm = isSampleId(a) ? await sampleById(env, a) : undefined;
     if (sm) { // نمونه‌ی دائمی: بایت‌های اصلی با کپشن آماده‌ی خودش؛ بدون دکمه‌ی ساخت همراه
-      return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `${sampleCaption(sm)}\n<i>(${SAMPLE_BADGE})</i>`, { mime: sampleMime(sm) });
+      const cap = `${sampleCaption(sm)}\n<i>(${SAMPLE_BADGE})</i>`;
+      if (sm.kind === "podcast") { // پخش‌کننده‌ی صوتی تلگرام (کنترل سرعت و جلو/عقب)؛ همان روش ارسال پادکست واقعی
+        const wav = new Uint8Array(f.data);
+        return await sendAudio(env, chatId, wav, f.entry.name, cap, { title: sm.title, performer: siteHost(env), duration: wavSeconds(wav) });
+      }
+      return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, cap, { mime: sampleMime(sm) });
+    }
+    if (/\.wav$/i.test(f.entry.name)) {
+      const wav = new Uint8Array(f.data);
+      return await sendAudio(env, chatId, wav, f.entry.name, `${/-podcast(-\d+)?$/.test(a) ? "🎙" : "🔊"} <b>${esc(f.entry.title)}</b>`, { title: f.entry.title, ...(/-podcast(-\d+)?$/.test(a) ? { performer: siteHost(env) } : {}), duration: wavSeconds(wav) });
     }
     const isDeck = !/\.(png|jpe?g|docx|wav)$/i.test(f.entry.name);
     const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a).catch(() => new Set<ExtraKind>(["poster", "handout", "audio", "podcast"]))) : [];

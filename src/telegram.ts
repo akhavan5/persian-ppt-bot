@@ -121,7 +121,7 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
 }
 
 /** ارسال فایل صوتی (پخش‌کننده‌ی تلگرام با عنوان و مدت). تلگرام رسماً MP3/M4A می‌خواهد؛ اگر WAV را نپذیرفت، همان فایل به‌صورت سند فرستاده می‌شود (باز هم داخل تلگرام پخش می‌شود). */
-export async function sendAudio(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { title?: string; performer?: string; duration?: number; mime?: string } = {}) {
+export async function sendAudio(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { title?: string; performer?: string; duration?: number; mime?: string; reply_markup?: unknown } = {}) {
   const mime = extra.mime ?? "audio/wav";
   if (isEitaaId(chatId)) throw new Error("Eitaa: ارسال فایل به چت پشتیبانی نمی‌شود");
   const rt = route(env, chatId);
@@ -133,6 +133,7 @@ export async function sendAudio(env: Env, chatId: number, data: Uint8Array, file
   if (extra.title) form.append("title", extra.title.slice(0, 200));
   if (extra.performer) form.append("performer", extra.performer.slice(0, 100));
   if (extra.duration) form.append("duration", String(extra.duration));
+  if (extra.reply_markup) form.append("reply_markup", JSON.stringify(extra.reply_markup));
   form.append("audio", new Blob([data], { type: mime }), filename);
   try {
     const r = await fetch(`${rt.base}/bot${rt.token}/sendAudio`, { method: "POST", body: form, signal: AbortSignal.timeout(180_000) });
@@ -142,7 +143,7 @@ export async function sendAudio(env: Env, chatId: number, data: Uint8Array, file
   } catch (e) {
     console.error(`${rt.bale ? "bale" : "telegram"} sendAudio`, String(e).slice(0, 200));
   }
-  await sendDocument(env, chatId, data, filename, caption, { mime });
+  await sendDocument(env, chatId, data, filename, caption, { mime, ...(extra.reply_markup ? { reply_markup: extra.reply_markup } : {}) });
 }
 
 /** ارسال عکس (پیش‌نمایش داخل چت). سقف تلگرام: ۱۰ مگابایت و مجموع عرض+ارتفاع ≤ ۱۰۰۰۰ پیکسل */

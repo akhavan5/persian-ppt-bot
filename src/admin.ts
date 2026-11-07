@@ -2,7 +2,8 @@ import { BALE_ID_BASE, isBaleId } from "./bale-format";
 import { RUBIKA_ID_BASE, isRubikaId } from "./rubika-format";
 import { EITAA_ID_BASE, isEitaaId } from "./eitaa-format";
 import type { Env } from "./env";
-import { editMessage, esc, sendDocument, sendMessage, tg } from "./telegram";
+import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
+import { wavSeconds } from "./wav";
 import {
   PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
   setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, statDay, type Platform, type Uid,
@@ -1320,8 +1321,11 @@ export async function handleAdminFileCallback(env: Env, cq: any) {
   if (!f) return await sendMessage(env, chatId, "⌛️ این فایل دیگر در دسترس نیست (فایل‌ها ۲۴ ساعت و حداکثر ۹ فایل آخر هر کاربر (پلاس ۱۸، پرو ۳۰) نگه داشته می‌شوند).");
   const isDeckFile = !/-(poster|handout|audio(-s\d+)?|podcast(-\d+)?)$/.test(fid);
   const pdfThere = isDeckFile && (await cachedPdf(env, userId, fid).catch(() => null)) != null; // دکمه‌ی نمونه‌ی PDF فقط اگر PDF این ارائه ساخته شده
-  await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`,
-    { reply_markup: sampleKb(userId, fid, pdfThere) });
+  const head = `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`;
+  if (/\.wav$/i.test(f.entry.name)) { // پادکست/صدا: با پخش‌کننده‌ی صوتی تلگرام (کنترل سرعت)
+    const wav = new Uint8Array(f.data);
+    await sendAudio(env, chatId, wav, f.entry.name, head, { title: f.entry.title, duration: wavSeconds(wav), reply_markup: sampleKb(userId, fid, false) });
+  } else await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, head, { reply_markup: sampleKb(userId, fid, pdfThere) });
   // اگر برای همین ارائه همراه‌ها هم ساخته شده (و هنوز نگه داشته می‌شوند)، همراهش فرستاده می‌شوند: پوستر، جزوه، اسلاید صوتی، صدای اسلایدهای جاماندنی و پادکست
   // (اسلاید صوتی و پادکست فقط برای کاربران وب ذخیره می‌شوند؛ در تلگرام مستقیم به چت خودِ کاربر رفته‌اند)
   if (/-(poster|handout|audio(-s\d+)?|podcast(-\d+)?)$/.test(fid)) return;
@@ -1341,7 +1345,10 @@ export async function handleAdminFileCallback(env: Env, cq: any) {
   for (const { x, k } of extras) {
     const extra = await loadFile(env, userId, x.id).catch(() => null);
     if (!extra) continue;
-    await sendDocument(env, chatId, new Uint8Array(extra.data), extra.entry.name, `${kinds[k].label} · <b>${esc(extra.entry.title)}</b>\n👤 <code>${userId}</code>`, { reply_markup: sampleKb(userId, x.id, false) })
+    const cap = `${kinds[k].label} · <b>${esc(extra.entry.title)}</b>\n👤 <code>${userId}</code>`;
+    await (/\.wav$/i.test(extra.entry.name)
+      ? (() => { const w = new Uint8Array(extra.data); return sendAudio(env, chatId, w, extra.entry.name, cap, { title: extra.entry.title, duration: wavSeconds(w), reply_markup: sampleKb(userId, x.id, false) }); })()
+      : sendDocument(env, chatId, new Uint8Array(extra.data), extra.entry.name, cap, { reply_markup: sampleKb(userId, x.id, false) }))
       .catch((err) => console.error("admin send extra", x.id, err));
   }
 }
