@@ -873,12 +873,12 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                     if (cfg.audio) {
                         HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                         ToggleRow(
-                            title = "اسلاید صوتی", subtitle = "صدای گوینده داخل هر اسلاید؛ چند دقیقه بعد از ارائه آماده می‌شود", icon = AppIcons.Slides,
+                            title = "اسلاید صوتی", subtitle = "صدای گوینده داخل هر اسلاید", icon = AppIcons.Slides,
                             checked = form.audio, badge = EXTRA_CREDIT, onChange = { form.audio = it },
                         )
                         HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                         ToggleRow(
-                            title = "پادکست", subtitle = "گفت‌وگوی دونفره درباره‌ی موضوع ارائه؛ چند دقیقه بعد از ارائه آماده می‌شود", icon = AppIcons.Mic,
+                            title = "پادکست", subtitle = "گفت‌وگوی دونفره درباره‌ی موضوع ارائه", icon = AppIcons.Mic,
                             checked = form.podcast, badge = EXTRA_CREDIT, onChange = { form.podcast = it },
                         )
                     }
