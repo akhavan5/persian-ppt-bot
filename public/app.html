@@ -60,8 +60,8 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .dot{width:14px;height:14px;border-radius:50%;display:inline-block}
 .file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .file:first-child{border-top:0}
-.file strong{display:block;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.file>div:first-child{min-width:0;flex:1}
+.file strong{display:-webkit-box;font-size:.92rem;overflow:hidden;white-space:normal;overflow-wrap:anywhere;line-height:1.6;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.file>div:first-child{min-width:0;flex:1 1 100%}
 /* همراه‌های بعد از ساخت ارائه (پوستر، جزوه، اسلاید صوتی، پادکست): ردیف جدا زیر هر ارائه */
 .file{flex-wrap:wrap}
 .file .fx,#doneExtras{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
