@@ -228,6 +228,7 @@ details>summary::after{content:"▾";color:var(--muted)} details[open]>summary::
 .file .pp-slot{flex:1 1 100%}.file .pp-slot:empty{display:none}
 @media(max-width:520px){.pp-row{flex-wrap:wrap;justify-content:center}.pp-seek{flex:1 1 100%;order:5}}
 
+.sample-badge{display:inline-block;margin-inline-start:6px;padding:1px 8px;border-radius:999px;background:#fff3e0;color:#b45309;font-size:11px;font-weight:700}
 .file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .file .fa{display:flex;gap:6px;flex:none}
 .file:last-child{border-bottom:0} .file>div:first-child{min-width:0;flex:1 1 180px} .file strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1831,9 +1832,9 @@ async function loadFiles() {
       slot.append(podcastPlayer(f.id, f.title, true)); ev.currentTarget.textContent = "✕ بستن پلیر";
     } }, "▶ پخش") : null;
     return h("div", { class: "file" },
-      h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${f.poster ? "پوستر" : f.handout ? "جزوه (Word)" : f.audio === "podcast" ? "پادکست" : f.audio === "slides" ? (f.slides ? "اسلاید صوتی · " + fa(f.slides) + " اسلاید" : "صدای یک اسلاید") : fa(f.slides) + " اسلاید"} · تا ${fa(hrs)} ساعت دیگر`)),
+      h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, f.sample ? `${f.label} · ` : `${f.poster ? "پوستر" : f.handout ? "جزوه (Word)" : f.audio === "podcast" ? "پادکست" : f.audio === "slides" ? (f.slides ? "اسلاید صوتی · " + fa(f.slides) + " اسلاید" : "صدای یک اسلاید") : fa(f.slides) + " اسلاید"} · تا ${fa(hrs)} ساعت دیگر`, f.sample ? h("span", { class: "sample-badge" }, "نمونه") : null)),
       h("div", { class: "fa" },
-        f.handout || f.audio ? null : f.poster
+        f.handout || f.audio || (f.sample && !f.poster && !f.pdf) ? null : f.poster || f.pdf
           ? h("a", { class: "btn ghost sm", href: "/api/files/" + encodeURIComponent(f.id) + "?inline=1", target: "_blank", rel: "noopener" }, "👁 نمایش")
           : h("a", { class: "btn ghost sm", href: previewUrl(f.id), target: "_blank", rel: "noopener" }, "👁 پیش‌نمایش / PDF"),
         playBtn,

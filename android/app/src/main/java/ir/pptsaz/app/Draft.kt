@@ -44,7 +44,7 @@ object FileCache {
     fun save(ctx: Context, list: List<FileItem>) {
         val a = JSONArray()
         list.forEach {
-            a.put(JSONObject().put("id", it.id).put("title", it.title).put("slides", it.slides).put("t", it.t).put("poster", it.poster).put("handout", it.handout).put("audio", it.audio).put("extras", JSONArray(it.extras)))
+            a.put(JSONObject().put("id", it.id).put("title", it.title).put("slides", it.slides).put("t", it.t).put("poster", it.poster).put("handout", it.handout).put("audio", it.audio).put("extras", JSONArray(it.extras)).put("sample", it.sample).put("pdf", it.pdf).put("label", it.label))
         }
         p(ctx).edit().putString("files", a.toString()).apply()
     }
@@ -57,11 +57,12 @@ object FileCache {
                 FileItem(
                     it.optString("id"), it.optString("title"), it.optInt("slides"), it.optLong("t"), it.optBoolean("poster"), it.optBoolean("handout"), it.optString("audio"),
                     it.optJSONArray("extras")?.let { a -> (0 until a.length()).map { i -> a.optString(i) }.filter { k -> k in EXTRA_KINDS } } ?: emptyList(),
+                    it.optBoolean("sample"), it.optBoolean("pdf"), it.optString("label"),
                 )
             }
             .filter {
                 val ms = if (it.t in 1..9_999_999_999L) it.t * 1000 else it.t // سرور ثانیه یا میلی‌ثانیه بفرستد هر دو درست است
-                it.id.isNotEmpty() && now - ms < DAY
+                it.id.isNotEmpty() && (it.sample || now - ms < DAY) // نمونه‌ها دائمی‌اند
             }
     } catch (_: Exception) {
         emptyList()

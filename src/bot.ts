@@ -7,8 +7,9 @@ import {
   DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_EVERY, REF_MAX, holdReferral, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
-import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
+import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminSampleCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
 import { listFiles, loadFile } from "./files";
+import { SAMPLE_BADGE, isSampleId, listSamples, sampleById, sampleCaption, sampleLabel, sampleMime } from "./samples";
 import { extraButtons, extraOfCode, extrasHint, isButtonOf, madeExtras, startExtra, type ExtraKind } from "./extras";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
@@ -401,6 +402,7 @@ async function handleCallback(env: Env, cq: any) {
   if (act === "pf") return await handleProfileCallback(env, cq, userId, chatId, a); // ثبت موبایل/ایمیل با OTP (bot-profile.ts)
   if (act === "bc") return await handleBroadcastCallback(env, cq);
   if (act === "af") return await handleAdminFileCallback(env, cq);
+  if (act === "as" || act === "ap" || act === "ar") return await handleAdminSampleCallback(env, cq);
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
   if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
   if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
@@ -434,6 +436,10 @@ async function handleCallback(env: Env, cq: any) {
     const f = await loadFile(env, uid, a);
     if (!f) return await sendMessage(env, chatId, "⌛️ این فایل منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).");
     // ارائه‌ی دوباره‌فرستاده‌شده: دکمه‌ی همراه‌هایی که هنوز ساخته نشده‌اند (پوستر، جزوه، اسلاید صوتی، پادکست) زیرش هم می‌آید
+    const sm = isSampleId(a) ? await sampleById(env, a) : undefined;
+    if (sm) { // نمونه‌ی دائمی: بایت‌های اصلی با کپشن آماده‌ی خودش؛ بدون دکمه‌ی ساخت همراه
+      return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `${sampleCaption(sm)}\n<i>(${SAMPLE_BADGE})</i>`, { mime: sampleMime(sm) });
+    }
     const isDeck = !/\.(png|jpe?g|docx|wav)$/i.test(f.entry.name);
     const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a).catch(() => new Set<ExtraKind>(["poster", "handout", "audio", "podcast"]))) : [];
     return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>${extrasHint(xrows)}`,
@@ -554,16 +560,21 @@ async function showSettings(env: Env, chatId: number, uid: Uid) {
 }
 async function showFiles(env: Env, chatId: number, uid: Uid) {
   const list = await listFiles(env, uid);
-  if (!list.length) return await sendMessage(env, chatId, "📁 فایلی برای ۲۴ ساعت اخیر نداری. فایل هر ارائه بعد از ساخته شدن تا ۲۴ ساعت اینجا می‌ماند.");
-  return await sendMessage(env, chatId, "📁 <b>فایل‌های ۲۴ ساعت اخیر</b>\nبرای دریافت دوباره، یکی را بزن:",
-    kb(list.map((f) => /\.(png|jpe?g)$/i.test(f.name)
+  const mineRows = list.map((f) => /\.(png|jpe?g)$/i.test(f.name)
       ? [{ text: `🖼 ${f.title.slice(0, 32)} (پوستر)`, callback_data: `f:${f.id}` }]
       : /\.docx$/i.test(f.name)
       ? [{ text: `📝 ${f.title.slice(0, 32)} (جزوه)`, callback_data: `f:${f.id}` }]
       : [
         { text: `📥 ${f.title.slice(0, 32)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` },
         ...(hasBrowser(env) ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),
-      ])));
+      ]);
+  // نمونه‌های دائمی (برچسب «نمونه»): همیشه پایین فهرست می‌آیند و منقضی نمی‌شوند
+  const samples = await listSamples(env).catch(() => []);
+  const sampleRows = samples.map((s) => [{ text: `${sampleLabel(s)} · ${s.title.slice(0, 26)} (${SAMPLE_BADGE})`, callback_data: `f:${s.id}` }]);
+  return await sendMessage(env, chatId,
+    (list.length ? "📁 <b>فایل‌های ۲۴ ساعت اخیر</b>\nبرای دریافت دوباره، یکی را بزن:\n\n" : "📁 فایلی برای ۲۴ ساعت اخیر نداری. فایل هر ارائه بعد از ساخته شدن تا ۲۴ ساعت اینجا می‌ماند.\n\n")
+    + (samples.length ? `🧪 <b>نمونه‌ها</b> (همیشه در دسترس): نمونه‌ی خروجی‌های ربات را ببین.` : ""),
+    kb([...mineRows, ...sampleRows]));
 }
 async function showInvite(env: Env, chatId: number, userId: number) {
   const bale = isBaleId(userId), rubika = isRubikaId(userId);

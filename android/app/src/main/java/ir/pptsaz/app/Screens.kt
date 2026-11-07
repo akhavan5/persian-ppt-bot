@@ -1163,6 +1163,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
         else -> AppIcons.Slides to LocalExtra.current.brand
     }
     val kind = when {
+        f.sample && f.label.isNotEmpty() -> f.label.substringAfter(' ').trim() // «🎙 پادکست» ← «پادکست» (ایموجی را آیکن نشان می‌دهد)
         f.poster -> "پوستر"
         f.handout -> "جزوه‌ی Word"
         f.audio == "podcast" -> "پادکست"
@@ -1176,7 +1177,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(f.title.ifBlank { "بدون عنوان" }, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    listOf(kind, fmtDate(f.t), if (onPhone) "روی گوشی ✓" else "").filter { it.isNotEmpty() }.joinToString(" • "),
+                    listOf(kind, if (f.sample) "نمونه" else fmtDate(f.t), if (onPhone) "روی گوشی ✓" else "").filter { it.isNotEmpty() }.joinToString(" • "),
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                 )
             }
@@ -1184,10 +1185,10 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
             if (f.poster) {
                 IconButton(onClick = { vm.openViewer(Viewer.Poster(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "نمایش پوستر") }
-            } else if (!f.handout && f.audio.isEmpty()) {
+            } else if (!f.handout && f.audio.isEmpty() && !f.sample) { // نمونه‌ی ارائه/PDF پیش‌نمایش سرور ندارد
                 IconButton(onClick = { vm.openViewer(Viewer.Preview(f.id)) }) { AppIcon(AppIcons.Eye, tint = cs.onSurfaceVariant, description = "پیش‌نمایش اسلایدها") }
             }
-            if (pdf && !f.poster && !f.handout && f.audio.isEmpty()) {
+            if (pdf && !f.sample && !f.poster && !f.handout && f.audio.isEmpty()) {
                 TextButton(onClick = { vm.downloadPdf(f.id) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("PDF") }
             }
             if (f.audio == "podcast") {
@@ -1201,13 +1202,13 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             PodcastPlayerCard(f.id, f.title, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp), autoStart = true)
         }
         // فقط زیر خودِ ارائه (نه پوستر/جزوه/صدا)؛ همراه‌های ساخته‌شده یا در حال ساخت دکمه ندارند
-        if (!f.poster && !f.handout && f.audio.isEmpty()) {
+        if (!f.sample && !f.poster && !f.handout && f.audio.isEmpty()) {
             ExtraButtons(f.id, f.title, f.extras, extraJobs, vm, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp))
         }
     }
     if (shareOpen) {
         ShareDialog(
-            canPdf = pdf && !f.poster && !f.handout && f.audio.isEmpty(),
+            canPdf = pdf && !f.sample && !f.poster && !f.handout && f.audio.isEmpty(),
             onDismiss = { shareOpen = false },
         ) { pkg, asPdf ->
             shareOpen = false

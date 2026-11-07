@@ -69,7 +69,9 @@ data class Me(
  * extras: همراه‌هایی که هنوز برای همین ارائه ساخته نشده‌اند و روی سرور روشن‌اند (زیرمجموعه‌ی "audio"، "podcast"، "handout"، "poster")؛
  * فقط برای خودِ ارائه پر می‌شود و زیرش دکمه‌ی «ساخت جداگانه» دارد.
  */
-data class FileItem(val id: String, val title: String, val slides: Int, val t: Long, val poster: Boolean, val handout: Boolean, val audio: String = "", val extras: List<String> = emptyList())
+data class FileItem(val id: String, val title: String, val slides: Int, val t: Long, val poster: Boolean, val handout: Boolean, val audio: String = "", val extras: List<String> = emptyList(),
+    /** فایل نمونه‌ی دائمی (برچسب «نمونه»): منقضی نمی‌شود و پیش‌نمایش/PDF/ساخت جداگانه ندارد؛ label برچسب نوع از سرور است */
+    val sample: Boolean = false, val pdf: Boolean = false, val label: String = "")
 
 /** isPublic = false یعنی فایل در حافظه‌ی اختصاصی اپ است (اندروید ۷–۹) و کاربر باید «ذخیره در گوشی» را بزند. */
 data class Saved(val uri: android.net.Uri, val mime: String, val name: String, val isPublic: Boolean = true)
@@ -157,6 +159,7 @@ fun parseFiles(j: JSONObject): List<FileItem> =
         FileItem(
             it.str("id"), it.str("title"), it.optInt("slides"), it.optLong("t"), it.optBoolean("poster"), it.optBoolean("handout"), it.str("audio"),
             it.optJSONArray("extras")?.let { a -> (0 until a.length()).map { i -> a.optString(i) }.filter { k -> k in EXTRA_KINDS } } ?: emptyList(),
+            it.optBoolean("sample"), it.optBoolean("pdf"), it.str("label"),
         )
     }
 

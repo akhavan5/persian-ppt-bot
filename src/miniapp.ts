@@ -11,6 +11,7 @@ import { createSession, getUserById, hitLimit, publicUser, randomToken, reuseSes
 import { REF_MAX, REF_EVERY, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
 import { ensureUid, getLinkedTg } from "./link";
 import { listFiles, loadFileDirect } from "./files";
+import { isSampleId, sampleById, sampleCaption, sampleMime } from "./samples";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { esc, sendAudio, sendDocument, tg } from "./telegram";
 import { wavSeconds } from "./wav";
@@ -122,7 +123,7 @@ const MIME: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
-  wav: "audio/wav",
+  wav: "audio/wav", pdf: "application/pdf",
 };
 
 /** POST /api/miniapp/send {id} — فایل (pptx، جزوه، پوستر، اسلاید صوتی، پادکست) را ربات به چت تلگرام خود کاربر می‌فرستد.
@@ -140,11 +141,14 @@ export async function miniappSend(env: Env, user: WebUser, body: Record<string, 
   // اسلاید صوتی و پادکست از روی شناسه‌ی فایل شناخته می‌شوند: «<کار>-audio[-s<n>]» و «<کار>-podcast[-<n>]»
   const slidesAudio = /-audio(-s\d+)?$/.test(id), podcast = /-podcast(-\d+)?$/.test(id);
   const label = ext === "docx" ? "📝 جزوه" : ext === "png" || ext === "jpg" || ext === "jpeg" ? "🖼 پوستر" : ext === "wav" ? (podcast ? "🎙 پادکست" : "🔊 صدای اسلاید") : slidesAudio ? "🔊 اسلاید صوتی" : "📥 ارائه";
+  const sm = await sampleById(env, id); // نمونه: همان کپشن آماده‌ی خودش
   try {
-    if (ext === "wav") {
+    if (sm && ext !== "wav") {
+      await sendDocument(env, tgId, new Uint8Array(f.data), f.entry.name, sampleCaption(sm), { mime: sampleMime(sm) });
+    } else if (ext === "wav") {
       // فایل صوتی با پخش‌کننده‌ی تلگرام (اگر WAV را نپذیرفت، sendAudio خودش به‌صورت سند می‌فرستد)
       const wav = new Uint8Array(f.data);
-      await sendAudio(env, tgId, wav, f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { title: f.entry.title, ...(podcast ? { performer: siteHost(env) } : {}), duration: wavSeconds(wav) });
+      await sendAudio(env, tgId, wav, f.entry.name, sm ? sampleCaption(sm) : `${label}: ${esc(f.entry.title.slice(0, 120))}`, { title: f.entry.title, ...(podcast ? { performer: siteHost(env) } : {}), duration: wavSeconds(wav) });
     } else {
       await sendDocument(env, tgId, new Uint8Array(f.data), f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { mime: MIME[ext] ?? "application/octet-stream" });
     }
@@ -211,7 +215,8 @@ export async function miniappDlLink(env: Env, user: WebUser, body: Record<string
   const id = typeof body?.id === "string" ? body.id : "";
   if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
   if (await hitLimit(env, `mdl:${user.id}`, 60, 3600)) return err("تعداد درخواست دانلود زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
-  const f = (await listFiles(env, user.id).catch(() => [])).find((x) => x.id === id);
+  const sm = isSampleId(id) ? await sampleById(env, id) : undefined;
+  const f = sm ? { name: sm.name } : (await listFiles(env, user.id).catch(() => [])).find((x) => x.id === id);
   if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
   const token = randomToken(24);
   await env.KV.put(`mdl:${token}`, `${user.id}|${id}`, { expirationTtl: 300 });

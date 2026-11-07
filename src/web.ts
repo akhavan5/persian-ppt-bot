@@ -13,6 +13,7 @@ import { supportHistory, supportSend } from "./support-chat";
 import { appCrash } from "./app-crash";
 import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
+import { listSamples, sampleLabel } from "./samples";
 import { renderPreview } from "./preview";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hasBrowser } from "./browser-api";
@@ -217,7 +218,11 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     const list = await listFiles(env, user.id);
     // زیر هر ارائه (نه پوستر/جزوه/صدا) دکمه‌ی همراه‌هایی که هنوز ساخته نشده‌اند و روی سرویس روشن‌اند: extras = ["audio","podcast","handout","poster"] (زیرمجموعه)
     const extras = await Promise.all(list.map((f) => (isPosterFile(f.name) || isHandoutFile(f.name) || audioKind(f.id) ? Promise.resolve([]) : missingExtras(env, user.id, f.id, list).catch(() => []))));
-    return json({ files: list.map((f, i) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name), ...(audioKind(f.id) ? { audio: audioKind(f.id) } : {}), ...(extras[i].length ? { extras: extras[i] } : {}) })) });
+    const mine = list.map((f, i) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name), ...(audioKind(f.id) ? { audio: audioKind(f.id) } : {}), ...(extras[i].length ? { extras: extras[i] } : {}) }));
+    // نمونه‌ها دائمی‌اند و همیشه بعد از فایل‌های خود کاربر می‌آیند؛ sample=true ⇒ برچسب «نمونه»، بدون شمارش‌معکوس ۲۴ ساعت و بدون دکمه‌ی ساخت جداگانه
+    const samples = (await listSamples(env)).map((s) => ({ id: s.id, title: s.title, slides: s.slides, t: 0, sample: true, label: sampleLabel(s), poster: s.kind === "poster", handout: s.kind === "handout", pdf: s.kind === "pdf",
+      ...(s.kind === "podcast" ? { audio: "podcast" } : s.kind === "audio" ? { audio: "slides" } : {}) }));
+    return json({ files: [...mine, ...samples] });
   }
   if (path.startsWith("/api/files/") && method === "GET") return download(env, user, path.slice("/api/files/".length), url.searchParams.get("inline") === "1", req.headers.get("range"));
 
@@ -642,6 +647,8 @@ async function download(env: Env, user: WebUser, id: string, inline = false, ran
   if (!/^[\w-]{1,100}$/.test(id)) return err("پیدا نشد", 404);
   const f = await loadFileDirect(env, user.id, id);
   if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
+  if (/^sample-.*-pdf$/.test(id)) // نمونه‌ی PDF: همان بایت‌های اصلی، بدون تغییر
+    return new Response(f.data, { headers: { "content-type": "application/pdf", "content-disposition": `${inline ? "inline" : "attachment"}; filename="sample-${siteHost(env)}.pdf"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`, ...SEC_HEADERS } });
   const poster = isPosterFile(f.entry.name);
   const png = /\.png$/i.test(f.entry.name);
   const docx = isHandoutFile(f.entry.name);

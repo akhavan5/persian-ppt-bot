@@ -76,6 +76,7 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .ex button{border:1px solid var(--line);background:var(--sec);color:var(--hint);border-radius:999px;padding:2px 10px;font:inherit;font-size:.78rem;cursor:pointer}
 .err{color:var(--danger);font-size:.88rem;margin-top:8px}
 .ok{color:var(--ok)}
+.sample-badge{display:inline-block;margin-inline-start:6px;padding:1px 8px;border-radius:999px;background:#fff3e0;color:#b45309;font-size:11px;font-weight:700}
 .poster{width:100%;border-radius:10px;margin-top:10px;border:1px solid var(--line)}
 nav{position:fixed;inset:auto 0 0 0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 8px calc(6px + var(--sab));z-index:5}
 nav button{flex:1;background:none;border:0;color:var(--hint);font:inherit;font-size:.78rem;padding:4px 0;cursor:pointer}
@@ -1236,19 +1237,19 @@ async function loadFiles() {
   if (!list.length) { box.replaceChildren(h("span", { class: "muted" }, "فایلی نداری. فایل هر ارائه تا ۲۴ ساعت اینجا می‌ماند.")); return; }
   box.replaceChildren(...list.map((f) => {
     const hrs = Math.max(1, Math.ceil((f.t + 86400000 - Date.now()) / 3600000));
-    const kind = f.poster ? "🖼 پوستر" : f.handout ? "📝 جزوه (Word)" : f.audio === "podcast" ? "🎙 پادکست" : f.audio === "slides" ? (f.slides ? `🔊 اسلاید صوتی · ${fa(f.slides)} اسلاید` : "🔊 صدای یک اسلاید") : `📊 ${fa(f.slides)} اسلاید`;
+    const kind = f.sample ? f.label : f.poster ? "🖼 پوستر" : f.handout ? "📝 جزوه (Word)" : f.audio === "podcast" ? "🎙 پادکست" : f.audio === "slides" ? (f.slides ? `🔊 اسلاید صوتی · ${fa(f.slides)} اسلاید` : "🔊 صدای یک اسلاید") : `📊 ${fa(f.slides)} اسلاید`;
     const slot = f.audio === "podcast" ? h("div", { class: "pp-slot" }) : null;
     const playBtn = slot ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => {
       if (slot.firstChild) { slot.firstChild.dispose && slot.firstChild.dispose(); slot.replaceChildren(); e.currentTarget.textContent = "▶ پخش"; return; }
       slot.append(podcastPlayer(f.id, f.title, true)); e.currentTarget.textContent = "✕ بستن پلیر";
     } }, "▶ پخش") : null;
     return h("div", { class: "file" },
-      h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, `${kind} · تا ${fa(hrs)} ساعت دیگر`)),
+      h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, f.sample ? `${kind} · ` : `${kind} · تا ${fa(hrs)} ساعت دیگر`, f.sample ? h("span", { class: "sample-badge" }, "نمونه") : null)),
       h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end" },
         playBtn,
         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
-        !f.poster && !f.handout && !f.audio && cfg.poster && !IS_EITAA ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
+        !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster && !IS_EITAA ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
       f.extras && f.extras.length
         ? h("div", { class: "fx" },
           h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),

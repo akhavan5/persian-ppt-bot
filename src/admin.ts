@@ -11,6 +11,8 @@ import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
 import { resolveUid } from "./link";
 import { DAILY_LIMIT, loadSupportConv, supportOverview, supportUsers } from "./support-chat";
 import { getDeckLog, listFiles, loadFile, type DeckLog } from "./files";
+import { SAMPLE_BADGE, addSample, listSamples, removeSample, sampleLabel } from "./samples";
+import { cachedPdf } from "./pdf";
 import { hasKey, modelList } from "./llm";
 import { PLANS, activatePlan, payEnabled } from "./payment";
 import { runningJob } from "./deck-service";
@@ -25,7 +27,7 @@ import { APPVER_HELP, STORES, STORE_NAMES, appVerText, applyAppVer, getAppVersio
 
 /** دستورهای متنی مدیر: ورود به پنل و لغو ورودی در انتظار؛ بقیه‌ی کارها (از جمله نسخه‌ی اپ و اعلان به اپ) با دکمه‌های پنل انجام می‌شود.
  *  دستورهای قدیمی /appver و /apppush هم هنوز کار می‌کنند ولی زیرشان دکمه‌ی «باز کردن در پنل» هست. */
-export const ADMIN_CMDS = new Set(["/admin", "/panel", "/cancel"]);
+export const ADMIN_CMDS = new Set(["/admin", "/panel", "/cancel", "/samples"]);
 
 type Btn = { text: string; callback_data?: string; url?: string };
 type Screen = { text: string; kb: Btn[][] };
@@ -995,6 +997,7 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, _args: 
   if (isBaleId(adminId) || isRubikaId(adminId) || isEitaaId(adminId)) return; // پنل مدیریت فقط در تلگرام است
   await clearInput(env, adminId).catch(() => {});
   if (cmd === "/cancel") return sendMessage(env, chatId, "✅ لغو شد.");
+  if (cmd === "/samples") return sendSamples(env, chatId);
   return sendScreen(env, chatId, await homeScreen(env)); // /admin و /panel
 }
 
@@ -1315,7 +1318,10 @@ export async function handleAdminFileCallback(env: Env, cq: any) {
   const userId: Uid = WEB_ID.test(uid ?? "") ? uid : Number(uid);
   const f = (typeof userId === "string" || Number.isSafeInteger(userId)) && fid ? await loadFile(env, userId, fid) : null;
   if (!f) return await sendMessage(env, chatId, "⌛️ این فایل دیگر در دسترس نیست (فایل‌ها ۲۴ ساعت و حداکثر ۹ فایل آخر هر کاربر (پلاس ۱۸، پرو ۳۰) نگه داشته می‌شوند).");
-  await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`);
+  const isDeckFile = !/-(poster|handout|audio(-s\d+)?|podcast(-\d+)?)$/.test(fid);
+  const pdfThere = isDeckFile && (await cachedPdf(env, userId, fid).catch(() => null)) != null; // دکمه‌ی نمونه‌ی PDF فقط اگر PDF این ارائه ساخته شده
+  await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>\n👤 <code>${userId}</code>`,
+    { reply_markup: sampleKb(userId, fid, pdfThere) });
   // اگر برای همین ارائه همراه‌ها هم ساخته شده (و هنوز نگه داشته می‌شوند)، همراهش فرستاده می‌شوند: پوستر، جزوه، اسلاید صوتی، صدای اسلایدهای جاماندنی و پادکست
   // (اسلاید صوتی و پادکست فقط برای کاربران وب ذخیره می‌شوند؛ در تلگرام مستقیم به چت خودِ کاربر رفته‌اند)
   if (/-(poster|handout|audio(-s\d+)?|podcast(-\d+)?)$/.test(fid)) return;
@@ -1335,7 +1341,40 @@ export async function handleAdminFileCallback(env: Env, cq: any) {
   for (const { x, k } of extras) {
     const extra = await loadFile(env, userId, x.id).catch(() => null);
     if (!extra) continue;
-    await sendDocument(env, chatId, new Uint8Array(extra.data), extra.entry.name, `${kinds[k].label} · <b>${esc(extra.entry.title)}</b>\n👤 <code>${userId}</code>`)
+    await sendDocument(env, chatId, new Uint8Array(extra.data), extra.entry.name, `${kinds[k].label} · <b>${esc(extra.entry.title)}</b>\n👤 <code>${userId}</code>`, { reply_markup: sampleKb(userId, x.id, false) })
       .catch((err) => console.error("admin send extra", x.id, err));
   }
+}
+
+// ---------- نمونه‌ها (فایل‌های دائمی که برای همه‌ی کاربران در بخش فایل‌ها با برچسب «نمونه» می‌آیند) ----------
+const sampleKb = (userId: Uid, fid: string, pdf: boolean) => ({
+  inline_keyboard: [[cb("⭐ نمونه کردن", `as:${userId}:${fid}`), ...(pdf ? [cb("⭐ PDF هم", `ap:${userId}:${fid}`)] : [])]],
+});
+
+/** /samples: فهرست نمونه‌های فعلی با دکمه‌ی حذف */
+async function sendSamples(env: Env, chatId: number) {
+  const list = await listSamples(env);
+  if (!list.length) return await sendMessage(env, chatId, "🧪 هنوز نمونه‌ای نیست.\nفایل هر کاربر را از پنل (🗂 فایل‌ها) بگیر و زیرش «⭐ نمونه کردن» را بزن.");
+  return await sendMessage(env, chatId, `🧪 <b>نمونه‌های دائمی</b> (${fa(list.length)})\nهمه‌ی کاربران این‌ها را در بخش فایل‌ها با برچسب «${SAMPLE_BADGE}» می‌بینند. برای حذف، دکمه‌ی 🗑 را بزن:`,
+    { reply_markup: { inline_keyboard: list.map((s) => [cb(`🗑 ${sampleLabel(s)} · ${s.title.slice(0, 26)}`, `ar:${s.id}`)]) } });
+}
+
+/** as:<کاربر>:<فایل> نمونه کردن، ap:… نمونه کردن PDF همان ارائه، ar:<نمونه> حذف نمونه */
+export async function handleAdminSampleCallback(env: Env, cq: any) {
+  if (!isAdmin(env, cq.from.id)) return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+  const chatId: number = cq.message.chat.id;
+  const [act, a, b] = String(cq.data ?? "").split(":");
+  const answer = (text: string, alert = false) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, text: text.slice(0, 200), show_alert: alert }).catch(() => {});
+  if (act === "ar") {
+    const ok = await removeSample(env, a ?? "");
+    if (ok) await logAction(env, cq.from.id, `حذف نمونه ${a}`);
+    await answer(ok ? "🗑 از نمونه‌ها حذف شد." : "این نمونه دیگر نیست.");
+    return await tg(env, "deleteMessage", { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
+  }
+  const userId: Uid = WEB_ID.test(a ?? "") ? (a as string) : Number(a);
+  if (!((typeof userId === "string" && userId) || Number.isSafeInteger(userId)) || !b) return await answer("نامعتبر");
+  const r = await addSample(env, userId, b, act === "ap");
+  if (!r.ok) return await answer(`⚠️ ${r.error}`, true);
+  await logAction(env, cq.from.id, `${r.replaced ? "به‌روزرسانی" : "افزودن"} نمونه ${r.entry.id}`);
+  return await answer(`⭐ ${r.replaced ? "نمونه به‌روز شد" : "نمونه شد"}: ${sampleLabel(r.entry)}\nبرای همه‌ی کاربران دائمی است. حذف: /samples`, true);
 }

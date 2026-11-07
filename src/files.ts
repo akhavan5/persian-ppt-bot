@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import type { Env } from "./env";
 import { getSub, type Uid } from "./settings";
 import type { Deck } from "./types";
+import { isSampleId, loadSample } from "./samples";
 
 export interface FileEntry { id: string; name: string; title: string; slides: number; t: number }
 
@@ -44,6 +45,7 @@ export async function saveFile(env: Env, userId: Uid, id: string, bytes: Uint8Ar
 
 /** دریافت مستقیم با شناسه‌ی فایل (بدون فهرست). مالکیت از خودِ کلید (شناسه‌ی کاربر) می‌آید. */
 export async function loadFileDirect(env: Env, userId: Uid, id: string): Promise<{ entry: FileEntry; data: ArrayBuffer } | null> {
+  if (isSampleId(id)) return loadSample(env, id); // فایل نمونه: دائمی و برای همه
   const r = await env.FILES.getWithMetadata<Omit<FileEntry, "id">>(fileKey(userId, id), "arrayBuffer");
   if (!r.value || !r.metadata) return null;
   return { entry: { id, ...r.metadata }, data: r.value };
@@ -51,6 +53,7 @@ export async function loadFileDirect(env: Env, userId: Uid, id: string): Promise
 
 /** فقط فایل‌های خودِ کاربر (از روی فهرست او) برگردانده می‌شود. */
 export async function loadFile(env: Env, userId: Uid, id: string): Promise<{ entry: FileEntry; data: ArrayBuffer } | null> {
+  if (isSampleId(id)) return loadSample(env, id);
   const entry = (await listFiles(env, userId)).find((f) => f.id === id);
   if (!entry) return null;
   const data = await env.FILES.get(fileKey(userId, id), "arrayBuffer");
