@@ -37,7 +37,8 @@ export async function makePodcastScript(env: Env, deck: Deck, o: { model?: strin
 
 Hosts (equals, relaxed, a bit playful):
 - "A" = علی: the host. Curious and friendly; opens and closes the episode, asks the questions a listener would ask, reacts, jokes lightly, sums up.
-- "B" = سارا: the guest who knows the topic well. She explains like a friend would, with simple words and one concrete everyday example or analogy; she never lectures.
+- "B" = امیر: the guest who knows the topic well. He explains like a friend would, with simple words and one concrete everyday example or analogy; he never lectures.
+- Both hosts are men. If they ever address each other by name (rarely, e.g. «آره امیر», «ببین علی»), use exactly these names: علی and امیر. Never use any other name.
 
 Content rules:
 - Use ONLY the material below. Do not invent statistics, dates, names, quotes or sources. If something is not in the material, keep it general.
@@ -53,7 +54,7 @@ Spoken-Persian style rules (the text is read aloud by a TTS engine, so spell wor
 - Style demo only (NOT content to reuse): bookish «در این بخش به بررسی مزایای این روش می‌پردازیم و مشاهده می‌کنیم که چگونه می‌توان از آن بهره برد.» → spoken «خب، بیا ببینیم این روش دقیقاً به چه دردی می‌خوره. یعنی کجاها می‌شه ازش استفاده کرد؟»
 - Correct half-spaces (نیم‌فاصله), e.g. «می‌شه», «کتاب‌خونه».
 - Write ALL numbers in words (e.g. «بیست و دو درصد»); never digits.
-- No emojis, markdown, parentheses, quotation marks, English words (except unavoidable acronyms), stage directions, sound tags (like laughs) or speaker names inside the text.
+- No emojis, markdown, parentheses, quotation marks, English words (except unavoidable acronyms), stage directions, sound tags (like laughs) or speaker labels (like "علی:") inside the text.
 
 Return ONLY JSON: {"title": "<short Persian episode title>", "turns": [{"s": "A", "t": "..."}, {"s": "B", "t": "..."}]}
 
@@ -94,4 +95,4 @@ export function chunkTurns(turns: Turn[], maxChars = 1500, maxTurns = 8): Turn[]
 }
 
 /** متن گفت‌وگو برای ارسال به‌صورت فایل متنی */
-export const transcript = (s: PodcastScript) => `${s.title}\n\n` + s.turns.map((t) => `${t.speaker === "A" ? "علی" : "سارا"}: ${t.text}`).join("\n\n") + "\n";
+export const transcript = (s: PodcastScript) => `${s.title}\n\n` + s.turns.map((t) => `${t.speaker === "A" ? "علی" : "امیر"}: ${t.text}`).join("\n\n") + "\n";

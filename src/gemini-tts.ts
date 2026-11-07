@@ -29,7 +29,7 @@ export interface TtsVoices { narrator: string; A: string; B: string }
 export const ttsVoices = (env: Env): TtsVoices => ({
   narrator: (env.GEMINI_TTS_VOICE || "Kore").trim(), // Kore محکم و شفاف؛ برای سخنرانی مناسب است
   A: (env.GEMINI_TTS_VOICE_A || "Achird").trim(), // مجری (مرد، صمیمی)
-  B: (env.GEMINI_TTS_VOICE_B || "Sulafat").trim(), // مهمان (زن، گرم)
+  B: (env.GEMINI_TTS_VOICE_B || "Sulafat").trim(), // مهمان (پیش‌فرض Sulafat صدای زنانه است؛ اگر مهمان «امیر» است یک صدای مردانه بگذارید: GEMINI_TTS_VOICE_B)
 });
 
 const stepSize = (env: Env) => Math.max(1, Math.min(50, Math.floor(Number(env.GEMINI_KEY_STEP) || 3)));
@@ -190,7 +190,7 @@ export async function ttsSpeak(env: Env, texts: string[], o: { voice?: string; s
 }
 
 export interface Turn { speaker: "A" | "B"; text: string }
-const LABEL = { A: "Ali", B: "Sara" } as const;
+const LABEL = { A: "Ali", B: "Amir" } as const;
 
 /** گفت‌وگوی دو‌نفره در «یک» درخواست (حداکثر دو گوینده با صدای آماده‌ی Gemini). اگر فقط یک نفر حرف می‌زند، حالت تک‌گوینده. */
 export async function ttsDialogue(env: Env, turns: Turn[], o: { styleA?: string; styleB?: string } = {}): Promise<Uint8Array> {
