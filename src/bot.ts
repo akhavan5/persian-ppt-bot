@@ -10,7 +10,7 @@ import {
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminSampleCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
 import { listFiles, loadFile } from "./files";
 import { SAMPLE_BADGE, isSampleId, listSamples, sampleById, sampleCaption, sampleLabel, sampleMime } from "./samples";
-import { extraButtons, extraOfCode, extrasHint, isButtonOf, madeExtras, startExtra, type ExtraKind } from "./extras";
+import { extraButtons, extraOfCode, extrasHint, isButtonOf, isMainDeck, madeExtras, startExtra, type ExtraKind } from "./extras";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
@@ -316,6 +316,7 @@ async function sendDeckPdf(env: Env, cq: any, uid: Uid, chatId: number, id: stri
   const answer = (text?: string, alert = false) =>
     tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
   if (!/^[\w-]{1,100}$/.test(id)) return await answer();
+  if (!isMainDeck(id, "x.pptx")) return await answer("PDF فقط برای خودِ ارائه ساخته می‌شود.", true); // نه برای اسلاید صوتی/پادکست/جزوه/پوستر
   const cap = (title: string) => `📄 <b>${esc(title)}</b>\nنسخه‌ی PDF`;
   const name = (title: string) => fileNameWithSite(env, title, "pdf", "", 80);
 
@@ -357,6 +358,7 @@ async function startExtraButton(env: Env, cq: any, uid: Uid, tgId: number, chatI
   const answer = (text?: string, alert = false) =>
     tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
   if (!/^[\w-]{1,100}$/.test(id)) return await answer();
+  if (!isMainDeck(id, "x.pptx")) return await answer("همراه‌ها فقط از روی خودِ ارائه ساخته می‌شوند.", true);
   const r = await startExtra(env, uid, id, kind, { channel: "telegram", chatId, layout });
   if (!r.ok) {
     await answer(r.error, true);
@@ -451,7 +453,7 @@ async function handleCallback(env: Env, cq: any) {
       const wav = new Uint8Array(f.data);
       return await sendAudio(env, chatId, wav, f.entry.name, `${/-podcast(-\d+)?$/.test(a) ? "🎙" : "🔊"} <b>${esc(f.entry.title)}</b>`, { title: f.entry.title, ...(/-podcast(-\d+)?$/.test(a) ? { performer: siteHost(env) } : {}), duration: wavSeconds(wav) });
     }
-    const isDeck = !/\.(png|jpe?g|docx|wav)$/i.test(f.entry.name);
+    const isDeck = isMainDeck(a, f.entry.name); // اسلاید صوتی هم .pptx است ولی ارائه‌ی اصلی نیست: دکمه‌ی همراه نمی‌گیرد
     const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a).catch(() => new Set<ExtraKind>(["poster", "handout", "audio", "podcast"]))) : [];
     return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>${extrasHint(xrows)}`,
       /\.(png|jpe?g)$/i.test(f.entry.name) ? { mime: /\.png$/i.test(f.entry.name) ? "image/png" : "image/jpeg" }
@@ -575,6 +577,10 @@ async function showFiles(env: Env, chatId: number, uid: Uid) {
       ? [{ text: `🖼 ${f.title.slice(0, 32)} (پوستر)`, callback_data: `f:${f.id}` }]
       : /\.docx$/i.test(f.name)
       ? [{ text: `📝 ${f.title.slice(0, 32)} (جزوه)`, callback_data: `f:${f.id}` }]
+      : /\.wav$/i.test(f.name) || /-podcast(-\d+)?$/.test(f.id)
+      ? [{ text: `🎙 ${f.title.slice(0, 32)} (پادکست)`, callback_data: `f:${f.id}` }]
+      : /-audio(-s\d+)?$/.test(f.id)
+      ? [{ text: `🔊 ${f.title.slice(0, 32)} (اسلاید صوتی)`, callback_data: `f:${f.id}` }]
       : [
         { text: `📥 ${f.title.slice(0, 32)} (${toFa(String(f.slides))} اسلاید)`, callback_data: `f:${f.id}` },
         ...(hasBrowser(env) ? [{ text: "📄 PDF", callback_data: `g:${f.id}` }] : []),

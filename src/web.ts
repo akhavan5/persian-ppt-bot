@@ -35,7 +35,7 @@ import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
-import { EXTRA_KINDS, missingExtras, startExtra } from "./extras";
+import { EXTRA_KINDS, audioKind, isMainDeck, missingExtras, startExtra } from "./extras";
 import { isBaleId, fromBaleId } from "./bale-format";
 import { isEitaaId, fromEitaaId } from "./eitaa-format";
 import { isRubikaId } from "./rubika-format";
@@ -217,7 +217,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/files" && method === "GET") {
     const list = await listFiles(env, user.id);
     // زیر هر ارائه (نه پوستر/جزوه/صدا) دکمه‌ی همراه‌هایی که هنوز ساخته نشده‌اند و روی سرویس روشن‌اند: extras = ["audio","podcast","handout","poster"] (زیرمجموعه)
-    const extras = await Promise.all(list.map((f) => (isPosterFile(f.name) || isHandoutFile(f.name) || audioKind(f.id) ? Promise.resolve([]) : missingExtras(env, user.id, f.id, list).catch(() => []))));
+    const extras = await Promise.all(list.map((f) => (!isMainDeck(f.id, f.name) ? Promise.resolve([]) : missingExtras(env, user.id, f.id, list).catch(() => []))));
     const mine = list.map((f, i) => ({ id: f.id, title: f.title, slides: f.slides, t: f.t, poster: isPosterFile(f.name), handout: isHandoutFile(f.name), ...(audioKind(f.id) ? { audio: audioKind(f.id) } : {}), ...(extras[i].length ? { extras: extras[i] } : {}) }));
     // نمونه‌ها دائمی‌اند و همیشه بعد از فایل‌های خود کاربر می‌آیند؛ sample=true ⇒ برچسب «نمونه»، بدون شمارش‌معکوس ۲۴ ساعت و بدون دکمه‌ی ساخت جداگانه
     const samples = (await listSamples(env)).map((s) => ({ id: s.id, title: s.title, slides: s.slides, t: 0, sample: true, label: sampleLabel(s), poster: s.kind === "poster", handout: s.kind === "handout", pdf: s.kind === "pdf",
@@ -623,7 +623,6 @@ async function audioJobStatus(env: Env, id: string): Promise<Response> {
   return json({ state: "running", message, ...(Number.isFinite(n) ? { progress: Math.max(0, Math.min(100, Math.round(n))) } : {}) });
 }
 /** فایل صوتی از روی شناسه: «<کار>-audio[-s<n>]» = اسلاید صوتی (یا صدای یک اسلاید)، «<کار>-podcast[-<n>]» = پادکست */
-const audioKind = (id: string): "slides" | "podcast" | undefined => (/-audio(-s\d+)?$/.test(id) ? "slides" : /-podcast(-\d+)?$/.test(id) ? "podcast" : undefined);
 const isWavFile = (name: string) => /\.wav$/i.test(name);
 
 /** پوستر به‌صورت تصویر PNG/JPG ذخیره می‌شود (پسوند تصویر)؛ ارائه‌ها PPTX */
