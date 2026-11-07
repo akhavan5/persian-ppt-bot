@@ -789,6 +789,15 @@ async function boot() {
     const r = await api("/api/me");
     me = r.user ? r : null;
   } catch (e) { toast("ارتباط با سرور برقرار نشد؛ صفحه را دوباره باز کن."); return; }
+  if (me && me.contactReward && me.contactReward.available) {
+    try {
+      if (!sessionStorage.getItem("gift_seen")) {
+        sessionStorage.setItem("gift_seen", "1");
+        const ms = me.contactReward.missing, what = ms.length > 1 ? "موبایل و ایمیل (برای هر کدام)" : ms[0] === "mobile" ? "موبایل" : "ایمیل";
+        setTimeout(() => toast(`🎁 با ثبت و تایید ${what} در پروفایل ${fa(me.contactReward.credits)} اعتبار هدیه بگیر`), 1500);
+      }
+    } catch {}
+  }
   if (me && me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.");
   renderCommon(); initPoster(); initLink(); initVoice();
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
