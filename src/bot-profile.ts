@@ -17,7 +17,6 @@ type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
 
 const stKey = (userId: number) => `pf:${userId}`;
-const nudgeKey = (uid: string) => `pfn:${uid}`;
 const ST_TTL = 600;
 type State = { s: "mobile" | "email" | "mcode" | "ecode"; v?: string };
 
@@ -44,21 +43,6 @@ export async function showProfile(env: Env, chatId: number, userId: number, uid:
   if (add.length) rows.push(add);
   rows.push([{ text: "🌐 ورود به سایت", url: await siteLoginUrl(env, userId, "home") }]);
   return sendMessage(env, chatId, lines.join("\n"), kb(rows));
-}
-
-/** یک‌بار بعد از /start برای کاربر جدیدی که موبایل/ایمیل ندارد: یادآور هدیه */
-export async function nudgeProfile(env: Env, chatId: number, uid: string | number): Promise<void> {
-  if (typeof uid !== "string") return;
-  const user = await getUserById(env, uid);
-  if (!user) return;
-  const info = await contactRewardInfo(env, user);
-  if (!info.available) return;
-  if ((await env.KV.get(nudgeKey(uid))) !== null) return;
-  await env.KV.put(nudgeKey(uid), "1");
-  const add: Btn[] = [];
-  if (info.missing.includes("mobile")) add.push({ text: "📱 ثبت شماره‌ی موبایل", callback_data: "pf:m" });
-  if (info.missing.includes("email")) add.push({ text: "✉️ ثبت ایمیل", callback_data: "pf:e" });
-  await sendMessage(env, chatId, `${giftLine()}\nبا ثبت و تایید ${user.mobile ? "ایمیل" : user.email ? "شماره‌ی موبایل" : "شماره‌ی موبایل و ایمیل (هرکدام جداگانه)"} اعتبار هدیه می‌گیری.`, kb([add])).catch(() => {});
 }
 
 /** دکمه‌های pf:m (ثبت موبایل) | pf:e (ثبت ایمیل) | pf:x (لغو) */

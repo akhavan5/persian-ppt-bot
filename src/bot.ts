@@ -23,7 +23,7 @@ import { PLANS } from "./payment";
 import { inviteBody, inviteShareUrl, telegramInviteLink } from "./invite-msg";
 import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
-import { handleProfileCallback, handleProfileInput, nudgeProfile, showProfile } from "./bot-profile";
+import { handleProfileCallback, handleProfileInput, showProfile } from "./bot-profile";
 import { notifyInviterJoined } from "./referral";
 import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
@@ -42,7 +42,7 @@ const HELP =
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "🖼 چند عکس (مثلاً صفحه‌های یک جزوه) را <b>یک‌جا و به‌صورت آلبوم</b> انتخاب و بفرست (حداکثر ۱۰ عدد)؛ همه با هم خوانده می‌شوند و فقط <b>یک ارائه</b> ساخته می‌شود. عکس‌هایی که جدا از هم بفرستی هر کدام ارائه‌ی جداگانه حساب می‌شوند.\n\n" +
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
-  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر؛ با ثبت و تایید موبایل یا ایمیل در /profile هم ۱ اعتبار هدیه می‌گیری)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دوستی که با لینک تو بیایند و اولین ارائه‌شان را بسازند = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
+  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دوستی که با لینک تو بیایند و اولین ارائه‌شان را بسازند = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
 /** خط ورودی صوتی فقط وقتی DEEPGRAM_API_KEY تنظیم است در راهنما می‌آید */
@@ -645,11 +645,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (cmd === "/credit" || cmd === "/balance") return await showCredit(env, chatId, uid, userId);
   if (cmd === "/start") await env.KV.delete(`blk:${userId}`).catch(() => {}); // اگر ربات را بلاک کرده بود و دوباره آمد (بلاک‌برداشتن = /start)، به فهرست پیام همگانی برمی‌گردد
-  if (cmd === "/start" || cmd === "/help") {
-    await sendMessage(env, chatId, helpText(env), homeKb(env, userId, admin));
-    if (cmd === "/start" && !admin) await nudgeProfile(env, chatId, uid); // یک‌بار: هدیه‌ی ثبت موبایل/ایمیل برای حسابی که ندارد
-    return;
-  }
+  if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, helpText(env), homeKb(env, userId, admin));
   if (cmd === "/menu") return await sendMessage(env, chatId, HOME_TEXT, homeKb(env, userId, admin));
   if (cmd === "/settings") return await showSettings(env, chatId, uid);
   if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. منوی دکمه‌ای:", homeKb(env, userId, admin));

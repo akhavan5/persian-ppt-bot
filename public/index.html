@@ -789,7 +789,6 @@ async function boot() {
     const r = await api("/api/me");
     me = r.user ? r : null;
   } catch (e) { toast("ارتباط با سرور برقرار نشد؛ صفحه را دوباره باز کن."); return; }
-  if (me && me.contactReward && me.contactReward.available) { try { if (!sessionStorage.getItem("gift_seen")) { sessionStorage.setItem("gift_seen", "1"); setTimeout(() => toast(`🎁 با ثبت موبایل یا ایمیل در پروفایل ${fa(me.contactReward.credits)} اعتبار هدیه بگیر`), 1500); } } catch {} }
   if (me && me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.");
   renderCommon(); initPoster(); initLink(); initVoice();
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
@@ -1258,6 +1257,8 @@ function handleTgLogin() {
   const q = new URLSearchParams(location.search);
   if (q.get("login") === "expired") { history.replaceState(null, "", "/"); toast("لینک ورود منقضی شده؛ در ربات دوباره دکمه‌ی خرید یا /site را بزن."); return; }
   if (q.get("buy")) { history.replaceState(null, "", "/"); if (me) openBuy(); else openAuth("register", "برای خرید پلن وارد شو یا ثبت‌نام کن."); }
+  // از پیام‌های یادآور (ایمیل/اعلان وب): /?profile=1 بعد از ورود، پروفایل را برای ثبت موبایل/ایمیل باز می‌کند
+  if (q.get("profile")) { history.replaceState(null, "", "/"); if (me) openProfile(); else openAuth("login", "برای تکمیل پروفایل و گرفتن اعتبار هدیه وارد شو."); }
   // از ویجت چت پشتیبانی (مهمان): /?login=chat پنجره‌ی ورود را باز می‌کند
   if (q.get("login") === "chat") { history.replaceState(null, "", "/"); if (!me) openAuth("register", "برای گفتگو با دستیار هوشمند وارد شو یا ثبت‌نام کن؛ ۳ ارائه‌ی رایگان هم هدیه می‌گیری."); }
 }

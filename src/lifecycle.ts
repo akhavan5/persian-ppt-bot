@@ -9,6 +9,7 @@
  *    buy  پیشنهاد خرید پلن: ۴۸ ساعت یا بیشتر بعد از آخرین ارائه (حداکثر ۵ کاربر در هر اجرا و ۶۰ در روز، تازه‌ترین‌ها اول)، فقط برای کسی که هرگز پرداخت موفق نداشته و پلن فعال ندارد (کاربران قدیمی هم، بدون سقف بالا)؛ یک‌بار برای هر حساب و در «همه‌ی» کانال‌های موجود (ربات + اعلان وب + ایمیل).
  *    fl   ایمیلِ «فایل‌هایت آماده است»: حدود ۱ ساعت بعد از ساخت ارائه (تا ۲۰ ساعت بعد، چون فایل‌ها ۲۴ ساعت می‌مانند)؛ فقط ایمیل (بدون ربات و اعلان وب).
  *    inv  دعوت دوستان: یک‌بار برای کسی که ۲ تا ۶ ارائه ساخته و هنوز کسی را دعوت نکرده (فقط ربات؛ لینک دعوت مخصوص ربات است).
+ *    pf   هدیه‌ی تکمیل پروفایل: یک‌بار، ۲۶ ساعت تا ۸ روز بعد از آخرین ارائه (نه در بدو ورود)، برای کسی که موبایل یا ایمیلش ثبت نیست و هدیه‌ی آن مورد را هنوز نگرفته؛ با ثبت و تایید هر مورد ۱ اعتبار (profile.ts).
  *    rfn  یادآوری نرم به دعوت‌شده‌ای که با لینک دوست آمده ولی ۳ تا ۴۸ ساعت بعد هنوز ارائه‌ای نساخته (دعوتِ دوستش به ارائه‌ی او بسته است).
  *
  *  کانال: هر اعلان به «همه‌ی» کانال‌هایی که کاربر دارد می‌رسد: ربات (تلگرام/بله/روبیکا/ایتا) + اعلان وب (webpush.ts) + ایمیل؛ موفق = حداقل یک کانال رسید. استثنا: نوت‌های only:"email" (مثل fl با پیوست) فقط ایمیل‌اند.
@@ -16,7 +17,7 @@
  *  سقف زیردرخواست: هر اجرای Worker در پلن رایگان ۵۰ زیردرخواست دارد؛ همه‌ی کارها یک «بودجه‌ی» مشترک دارند و اگر تمام شود، بقیه به اجرای ساعت بعد می‌رود.
  *  هرگز خطا پرتاب نمی‌کند. env باید با withStore ساخته شده باشد. */
 import type { Env } from "./env";
-import type { WebUser } from "./auth";
+import { emailOtpEnabled, otpEnabled, type WebUser } from "./auth";
 import { envFor, esc as tgEsc, sendMessage, tg } from "./telegram";
 import { BRAND, emailEnabled, sendEmail, siteOf, toBase64 } from "./email";
 import { loadFileDirect } from "./files";
@@ -25,7 +26,7 @@ import { faDate, firstName, render } from "./plan-notify";
 import { buyKbFor, miniappUrl } from "./deck-service";
 import { extraButtons } from "./extras";
 import { PLANS } from "./payment";
-import { DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES } from "./settings";
+import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES } from "./settings";
 import { inviteBody, inviteShareUrl, telegramInviteLink } from "./invite-msg";
 import { sendWebPush, webPushEnabled, type WebPushMsg } from "./webpush";
 import { isBaleId } from "./bale-format";
@@ -604,6 +605,62 @@ ORDER BY x.k LIMIT ?3`,
   }),
 };
 
+// کار ۸: هدیه‌ی تکمیل پروفایل (یک‌بار برای هر حساب). نه در بدو ورود: بعد از اینکه کاربر طعم ساخت ارائه را چشید (۲۶ ساعت تا ۸ روز بعد از آخرین ارائه؛
+// از پنجره‌ی ۳ تا ۲۰ ساعتِ «ex» جداست). فقط حساب‌هایی که موبایل یا ایمیلی ندارند و هدیه‌ی همان مورد (pcr:u:<حساب>:mobile|email) را هنوز نگرفته‌اند.
+// متن بر اساس وضعیت واقعی حساب ساخته می‌شود (موبایل / ایمیل / هر دو) و فقط موردی که ثبتش در سرور فعال است (OTP پیامکی/ایمیلی) آورده می‌شود.
+const pfJob: Job<ActRow> = {
+  name: "pf", doneTtl: INV_TTL,
+  sql: `
+SELECT ${ACT_COLS()}
+${ACT_FROM("json_extract(v,'$.n') >= 1 AND json_extract(v,'$.l') <= ?4 AND json_extract(v,'$.l') > ?5")}
+WHERE ${notMarked("'lc:pf:' || x.u")}
+  AND (
+    (COALESCE((SELECT json_extract(w.v,'$.mobile') FROM kv w WHERE w.k = 'wu:' || x.u), '') = ''
+       AND NOT EXISTS (SELECT 1 FROM kv g WHERE g.k = 'pcr:u:' || x.u || ':mobile'))
+    OR
+    (COALESCE((SELECT json_extract(w.v,'$.email') FROM kv w WHERE w.k = 'wu:' || x.u), '') = ''
+       AND NOT EXISTS (SELECT 1 FROM kv g WHERE g.k = 'pcr:u:' || x.u || ':email'))
+  )
+  AND ${notCapped("x.u")}
+ORDER BY x.k LIMIT ?3`,
+  extra: (now) => [now - 26 * HOUR, now - 8 * DAY],
+  marker: (r) => `lc:pf:${r.uid}`,
+  note: (c, r, k) => {
+    if (CONTACT_CREDITS <= 0) return null;
+    let u: WebUser | null = null;
+    try { u = r.usr ? (JSON.parse(r.usr) as WebUser) : null; } catch { /* بدون پروفایل */ }
+    if (!u) return null;
+    const missing: string[] = [];
+    if (!u.mobile && otpEnabled(c.env)) missing.push("mobile");
+    if (!u.email && emailOtpEnabled(c.env)) missing.push("email");
+    if (!missing.length) return null;
+    const both = missing.length > 1;
+    const what = both ? "شماره‌ی موبایل و ایمیل" : missing[0] === "mobile" ? "شماره‌ی موبایل" : "ایمیل";
+    const n = toFa(String(CONTACT_CREDITS));
+    const gift = both ? `${n} اعتبار هدیه برای هر مورد` : `${n} اعتبار هدیه`;
+    return {
+      tag: "profile-gift",
+      tg: [
+        `🎁 <b>${gift} برای تکمیل پروفایل</b>`,
+        "",
+        `با ثبت و تایید ${what} با کد یک‌بارمصرف، ${gift} می‌گیری (برای هر مورد فقط یک‌بار).`,
+        tgEsc(CONTACT_REWARD_NOTE),
+      ].join("\n"),
+      kb: async () => ({ reply_markup: { inline_keyboard: [[{ text: "👤 تکمیل پروفایل", callback_data: "h:pf" }]] } }),
+      mail: {
+        subject: `${gift} برای تکمیل پروفایل — ${BRAND}`,
+        m: {
+          href: utm(c.env, "profile", "/?profile=1"), head: "یک هدیه برای تکمیل پروفایلت 🎁", sub: `${firstName(k.name)}، ${gift} منتظر توست.`,
+          paras: [`با ثبت و تایید ${what} در پروفایل، ${gift} به حسابت اضافه می‌شود (برای هر مورد فقط یک‌بار).`, CONTACT_REWARD_NOTE],
+          rows: [["هدیه", `${n} اعتبار` + (both ? " برای هر مورد" : "")], ["نیاز به", what]], cta: "تکمیل پروفایل ←", color: "#2563eb",
+          foot: "این پیام فقط یک‌بار فرستاده می‌شود.", preview: `${gift} با ثبت ${what}`,
+        },
+      },
+      push: { title: "🎁 هدیه‌ی تکمیل پروفایل", body: `با ثبت و تایید ${what}، ${gift} بگیر.`, url: "/?profile=1", tag: "profile-gift" },
+    };
+  },
+};
+
 // ---------- اجرا ----------
 /** از cron ساعتی صدا زده می‌شود. */
 export async function runLifecycle(env: Env): Promise<Record<string, number>> {
@@ -616,7 +673,7 @@ export async function runLifecycle(env: Env): Promise<Record<string, number>> {
     await env.KV.ready();
     const c: Ctx = { env, now, nowSec: Math.floor(now / 1000), left: SUBREQUEST_BUDGET, mailOn, botNames: new Map() };
     // پرداخت و هشدار اعتبار همیشه اول؛ بقیه هر ساعت با ترتیب چرخشی تا هیچ‌کدام گرسنه نماند
-    const rest: Job<any>[] = [flJob, buyJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, rfnJob];
+    const rest: Job<any>[] = [flJob, buyJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, pfJob, rfnJob];
     const shift = Math.floor(now / HOUR) % rest.length;
     const order: Job<any>[] = [payJob, lowJob, ...rest.slice(shift), ...rest.slice(0, shift)];
     for (const job of order) {
