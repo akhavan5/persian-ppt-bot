@@ -14,7 +14,7 @@ import { listFiles, loadFileDirect } from "./files";
 import { isSampleId, sampleById, sampleCaption, sampleMime } from "./samples";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { esc, sendAudio, sendDocument, tg } from "./telegram";
-import { wavSeconds } from "./wav";
+import { audioSeconds } from "./wav";
 import { fileNameWithSite, siteHost, siteLoginUrl } from "./deck-service";
 import { toBaleId } from "./bale-format";
 import { isEitaaId, toEitaaId, validEitaaRawId } from "./eitaa-format";
@@ -123,7 +123,7 @@ const MIME: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
-  wav: "audio/wav", pdf: "application/pdf",
+  wav: "audio/wav", mp3: "audio/mpeg", pdf: "application/pdf",
 };
 
 /** POST /api/miniapp/send {id} — فایل (pptx، جزوه، پوستر، اسلاید صوتی، پادکست) را ربات به چت تلگرام خود کاربر می‌فرستد.
@@ -140,15 +140,16 @@ export async function miniappSend(env: Env, user: WebUser, body: Record<string, 
   const ext = (f.entry.name.split(".").pop() ?? "").toLowerCase();
   // اسلاید صوتی و پادکست از روی شناسه‌ی فایل شناخته می‌شوند: «<کار>-audio[-s<n>]» و «<کار>-podcast[-<n>]»
   const slidesAudio = /-audio(-s\d+)?$/.test(id), podcast = /-podcast(-\d+)?$/.test(id);
-  const label = ext === "docx" ? "📝 جزوه" : ext === "png" || ext === "jpg" || ext === "jpeg" ? "🖼 پوستر" : ext === "wav" ? (podcast ? "🎙 پادکست" : "🔊 صدای اسلاید") : slidesAudio ? "🔊 اسلاید صوتی" : "📥 ارائه";
+  const isAudio = ext === "wav" || ext === "mp3";
+  const label = ext === "docx" ? "📝 جزوه" : ext === "png" || ext === "jpg" || ext === "jpeg" ? "🖼 پوستر" : isAudio ? (podcast ? "🎙 پادکست" : "🔊 صدای اسلاید") : slidesAudio ? "🔊 اسلاید صوتی" : "📥 ارائه";
   const sm = await sampleById(env, id); // نمونه: همان کپشن آماده‌ی خودش
   try {
-    if (sm && ext !== "wav") {
+    if (sm && !isAudio) {
       await sendDocument(env, tgId, new Uint8Array(f.data), f.entry.name, sampleCaption(sm), { mime: sampleMime(sm) });
-    } else if (ext === "wav") {
-      // فایل صوتی با پخش‌کننده‌ی تلگرام (اگر WAV را نپذیرفت، sendAudio خودش به‌صورت سند می‌فرستد)
+    } else if (isAudio) {
+      // فایل صوتی (MP3/WAV) با پخش‌کننده‌ی تلگرام (اگر نپذیرفت، sendAudio خودش به‌صورت سند می‌فرستد)
       const wav = new Uint8Array(f.data);
-      await sendAudio(env, tgId, wav, f.entry.name, sm ? sampleCaption(sm) : `${label}: ${esc(f.entry.title.slice(0, 120))}`, { title: f.entry.title, ...(podcast ? { performer: siteHost(env) } : {}), duration: wavSeconds(wav) });
+      await sendAudio(env, tgId, wav, f.entry.name, sm ? sampleCaption(sm) : `${label}: ${esc(f.entry.title.slice(0, 120))}`, { title: f.entry.title, ...(podcast ? { performer: siteHost(env) } : {}), duration: audioSeconds(wav) });
     } else {
       await sendDocument(env, tgId, new Uint8Array(f.data), f.entry.name, `${label}: ${esc(f.entry.title.slice(0, 120))}`, { mime: MIME[ext] ?? "application/octet-stream" });
     }

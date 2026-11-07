@@ -73,3 +73,24 @@ export function wavSeconds(wav: Uint8Array): number {
   const bps = fmt.sampleRate * fmt.channels * (fmt.bits / 8);
   return bps ? Math.round(data.length / bps) : 0;
 }
+
+/** مدت فایل MP3 به ثانیه: از هدر اولین فریم (نرخ بیت ثابت CBR، همان خروجی mp3.ts)؛ اگر هدر خوانده نشد ۰ */
+export function mp3Seconds(mp3: Uint8Array): number {
+  let o = 0;
+  if (mp3.length > 10 && tag(mp3, 0).startsWith("ID3")) o = 10 + (((mp3[6] & 0x7f) << 21) | ((mp3[7] & 0x7f) << 14) | ((mp3[8] & 0x7f) << 7) | (mp3[9] & 0x7f)); // برچسب ID3 را رد کن
+  for (; o + 4 < mp3.length && o < 65536; o++) {
+    if (mp3[o] !== 0xff || (mp3[o + 1] & 0xe0) !== 0xe0) continue;
+    const ver = (mp3[o + 1] >> 3) & 3, layer = (mp3[o + 1] >> 1) & 3, br = mp3[o + 2] >> 4;
+    if (ver === 1 || layer !== 1 || br === 0 || br === 15) continue; // فقط Layer III
+    const table = ver === 3 ? [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320] : [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+    return Math.round(((mp3.length - o) * 8) / (table[br] * 1000));
+  }
+  return 0;
+}
+
+/** WAV یا MP3 (از روی محتوا، نه پسوند) ⇒ مدت به ثانیه؛ برای نمایش پخش‌کننده‌ی تلگرام */
+export const audioSeconds = (b: Uint8Array): number => (b.length > 12 && tag(b, 0) === "RIFF" ? wavSeconds(b) : mp3Seconds(b));
+
+/** پسوندهای فایل صوتی ساخته‌شده توسط پروژه (پادکست و صدای اسلاید) */
+export const isAudioName = (name: string) => /\.(wav|mp3)$/i.test(name);
+export const audioMime = (name: string) => (/\.mp3$/i.test(name) ? "audio/mpeg" : "audio/wav");

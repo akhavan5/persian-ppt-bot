@@ -40,6 +40,7 @@ import { isBaleId, fromBaleId } from "./bale-format";
 import { isEitaaId, fromEitaaId } from "./eitaa-format";
 import { isRubikaId } from "./rubika-format";
 import { miniappBuy, miniappDlLink, miniappDownload, miniappInvite, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
+import { isAudioName } from "./wav";
 
 const SEC_HEADERS = {
   "cache-control": "no-store",
@@ -623,7 +624,7 @@ async function audioJobStatus(env: Env, id: string): Promise<Response> {
   return json({ state: "running", message, ...(Number.isFinite(n) ? { progress: Math.max(0, Math.min(100, Math.round(n))) } : {}) });
 }
 /** فایل صوتی از روی شناسه: «<کار>-audio[-s<n>]» = اسلاید صوتی (یا صدای یک اسلاید)، «<کار>-podcast[-<n>]» = پادکست */
-const isWavFile = (name: string) => /\.wav$/i.test(name);
+const isWavFile = (name: string) => isAudioName(name); // WAV یا MP3
 
 /** پوستر به‌صورت تصویر PNG/JPG ذخیره می‌شود (پسوند تصویر)؛ ارائه‌ها PPTX */
 const isPosterFile = (name: string) => /\.(png|jpe?g)$/i.test(name);
@@ -652,9 +653,10 @@ async function download(env: Env, user: WebUser, id: string, inline = false, ran
   const png = /\.png$/i.test(f.entry.name);
   const docx = isHandoutFile(f.entry.name);
   const wav = isWavFile(f.entry.name);
-  const ascii = poster ? `poster-${siteHost(env)}.${png ? "png" : "jpg"}` : docx ? `handout-${siteHost(env)}.docx` : wav ? `audio-${siteHost(env)}.wav` : audioKind(id) === "slides" ? `audio-presentation-${siteHost(env)}.pptx` : `presentation-${siteHost(env)}.pptx`;
+  const mp3 = /\.mp3$/i.test(f.entry.name);
+  const ascii = poster ? `poster-${siteHost(env)}.${png ? "png" : "jpg"}` : docx ? `handout-${siteHost(env)}.docx` : wav ? `audio-${siteHost(env)}.${mp3 ? "mp3" : "wav"}` : audioKind(id) === "slides" ? `audio-presentation-${siteHost(env)}.pptx` : `presentation-${siteHost(env)}.pptx`;
   const headers: Record<string, string> = {
-    "content-type": poster ? (png ? "image/png" : "image/jpeg") : docx ? DOCX_MIME : wav ? "audio/wav" : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "content-type": poster ? (png ? "image/png" : "image/jpeg") : docx ? DOCX_MIME : wav ? (mp3 ? "audio/mpeg" : "audio/wav") : "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "content-disposition": `${(poster || wav) && inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
     ...SEC_HEADERS,
   };

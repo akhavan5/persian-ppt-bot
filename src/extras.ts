@@ -21,7 +21,7 @@ export const EXTRA_KINDS: ExtraKind[] = ["audio", "podcast", "handout", "poster"
 /** نوع فایل صوتی از روی شناسه: اسلاید صوتی (…-audio و …-audio-sN) یا پادکست (…-podcast) */
 export const audioKind = (id: string): "slides" | "podcast" | undefined => (/-audio(-s\d+)?$/.test(id) ? "slides" : /-podcast(-\d+)?$/.test(id) ? "podcast" : undefined);
 /** فقط «ارائه‌ی اصلی» (نه پوستر/جزوه/اسلاید صوتی/پادکست): دکمه‌ی PDF و دکمه‌های ساخت همراه فقط برای این است */
-export const isMainDeck = (id: string, name: string) => !/\.(png|jpe?g|docx|wav)$/i.test(name) && !audioKind(id) && !/-(poster|handout)$/.test(id);
+export const isMainDeck = (id: string, name: string) => !/\.(png|jpe?g|docx|wav|mp3)$/i.test(name) && !audioKind(id) && !/-(poster|handout)$/.test(id);
 export const EXTRA_NAME: Record<ExtraKind, string> = { poster: "پوستر", handout: "جزوه", audio: "اسلاید صوتی", podcast: "پادکست" };
 
 /** کد کوتاه دکمه‌ی تلگرام (ex:<کد>:<شناسه‌ی ارائه>)؛ پوستر برای هر چیدمان یک کد دارد */

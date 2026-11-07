@@ -1,19 +1,21 @@
 /**
  * جاسازی صدا «داخل خود اسلایدها» در یک فایل PPTX که قبلاً با PptxGenJS ساخته شده (ارائه از نو ساخته نمی‌شود).
  * برای هر اسلاید:
- *  • فایل WAV در ppt/media گذاشته می‌شود و یک آیکن بلندگو (p:pic با a:audioFile) پایین‌راست اسلاید می‌آید؛
+ *  • فایل صوتی (MP3 یا WAV) در ppt/media گذاشته می‌شود و یک آیکن بلندگو (p:pic با a:audioFile) پایین‌راست اسلاید می‌آید؛
  *  • با گزینه‌ی autoPlay، صدا به‌محض نمایش اسلاید خودکار پخش می‌شود (مثل Start: Automatically در پاورپوینت) و آیکن در نمایش مخفی است؛
  *  • با گزینه‌ی autoAdvance، اسلاید بعد از پایان صدا (+ کمی مکث) خودکار عوض می‌شود تا ارائه مثل یک ویدیوی روایت‌شده پیش برود.
  * خروجی بدون فشرده‌سازی (STORE) ساخته می‌شود تا CPU کمی مصرف شود؛ همان کاری که pptx.ts هم می‌کند.
  */
 import JSZip from "jszip";
 import { AUDIO_ICON_B64 } from "./audio-icon";
-import { wavSeconds } from "./wav";
+import { audioSeconds } from "./wav";
 
 export interface SlideAudio {
   /** شماره‌ی فایل اسلاید در PPTX (slideN.xml، از ۱)؛ برای اسلاید i از ارائه: pptxSlideNo(template, i) */
   slide: number;
-  wav: Uint8Array;
+  /** صدا: MP3 (پیش‌فرض خروجی mp3.ts؛ حجم حدود یک‌دهم) یا WAV؛ نوع از روی همین فیلد معلوم می‌شود. اگر هر دو بود MP3 */
+  mp3?: Uint8Array;
+  wav?: Uint8Array;
 }
 export interface EmbedOptions {
   /** پخش خودکار با نمایش اسلاید (پیش‌فرض بله) */
@@ -64,7 +66,7 @@ export async function embedAudio(pptx: Uint8Array | ArrayBuffer, items: SlideAud
   const autoPlay = o.autoPlay !== false, autoAdvance = o.autoAdvance !== false;
   const zip = await JSZip.loadAsync(pptx);
 
-  // نوع محتوای wav (و png برای آیکن) باید در [Content_Types].xml باشد
+  // نوع محتوای wav و mp3 (و png برای آیکن) باید در [Content_Types].xml باشد
   const ctFile = zip.file("[Content_Types].xml");
   if (!ctFile) throw new Error("invalid pptx: [Content_Types].xml missing");
   let ct = await ctFile.async("string");
@@ -72,6 +74,7 @@ export async function embedAudio(pptx: Uint8Array | ArrayBuffer, items: SlideAud
     if (!new RegExp(`Extension="${ext}"`, "i").test(ct)) ct = ct.replace(/(<Types[^>]*>)/, `$1<Default Extension="${ext}" ContentType="${type}"/>`);
   };
   addDefault("wav", "audio/wav");
+  addDefault("mp3", "audio/mpeg");
   addDefault("png", "image/png");
   zip.file("[Content_Types].xml", ct);
   zip.file("ppt/media/audio-icon.png", b64ToBytes(AUDIO_ICON_B64));
@@ -88,8 +91,10 @@ export async function embedAudio(pptx: Uint8Array | ArrayBuffer, items: SlideAud
 
     const nextR = Math.max(0, ...[...rels.matchAll(/Id="rId(\d+)"/g)].map((m) => Number(m[1]))) + 1;
     const [rAudio, rMedia, rImg] = [`rId${nextR}`, `rId${nextR + 1}`, `rId${nextR + 2}`];
-    const mediaName = `audio-slide${it.slide}.wav`;
-    zip.file(`ppt/media/${mediaName}`, it.wav);
+    const audio = it.mp3 ?? it.wav;
+    if (!audio) continue;
+    const mediaName = `audio-slide${it.slide}.${it.mp3 ? "mp3" : "wav"}`;
+    zip.file(`ppt/media/${mediaName}`, audio);
     rels = rels.replace("</Relationships>",
       `<Relationship Id="${rAudio}" Type="${REL}/audio" Target="../media/${mediaName}"/>` +
       `<Relationship Id="${rMedia}" Type="${REL_MEDIA}" Target="../media/${mediaName}"/>` +
@@ -98,7 +103,7 @@ export async function embedAudio(pptx: Uint8Array | ArrayBuffer, items: SlideAud
     const spid = Math.max(1, ...[...xml.matchAll(/<p:cNvPr[^>]*\sid="(\d+)"/g)].map((m) => Number(m[1]))) + 1;
     xml = xml.replace("</p:spTree>", `${picXml(spid, it.slide, rAudio, rMedia, rImg)}</p:spTree>`);
     let tail = "";
-    if (autoAdvance && !xml.includes("<p:transition")) tail += `<p:transition spd="slow" advTm="${Math.ceil(wavSeconds(it.wav) * 1000) + ADVANCE_PAD_MS}"/>`;
+    if (autoAdvance && !xml.includes("<p:transition")) tail += `<p:transition spd="slow" advTm="${Math.ceil(audioSeconds(audio) * 1000) + ADVANCE_PAD_MS}"/>`;
     if (autoPlay && !xml.includes("<p:timing")) tail += timingXml(spid);
     if (tail) xml = xml.replace(/<\/p:sld>\s*$/, `${tail}</p:sld>`);
 

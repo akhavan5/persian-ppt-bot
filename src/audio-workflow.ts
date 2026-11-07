@@ -3,6 +3,7 @@
  *  • slides: متن سخنرانی (notes) هر اسلاید با یک صدا خوانده می‌شود و صدا «داخل خود اسلاید» در همان فایل PPTX جاسازی می‌شود (pptx-audio.ts)؛
  *    در نمایش، هر اسلاید صدایش را خودکار پخش می‌کند و بعد از پایان صدا به اسلاید بعد می‌رود. اگر حجم از سقف نشست، اسلایدهای باقی‌مانده جدا فرستاده می‌شوند.
  *  • podcast: LLM یک گفت‌وگوی دو‌نفره می‌نویسد؛ Gemini با دو صدا می‌خواند؛ تکه‌ها به یک فایل می‌چسبند.
+ *  • خروجی هر دو MP3 است (تبدیل با مرورگر کلودفلر در mp3.ts؛ حجم حدود یک‌دهمِ WAV). اگر مرورگر در دسترس نبود/خطا داد یا AUDIO_FORMAT=wav بود، همان WAV تحویل می‌شود.
  * هر تکه‌ی صدا در گام جدا ساخته می‌شود تا خطا/سقف کلید فقط همان گام را دوباره امتحان کند (کلیدها در gemini-tts.ts می‌چرخند).
  * بایت‌های صدا از گام‌ها برنمی‌گردند (سقف ۱ مگابایت)؛ یا همان‌جا فرستاده می‌شوند یا موقت در KV فایل‌ها می‌مانند.
  */
@@ -23,7 +24,8 @@ import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript } from "./podcast";
 import { NARRATION_BATCH, makeNarration } from "./narration";
-import { mergeWav, wavSeconds } from "./wav";
+import { audioSeconds, mergeWav } from "./wav";
+import { mp3Enabled, wavsToMp3 } from "./mp3";
 import { embedAudio, pptxSlideNo, type SlideAudio } from "./pptx-audio";
 
 export interface AudioParams {
@@ -190,17 +192,28 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       await status("🔊 جاسازی صدا داخل اسلایدها و ارسال فایل…", 90);
       const f = await loadFileDirect(this.env, uid, deckId);
       if (!f) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
+      // MP3 با مرورگر کلودفلر: حجم حدود یک‌دهم می‌شود (اسلایدهای بیشتری داخل فایل جا می‌شوند)؛ اسلایدی که تبدیل نشد با همان WAV می‌ماند
+      if (mp3Enabled(this.env)) await status("🔊 تبدیل صدا به MP3…", 92);
+      const mp3s = await wavsToMp3(this.env, made.length, async (k) => {
+        const b = await this.env.FILES.get(tmpKey(id, made[k].i), "arrayBuffer");
+        return b ? new Uint8Array(b) : null;
+      });
       let budget = (web ? WEB_FILE_LIMIT : EMBED_BUDGET) - f.data.byteLength;
       const items: SlideAudio[] = [];
       const saved: string[] = []; // وب: شناسه‌ی فایل‌های ذخیره‌شده
-      const inFile: number[] = [], apart: typeof made = [];
-      for (const m of made) {
-        if (m.bytes > budget) { apart.push(m); continue; }
-        const b = await this.env.FILES.get(tmpKey(id, m.i), "arrayBuffer");
-        if (!b) throw new Error(`audio of slide ${m.i} missing`);
-        items.push({ slide: m.no, wav: new Uint8Array(b) });
+      const inFile: number[] = [], apart: (typeof made[number] & { mp3: Uint8Array | null })[] = [];
+      for (let k = 0; k < made.length; k++) {
+        const m = made[k], mp3 = mp3s[k];
+        const size = mp3 ? mp3.length : m.bytes;
+        if (size > budget) { apart.push({ ...m, mp3 }); continue; }
+        if (mp3) items.push({ slide: m.no, mp3 });
+        else {
+          const b = await this.env.FILES.get(tmpKey(id, m.i), "arrayBuffer");
+          if (!b) throw new Error(`audio of slide ${m.i} missing`);
+          items.push({ slide: m.no, wav: new Uint8Array(b) });
+        }
         inFile.push(m.i);
-        budget -= m.bytes;
+        budget -= size;
       }
       if (items.length) {
         const out = await embedAudio(f.data, items, { autoPlay: true, autoAdvance: true });
@@ -217,21 +230,25 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           await saveFile(this.env, uid, id, out.bytes, name, plan.title, items.length).catch((e) => console.error("audio save (bot)", String(e).slice(0, 200)));
         }
       }
-      // اسلایدهایی که در فایل جا نشدند مثل قبل جدا فرستاده می‌شوند
+      // اسلایدهایی که در فایل جا نشدند مثل قبل جدا فرستاده می‌شوند (MP3 اگر ساخته شده بود، وگرنه WAV)
       for (const m of apart) {
-        const b = await this.env.FILES.get(tmpKey(id, m.i), "arrayBuffer");
-        if (!b) continue;
-        const wav = new Uint8Array(b);
-        const wname = fileNameWithSite(this.env, plan.title, "wav", `اسلاید ${m.i + 1}`, 40);
+        let audio = m.mp3;
+        if (!audio) {
+          const b = await this.env.FILES.get(tmpKey(id, m.i), "arrayBuffer");
+          if (!b) continue;
+          audio = new Uint8Array(b);
+        }
+        const ext = m.mp3 ? "mp3" : "wav";
+        const wname = fileNameWithSite(this.env, plan.title, ext, `اسلاید ${m.i + 1}`, 40);
         if (web) {
           const fid = `${id}-s${m.i + 1}`;
-          if (!(await saveFile(this.env, uid, fid, wav, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0))) throw new Error("slide audio too large to store");
+          if (!(await saveFile(this.env, uid, fid, audio, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0))) throw new Error("slide audio too large to store");
           saved.push(fid);
           continue;
         }
-        await sendAudio(this.env, chatId, wav, wname,
-          `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: wavSeconds(wav) });
-        await saveFile(this.env, uid, `${id}-s${m.i + 1}`, wav, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0).catch((e) => console.error("slide audio save (bot)", String(e).slice(0, 200)));
+        await sendAudio(this.env, chatId, audio, wname,
+          `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: audioSeconds(audio) });
+        await saveFile(this.env, uid, `${id}-s${m.i + 1}`, audio, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0).catch((e) => console.error("slide audio save (bot)", String(e).slice(0, 200)));
       }
       for (const m of made) await this.env.FILES.delete(tmpKey(id, m.i)).catch(() => {});
       return { inFile: inFile.length, apart: apart.map((m) => toFa(String(m.i + 1))), saved };
@@ -282,19 +299,30 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         if (!b) throw new Error(`voice chunk ${i} missing`);
         wavs.push(new Uint8Array(b));
       }
-      await status("🎙 ۳/۳ — ذخیره و ارسال فایل…", 96);
-      // تقریباً هیچ‌وقت پیش نمی‌آید، ولی اگر مجموع از سقف تلگرام (یا سقف فایل در وب) گذشت به چند قسمت تقسیم می‌شود
       const limit = web ? WEB_FILE_LIMIT : TG_LIMIT;
-      const groups: Uint8Array[][] = [[]];
-      let size = 0;
-      for (const w of wavs) {
-        if (size + w.length > limit && groups[groups.length - 1].length) { groups.push([]); size = 0; }
-        groups[groups.length - 1].push(w); size += w.length;
+      // MP3 (مرورگر کلودفلر): همه‌ی تکه‌ها اول به یک WAV چسبانده و یک‌جا فشرده می‌شود (بدون درز بین تکه‌ها)؛ حجم حدود یک‌دهم و همیشه یک فایل.
+      // اگر مرورگر در دسترس نبود یا خطا داد، مثل قبل WAV تحویل می‌شود.
+      let files: { bytes: Uint8Array; ext: "mp3" | "wav" }[] = [];
+      if (mp3Enabled(this.env)) {
+        await status("🎙 ۳/۳ — تبدیل به MP3…", 93);
+        const [mp3] = await wavsToMp3(this.env, 1, async () => mergeWav(wavs, 450));
+        if (mp3 && mp3.length <= limit) files = [{ bytes: mp3, ext: "mp3" }];
       }
-      for (let g = 0; g < groups.length; g++) {
-        const merged = mergeWav(groups[g], 450);
-        const part = groups.length > 1 ? ` (قسمت ${toFa(String(g + 1))})` : "";
-        const pname = fileNameWithSite(this.env, script.title, "wav", `پادکست${groups.length > 1 ? ` ${g + 1}` : ""}`, 40);
+      if (!files.length) {
+        // WAV: تقریباً هیچ‌وقت پیش نمی‌آید، ولی اگر مجموع از سقف تلگرام (یا سقف فایل در وب) گذشت به چند قسمت تقسیم می‌شود
+        const groups: Uint8Array[][] = [[]];
+        let size = 0;
+        for (const w of wavs) {
+          if (size + w.length > limit && groups[groups.length - 1].length) { groups.push([]); size = 0; }
+          groups[groups.length - 1].push(w); size += w.length;
+        }
+        files = groups.map((g) => ({ bytes: mergeWav(g, 450), ext: "wav" as const }));
+      }
+      await status("🎙 ۳/۳ — ذخیره و ارسال فایل…", 96);
+      for (let g = 0; g < files.length; g++) {
+        const merged = files[g].bytes;
+        const part = files.length > 1 ? ` (قسمت ${toFa(String(g + 1))})` : "";
+        const pname = fileNameWithSite(this.env, script.title, files[g].ext, `پادکست${files.length > 1 ? ` ${g + 1}` : ""}`, 40);
         if (web) {
           // وب: فایل در KV می‌ماند و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام شکست می‌خورد (تلاش مجدد/برگشت اعتبار)
           const fid = g === 0 ? id : `${id}-${g + 1}`;
@@ -303,7 +331,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           continue;
         }
         await sendAudio(this.env, chatId, merged, pname,
-          `🎙 <b>${esc(script.title)}</b>${part}`, { title: script.title, performer: siteHost(this.env), duration: wavSeconds(merged) });
+          `🎙 <b>${esc(script.title)}</b>${part}`, { title: script.title, performer: siteHost(this.env), duration: audioSeconds(merged) });
         // ربات: علاوه بر چت، نسخه‌ای هم در «فایل‌ها» (سایت، Mini App و اپ) نگه می‌داریم تا پلیر و دانلود آن‌جا هم باشد.
         // بهترین‌تلاش است: اگر فایل از سقف ذخیره (۲۴ مگابایت) بزرگ‌تر بود یا ذخیره نشد، ارسال به چت که انجام شده خراب نمی‌شود.
         try {

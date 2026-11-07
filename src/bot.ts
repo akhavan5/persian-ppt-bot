@@ -16,7 +16,7 @@ import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
 import { appVerCommand } from "./app-version";
 import { editMessage, envFor, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
-import { wavSeconds } from "./wav";
+import { audioSeconds, isAudioName } from "./wav";
 import { siteHost } from "./deck-service";
 import { isBaleId } from "./bale-format";
 import { isRubikaId } from "./rubika-format";
@@ -445,13 +445,13 @@ async function handleCallback(env: Env, cq: any) {
       const cap = `${sampleCaption(sm)}\n<i>(${SAMPLE_BADGE})</i>`;
       if (sm.kind === "podcast") { // پخش‌کننده‌ی صوتی تلگرام (کنترل سرعت و جلو/عقب)؛ همان روش ارسال پادکست واقعی
         const wav = new Uint8Array(f.data);
-        return await sendAudio(env, chatId, wav, f.entry.name, cap, { title: sm.title, performer: siteHost(env), duration: wavSeconds(wav) });
+        return await sendAudio(env, chatId, wav, f.entry.name, cap, { title: sm.title, performer: siteHost(env), duration: audioSeconds(wav) });
       }
       return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, cap, { mime: sampleMime(sm) });
     }
-    if (/\.wav$/i.test(f.entry.name)) {
+    if (isAudioName(f.entry.name)) {
       const wav = new Uint8Array(f.data);
-      return await sendAudio(env, chatId, wav, f.entry.name, `${/-podcast(-\d+)?$/.test(a) ? "🎙" : "🔊"} <b>${esc(f.entry.title)}</b>`, { title: f.entry.title, ...(/-podcast(-\d+)?$/.test(a) ? { performer: siteHost(env) } : {}), duration: wavSeconds(wav) });
+      return await sendAudio(env, chatId, wav, f.entry.name, `${/-podcast(-\d+)?$/.test(a) ? "🎙" : "🔊"} <b>${esc(f.entry.title)}</b>`, { title: f.entry.title, ...(/-podcast(-\d+)?$/.test(a) ? { performer: siteHost(env) } : {}), duration: audioSeconds(wav) });
     }
     const isDeck = isMainDeck(a, f.entry.name); // اسلاید صوتی هم .pptx است ولی ارائه‌ی اصلی نیست: دکمه‌ی همراه نمی‌گیرد
     const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a).catch(() => new Set<ExtraKind>(["poster", "handout", "audio", "podcast"]))) : [];
@@ -577,7 +577,7 @@ async function showFiles(env: Env, chatId: number, uid: Uid) {
       ? [{ text: `🖼 ${f.title.slice(0, 32)} (پوستر)`, callback_data: `f:${f.id}` }]
       : /\.docx$/i.test(f.name)
       ? [{ text: `📝 ${f.title.slice(0, 32)} (جزوه)`, callback_data: `f:${f.id}` }]
-      : /\.wav$/i.test(f.name) || /-podcast(-\d+)?$/.test(f.id)
+      : isAudioName(f.name) || /-podcast(-\d+)?$/.test(f.id)
       ? [{ text: `🎙 ${f.title.slice(0, 32)} (پادکست)`, callback_data: `f:${f.id}` }]
       : /-audio(-s\d+)?$/.test(f.id)
       ? [{ text: `🔊 ${f.title.slice(0, 32)} (اسلاید صوتی)`, callback_data: `f:${f.id}` }]

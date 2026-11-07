@@ -120,9 +120,9 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
   if (!j.ok) throw new Error(`${rt.bale ? "Bale" : "Telegram"} sendDocument: ${j.description ?? r.status}`);
 }
 
-/** ارسال فایل صوتی (پخش‌کننده‌ی تلگرام با عنوان و مدت). تلگرام رسماً MP3/M4A می‌خواهد؛ اگر WAV را نپذیرفت، همان فایل به‌صورت سند فرستاده می‌شود (باز هم داخل تلگرام پخش می‌شود). */
+/** ارسال فایل صوتی (پخش‌کننده‌ی تلگرام با عنوان و مدت). تلگرام رسماً MP3/M4A می‌خواهد (خروجی پیش‌فرض اکنون MP3 است)؛ اگر WAV را نپذیرفت، همان فایل به‌صورت سند فرستاده می‌شود (باز هم داخل تلگرام پخش می‌شود). */
 export async function sendAudio(env: Env, chatId: number, data: Uint8Array, filename: string, caption: string, extra: { title?: string; performer?: string; duration?: number; mime?: string; reply_markup?: unknown } = {}) {
-  const mime = extra.mime ?? "audio/wav";
+  const mime = extra.mime ?? (/\.mp3$/i.test(filename) ? "audio/mpeg" : "audio/wav");
   if (isEitaaId(chatId)) throw new Error("Eitaa: ارسال فایل به چت پشتیبانی نمی‌شود");
   const rt = route(env, chatId);
   if (rt.rubika) { // روبیکا: «Music» فقط mp3 می‌پذیرد؛ بقیه (مثل WAV) به‌صورت فایل می‌روند

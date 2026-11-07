@@ -8,7 +8,7 @@ import type { Turn } from "./gemini-tts";
 export interface PodcastScript { title: string; turns: Turn[] }
 
 const MAX_TURN_CHARS = 320; // نوبت‌های کوتاه‌تر = حرف‌زدن طبیعی‌تر (قبلاً ۴۵۰)
-const MAX_TOTAL_CHARS = 7000; // ≈ ۶ تا ۷ دقیقه گفتار؛ فایل WAV حدود ۱۸ مگابایت می‌شود (سقف تلگرام ۵۰)
+const MAX_TOTAL_CHARS = 7000; // ≈ ۶ تا ۷ دقیقه گفتار؛ فایل WAV حدود ۱۸ مگابایت و MP3 حدود ۳ مگابایت می‌شود (سقف تلگرام ۵۰)
 const MIN_TURNS = 6;
 
 /** خلاصه‌ی ارائه برای پرامپت (عنوان، نکته‌ها و یادداشت هر اسلاید)؛ سقف طول برای ارائه‌های بزرگ */
