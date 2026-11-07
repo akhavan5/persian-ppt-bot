@@ -23,6 +23,7 @@ import { PLANS } from "./payment";
 import { inviteBody, inviteShareUrl, telegramInviteLink } from "./invite-msg";
 import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
+import { handleProfileCallback, handleProfileInput, nudgeProfile, showProfile } from "./bot-profile";
 import { notifyInviterJoined } from "./referral";
 import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
@@ -41,7 +42,7 @@ const HELP =
   "📎 یا یک <b>فایل</b> بفرست (Word، PDF، PowerPoint، Excel، متن یا عکس) تا ارائه از روی محتوای آن ساخته شود. موضوع را می‌توانی در کپشن فایل بنویسی.\n\n" +
   "🖼 چند عکس (مثلاً صفحه‌های یک جزوه) را <b>یک‌جا و به‌صورت آلبوم</b> انتخاب و بفرست (حداکثر ۱۰ عدد)؛ همه با هم خوانده می‌شوند و فقط <b>یک ارائه</b> ساخته می‌شود. عکس‌هایی که جدا از هم بفرستی هر کدام ارائه‌ی جداگانه حساب می‌شوند.\n\n" +
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
-  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دوستی که با لینک تو بیایند و اولین ارائه‌شان را بسازند = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
+  "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر؛ با ثبت و تایید موبایل یا ایمیل در /profile هم ۱ اعتبار هدیه می‌گیری)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دوستی که با لینک تو بیایند و اولین ارائه‌شان را بسازند = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
 /** خط ورودی صوتی فقط وقتی DEEPGRAM_API_KEY تنظیم است در راهنما می‌آید */
@@ -392,10 +393,12 @@ async function handleCallback(env: Env, cq: any) {
     if (a === "set") return await showSettings(env, chatId, uid);
     if (a === "files") return await showFiles(env, chatId, uid);
     if (a === "inv") return await showInvite(env, chatId, userId);
+    if (a === "pf") return await showProfile(env, chatId, userId, uid);
     if (a === "site") return await showSite(env, chatId, userId);
     if (a === "admin" && isAdmin(env, userId)) return await handleAdmin(env, chatId, "/admin", [], "/admin", userId);
     return;
   }
+  if (act === "pf") return await handleProfileCallback(env, cq, userId, chatId, a); // ثبت موبایل/ایمیل با OTP (bot-profile.ts)
   if (act === "bc") return await handleBroadcastCallback(env, cq);
   if (act === "af") return await handleAdminFileCallback(env, cq);
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
@@ -529,7 +532,8 @@ function homeKb(env: Env, tgId: number, admin: boolean) {
     [{ text: "📱 ساخت ارائه (اپ)", web_app: { url: `${miniappUrl(env)}/app` } } as Btn],
     [{ text: "💳 اعتبار و پلن", callback_data: "h:credit" }, { text: "⚙️ تنظیمات", callback_data: "h:set" }],
     [{ text: "📁 فایل‌های من", callback_data: "h:files" }, { text: "🎁 دعوت دوستان", callback_data: "h:inv" }],
-    [{ text: "🌐 سایت و خرید پلن", callback_data: "h:site" }, { text: "💬 پشتیبانی", url: supportLink(tgId) }],
+    [{ text: "👤 پروفایل", callback_data: "h:pf" }, { text: "🌐 سایت و خرید پلن", callback_data: "h:site" }],
+    [{ text: "💬 پشتیبانی", url: supportLink(tgId) }],
   ];
   if (admin) rows.push([{ text: "🛠 پنل مدیریت", callback_data: "h:admin" }]);
   return kb(rows);
@@ -623,6 +627,10 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (!msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleFeedback(env, msg, userId, uid, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
 
+  // مرحله‌های ثبت موبایل/ایمیل (شماره/ایمیل ← کد OTP): پیام متنی بعدی کاربر ورودی همان مرحله است
+  if (!msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleProfileInput(env, userId, chatId, text, !!cmd).catch((e) => { console.error("profile input", e); return false; }))) return;
+
+  if (cmd === "/profile") return await showProfile(env, chatId, userId, uid);
   if (cmd === "/app") return await showApp(env, chatId);
   if (cmd === "/site") return await showSite(env, chatId, userId);
   // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده فقط «دعوت در انتظار» ثبت می‌کند؛ وقتی اولین ارائه‌اش ساخته شد (referral.ts ← workflow.ts)
@@ -637,7 +645,11 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   if (cmd === "/credit" || cmd === "/balance") return await showCredit(env, chatId, uid, userId);
   if (cmd === "/start") await env.KV.delete(`blk:${userId}`).catch(() => {}); // اگر ربات را بلاک کرده بود و دوباره آمد (بلاک‌برداشتن = /start)، به فهرست پیام همگانی برمی‌گردد
-  if (cmd === "/start" || cmd === "/help") return await sendMessage(env, chatId, helpText(env), homeKb(env, userId, admin));
+  if (cmd === "/start" || cmd === "/help") {
+    await sendMessage(env, chatId, helpText(env), homeKb(env, userId, admin));
+    if (cmd === "/start" && !admin) await nudgeProfile(env, chatId, uid); // یک‌بار: هدیه‌ی ثبت موبایل/ایمیل برای حسابی که ندارد
+    return;
+  }
   if (cmd === "/menu") return await sendMessage(env, chatId, HOME_TEXT, homeKb(env, userId, admin));
   if (cmd === "/settings") return await showSettings(env, chatId, uid);
   if (cmd) return await sendMessage(env, chatId, "دستور ناشناخته است. منوی دکمه‌ای:", homeKb(env, userId, admin));

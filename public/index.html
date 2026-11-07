@@ -344,6 +344,7 @@ address{font-style:normal}
     <div class="row" id="userbar" hidden>
       <button class="btn gold sm" id="upgradeBtn" type="button" hidden>👑 ارتقا</button>
       <button class="chip" id="creditChip" type="button" aria-label="اعتبار و پلن‌ها"></button>
+      <button class="chip" id="giftChip" type="button" hidden title="هدیه‌ی تکمیل پروفایل">🎁 +۱</button>
       <button class="chip" id="userName" type="button" aria-label="پروفایل"></button>
     </div>
   </div>
@@ -680,6 +681,7 @@ address{font-style:normal}
   <button class="x" type="button" id="pfClose" aria-label="بستن">×</button>
   <h2 id="pfTitle" style="font-size:1.15rem;margin:0 0 12px">پروفایل</h2>
   <p class="msg info" id="pfNote" style="margin:0 0 12px" hidden></p>
+  <p class="msg info" id="pfGift" style="margin:0 0 12px" hidden></p>
   <div class="row" style="gap:12px;margin-bottom:6px"><span class="av" id="pfAv"></span><span class="muted" id="pfPlan"></span></div>
   <label for="pfName">نام</label>
   <div class="row" style="gap:8px"><input type="text" id="pfName" maxlength="64" autocomplete="name" style="flex:1"><button class="btn sm" id="pfSave" type="button">ذخیره</button></div>
@@ -787,6 +789,7 @@ async function boot() {
     const r = await api("/api/me");
     me = r.user ? r : null;
   } catch (e) { toast("ارتباط با سرور برقرار نشد؛ صفحه را دوباره باز کن."); return; }
+  if (me && me.contactReward && me.contactReward.available) { try { if (!sessionStorage.getItem("gift_seen")) { sessionStorage.setItem("gift_seen", "1"); setTimeout(() => toast(`🎁 با ثبت موبایل یا ایمیل در پروفایل ${fa(me.contactReward.credits)} اعتبار هدیه بگیر`), 1500); } } catch {} }
   if (me && me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.");
   renderCommon(); initPoster(); initLink(); initVoice();
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
@@ -962,6 +965,23 @@ function renderPfTg() {
   show($("#pfTgAdd"), !t);
   show($("#pfTgCodeRow"), false); $("#pfTg").value = ""; $("#pfTgCode").value = ""; $("#pfTgSend").disabled = false; $("#pfTgSend").textContent = "ارسال کد";
 }
+/** هدیه‌ی تکمیل پروفایل: ثبت و تایید موبایل یا ایمیل برای حسابی که ندارد = اعتبار هدیه (فقط یک‌بار)؛ جمله‌ی کنارش از سرور می‌آید */
+function renderGift() {
+  const g = me && me.contactReward, el = $("#pfGift");
+  const on = !!(g && g.available);
+  show($("#giftChip"), on);
+  if (!on) { show(el, false); return; }
+  const what = g.missing.length > 1 ? "شماره‌ی موبایل و ایمیل" : g.missing[0] === "mobile" ? "شماره‌ی موبایل" : "ایمیل";
+  el.textContent = `🎁 با ثبت و تایید ${what} ${g.missing.length > 1 ? "(برای هرکدام جداگانه، یک‌بار)" : "(یک‌بار)"} ${fa(g.credits)} اعتبار هدیه می‌گیری — ${g.note}`;
+  show(el, true);
+}
+/** بعد از ثبت موفق موبایل/ایمیل: پیام هدیه، به‌روزرسانی اعتبار و پنهان‌شدن بنر */
+async function afterContact(kind, r, okText) {
+  if (r.reward) { toast(`${okText} — ${fa(r.reward)} اعتبار هدیه گرفتی 🎁`); await boot(); if (me) { me.user = r.user; kind === "mobile" ? renderPfMobile() : renderPfEmail(); } }
+  else { toast(okText); if (me && me.contactReward) { me.contactReward.missing = me.contactReward.missing.filter((x) => x !== kind); me.contactReward.available = me.contactReward.available && me.contactReward.missing.length > 0; } }
+  renderGift();
+}
+$("#giftChip").onclick = () => openProfile();
 function openProfile(note = "") {
   const u = me.user;
   if (typeof note !== "string") note = ""; // onclick رویداد می‌فرستد
@@ -969,7 +989,7 @@ function openProfile(note = "") {
   $("#pfName").value = u.name; $("#pfAv").textContent = (u.name || "?").trim().charAt(0);
   const pl = me.plan && (me.plans.find((x) => x.id === me.plan.id) || {}).name;
   $("#pfPlan").textContent = me.plan ? `👑 پلن ${pl || ""} تا ${new Date(me.plan.exp).toLocaleDateString("fa-IR", { year: "numeric", month: "long", day: "numeric" })}` : "پلن رایگان";
-  show($("#pfMsg"), false); renderPfEmail(); renderPfMobile(); renderPfTg();
+  show($("#pfMsg"), false); renderPfEmail(); renderPfMobile(); renderPfTg(); renderGift();
   $("#profileDlg").showModal();
 }
 $("#userName").onclick = openProfile;
@@ -992,7 +1012,7 @@ $("#pfMobSend").onclick = (ev) => {
 $("#pfMobVerify").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
   return busy(ev.currentTarget, "در حال بررسی…", async () => {
-    try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); toast("شماره‌ی موبایل ثبت شد ✓");
+    try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); await afterContact("mobile", r, "شماره‌ی موبایل ثبت شد ✓");
       if (pendingPlan) { const id = pendingPlan; pendingPlan = null; $("#profileDlg").close(); buyPlan(id); } }
     catch (e) { msg.textContent = e.message; show(msg, true); }
   });
@@ -1009,7 +1029,7 @@ $("#pfEmSend").onclick = (ev) => {
 $("#pfEmVerify").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
   return busy(ev.currentTarget, "در حال بررسی…", async () => {
-    try { const r = await api("/api/profile/email", { method: "POST", body: { email: normEmail($("#pfEm").value), code: $("#pfEmCode").value } }); me.user = r.user; renderPfEmail(); toast("ایمیل ثبت شد ✓"); }
+    try { const r = await api("/api/profile/email", { method: "POST", body: { email: normEmail($("#pfEm").value), code: $("#pfEmCode").value } }); me.user = r.user; renderPfEmail(); await afterContact("email", r, "ایمیل ثبت شد ✓"); }
     catch (er) { msg.textContent = er.message; show(msg, true); }
   });
 };
@@ -1168,6 +1188,7 @@ function renderCredit() {
   const c = me.credit;
   $("#creditChip").textContent = (me.plan ? "👑 " : "💳 ") + (c.unlimited ? "اعتبار نامحدود" : `اعتبار: ${fa(c.total)}`);
   show($("#upgradeBtn"), !me.premium);
+  renderGift();
   renderModels();
   renderSlides();
 }

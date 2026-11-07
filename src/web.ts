@@ -1,11 +1,12 @@
 /** API نسخه‌ی وب: ثبت‌نام/ورود، تنظیمات، ساخت ارائه (با همان Workflow ربات)، وضعیت و دانلود. */
 import type { Env } from "./env";
 import type { Settings } from "./types";
+import { attachContact, contactRewardInfo } from "./profile";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { TEMPLATES, isTemplate } from "./template";
 import {
   DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, botPlatform, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
-  EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
+  CONTACT_REWARD_NOTE, EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
 } from "./settings";
 import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
@@ -315,37 +316,24 @@ async function putProfile(req: Request, env: Env, user: WebUser): Promise<Respon
   return json({ user: publicUser(user) });
 }
 
-/** افزودن شماره‌ی موبایل به حساب فعلی (مثلاً حساب گوگل) با تایید کد پیامکی */
+/** افزودن شماره‌ی موبایل به حساب فعلی (مثلاً حساب گوگل) با تایید کد پیامکی؛ ۱ اعتبار هدیه‌ی تکمیل پروفایل (profile.ts) */
 async function linkMobile(req: Request, env: Env, user: WebUser): Promise<Response> {
   const b = await readBody(req);
   const mobile = normMobile(b?.mobile), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
   if (!mobile) return err("شماره‌ی موبایل معتبر نیست.");
-  if (user.mobile) return err("برای حساب شما شماره‌ی موبایل ثبت شده است.", 409);
-  const other = await getUserByMobile(env, mobile);
-  if (other && other.id !== user.id) return err("این شماره برای حساب دیگری ثبت شده است.", 409);
-  const bad = await checkOtp(env, mobile, code);
-  if (bad) return err(bad, 401);
-  user.mobile = mobile;
-  await saveWebUser(env, user);
-  await env.KV.put(`wm:${mobile}`, user.id);
-  return json({ user: publicUser(user) });
+  const r = await attachContact(env, user, "mobile", mobile, code);
+  if ("error" in r) return err(r.error, r.status);
+  return json({ user: publicUser(r.user), reward: r.reward });
 }
 
-/** افزودن ایمیل به حساب فعلی (مثلاً حسابی که با موبایل ساخته شده) با تایید کد ایمیلی؛ رسید خرید به همین ایمیل می‌رود */
+/** افزودن ایمیل به حساب فعلی (مثلاً حسابی که با موبایل ساخته شده) با تایید کد ایمیلی؛ رسید خرید به همین ایمیل می‌رود. ۱ اعتبار هدیه‌ی تکمیل پروفایل */
 async function linkEmail(req: Request, env: Env, user: WebUser): Promise<Response> {
   const b = await readBody(req);
   const email = bodyEmail(b), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
   if (!email) return err("ایمیل معتبر نیست؛ مثل name@example.com وارد کن.");
-  if (user.email) return err("برای حساب شما ایمیل ثبت شده است.", 409);
-  const other = await getUserByEmail(env, email);
-  if (other && other.id !== user.id) return err("این ایمیل برای حساب دیگری ثبت شده است.", 409);
-  const bad = await checkOtp(env, email, code);
-  if (bad) return err(bad, 401);
-  user.email = email;
-  user.verified = true;
-  await saveWebUser(env, user);
-  await env.KV.put(`we:${email}`, user.id);
-  return json({ user: publicUser(user) });
+  const r = await attachContact(env, user, "email", email, code);
+  if ("error" in r) return err(r.error, r.status);
+  return json({ user: publicUser(r.user), reward: r.reward });
 }
 
 /** اتصال تلگرام ۱: آیدی عددی را می‌گیرد و ربات یک کد ۶ رقمی به چت تلگرام همان آیدی می‌فرستد */
@@ -378,6 +366,8 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     telegramPlat: telegram ? (isEitaaId(telegram) ? "eitaa" : isRubikaId(telegram) ? "rubika" : isBaleId(telegram) ? "bale" : "tg") : null,
     telegramShown: telegram ? (isEitaaId(telegram) ? fromEitaaId(telegram) : isRubikaId(telegram) ? null : isBaleId(telegram) ? fromBaleId(telegram) : telegram) : null,
     dailyFree,
+    // هدیه‌ی تکمیل پروفایل: available=true یعنی با ثبت و تایید یکی از موارد missing (mobile/email) هنوز می‌شود credits اعتبار گرفت؛ note = جمله‌ی کنار هدیه
+    contactReward: { ...(await contactRewardInfo(env, user)), note: CONTACT_REWARD_NOTE },
     decks, // تعداد ارائه‌های موفق (اپ اندروید برای یادآور فعال‌سازی)
     credit: c.unlimited
       ? { unlimited: true }

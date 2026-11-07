@@ -997,6 +997,51 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** موبایل (09…) یا ایمیلِ تمیزشده؛ نامعتبر = null */
+    private fun normContact(kind: String, raw: String): String? =
+        if (kind == "email") raw.trim().lowercase().takeIf { it.length <= 254 && Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$").matches(it) }
+        else normalizeIranMobile(raw)
+
+    /** ثبت موبایل/ایمیل در پروفایل ← ۱: ارسال کد (پیامک یا ایمیل). onDone(true) = کد فرستاده شد. */
+    fun sendContactCode(kind: String, raw: String, onDone: (Boolean) -> Unit) {
+        val v = normContact(kind, raw)
+        if (v == null) {
+            toast(if (kind == "email") "ایمیل معتبر نیست؛ مثل name@example.com بنویسید" else "شماره‌ی موبایل معتبر نیست؛ مثل 09123456789 بنویسید")
+            onDone(false)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                Api.contactSend(kind, v)
+                toast(if (kind == "email") "کد به ایمیلتان فرستاده شد" else "کد تأیید پیامک شد")
+                onDone(true)
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+                onDone(false)
+            }
+        }
+    }
+
+    /** ← ۲: تایید کد و ثبت؛ اگر هدیه‌ای اضافه شد همان لحظه اعلام و اعتبار صفحه به‌روز می‌شود. */
+    fun verifyContact(kind: String, raw: String, code: String, onDone: (Boolean) -> Unit) {
+        val v = normContact(kind, raw)
+        if (v == null) { onDone(false); return }
+        viewModelScope.launch {
+            try {
+                val reward = Api.contactVerify(kind, v, normDigits(code))
+                reloadMe()
+                toast(
+                    (if (kind == "email") "ایمیل ثبت شد" else "شماره‌ی موبایل ثبت شد") +
+                        (if (reward > 0) " — " + reward.fa() + " اعتبار هدیه گرفتید 🎁" else ""),
+                )
+                onDone(true)
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+                onDone(false)
+            }
+        }
+    }
+
     fun updateName(name: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {

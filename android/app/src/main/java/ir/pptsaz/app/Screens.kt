@@ -1338,6 +1338,8 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
     val ex = LocalExtra.current
     var nameDialog by rememberSaveable { mutableStateOf(false) }
     if (nameDialog) NameDialog(me.name, vm) { nameDialog = false }
+    var contactDialog by rememberSaveable { mutableStateOf("") } // "" | "mobile" | "email"
+    if (contactDialog.isNotEmpty()) ContactDialog(contactDialog, vm) { contactDialog = "" }
     val planName = me.planId?.let { id -> me.plans.firstOrNull { it.id == id }?.name ?: id }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -1384,6 +1386,29 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("🎁", fontSize = 22.sp)
                         Text("هر روز " + cfg.dailyFree.fa() + " اعتبار رایگان هدیه می‌گیرید.", color = ex.warn, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+
+            if (me.giftMissing.isNotEmpty()) {
+                // ثبت موبایل/ایمیل داخل خود اپ؛ هدیه‌ی هر مورد جدا و یک‌بار است و حساب در همه‌ی پلتفرم‌ها یکی می‌ماند
+                SurfaceCard(color = if (me.giftAvailable) ex.warnBg else MaterialTheme.colorScheme.surface, borderColor = null) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (me.giftAvailable && me.giftCredits > 0) {
+                            Text(
+                                "🎁 با ثبت و تأیید هر مورد، " + me.giftCredits.fa() + " اعتبار هدیه می‌گیرید (برای هر مورد یک‌بار).",
+                                color = ex.warn, style = MaterialTheme.typography.bodyMedium,
+                            )
+                            if (me.giftNote.isNotEmpty()) Text(me.giftNote, color = ex.warn, style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            Text("اطلاعات تماس", style = MaterialTheme.typography.titleSmall)
+                        }
+                        if ("mobile" in me.giftMissing && me.mobile.isEmpty()) {
+                            OutlinedButton(onClick = { contactDialog = "mobile" }, Modifier.fillMaxWidth()) { Text("📱 ثبت شماره‌ی موبایل") }
+                        }
+                        if ("email" in me.giftMissing && me.email.isEmpty()) {
+                            OutlinedButton(onClick = { contactDialog = "email" }, Modifier.fillMaxWidth()) { Text("✉️ ثبت ایمیل") }
+                        }
                     }
                 }
             }
@@ -1522,6 +1547,52 @@ fun NameDialog(current: String, vm: AppViewModel, onClose: () -> Unit) {
             )
         },
         dismissButton = { TextButton(onClick = onClose) { Text("انصراف") } },
+    )
+}
+
+/** ثبت موبایل (کد پیامکی) یا ایمیل (کد ایمیلی) در پروفایل: ۱) مقدار ← ارسال کد ۲) کد ← تایید. kind: "mobile" | "email" */
+@Composable
+fun ContactDialog(kind: String, vm: AppViewModel, onClose: () -> Unit) {
+    val isMobile = kind == "mobile"
+    var value by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
+    var sent by rememberSaveable { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onClose() },
+        shape = RoundedCornerShape(28.dp),
+        title = { Text(if (isMobile) "ثبت شماره‌ی موبایل" else "ثبت ایمیل") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = value, onValueChange = { value = it.take(if (isMobile) 16 else 254) }, singleLine = true, enabled = !sent && !busy,
+                    shape = RoundedCornerShape(16.dp),
+                    placeholder = { Text(if (isMobile) "09123456789" else "name@example.com") },
+                    keyboardOptions = KeyboardOptions(keyboardType = if (isMobile) KeyboardType.Phone else KeyboardType.Email),
+                )
+                if (sent) {
+                    Text(if (isMobile) "کد ۶ رقمی پیامک شد؛ آن را وارد کنید." else "کد ۶ رقمی به ایمیلتان فرستاده شد؛ آن را وارد کنید.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = code, onValueChange = { code = normDigits(it).filter { c -> c.isDigit() }.take(6) }, singleLine = true, enabled = !busy,
+                        shape = RoundedCornerShape(16.dp), placeholder = { Text("کد ۶ رقمی") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    TextButton(onClick = { sent = false; code = "" }, enabled = !busy) { Text(if (isMobile) "تغییر شماره / ارسال دوباره" else "تغییر ایمیل / ارسال دوباره") }
+                }
+            }
+        },
+        confirmButton = {
+            GradientButton(
+                if (sent) "تأیید" else "ارسال کد",
+                {
+                    busy = true
+                    if (!sent) vm.sendContactCode(kind, value) { ok -> busy = false; if (ok) sent = true }
+                    else vm.verifyContact(kind, value, code) { ok -> busy = false; if (ok) onClose() }
+                },
+                Modifier.width(130.dp).height(48.dp), enabled = if (sent) code.length == 6 else value.trim().length >= 5, loading = busy,
+            )
+        },
+        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("انصراف") } },
     )
 }
 

@@ -314,6 +314,39 @@ export async function claimFeedbackReward(env: Env, userId: Uid): Promise<boolea
   return true;
 }
 
+// ---------- اعتبار هدیه‌ی تکمیل پروفایل (موبایل یا ایمیل «تاییدشده با کد یک‌بارمصرف») ----------
+/** هدیه‌ی ثبت و تایید موبایل/ایمیل برای حسابی که آن را نداشت؛ به‌ازای «هر مورد» (موبایل ۱ و ایمیل ۱) برای هر حساب یک‌بار و برای هر شماره/ایمیل یک‌بار. ۰ = خاموش */
+export const CONTACT_CREDITS = 1;
+/** جمله‌ی کنار هدیه در همه‌ی پلتفرم‌ها (سایت، اپ، ربات‌ها): حساب و اعتبار یکی است */
+export const CONTACT_REWARD_NOTE = "با حفظ یکپارچگی در همه‌ی پلتفرم‌ها؛ اعتبار و فایل‌هایت در سایت، اپ، تلگرام، بله، روبیکا و ایتا یکی می‌ماند.";
+export type ContactKind = "mobile" | "email";
+const contactAcctKey = (uid: Uid, kind: ContactKind) => `pcr:u:${uid}:${kind}`;
+const contactValKey = (v: string) => `pcr:c:${v}`;
+
+/** آیا این حساب قبلاً هدیه‌ی همین مورد (موبایل یا ایمیل) را گرفته؟ */
+export async function hasContactReward(env: Env, uid: Uid, kind: ContactKind): Promise<boolean> {
+  return (await env.KV.get(contactAcctKey(uid, kind))) !== null;
+}
+
+/** هدیه‌ی تکمیل پروفایل: اتمی (INSERT OR IGNORE). contact مثل «mobile:09123456789» یا «email:a@b.com».
+ *  دو قفل: یکی روی حساب و یکی روی خودِ شماره/ایمیل؛ پس با ساختن و حذف حساب‌های تازه برای یک شماره هدیه‌ی دوباره داده نمی‌شود.
+ *  true = همین حالا اضافه شد. uid باید شناسه‌ی اصلیِ حساب باشد تا وب و ربات‌های یک حساب دوبار پاداش نگیرند. */
+export async function claimContactReward(env: Env, uid: Uid, contact: string): Promise<boolean> {
+  if (CONTACT_CREDITS <= 0 || isAdmin(env, uid)) return false;
+  const db = await rawDb(env);
+  const ins = "INSERT OR IGNORE INTO kv (k, v, exp) VALUES (?1, ?2, NULL)";
+  const kind: ContactKind = contact.startsWith("email:") ? "email" : "mobile";
+  if (!changed(await db.prepare(ins).bind(contactAcctKey(uid, kind), contact).run())) return false; // این حساب هدیه‌ی همین مورد را قبلاً گرفته
+  if (!changed(await db.prepare(ins).bind(contactValKey(contact), String(uid)).run())) {
+    await db.prepare("DELETE FROM kv WHERE k = ?1").bind(contactAcctKey(uid, kind)).run(); // این شماره/ایمیل قبلاً برای حساب دیگری هدیه گرفته؛ حساب می‌تواند با مورد دیگری امتحان کند
+    return false;
+  }
+  await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + ?2 AS TEXT), exp = NULL")
+    .bind(bonusKey(uid), String(CONTACT_CREDITS)).run();
+  return true;
+}
+
 // ---------- قفل: هر کاربر در هر لحظه یک ارائه ----------
 // TTL فقط شبکه‌ی ایمنی است تا اگر Workflow اصلاً به پایان نرسید، کاربر برای همیشه قفل نماند.
 const lockKey = (userId: Uid) => `lock:${userId}`;

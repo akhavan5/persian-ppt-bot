@@ -207,6 +207,18 @@ object Api {
         call("PUT", "/api/profile", JSONObject().put("name", name))
     }
 
+    /** ثبت موبایل/ایمیل در پروفایل، مرحله‌ی ۱: ارسال کد یک‌بارمصرف (kind: "mobile" پیامک | "email" ایمیل). */
+    suspend fun contactSend(kind: String, value: String) {
+        call("POST", "/api/auth/otp/send", JSONObject().put(if (kind == "email") "email" else "mobile", value))
+    }
+
+    /** مرحله‌ی ۲: تایید کد و ثبت روی حساب. خروجی: تعداد اعتبار هدیه‌ای که همین حالا اضافه شد (۰ = هدیه‌ای نبود). */
+    suspend fun contactVerify(kind: String, value: String, code: String): Int {
+        val key = if (kind == "email") "email" else "mobile"
+        val j = call("POST", "/api/profile/$key", JSONObject().put(key, value).put("code", code))
+        return j.optInt("reward")
+    }
+
     // ------------------------------------------------------------ پیش‌نمایش و پوستر
 
     fun previewUrl(id: String): String = "$BASE/api/files/" + Uri.encode(id) + "/preview"

@@ -55,6 +55,12 @@ data class Me(
     val support: String,
     /** تعداد ارائه‌های موفق (سرور)؛ برای یادآورهای محلی */
     val decks: Int = 0,
+    /** هدیه‌ی تکمیل پروفایل: با ثبت و تایید موبایل/ایمیل (در سایت یا ربات‌ها) اعتبار هدیه؛ giftNote = جمله‌ی «یکپارچگی در همه‌ی پلتفرم‌ها» از سرور */
+    val giftAvailable: Boolean = false,
+    val giftCredits: Int = 0,
+    val giftNote: String = "",
+    /** موردهای ثبت‌نشده‌ی پروفایل که سرور ثبتشان را پشتیبانی می‌کند: "mobile" و/یا "email" */
+    val giftMissing: List<String> = emptyList(),
 )
 
 /**
@@ -137,6 +143,10 @@ fun parseMe(j: JSONObject): Me? {
         },
         support = j.str("support"),
         decks = j.optInt("decks"),
+        giftAvailable = j.optJSONObject("contactReward")?.optBoolean("available") ?: false,
+        giftCredits = j.optJSONObject("contactReward")?.optInt("credits") ?: 0,
+        giftNote = j.optJSONObject("contactReward")?.str("note") ?: "",
+        giftMissing = j.optJSONObject("contactReward")?.optJSONArray("missing")?.let { a -> (0 until a.length()).map { i -> a.optString(i) } } ?: emptyList(),
     )
 }
 

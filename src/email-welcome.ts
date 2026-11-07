@@ -2,7 +2,7 @@
  *  قالب مخصوص کلاینت‌های ایمیل: جدول‌بندی، استایل درون‌خطی، راست‌به‌چپ، بدون SVG/فونت وب (Gmail و Outlook پشتیبانی نمی‌کنند). */
 import type { Env } from "./env";
 import type { WebUser } from "./auth";
-import { SIGNUP_CREDITS } from "./settings";
+import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, SIGNUP_CREDITS } from "./settings";
 import { toFa } from "./util";
 import { BRAND, sendEmail, siteOf } from "./email";
 
@@ -77,6 +77,14 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
           <div style="font:400 12.5px/1.9 ${FONT};color:${MUTED};">اعتبار هدیه همین حالا به حسابت اضافه شده است.</div>
         </td>
       </tr></table>
+${CONTACT_CREDITS > 0 ? `
+      <!-- هدیه‌ی تکمیل پروفایل: حساب‌هایی که با ایمیل ساخته شده‌اند هنوز موبایل ندارند -->
+      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td dir="rtl" align="center" style="padding:14px 8px 0;font:400 12.5px/2 ${FONT};color:${MUTED};">
+          🎁 با ثبت و تایید <b style="color:${INK};">شماره‌ی موبایل</b> در پروفایل، <b style="color:${INK};">${toFa(String(CONTACT_CREDITS))} اعتبار هدیه‌ی دیگر</b> هم می‌گیری.<br>${esc(CONTACT_REWARD_NOTE)}
+        </td>
+      </tr></table>
+` : ""}
 
       <!-- دکمه -->
       <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td dir="rtl" align="center" style="padding:26px 0 8px;">
@@ -115,6 +123,7 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
     `${firstName(name)}، خوش آمدی به ${BRAND}!`,
     "",
     `${credits} ارائه‌ی رایگان به‌عنوان هدیه‌ی ثبت‌نام به حسابت اضافه شده است.`,
+    ...(CONTACT_CREDITS > 0 ? [`با ثبت و تایید شماره‌ی موبایل در پروفایل، ${toFa(String(CONTACT_CREDITS))} اعتبار هدیه‌ی دیگر هم می‌گیری. ${CONTACT_REWARD_NOTE}`] : []),
     "",
     "در سه قدم ارائه‌ات آماده است:",
     ...STEPS.map(([t], i) => `${toFa(String(i + 1))}. ${t}`),

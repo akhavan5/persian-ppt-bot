@@ -185,3 +185,12 @@ async function performLink(env: Env, uid: string, tgId: number) {
   await env.KV.put(`tg2w:${tgId}`, uid);
   await env.KV.put(`w2tg:${uid}`, String(tgId));
 }
+
+/** وصل کردن هویت یک ربات (تلگرام/بله/روبیکا/ایتا) به یک حساب موجود، بعد از اینکه مالکیت موبایل/ایمیل آن حساب با کد یک‌بارمصرف ثابت شد.
+ *  اعتبار و پلنِ پروفایل خودکارِ ربات به حساب مقصد منتقل می‌شود (performLink) تا چیزی از دست نرود. */
+export async function linkBotToAccount(env: Env, uid: string, botId: number): Promise<LinkErr | { ok: true }> {
+  const chk = await linkCheck(env, uid, botId);
+  if (chk && "error" in chk) return chk;
+  if (!chk) await performLink(env, uid, botId);
+  return { ok: true };
+}
