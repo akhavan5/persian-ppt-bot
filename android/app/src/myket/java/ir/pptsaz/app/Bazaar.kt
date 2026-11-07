@@ -6,6 +6,7 @@ import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import ir.myket.billingclient.IabHelper
+import ir.myket.billingclient.util.Purchase
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.UUID
@@ -48,7 +49,7 @@ class BazaarBilling(
     }
 
     /** توکن (JSON) → اجرای «مصرف» همان خرید؛ شیء Purchase داخل lambda نگه داشته می‌شود. */
-    private val consumers = HashMap<String, (IabHelper.OnConsumeFinishedListener) -> Unit>()
+    private val consumers = HashMap<String, ((Boolean) -> Unit) -> Unit>()
 
     private val queue = ArrayDeque<(() -> Unit) -> Unit>()
     private var busy = false
@@ -88,6 +89,31 @@ class BazaarBilling(
                 return
             }
         }
+    }
+
+    /**
+     * کرش «NullPointerException … IInAppBillingService.getPurchases» (IabHelper$3.run): queryInventoryAsync و consumeAsync داخل
+     * کتابخانه یک Thread جدا می‌سازند و اگر وسطِ کار سرویس مایکت قطع شود (مایکت بسته/به‌روزرسانی شود، یا disconnect() همزمان dispose کند)
+     * استثنا در همان Thread بدون هیچ try/catch بالا می‌آید و کل اپ می‌بندد. برای همین به‌جای نسخه‌های Async، نسخه‌های همگام را
+     * روی Thread خودمان صدا می‌زنیم، همه‌ی خطاها را می‌گیریم و نتیجه را روی Main به صف برمی‌گردانیم.
+     */
+    private fun safely(work: () -> Unit, result: (Throwable?) -> Unit) {
+        Thread {
+            val err: Throwable? = try { work(); null } catch (t: Throwable) { t }
+            handler.post { result(err) }
+        }.start()
+    }
+
+    /** NullPointerException/IllegalState یعنی سرویس مایکت از زیر دست کتابخانه رفته؛ اتصال را رها می‌کنیم و خودکار دوباره وصل می‌شویم. */
+    private fun serviceLost(h: IabHelper, err: Throwable) {
+        if (err !is NullPointerException && err !is IllegalStateException) return
+        if (stopped || helper !== h) return
+        ready = false
+        helper = null
+        consumers.clear() // مصرف با این helper دیگر ممکن نیست؛ بعد از اتصال دوباره، unconsumed خریدها را از نو پیدا می‌کند
+        release(h)
+        onReady(false)
+        scheduleRetry()
     }
 
     fun connect() {
@@ -175,7 +201,7 @@ class BazaarBilling(
                             }
                             val json = p.originalJson.orEmpty()
                             val token = pack(json, p.signature.orEmpty())
-                            consumers[token] = { l -> h.consumeAsync(p, l) }
+                            consumers[token] = { cb -> consumeSafely(h, p, cb) }
                             onPurchase(skuOf(json) ?: sku, token)
                         },
                         "pptsaz-" + UUID.randomUUID().toString().take(8),
@@ -201,16 +227,23 @@ class BazaarBilling(
                 fin()
             } else {
                 try {
-                    c(IabHelper.OnConsumeFinishedListener { _, r ->
-                        if (r.isSuccess) consumers.remove(token)
-                        done(r.isSuccess)
+                    c { ok ->
+                        if (ok) consumers.remove(token)
+                        done(ok)
                         fin()
-                    })
+                    }
                 } catch (_: Exception) {
                     done(false)
                     fin()
                 }
             }
+        }
+    }
+
+    private fun consumeSafely(h: IabHelper, p: Purchase, cb: (Boolean) -> Unit) {
+        safely({ h.consume(p) }) { err ->
+            if (err != null) serviceLost(h, err)
+            cb(err == null)
         }
     }
 
@@ -223,27 +256,22 @@ class BazaarBilling(
                 cb(emptyList())
                 fin()
             } else {
-                try {
-                    h.queryInventoryAsync(
-                        false,
-                        IabHelper.QueryInventoryFinishedListener { r, inv ->
-                            val out = ArrayList<Pair<String, String>>()
-                            if (helper != null && r.isSuccess && inv != null) {
-                                for (p in inv.allPurchases.orEmpty()) {
-                                    val json = p.originalJson.orEmpty()
-                                    val sku = skuOf(json) ?: continue
-                                    val token = pack(json, p.signature.orEmpty())
-                                    consumers[token] = { l -> h.consumeAsync(p, l) }
-                                    out += sku to token
-                                }
-                            }
-                            fin()
-                            cb(out)
-                        },
-                    )
-                } catch (_: Exception) {
-                    cb(emptyList())
+                var inv: ir.myket.billingclient.util.Inventory? = null
+                safely({ inv = h.queryInventory(false, null) }) { err ->
+                    val out = ArrayList<Pair<String, String>>()
+                    if (err != null) {
+                        serviceLost(h, err)
+                    } else if (helper === h) {
+                        for (p in inv?.allPurchases.orEmpty()) {
+                            val json = p.originalJson.orEmpty()
+                            val sku = skuOf(json) ?: continue
+                            val token = pack(json, p.signature.orEmpty())
+                            consumers[token] = { k -> consumeSafely(h, p, k) }
+                            out += sku to token
+                        }
+                    }
                     fin()
+                    cb(out)
                 }
             }
         }
