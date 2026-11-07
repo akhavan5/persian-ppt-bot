@@ -361,7 +361,8 @@ fun LoginScreen(st: UiState, vm: AppViewModel) {
                                             else -> "09123456789"
                                         },
                                         Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-                                        style = if (otpOn && emailOn) MaterialTheme.typography.bodyMedium else LocalTextStyle.current,
+                                        maxLines = 1, softWrap = false, // همیشه یک خط
+                                        style = if (otpOn && emailOn) MaterialTheme.typography.bodySmall else LocalTextStyle.current,
                                     )
                                 },
                                 textStyle = fieldStyle,
