@@ -157,6 +157,12 @@ object Api {
 
     suspend fun files(): List<FileItem> = parseFiles(call("GET", "/api/files"))
 
+    /** گفتگوی قبلی با دستیار هوشمند پشتیبانی + تعداد پیام‌های باقی‌مانده‌ی امروز (همان گفتگوی سایت). */
+    suspend fun supportHistory(): SupportData = parseSupport(call("GET", "/api/support/history"))
+
+    /** پیام کاربر را می‌فرستد و گفتگوی به‌روز (همراه جواب دستیار) را برمی‌گرداند. خطای ۴۲۹ = سقف روزانه یا ارسال پشت‌سرهم. */
+    suspend fun supportSend(text: String): SupportData = parseSupport(call("POST", "/api/support/send", JSONObject().put("text", text)))
+
     suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean, audio: Boolean = false, podcast: Boolean = false, imagesMany: Boolean = false): String {
         val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout).put("images", images).put("imagesMany", images && imagesMany)
         if (poster != null) b.put("poster", poster)

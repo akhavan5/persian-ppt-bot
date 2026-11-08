@@ -165,6 +165,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     val form: CreateForm = Draft.load(app)
 
+    /** گفتگوی «پشتیبانی هوشمند» (Support.kt) */
+    val support = SupportChat()
+
     private var lastMeRefresh = 0L
 
     /** کاربر برای پرداخت/لینک بیرونی از اپ رفته؛ با برگشتن، بدون توجه به فاصله‌ی زمانی حساب (اعتبار/پلن) تازه می‌شود. */
@@ -397,6 +400,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             InviteCache.clear(getApplication())
             LocalFiles.clear(getApplication())
             form.reset()
+            support.reset()
             _state.update { UiState(screen = Screen.Login, config = it.config) }
         }
     }
