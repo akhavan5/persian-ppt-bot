@@ -573,8 +573,7 @@ async function showSupport(env: Env, chatId: number, userId: number, uid: Uid) {
   if (typeof uid !== "string") return await sendMessage(env, chatId, "🤖 دستیار هوشمند پشتیبانی برای کاربران است؛ حساب مدیر پروفایل کاربری ندارد.");
   await env.KV.put(supKey(userId), "1", { expirationTtl: SUP_TTL });
   return await sendMessage(env, chatId,
-    "🤖 <b>پشتیبانی هوشمند</b>\nهر سؤالی درباره‌ی قیمت و اعتبار، ساخت ارائه، مشکل فنی یا حتی نکته‌های طراحی و سخنرانی داری همین‌جا بنویس. " +
-    "اگر موضوعی به تیم نیاز داشته باشد (مثل پرداخت یا فایل خراب) خودم برایشان ارجاع می‌دهم.\n\n" +
+    "🤖 <b>پشتیبانی هوشمند</b>\nهر سؤالی درباره‌ی قیمت و اعتبار، ساخت ارائه، مشکل فنی یا حتی نکته‌های طراحی و سخنرانی داری همین‌جا بنویس.\n\n" +
     "<i>تا وقتی در این گفتگو هستی پیام‌هایت سؤال از دستیار حساب می‌شود، نه موضوع ارائه. هر دستور، فایل یا دکمه‌ی زیر از گفتگو خارجت می‌کند.</i>", supKb());
 }
 
@@ -589,8 +588,7 @@ async function handleSupportInput(env: Env, chatId: number, userId: number, uid:
   await env.KV.put(supKey(userId), "1", { expirationTtl: SUP_TTL }).catch(() => {});
   await tg(env, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {}); // «در حال نوشتن…»؛ در پیام‌رسان‌هایی که ندارند بی‌اثر است
   const r = await supportBotAsk(env, uid, text, botPlatform(userId));
-  const left = !r.error && r.remaining <= 3 ? `\n\n<i>پیام‌های باقی‌مانده‌ی امروز: ${toFa(String(r.remaining))}</i>` : "";
-  await sendMessage(env, chatId, esc(r.text) + left, supKb());
+  await sendMessage(env, chatId, esc(r.text), supKb());
   return true;
 }
 

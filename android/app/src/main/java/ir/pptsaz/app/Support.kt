@@ -346,9 +346,8 @@ private fun SupportInput(vm: AppViewModel) {
                 AppIcon(AppIcons.Send, tint = if (canSend) cs.onPrimary else cs.onSurface.copy(alpha = 0.38f), description = "ارسال", modifier = Modifier.graphicsLayer { scaleX = -1f })
             }
         }
-        Text(
-            if (out) "سهمیه‌ی پیام امروز تمام شد (از نیمه‌شب به وقت ایران دوباره پر می‌شود)."
-            else "${s.remaining.fa()} از ${s.limit.fa()} پیام امروز باقی‌مانده · موضوع‌های خاص به تیم پشتیبانی ارجاع می‌شود",
+        if (out) Text(
+            "سهمیه‌ی پیام امروز تمام شد (از نیمه‌شب به وقت ایران دوباره پر می‌شود).",
             style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant,
             modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
         )
