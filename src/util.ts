@@ -14,7 +14,7 @@ export const toEn = (s: string) =>
  * بقیه‌ی متن مثل قبل (در صورت digits=true) ارقام فارسی می‌گیرد.
  * mode "isolate" = LRI/PDI (مرورگر/PDF)، "embed" = LRE/PDF (PowerPoint و Word؛ سازگارتر)
  */
-const MATH_RUN = /[A-Za-z0-9۰-۹\u0370-\u03FF\u00B1\u00B2\u00B3\u00B7\u00B9\u00D7\u00F7\u2026\u2070-\u209F\u2190-\u22FF=+\-*\/^_!.,;:()[\]{}|<>% ]+/g;
+const MATH_RUN = /[A-Za-z0-9۰-۹\u0370-\u03FF\u00B1\u00B2\u00B3\u00B7\u00B9\u00D7\u00F7\u066B\u066C\u2026\u2070-\u209F\u2190-\u22FF=+\-*\/^_!.,;:()[\]{}|<>% ]+/g;
 const MATH_LEAD = /^(?:[\s.,;:?)\]}%]|[0-9۰-۹]+(?=\s))+/;
 const MATH_TRAIL = /[\s.,;:?(\[{]+$/;
 const HAS_LETTER = /[A-Za-z\u0370-\u03FF]/;
@@ -30,7 +30,7 @@ export function faText(s: string, digits: boolean, mode: "isolate" | "embed" = "
     const core = raw.slice(lead.length).replace(MATH_TRAIL, "");
     if (!core || !HAS_LETTER.test(core) || !HAS_MATH.test(core)) continue;
     const start = at + lead.length;
-    out += plain(s.slice(last, start)) + open + toEn(core) + close;
+    out += plain(s.slice(last, start)) + open + toEn(core).replace(/\u066B/g, ".").replace(/\u066C/g, ",") + close;
     last = start + core.length;
   }
   return out + plain(s.slice(last));
