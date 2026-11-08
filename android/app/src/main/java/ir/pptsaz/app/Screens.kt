@@ -1340,7 +1340,6 @@ fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
                 HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 ToggleRow("اسلاید پرسش‌های پایانی", "پرسش و پاسخ برای جمع‌بندی", null, s.questions) { vm.setSetting("questions", it) }
                 HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
-                if (Push.configured) ToggleRow("اعلان‌های اخبار و تخفیف", "اطلاعیه‌ی قابلیت‌های تازه و تخفیف‌ها؛ اعلان «ارائه آماده شد» همیشه روشن می‌ماند", null, st.promo) { vm.setPromo(it) }
                 ToggleRow("ذخیره‌ی خودکار روی گوشی", "بعد از ساخت، یک نسخه روی گوشی می‌ماند تا بعد از ۲۴ ساعت هم در دسترس باشد", null, st.autoSave) { vm.setAutoSave(it) }
             }
 

@@ -80,7 +80,6 @@ data class UiState(
     val me: Me? = null,
     val files: List<FileItem> = emptyList(),
     val localFiles: List<LocalFile> = emptyList(), // نسخه‌های ذخیره‌شده روی گوشی (بعد از ۲۴ ساعت سرور هم می‌مانند)
-    val promo: Boolean = true, // اعلان‌های اخبار و تخفیف (FCM)
     val autoSave: Boolean = true, // ذخیره‌ی خودکار روی گوشی بعد از ساخت
     val filesLoading: Boolean = false,
     val tab: Int = 0,
@@ -186,7 +185,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Api.init(app)
-        _state.update { it.copy(files = FileCache.load(app), invite = InviteCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app), promo = Push.promoEnabled(app)) }
+        _state.update { it.copy(files = FileCache.load(app), invite = InviteCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app)) }
         viewModelScope.launch { CrashReporter.sendPending(app) }
         // ویجت صفحه‌ی اصلی: آخرین اعتبار (یا «خارج از حساب» = null) را برای ویجت نگه می‌دارد؛ حالت‌های Loading/Error نادیده گرفته می‌شوند
         viewModelScope.launch {
@@ -735,13 +734,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val list = withContext(Dispatchers.IO) { LocalFiles.list(app) }
             _state.update { it.copy(localFiles = list) }
         }
-    }
-
-    fun setPromo(on: Boolean) {
-        val app = getApplication<Application>()
-        Push.setPromo(app, on)
-        _state.update { it.copy(promo = on) }
-        viewModelScope.launch { Push.sync(app) }
     }
 
     fun setAutoSave(on: Boolean) {

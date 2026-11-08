@@ -18,7 +18,7 @@ import kotlin.coroutines.resume
 /**
  * اعلان تبلیغاتی/خبری با FCM. مقدارهای فایربیس هنگام بیلد از متغیرهای محیطی می‌آیند (FIREBASE_*)؛
  * اگر خالی باشند همه‌ی این‌ها بی‌اثر است و اپ مثل قبل کار می‌کند (فایل google-services.json لازم نیست).
- * پیام‌ها «data-only» هستند و اعلان را خود اپ می‌سازد؛ پس با خاموش‌کردن «اعلان‌های اخبار و تخفیف» دیگر نمایش داده نمی‌شوند.
+ * پیام‌ها «data-only» هستند و اعلان را خود اپ می‌سازد؛ و گزینه‌ی خاموش‌کردن آن‌ها در تنظیمات اپ وجود ندارد.
  */
 object Push {
     private const val CHANNEL = "promo"
@@ -45,11 +45,9 @@ object Push {
         }
     }
 
-    private fun prefs(ctx: Context) = ctx.getSharedPreferences("push", Context.MODE_PRIVATE)
-    fun promoEnabled(ctx: Context): Boolean = prefs(ctx).getBoolean("promo", true)
-    fun setPromo(ctx: Context, on: Boolean) {
-        prefs(ctx).edit().putBoolean("promo", on).apply()
-    }
+    /** اعلان اخبار و تخفیف همیشه روشن است و کاربر گزینه‌ای برای خاموش‌کردنش در اپ ندارد (مقدار قدیمیِ خاموش هم نادیده گرفته می‌شود). */
+    @Suppress("UNUSED_PARAMETER")
+    fun promoEnabled(ctx: Context): Boolean = true
 
     private suspend fun token(): String? = suspendCancellableCoroutine { c ->
         try {
