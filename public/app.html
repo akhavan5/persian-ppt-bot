@@ -1456,12 +1456,23 @@ async function shareInvite(link) {
   if (navigator.share) { try { await navigator.share({ title: "پاورپوینت‌ساز فارسی", text: "ساخت پاورپوینت فارسی با هوش مصنوعی 👇", url: link }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
   if (await copyText(link)) toast("لینک دعوت کپی شد؛ برای دوستانت بفرست ✓"); else window.prompt("لینک دعوت را کپی کن:", link);
 }
+// آخرین مقدار «دعوت» برای هر کاربر روی دستگاه می‌ماند: بخش و دکمه از همان لحظه‌ی باز شدن برنامه آماده‌اند و سرور فقط پشت‌صحنه عدد را به‌روز می‌کند.
+// لینک ارسال (link: مخصوص پلتفرم حساب) هم همین‌جا نگه داشته می‌شود تا زدن «ارسال لینک دعوت» منتظر درخواست نماند.
+let invData = null;
+const invKey = () => "pptInv:" + (me && me.user ? me.user.id : "");
+function invLoadCache() { try { const v = JSON.parse(localStorage.getItem(invKey()) || "null"); return v && v.link ? v : null; } catch { return null; } }
+function invPaint(v) {
+  $("#invCount").textContent = `📊 دعوت‌های موفق تو تا الان: ${fa(v.count)} از ${fa(v.max)}`; show($("#invCount"), true);
+  show($("#invClaim"), !!v.canClaim);
+}
 async function loadInvite() {
+  if (!invData) { invData = invLoadCache(); if (invData) invPaint(invData); } // اول مقدار ذخیره‌شده، فوری
   try {
     const d = await api("/api/invite");
-    $("#invCount").textContent = `📊 دعوت‌های موفق تو تا الان: ${fa(d.count)} از ${fa(d.max)}`; show($("#invCount"), true);
-    show($("#invClaim"), !!d.canClaim);
-  } catch {}
+    invData = { link: d.link || d.webLink, webLink: d.webLink, count: d.count, max: d.max, canClaim: !!d.canClaim };
+    try { localStorage.setItem(invKey(), JSON.stringify(invData)); } catch {}
+    invPaint(invData);
+  } catch {} // خطای شبکه: مقدار قبلی می‌ماند
 }
 // startapp=ref_<شناسه> (لینک برنامک ایتا / Mini App دوستی که دعوتت کرده): بعد از ورود ثبت می‌شود؛ خطاها (مثلاً بعد از اولین ارائه) بی‌صدا
 async function claimStartRef() {
@@ -1470,12 +1481,15 @@ async function claimStartRef() {
   store.set("refDone", m[1]);
   try { await api("/api/invite/claim", { method: "POST", body: { code: m[1] } }); toast("🎁 کد دعوت دوستت ثبت شد؛ با ساخت اولین ارائه‌ات دعوتش شمرده می‌شود."); } catch {}
 }
-$("#inv").onclick = (e) => busy(e.currentTarget, "در حال آماده‌سازی…", async () => {
-  try {
-    const d = await api("/api/invite", { method: "POST" });
-    await shareInvite(d.link);
-  } catch (err) { toast(err.message); }
-});
+$("#inv").onclick = async (e) => {
+  if (invData && invData.link) { shareInvite(invData.link); loadInvite(); return; } // لینک آماده است: بدون انتظار برای سرور
+  return busy(e.currentTarget, "در حال آماده‌سازی…", async () => {
+    try {
+      const d = await api("/api/invite", { method: "POST" });
+      await shareInvite(d.link);
+    } catch (err) { toast(err.message); }
+  });
+};
 $("#invSend").onclick = (e) => busy(e.currentTarget, "در حال ثبت…", async () => {
   try {
     await api("/api/invite/claim", { method: "POST", body: { code: $("#invCode").value } });

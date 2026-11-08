@@ -72,3 +72,25 @@ object FileCache {
         p(ctx).edit().clear().apply()
     }
 }
+
+/** آخرین «دعوت دوستان» روی خود گوشی؛ کارت دعوت بعد از هر بار باز کردن اپ فوراً با آخرین مقدار دیده می‌شود و فقط عدد در پس‌زمینه به‌روز می‌شود. با خروج از حساب پاک می‌شود. */
+object InviteCache {
+    private fun p(ctx: Context) = ctx.getSharedPreferences("invite", Context.MODE_PRIVATE)
+
+    fun save(ctx: Context, d: InviteInfo) {
+        p(ctx).edit()
+            .putString("link", d.link).putInt("count", d.count).putInt("max", d.max).putInt("every", d.every).putBoolean("canClaim", d.canClaim)
+            .apply()
+    }
+
+    fun load(ctx: Context): InviteInfo? {
+        val p = p(ctx)
+        val link = p.getString("link", "").orEmpty()
+        if (link.isEmpty()) return null
+        return InviteInfo(link, p.getInt("count", 0), p.getInt("max", 50), p.getInt("every", 5), p.getBoolean("canClaim", false))
+    }
+
+    fun clear(ctx: Context) {
+        p(ctx).edit().clear().apply()
+    }
+}

@@ -181,7 +181,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         Api.init(app)
-        _state.update { it.copy(files = FileCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app), promo = Push.promoEnabled(app)) }
+        _state.update { it.copy(files = FileCache.load(app), invite = InviteCache.load(app), localFiles = LocalFiles.list(app), autoSave = LocalFiles.autoEnabled(app), promo = Push.promoEnabled(app)) }
         viewModelScope.launch { CrashReporter.sendPending(app) }
         // ویجت صفحه‌ی اصلی: آخرین اعتبار (یا «خارج از حساب» = null) را برای ویجت نگه می‌دارد؛ حالت‌های Loading/Error نادیده گرفته می‌شوند
         viewModelScope.launch {
@@ -225,7 +225,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val cfg = _state.value.config ?: Api.config()
                 val me = Api.me()
                 if (me == null) {
-                    _state.update { it.copy(config = cfg, me = null, screen = Screen.Login, error = null) }
+                    InviteCache.clear(getApplication())
+                    _state.update { it.copy(config = cfg, me = null, invite = null, screen = Screen.Login, error = null) }
                 } else {
                     _state.update { it.copy(config = cfg, me = me, screen = Screen.Main, error = null) }
                     lastMeRefresh = SystemClock.elapsedRealtime() // اولین onResume بعد از شروع، درخواست تکراری نمی‌فرستد
@@ -368,6 +369,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             Api.logout()
             Draft.clear(getApplication())
             FileCache.clear(getApplication())
+            InviteCache.clear(getApplication())
             LocalFiles.clear(getApplication())
             form.reset()
             _state.update { UiState(screen = Screen.Login, config = it.config) }
@@ -1054,6 +1056,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val d = Api.invite()
+                if (_state.value.screen != Screen.Main) return@launch // وسط خروج از حساب: دعوت حساب قبلی ذخیره/نمایش داده نشود
+                InviteCache.save(getApplication(), d)
                 _state.update { it.copy(invite = d) }
             } catch (_: ApiException) { /* مقدار قبلی می‌ماند */ }
         }

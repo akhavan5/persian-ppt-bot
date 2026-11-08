@@ -1573,6 +1573,7 @@ private fun ContactRow(icon: ImageVector, brush: Brush, title: String, value: St
 /** دعوت دوستان در اپ: لینک سایت، شمارنده‌ی دعوت‌های موفق و ورود کد دعوتِ دوست (در هر زمان). اطلاعات از state می‌آید (پیش‌بارگذاری‌شده در ViewModel) تا کارت بدون تأخیر دیده شود. */
 @Composable
 fun InviteCard(d: InviteInfo?, vm: AppViewModel) {
+    LaunchedEffect(Unit) { vm.refreshInvite() } // هر بار که «حساب من» باز می‌شود عدد به‌روز می‌شود؛ کارت با آخرین مقدارِ ذخیره‌شده فوراً دیده می‌شود
     if (d == null) return
     val ctx = LocalContext.current
     var code by rememberSaveable { mutableStateOf("") }

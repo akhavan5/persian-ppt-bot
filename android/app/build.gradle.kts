@@ -19,8 +19,8 @@ android {
         applicationId = "ir.pptsaz.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
         // اعلان FCM: از متغیرهای محیطی (GitHub Secrets) می‌آید؛ خالی = اعلان خاموش. فایل google-services.json لازم نیست.
         for (k in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {
             buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim().replace("\"", "") + "\"")

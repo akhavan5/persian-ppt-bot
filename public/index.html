@@ -867,7 +867,7 @@ async function boot() {
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
   // درخواست تکراری callback (nginx/مرورگر) خطای کاذب برمی‌گرداند ولی نشست از درخواست اول ساخته شده؛ اگر وارد شده‌ایم خطا نمایش داده نشود و از آدرس پاک شود
   if (me) { const sp = new URLSearchParams(location.search); if (sp.has("login_error") || sp.get("login") === "expired") history.replaceState(null, "", "/"); }
-  if (me) claimStoredRef();
+  if (me) claimStoredRef().finally(() => fetchInvite().catch(() => {})); // پیش‌بارگذاری دعوت (بعد از ثبت کد ذخیره‌شده) تا اولین باز شدن پروفایل هم فوری باشد
   else if (refStore.get() && !store.get("refHint")) { store.set("refHint", "1"); setTimeout(() => toast("🎁 با لینک دعوت دوستت آمده‌ای؛ ثبت‌نام کن و اولین ارائه‌ات را بساز."), 1200); }
   if (me) { if ($("#authDlg").open) $("#authDlg").close(); renderApp(); } else renderAuthBtn();
   handlePayReturn();
@@ -988,15 +988,37 @@ async function claimStoredRef() {
     toast("🎁 کد دعوت دوستت ثبت شد؛ با ساخت اولین ارائه‌ات دعوتش شمرده می‌شود.");
   } catch (e) { if (e.status >= 400 && e.status < 500 && e.status !== 429) refStore.clear(); } // خطای شبکه/سرور یا محدودیت: بعداً دوباره تلاش می‌شود
 }
+// «دعوت دوستان» پروفایل: آخرین مقدار برای هر کاربر روی خود دستگاه می‌ماند و بخش همان لحظه‌ی باز شدن پروفایل دیده می‌شود؛
+// درخواست سرور فقط پشت‌صحنه عدد (و در صورت تغییر لینک/وضعیت ثبت کد) را به‌روز می‌کند. بدون هیچ مقدار ذخیره‌شده هم کادر بلافاصله با «در حال دریافت…» می‌آید.
+const invCache = {
+  key: () => "pptInv:" + (me && me.user ? me.user.id : ""),
+  get() { try { return me && me.user ? JSON.parse(localStorage.getItem(this.key()) || "null") : null; } catch { return null; } },
+  set(d) { try { if (me && me.user) localStorage.setItem(this.key(), JSON.stringify({ link: d.webLink || d.link, count: d.count, max: d.max, canClaim: !!d.canClaim })); } catch {} },
+};
+let invMem = null, invMemUid = null, invInflight = null;
+const invNow = () => (me && me.user && invMemUid === me.user.id ? invMem : null) || invCache.get();
+function fetchInvite() { // درخواست‌های هم‌زمان یکی می‌شوند؛ نتیجه در حافظه و روی دستگاه ذخیره می‌شود
+  if (invInflight) return invInflight;
+  const uid = me && me.user ? me.user.id : null;
+  return (invInflight = api("/api/invite").then((d) => {
+    const v = { link: d.webLink || d.link, count: d.count, max: d.max, canClaim: !!d.canClaim };
+    if (uid && me && me.user && me.user.id === uid) { invMem = v; invMemUid = uid; invCache.set(d); }
+    return v;
+  }).finally(() => { invInflight = null; }));
+}
+function paintInvite(v) {
+  if (v.link) $("#pfInvLink").value = v.link;
+  $("#pfInvCount").textContent = `📊 دعوت‌های موفق تو تا الان: ${fa(v.count)} از ${fa(v.max)}`;
+  show($("#pfInvClaim"), !!v.canClaim); // کادر ورودی کد دست نمی‌خورد (کاربر ممکن است وسط تایپ باشد)
+}
 async function renderPfInvite() {
-  const box = $("#pfInvBox"); show(box, false);
-  try {
-    const d = await api("/api/invite");
-    $("#pfInvLink").value = d.webLink || d.link;
-    $("#pfInvCount").textContent = `📊 دعوت‌های موفق تو تا الان: ${fa(d.count)} از ${fa(d.max)}`;
-    $("#pfInvCode").value = ""; show($("#pfInvClaim"), !!d.canClaim);
-    show(box, true);
-  } catch {}
+  const box = $("#pfInvBox"), cached = invNow();
+  $("#pfInvCode").value = "";
+  show(box, true);
+  if (cached) paintInvite(cached);
+  else { $("#pfInvLink").value = ""; $("#pfInvLink").placeholder = "در حال دریافت لینک…"; $("#pfInvCount").textContent = "📊 دعوت‌های موفق تو تا الان: …"; show($("#pfInvClaim"), false); }
+  try { paintInvite(await fetchInvite()); }
+  catch { if (!cached) show(box, false); } // خطای شبکه: مقدار قبلی می‌ماند؛ اگر هیچ مقداری نبود بخش پنهان می‌شود
 }
 $("#pfInvCopy").onclick = async () => {
   const el = $("#pfInvLink");
@@ -1009,7 +1031,7 @@ $("#pfInvShare").onclick = async () => {
 $("#pfInvSend").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
   return busy(ev.currentTarget, "در حال ثبت…", async () => {
-    try { await api("/api/invite/claim", { method: "POST", body: { code: $("#pfInvCode").value } }); refStore.clear(); toast("✓ کد دعوت ثبت شد؛ با ساخت اولین ارائه‌ات دعوتِ دوستت شمرده می‌شود."); renderPfInvite(); }
+    try { await api("/api/invite/claim", { method: "POST", body: { code: $("#pfInvCode").value } }); refStore.clear(); toast("✓ کد دعوت ثبت شد؛ با ساخت اولین ارائه‌ات دعوتِ دوستت شمرده می‌شود."); const c = invNow(); if (c) { c.canClaim = false; invMem = c; invMemUid = me.user.id; invCache.set({ link: c.link, count: c.count, max: c.max, canClaim: false }); } renderPfInvite(); }
     catch (e) { msg.textContent = e.message; show(msg, true); }
   });
 };
