@@ -167,6 +167,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** گفتگوی «پشتیبانی هوشمند» (Support.kt) */
     val support = SupportChat()
 
+    /** پیش‌نویس تأیید موبایل/ایمیل پروفایل (ContactDialog)؛ با بستن پنجره از بین نمی‌رود */
+    val contactDrafts = mapOf("mobile" to ContactDraft(), "email" to ContactDraft())
+
     private var lastMeRefresh = 0L
 
     /** کاربر برای پرداخت/لینک بیرونی از اپ رفته؛ با برگشتن، بدون توجه به فاصله‌ی زمانی حساب (اعتبار/پلن) تازه می‌شود. */
@@ -400,6 +403,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             LocalFiles.clear(getApplication())
             form.reset()
             support.reset()
+            contactDrafts.values.forEach { it.reset() }
             _state.update { UiState(screen = Screen.Login, config = it.config) }
         }
     }
@@ -1055,6 +1059,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val reward = Api.contactVerify(kind, v, normDigits(code))
+                contactDrafts[kind]?.reset()
                 reloadMe()
                 toast(
                     (if (kind == "email") "ایمیل ثبت شد" else "شماره‌ی موبایل ثبت شد") +

@@ -1394,8 +1394,10 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                         }
                         Column(Modifier.weight(1f)) {
                             Text(me.name.ifBlank { "کاربر" }, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            val sub = me.mobile.ifEmpty { me.email }
-                            if (sub.isNotEmpty()) Text(sub.faStr(), style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f), maxLines = 1)
+                            // شماره و ایمیلِ ثبت‌شده، هرکدام یک خط زیر نام (مورد تازه‌تأییدشده زیر مورد قبلی می‌آید)
+                            listOf(me.mobile, me.email).filter { it.isNotEmpty() }.forEach {
+                                Text(it.faStr(), style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                         IconButton(onClick = { nameDialog = true }) { AppIcon(AppIcons.Edit, tint = Color.White, size = 22.dp, description = "ویرایش نام") }
                     }
@@ -1419,10 +1421,10 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                     // LRM پیش از «+»: در متن راست‌به‌چپ علامت + سمت اشتباه عدد نیفتد
                     val gift = if (me.giftAvailable && me.giftCredits > 0) " (\u200E+" + me.giftCredits.fa() + " اعتبار هدیه)" else ""
                     if ("mobile" in me.giftMissing && me.mobile.isEmpty()) {
-                        ProfileContactButton("📱 ثبت و تأیید شماره‌ی موبایل$gift") { contactDialog = "mobile" }
+                        ProfileContactButton("📱 تأیید شماره‌ی موبایل$gift") { contactDialog = "mobile" }
                     }
                     if ("email" in me.giftMissing && me.email.isEmpty()) {
-                        ProfileContactButton("✉️ ثبت و تأیید ایمیل$gift") { contactDialog = "email" }
+                        ProfileContactButton("✉️ تأیید ایمیل$gift") { contactDialog = "email" }
                     }
                 }
             }
@@ -1640,18 +1642,28 @@ fun NameDialog(current: String, vm: AppViewModel, onClose: () -> Unit) {
     )
 }
 
-/** ثبت موبایل (کد پیامکی) یا ایمیل (کد ایمیلی) در پروفایل: ۱) مقدار ← ارسال کد ۲) کد ← تایید. kind: "mobile" | "email" */
+/** پیش‌نویس تأیید موبایل/ایمیل؛ در ViewModel نگه داشته می‌شود تا با بستن پنجره (لمس بیرون) و بازکردن دوباره، همان مرحله‌ی وارد‌کردن کد بماند. */
+@Stable
+class ContactDraft {
+    var value by mutableStateOf("")
+    var code by mutableStateOf("")
+    var sent by mutableStateOf(false)
+    fun reset() { value = ""; code = ""; sent = false }
+}
+
+/** تأیید موبایل (کد پیامکی) یا ایمیل (کد ایمیلی) در پروفایل: ۱) مقدار ← ارسال کد ۲) کد ← تایید. kind: "mobile" | "email" */
 @Composable
 fun ContactDialog(kind: String, vm: AppViewModel, onClose: () -> Unit) {
     val isMobile = kind == "mobile"
-    var value by rememberSaveable { mutableStateOf("") }
-    var code by rememberSaveable { mutableStateOf("") }
-    var sent by rememberSaveable { mutableStateOf(false) }
+    val draft = vm.contactDrafts.getValue(kind)
+    var value by draft::value
+    var code by draft::code
+    var sent by draft::sent
     var busy by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = { if (!busy) onClose() },
         shape = RoundedCornerShape(28.dp),
-        title = { Text(if (isMobile) "ثبت شماره‌ی موبایل" else "ثبت ایمیل") },
+        title = { Text(if (isMobile) "تأیید شماره‌ی موبایل" else "تأیید ایمیل") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
