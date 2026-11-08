@@ -77,7 +77,11 @@ async function emailOf(env: Env, uid: Uid): Promise<{ to: string; name: string }
   const u = await getUserById(env, String(uid)).catch(() => null);
   return u?.email ? { to: u.email, name: u.name } : null;
 }
-export const firstName = (n: string) => n.trim().split(/\s+/)[0]?.slice(0, 24) || "دوست عزیز";
+/** نام کوچک برای سلام در ایمیل/پیام. اگر نام لاتین باشد، یک RLM (U+200F) بعدش می‌آید تا «،» و عددِ فارسیِ بعد از آن در جمله‌ی راست‌به‌چپ جابه‌جا نشوند (مثلاً «Akhava ،۱» به‌جای «Akhava، ۱») */
+export const firstName = (n: string) => {
+  const f = n.trim().split(/\s+/)[0]?.slice(0, 24) || "دوست عزیز";
+  return /[A-Za-z]/.test(f) ? f + "\u200f" : f;
+};
 
 // ---------- ۱) یادآوری ۷ روز و ۱ روز مانده به پایان پلن ----------
 /** last = یادآوری آخر (کمتر از ۱ روز مانده)؛ وگرنه یادآوری ۷ روز مانده */
