@@ -232,6 +232,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     lastMeRefresh = SystemClock.elapsedRealtime() // اولین onResume بعد از شروع، درخواست تکراری نمی‌فرستد
                     if (me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.")
                     Reminders.onMe(getApplication(), me, cfg.dailyFree > 0)
+                    askNotifyIfNeverAsked()
                     loadFiles()
                     refreshInvite()
                     viewModelScope.launch { Push.sync(getApplication()) } // توکن FCM (اگر پیکربندی شده باشد)
@@ -296,6 +297,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun notifHint() {
         _events.trySend(Event.NotifHint)
+    }
+
+    /**
+     * اندروید ۱۳+: مجوز اعلان تا وقتی پرسیده نشود خاموش است و همه‌ی یادآورهای محلی بی‌صدا رد می‌شوند.
+     * یادآورهای «اولین ارائه‌ات منتظر توست» (act1/act2) دقیقاً برای کاربرانی است که هنوز ارائه‌ای نساخته‌اند؛ پس مجوز فقط بعد از اولین ارائه
+     * پرسیدن آن‌ها را بی‌اثر می‌کرد. حالا یک‌بار بعد از ورود پرسیده می‌شود (asked_notif از تکرار جلوگیری می‌کند؛ بعد از رد کردن فقط راهنمای تنظیمات می‌آید).
+     */
+    private fun askNotifyIfNeverAsked() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        val app = getApplication<Application>()
+        if (app.getSharedPreferences("prefs", Context.MODE_PRIVATE).getBoolean("asked_notif", false)) return
+        if (androidx.core.app.NotificationManagerCompat.from(app).areNotificationsEnabled()) return
+        _events.trySend(Event.AskNotify)
     }
 
     fun editMobile() {
