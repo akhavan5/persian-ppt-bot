@@ -109,6 +109,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -1570,6 +1572,12 @@ fun InviteCard(d: InviteInfo?, vm: AppViewModel) {
     val ctx = LocalContext.current
     var code by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    // فیلد کد تا وقتی کاربر روی «کد دعوت دارید؟ اینجا وارد کنید.» نزده اصلاً ساخته نمی‌شود؛ پس وقتی از بیرون اپ (مثلاً درگاه پرداخت) برمی‌گردیم
+    // کامپوز نمی‌تواند خودکار فوکوس را به آن بدهد و کیبورد باز نمی‌شود. با لمس آن متن، فیلد همان‌جا باز می‌شود و فوکوس می‌گیرد.
+    var codeOpen by rememberSaveable { mutableStateOf(false) }
+    val codeFocus = remember { FocusRequester() }
+    var focusCode by remember { mutableStateOf(false) } // فقط بعد از لمس همین متن؛ نه هنگام ساخته‌شدن دوباره‌ی صفحه (چرخش و…)
+    LaunchedEffect(focusCode) { if (focusCode) { runCatching { codeFocus.requestFocus() }; focusCode = false } }
     SurfaceCard(color = MaterialTheme.colorScheme.surface, borderColor = null) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("🎁 دعوت دوستان", style = MaterialTheme.typography.titleSmall)
@@ -1589,11 +1597,18 @@ fun InviteCard(d: InviteInfo?, vm: AppViewModel) {
                 Modifier.fillMaxWidth(),
             ) { Text("📤 ارسال لینک دعوت به دوستان") }
             if (d.canClaim) {
-                Text("کد دعوت دارید؟ اینجا وارد کنید.", style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!codeOpen) Text(
+                    "کد دعوت دارید؟ اینجا وارد کنید.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = Modifier.clickable { codeOpen = true; focusCode = true }.padding(vertical = 6.dp),
+                )
+                if (codeOpen) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = code, onValueChange = { code = it.take(80) }, singleLine = true,
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), placeholder = { Text("کد یا لینک دعوت") },
+                        modifier = Modifier.weight(1f).focusRequester(codeFocus),
+                        shape = RoundedCornerShape(16.dp), placeholder = { Text("کد یا لینک دعوت") },
                     )
                     TextButton(
                         enabled = !busy && code.isNotBlank(),
