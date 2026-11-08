@@ -1414,6 +1414,8 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 }
             }
 
+            InviteCard(vm)
+
             if (cfg != null && cfg.dailyFree > 0 && !me.unlimited && me.planId == null) {
                 SurfaceCard(color = ex.warnBg, borderColor = null) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1551,6 +1553,57 @@ private fun ContactRow(icon: ImageVector, brush: Brush, title: String, value: St
 }
 
 // ================================================================== دیالوگ‌ها
+
+/** دعوت دوستان در اپ: لینک سایت (ثبت‌نام/ورود دوست با همان لینک)، شمارنده‌ی دعوت‌های موفق و ورود کد دعوتِ دوست. با همان سامانه‌ی ربات‌ها و سایت یکی است. */
+@Composable
+fun InviteCard(vm: AppViewModel) {
+    val ctx = LocalContext.current
+    var info by remember { mutableStateOf<InviteInfo?>(null) }
+    var code by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(tick) { info = vm.loadInvite() }
+    val d = info ?: return
+    SurfaceCard(color = MaterialTheme.colorScheme.surface, borderColor = null) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("🎁 دعوت دوستان", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "به‌ازای هر " + d.every.fa() + " دوستی که با لینک شما وارد پاورپوینت‌ساز شوند و اولین ارائه‌شان را بسازند، ۱ اعتبار پلن پلاس می‌گیرید (تا سقف " + d.max.fa() + " دعوت).",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text("📊 دعوت‌های موفق شما: " + d.count.fa() + " از " + d.max.fa(), style = MaterialTheme.typography.bodyMedium)
+            OutlinedButton(
+                onClick = {
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, "ساخت پاورپوینت فارسی با هوش مصنوعی 👇\n" + d.link)
+                    }
+                    try { ctx.startActivity(Intent.createChooser(send, "ارسال لینک دعوت")) } catch (_: ActivityNotFoundException) {}
+                },
+                Modifier.fillMaxWidth(),
+            ) { Text("📤 ارسال لینک دعوت به دوستان") }
+            if (d.canClaim) {
+                Text("کد دعوت دارید؟ تا قبل از ساخت اولین ارائه وارد کنید تا دعوتِ دوستتان شمرده شود.", style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = code, onValueChange = { code = it.take(80) }, singleLine = true,
+                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), placeholder = { Text("کد یا لینک دعوت") },
+                    )
+                    TextButton(
+                        enabled = !busy && code.isNotBlank(),
+                        onClick = {
+                            busy = true
+                            vm.claimInvite(normDigits(code)) { ok ->
+                                busy = false
+                                if (ok) { code = ""; tick++ }
+                            }
+                        },
+                    ) { Text("ثبت") }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun NameDialog(current: String, vm: AppViewModel, onClose: () -> Unit) {

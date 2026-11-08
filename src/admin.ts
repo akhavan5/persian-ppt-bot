@@ -353,8 +353,8 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
     tgId ? isBanned(env, tgId) : Promise.resolve(false),
     webId ? isBanned(env, webId) : Promise.resolve(false),
     runningJob(env, acct).catch(() => ({ busy: false, jobId: null })),
-    tgId ? env.KV.get(`ref:${tgId}`).catch(() => null) : Promise.resolve(null),
-    tgId ? env.KV.get(`refc:${tgId}`).catch(() => null) : Promise.resolve(null),
+    (tgId ?? webId) ? env.KV.get(`ref:${tgId ?? webId}`).catch(() => null) : Promise.resolve(null), // حساب فقط‌وب/اپ با شناسه‌ی وبش شمرده می‌شود (referral.ts ← refIdOf)
+    (tgId ?? webId) ? env.KV.get(`refc:${tgId ?? webId}`).catch(() => null) : Promise.resolve(null),
   ]);
   const banned = bannedTg || bannedWeb;
   const admin = tgId ? isAdmin(env, tgId) : false;
@@ -380,7 +380,7 @@ async function userCard(env: Env, id: Uid): Promise<Screen> {
     sub ? `👑 پلن ${esc(planName ?? "")}: ${subActive ? "فعال" : "بدون اعتبار"} تا ${fmtDay(sub.exp)}${sub.credits ? ` · ${fa(sub.credits)} اعتبار` : ""}` : "👑 پلن: رایگان",
     `📄 سقف هر ارائه: ${caps}`,
     `📁 فایل‌های ۲۴ ساعت اخیر: ${fa(files.length)}`,
-    tgId && (refBy || refCount) ? `🎁 دعوت: ${refCount ? `${fa(refCount)} نفر را دعوت کرده` : ""}${refBy && refCount ? " · " : ""}${refBy ? `دعوت‌شده‌ی ${refBy}` : ""}` : "",
+    (tgId ?? webId) && (refBy || refCount) ? `🎁 دعوت: ${refCount ? `${fa(refCount)} نفر را دعوت کرده` : ""}${refBy && refCount ? " · " : ""}${refBy ? `دعوت‌شده‌ی ${refBy}` : ""}` : "",
     job.busy ? "⏳ <b>الان در حال ساخت ارائه است</b>" : "",
     `وضعیت: ${banned ? "⛔️ مسدود" : "✅ فعال"}`,
   ].filter((x) => x !== "" || true);

@@ -4,7 +4,7 @@ import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
   EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
-  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_EVERY, REF_MAX, holdReferral, displayName, noteActive, isWebId,
+  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_EVERY, REF_MAX, holdReferral, parseRefId, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminSampleCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
@@ -15,7 +15,7 @@ import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
 import { appVerCommand } from "./app-version";
-import { editMessage, envFor, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
+import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { audioSeconds, isAudioName } from "./wav";
 import { siteHost } from "./deck-service";
 import { isBaleId } from "./bale-format";
@@ -23,7 +23,7 @@ import { isRubikaId } from "./rubika-format";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
 import { PLANS } from "./payment";
-import { inviteBody, inviteShareUrl, telegramInviteLink } from "./invite-msg";
+import { inviteBody, inviteLinkFor, inviteMarkup } from "./invite-msg";
 import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
 import { handleProfileCallback, handleProfileInput, showProfile } from "./bot-profile";
@@ -594,12 +594,11 @@ async function showFiles(env: Env, chatId: number, uid: Uid) {
     kb([...mineRows, ...sampleRows]));
 }
 async function showInvite(env: Env, chatId: number, userId: number) {
-  const bale = isBaleId(userId), rubika = isRubikaId(userId);
-  const me = await tg<{ username?: string }>(bale || rubika ? envFor(env, userId) : env, "getMe");
-  const link = rubika ? `https://rubika.ir/${me.username}?start=ref_${userId}` : bale ? `https://ble.ir/${me.username}?start=ref_${userId}` : telegramInviteLink(String(me.username), userId);
+  // لینک اختصاصی هر پلتفرم (تلگرام/بله/روبیکا: لینک ربات؛ ایتا: لینک برنامک)؛ شمارنده روی شناسه‌ی پیام‌رسان است (همان کلیدی که completeReferral می‌شمارد)
+  const link = await inviteLinkFor(env, userId).catch(() => "");
+  if (!link) return await sendMessage(env, chatId, "ساخت لینک دعوت ممکن نشد؛ کمی بعد دوباره امتحان کن.");
   const done = Math.min(REF_MAX, Number(await env.KV.get(`refc:${userId}`).catch(() => null)) || 0);
-  return await sendMessage(env, chatId, inviteBody(link, done),
-    bale || rubika ? undefined : kb([[{ text: "📤 ارسال به دوستان", url: inviteShareUrl(link) }]])); // دکمه‌ی اشتراک‌گذاری t.me فقط برای تلگرام
+  return await sendMessage(env, chatId, inviteBody(link, done), inviteMarkup(userId, link)); // دکمه‌ی اشتراک‌گذاری t.me فقط برای تلگرام
 }
 async function showCredit(env: Env, chatId: number, uid: Uid, userId: number) {
   const granted = await grantDailyFree(env, uid).catch(() => false); // اعتبار صفر ⇒ سهم رایگان امروز
@@ -664,9 +663,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده فقط «دعوت در انتظار» ثبت می‌کند؛ وقتی اولین ارائه‌اش ساخته شد (referral.ts ← workflow.ts)
   // شمارنده‌ی دعوت‌کننده بالا می‌رود؛ هر ۵ دعوت موفق = ۱ اعتبار پلن پلاس (تا ۵۰ دعوت)
   if (cmd === "/start" && isNew && args[0]?.startsWith("ref_")) {
-    const inviter = Number(args[0].slice(4));
+    const inviter = parseRefId(args[0].slice(4)); // عدد (پیام‌رسان) یا w_… (دعوت‌کننده‌ی فقط‌وب/اپ)
     // دعوت‌کننده همان لحظه خبردار می‌شود که دوستش وارد شده؛ پاداش هنوز به ساخت اولین ارائه‌ی دوست بسته است
-    if (await holdReferral(env, inviter, userId).catch((e) => { console.error("referral hold", e); return false; })) await notifyInviterJoined(env, inviter);
+    if (inviter !== null && await holdReferral(env, inviter, userId).catch((e) => { console.error("referral hold", e); return false; })) await notifyInviterJoined(env, inviter);
   }
   if (cmd === "/files") return await showFiles(env, chatId, uid);
   if (cmd === "/invite") return await showInvite(env, chatId, userId);

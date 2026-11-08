@@ -268,8 +268,13 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
       </div>
       <div class="card" id="invCard">
         <h2>🎁 دعوت دوستان</h2>
-        <div class="muted">به‌ازای هر ۵ دوستی که با لینک تو وارد ربات شوند و اولین ارائه‌شان را بسازند ۱ اعتبار پلن پلاس می‌گیری (تا سقف ۵۰ دعوت).</div>
+        <div class="muted">به‌ازای هر ۵ دوستی که با لینک تو وارد پاورپوینت‌ساز شوند و اولین ارائه‌شان را بسازند ۱ اعتبار پلن پلاس می‌گیری (تا سقف ۵۰ دعوت).</div>
+        <div class="muted" id="invCount" style="margin-top:6px" hidden></div>
         <button class="btn ghost" id="inv" type="button" style="margin-top:10px">📤 ارسال لینک دعوت به دوستان</button>
+        <div id="invClaim" hidden style="margin-top:12px">
+          <div class="muted" style="margin-bottom:6px">کد دعوت داری؟ تا قبل از ساخت اولین ارائه‌ات وارد کن تا دعوتِ دوستت شمرده شود.</div>
+          <div style="display:flex;gap:8px"><input class="pfIn" id="invCode" type="text" dir="ltr" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="40" placeholder="کد یا لینک دعوت" style="flex:1;min-width:0"><button class="btn ghost" id="invSend" type="button">ثبت کد</button></div>
+        </div>
       </div>
       <div class="card">
         <h2>اعتبار و پلن</h2>
@@ -635,6 +640,7 @@ async function boot() {
   show($("#pasteTopic"), TG.canPaste);
   if (IS_EITAA) { eitaaTexts(); TG.askWrite(() => api("/api/miniapp/welcome", { method: "POST" }).catch(() => {})); }
   renderAll();
+  claimStartRef().then(loadInvite);
   if (!applyStart()) restoreDraft();
   if (!syncT) syncT = setInterval(syncUI, 500);
   syncUI();
@@ -1438,11 +1444,41 @@ function renderProfile() {
   }
   box.replaceChildren(...kids);
 }
-if (IS_EITAA) $("#invCard").hidden = true; // دعوت دوستان در ایتا پشتیبانی نمی‌شود
+// دعوت دوستان: همه‌ی پلتفرم‌ها (تلگرام، بله، ایتا). لینک اختصاصی را سرور براساس پلتفرم حساب می‌سازد (/api/invite)؛ فقط لینک t.me پنجره‌ی اشتراک‌گذاری تلگرام دارد
+async function copyText(v) {
+  try { await navigator.clipboard.writeText(v); return true; } catch {}
+  try { const ta = document.createElement("textarea"); ta.value = v; ta.style.cssText = "position:fixed;opacity:0"; document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch { return false; }
+}
+async function shareInvite(link) {
+  if (/^https:\/\/t\.me\//.test(link) && TG.share) return TG.share(link);
+  if (navigator.share) { try { await navigator.share({ title: "پاورپوینت‌ساز فارسی", text: "ساخت پاورپوینت فارسی با هوش مصنوعی 👇", url: link }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
+  if (await copyText(link)) toast("لینک دعوت کپی شد؛ برای دوستانت بفرست ✓"); else window.prompt("لینک دعوت را کپی کن:", link);
+}
+async function loadInvite() {
+  try {
+    const d = await api("/api/invite");
+    $("#invCount").textContent = `📊 دعوت‌های موفق تو تا الان: ${fa(d.count)} از ${fa(d.max)}`; show($("#invCount"), true);
+    show($("#invClaim"), !!d.canClaim);
+  } catch {}
+}
+// startapp=ref_<شناسه> (لینک برنامک ایتا / Mini App دوستی که دعوتت کرده): بعد از ورود ثبت می‌شود؛ خطاها (مثلاً بعد از اولین ارائه) بی‌صدا
+async function claimStartRef() {
+  const m = /^ref_(\d{1,15}|w_[0-9a-f]{16})$/.exec(TG.startParam || "");
+  if (!m || store.get("refDone") === m[1]) return;
+  store.set("refDone", m[1]);
+  try { await api("/api/invite/claim", { method: "POST", body: { code: m[1] } }); toast("🎁 کد دعوت دوستت ثبت شد؛ با ساخت اولین ارائه‌ات دعوتش شمرده می‌شود."); } catch {}
+}
 $("#inv").onclick = (e) => busy(e.currentTarget, "در حال آماده‌سازی…", async () => {
   try {
-    const d = await api("/api/miniapp/invite", { method: "POST" });
-    TG.share(d.link);
+    const d = await api("/api/invite", { method: "POST" });
+    await shareInvite(d.link);
+  } catch (err) { toast(err.message); }
+});
+$("#invSend").onclick = (e) => busy(e.currentTarget, "در حال ثبت…", async () => {
+  try {
+    await api("/api/invite/claim", { method: "POST", body: { code: $("#invCode").value } });
+    $("#invCode").value = ""; toast("✓ کد دعوت ثبت شد؛ با ساخت اولین ارائه‌ات دعوتِ دوستت شمرده می‌شود.");
+    loadInvite();
   } catch (err) { toast(err.message); }
 });
 $("#buy1").onclick = openPlans; // قبل از رفتن به مرورگر، جدول پلن‌ها نشان داده می‌شود

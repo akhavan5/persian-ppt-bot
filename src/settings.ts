@@ -480,32 +480,52 @@ export interface RefResult { /** تعداد کل دعوت‌های موفق (ب�
 // ورود با لینک دعوت فقط یک «دعوت در انتظار» ثبت می‌کند (holdReferral: refp:<دعوت‌شده> = <دعوت‌کننده>، ۳۰ روز اعتبار)؛ وقتی دوست اولین ارائه‌اش را ساخت،
 // referral.ts ← completeReferral آن را با rewardReferral به دعوتِ شمرده‌شده تبدیل می‌کند. حساب‌های ساختگی که هیچ ارائه‌ای نمی‌سازند چیزی نمی‌شمارند.
 const REF_PENDING_TTL = 30 * 86_400;
-const refPendingKey = (newUserId: number) => `refp:${newUserId}`;
+const refPendingKey = (newUserId: RefId) => `refp:${newUserId}`;
+
+/** شناسه‌ی دعوت: عدد (شناسه‌ی پیام‌رسان: تلگرام/بله/روبیکا/ایتا) یا شناسه‌ی حساب وب «w_…» (کاربرِ فقط وب/اپ اندروید).
+ *  هر دو قالب در کلیدهای refc:/ref:/refp: می‌آیند؛ حساب وبِ وصل‌به‌پیام‌رسان همیشه با شناسه‌ی پیام‌رسانش شمرده می‌شود (referral.ts ← refIdOf) تا شمارنده یکی بماند. */
+export type RefId = number | string;
+const REF_WEB_ID = /^w_[0-9a-f]{16}$/;
+/** کد دعوت (از لینک یا ورودی کاربر) ← شناسه‌ی معتبر؛ نامعتبر = null */
+export function parseRefId(raw: unknown): RefId | null {
+  const s = String(raw ?? "").trim();
+  if (REF_WEB_ID.test(s)) return s;
+  if (!/^\d{1,15}$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+/** دعوت‌کننده باید کاربر واقعی باشد: پیام‌رسان ← seen:<شناسه>؛ حساب وب ← wu:<شناسه> */
+async function refUserExists(env: Env, id: RefId): Promise<boolean> {
+  return (await env.KV.get(typeof id === "number" ? `seen:${id}` : `wu:${id}`)) !== null;
+}
+const sameRef = (a: RefId, b: RefId) => String(a) === String(b);
 
 /** ثبت دعوت در انتظار برای کاربرِ تازه‌واردی که با لینک دعوت آمده (هنوز شمرده نمی‌شود). false = ثبت نشد (نامعتبر، تکراری یا دعوت‌کننده مسدود/ناشناس). */
-export async function holdReferral(env: Env, inviterId: number, newUserId: number): Promise<boolean> {
-  if (!Number.isSafeInteger(inviterId) || inviterId <= 0 || inviterId === newUserId) return false;
-  if ((await env.KV.get(`ref:${newUserId}`)) !== null) return false;     // قبلاً شمرده شده
-  if ((await env.KV.get(`seen:${inviterId}`)) === null) return false;    // دعوت‌کننده باید کاربر واقعی ربات باشد
-  if (await isBanned(env, inviterId)) return false;
-  await env.KV.put(refPendingKey(newUserId), String(inviterId), { expirationTtl: REF_PENDING_TTL });
+export async function holdReferral(env: Env, inviterId: RefId, newUserId: RefId): Promise<boolean> {
+  const inviter = parseRefId(inviterId), invitee = parseRefId(newUserId);
+  if (inviter === null || invitee === null || sameRef(inviter, invitee)) return false;
+  if ((await env.KV.get(`ref:${invitee}`)) !== null) return false;     // قبلاً شمرده شده
+  if (!(await refUserExists(env, inviter))) return false;              // دعوت‌کننده باید کاربر واقعی باشد
+  if (await isBanned(env, inviter)) return false;
+  await env.KV.put(refPendingKey(invitee), String(inviter), { expirationTtl: REF_PENDING_TTL });
   return true;
 }
 /** دعوت‌کننده‌ی در انتظارِ این کاربر (اگر دارد) */
-export async function pendingInviter(env: Env, newUserId: number): Promise<number | null> {
-  const n = Number(await env.KV.get(refPendingKey(newUserId)).catch(() => null));
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
+export async function pendingInviter(env: Env, newUserId: RefId): Promise<RefId | null> {
+  return parseRefId(await env.KV.get(refPendingKey(newUserId)).catch(() => null));
 }
-export const clearPendingReferral = (env: Env, newUserId: number) => env.KV.delete(refPendingKey(newUserId));
+export const clearPendingReferral = (env: Env, newUserId: RefId) => env.KV.delete(refPendingKey(newUserId));
 
 /** ثبت یک دعوتِ جدید (بعد از ساخت اولین ارائه‌ی دوست)؛ هر کاربر جدید فقط یک بار حساب می‌شود. null = دعوت شمرده نشد (نامعتبر، تکراری یا رسیدن به سقف).
  *  شمارنده‌ی دعوت‌کننده (refc:) با یک دستور SQL اتمی بالا می‌رود تا دعوت‌های هم‌زمان مضرب ۱۰ را جا نیندازند یا دوبار حساب نکنند.
  *  creditTo: اگر دعوت‌کننده حسابش را به وب وصل کرده، شناسه‌ی حساب وب (پلن و اعتبار روی حساب اصلی ثبت می‌شود). */
-export async function rewardReferral(env: Env, inviterId: number, newUserId: number, creditTo: Uid = inviterId): Promise<RefResult | null> {
-  if (!Number.isSafeInteger(inviterId) || inviterId <= 0 || inviterId === newUserId) return null;
+export async function rewardReferral(env: Env, inviterId: RefId, newUserId: RefId, creditTo: Uid = inviterId): Promise<RefResult | null> {
+  const inviter = parseRefId(inviterId), invitee = parseRefId(newUserId);
+  if (inviter === null || invitee === null || sameRef(inviter, invitee)) return null;
+  inviterId = inviter; newUserId = invitee;
   if ((await env.KV.get(`ref:${newUserId}`)) !== null) return null;
-  if ((await env.KV.get(`seen:${inviterId}`)) === null) return null; // دعوت‌کننده باید کاربر واقعی ربات باشد
-  if (await isBanned(env, inviterId)) return null;
+  if (!(await refUserExists(env, inviter))) return null; // دعوت‌کننده باید کاربر واقعی باشد
+  if (await isBanned(env, inviter)) return null;
   const db = await rawDb(env);
   const row = await db.prepare(
     "INSERT INTO kv (k, v, exp) VALUES (?1, '1', NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT), exp = NULL WHERE CAST(v AS INTEGER) < ?2 RETURNING v")
@@ -525,11 +545,11 @@ export async function rewardReferral(env: Env, inviterId: number, newUserId: num
 export function referralMsg(r: RefResult): string {
   const c = toFa(String(r.count)), max = toFa(String(REF_MAX)), every = toFa(String(REF_EVERY));
   if (r.plusGranted) {
-    return `🎉 یکی از دوستانت با لینک تو وارد ربات شد و اولین ارائه‌اش را ساخت؛ دعوت‌های موفقت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa("1")} اعتبار پلن پلاس</b> به‌خاطر هر ${every} دعوت به حسابت اضافه شد؛ با آن تا ${toFa(String(PLAN_MAX_SLIDES.plus))} اسلاید و مدل‌های ویژه را هم داری. برای دیدن اعتبار: /credit` +
-      (r.count >= REF_MAX ? `\n\n✅ به سقف ${max} دعوت رسیدی و تمام پاداش‌ها را گرفتی. ممنون که ربات را معرفی کردی! 🙏` : "");
+    return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت؛ دعوت‌های موفقت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa("1")} اعتبار پلن پلاس</b> به‌خاطر هر ${every} دعوت به حسابت اضافه شد؛ با آن تا ${toFa(String(PLAN_MAX_SLIDES.plus))} اسلاید و مدل‌های ویژه را هم داری. برای دیدن اعتبار: /credit` +
+      (r.count >= REF_MAX ? `\n\n✅ به سقف ${max} دعوت رسیدی و تمام پاداش‌ها را گرفتی. ممنون که پاورپوینت‌ساز را معرفی کردی! 🙏` : "");
   }
   const left = REF_EVERY - (r.count % REF_EVERY);
-  return `🎉 یکی از دوستانت با لینک تو وارد ربات شد و اولین ارائه‌اش را ساخت. دعوت‌های موفق تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(left))} دعوت دیگر تا ${toFa("1")} اعتبار پلن پلاس.`;
+  return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت. دعوت‌های موفق تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(left))} دعوت دیگر تا ${toFa("1")} اعتبار پلن پلاس.`;
 }
 
 export async function getUserSeen(env: Env, userId: Uid): Promise<SeenUser | null> {

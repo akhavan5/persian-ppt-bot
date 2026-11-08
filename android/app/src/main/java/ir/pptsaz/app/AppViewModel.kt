@@ -1042,6 +1042,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** دعوت دوستان (همان سامانه‌ی ربات‌ها و سایت): اطلاعات دعوت؛ خطا = null و کارت دعوت پنهان می‌ماند. */
+    suspend fun loadInvite(): InviteInfo? = try { Api.invite() } catch (e: ApiException) { null }
+
+    /** ثبت کد دعوت دوست؛ پاداش دعوت‌کننده با ساخت اولین ارائه‌ی همین حساب شمرده می‌شود. */
+    fun claimInvite(raw: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                Api.inviteClaim(raw)
+                toast("کد دعوت ثبت شد؛ با ساخت اولین ارائه، دعوتِ دوستتان شمرده می‌شود 🎁")
+                onDone(true)
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+                onDone(false)
+            }
+        }
+    }
+
     fun updateName(name: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {

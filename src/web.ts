@@ -40,7 +40,7 @@ import { EXTRA_KINDS, audioKind, isMainDeck, missingExtras, startExtra } from ".
 import { isBaleId, fromBaleId } from "./bale-format";
 import { isEitaaId, fromEitaaId } from "./eitaa-format";
 import { isRubikaId } from "./rubika-format";
-import { miniappBuy, miniappDlLink, miniappDownload, miniappInvite, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
+import { inviteClaim, inviteInfo, miniappBuy, miniappDlLink, miniappDownload, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
 import { isAudioName } from "./wav";
 
 const SEC_HEADERS = {
@@ -198,7 +198,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
   if (path === "/api/miniapp/welcome" && method === "POST") return miniappWelcome(env, user);
   if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000));
-  if (path === "/api/miniapp/invite" && method === "POST") return miniappInvite(env, user);
+  // دعوت دوستان برای همه‌ی پلتفرم‌ها (سایت، اپ اندروید، Mini App تلگرام/بله، برنامک ایتا)؛ /api/miniapp/invite برای نسخه‌های قدیمی Mini App می‌ماند
+  if ((path === "/api/invite" && (method === "GET" || method === "POST")) || (path === "/api/miniapp/invite" && method === "POST")) return inviteInfo(env, user);
+  if (path === "/api/invite/claim" && method === "POST") return inviteClaim(env, user, await readBody(req, 500), clientIp(req));
   if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
   if (path === "/api/profile/email" && method === "POST") return linkEmail(req, env, user);

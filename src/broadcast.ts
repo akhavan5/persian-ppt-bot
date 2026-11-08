@@ -1,8 +1,8 @@
 /** ارسال پیام همگانی با Workflow: دسته‌های ۲۰تایی تا از سقف درخواست‌های هر گام و سرعت تلگرام رد نشود. */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "./env";
-import { esc, sendMessage, tg } from "./telegram";
-import { INVITE_TOKEN, inviteBody, inviteShareUrl, telegramInviteLink } from "./invite-msg";
+import { esc, sendMessage } from "./telegram";
+import { INVITE_TOKEN, botUsername, inviteBody, inviteLinkFor, inviteMarkup, invitePlatform } from "./invite-msg";
 import { toFa } from "./util";
 import { withStore } from "./store";
 import { PUSH_SEGMENTS, filterSegment, pushTokenPage, sendPush, type PushMsg, type PushSegment } from "./push";
@@ -162,8 +162,8 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
       await this.env.KV.ready(); used += 2;
       // نشانه‌ی {invite}: هر کاربر بلوک /invite خودش (لینک اختصاصی + شمارنده‌ی دعوت) را می‌گیرد؛ شمارنده‌ها در همان پرس‌وجوی مسدودی خوانده می‌شوند (۹۰ پارامتر، زیر سقف ۱۰۰ D1)
       const personal = text.includes(INVITE_TOKEN);
-      let botName = "";
-      if (personal) { botName = String((await tg<{ username?: string }>(this.env, "getMe")).username ?? ""); used += 1; }
+      // نام کاربری ربات هر پلتفرم (تلگرام/بله/روبیکا) فقط یک‌بار در همین نمونه گرفته می‌شود؛ ایتا لینک برنامک دارد و getMe ندارد
+      const botNames = new Map<string, string>();
       const keys = chunk.flatMap((id) => (personal ? [`ban:${id}`, `refc:${id}`] : [`ban:${id}`]));
       const rows = await this.env.DB.prepare(`SELECT k, v FROM kv WHERE (exp IS NULL OR exp > ${Math.floor(Date.now() / 1000)}) AND k IN (${keys.map((_, n) => `?${n + 1}`).join(",")})`).bind(...keys).all<{ k: string; v: string }>();
       used += 1;
@@ -176,10 +176,18 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
         if (banned.has(`ban:${id}`)) { out.skipped++; continue; } // مسدودها پیام نمی‌گیرند
         if (used >= SUB_BUDGET) break; // بودجه‌ی این نمونه تمام شد؛ ادامه در نمونه‌ی بعدی
         let res: { ok: boolean; calls: number };
-        if (personal && botName) {
-          const link = telegramInviteLink(botName, id);
-          const html = text.split(INVITE_TOKEN).map(esc).join(inviteBody(link, refc.get(`refc:${id}`) ?? 0));
-          res = await sendOneCounted(this.env, id, text, html, { reply_markup: { inline_keyboard: [[{ text: "📤 ارسال به دوستان", url: inviteShareUrl(link) }]] } });
+        if (personal) {
+          // لینک اختصاصی دقیقاً برای پلتفرم همین کاربر (قبلاً همه لینک تلگرام می‌گرفتند و برای کاربران بله/روبیکا/ایتا خراب بود)
+          const plat = invitePlatform(id);
+          let name = botNames.get(plat);
+          if (name === undefined && (plat === "tg" || plat === "bale" || plat === "rubika")) {
+            name = await botUsername(this.env, plat); used += 1; botNames.set(plat, name);
+          }
+          const link = await inviteLinkFor(this.env, id, name || undefined).catch(() => "");
+          if (link) {
+            const html = text.split(INVITE_TOKEN).map(esc).join(inviteBody(link, refc.get(`refc:${id}`) ?? 0));
+            res = await sendOneCounted(this.env, id, text, html, inviteMarkup(id, link));
+          } else res = await sendOneCounted(this.env, id, text.split(INVITE_TOKEN).join(""));
         } else res = await sendOneCounted(this.env, id, text);
         used += res.calls;
         if (res.ok) out.ok++; else out.failed++;

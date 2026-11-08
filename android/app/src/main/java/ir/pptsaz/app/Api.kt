@@ -23,6 +23,8 @@ import java.io.IOException
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
+class InviteInfo(val link: String, val count: Int, val max: Int, val every: Int, val canClaim: Boolean)
+
 class ApiException(
     message: String,
     val status: Int = 0,
@@ -218,6 +220,23 @@ object Api {
         val key = if (kind == "email") "email" else "mobile"
         val j = call("POST", "/api/profile/$key", JSONObject().put(key, value).put("code", code))
         return j.optInt("reward")
+    }
+
+    // ------------------------------------------------------------ دعوت دوستان
+
+    /** وضعیت دعوت این حساب: لینک سایت (برای همه‌ی پلتفرم‌ها کار می‌کند)، دعوت‌های موفق و اینکه هنوز می‌شود کد دعوت دوست را وارد کرد. */
+    suspend fun invite(): InviteInfo {
+        val j = call("GET", "/api/invite")
+        return InviteInfo(
+            link = j.optString("webLink").ifEmpty { j.optString("link") },
+            count = j.optInt("count"), max = j.optInt("max", 50), every = j.optInt("every", 5),
+            canClaim = j.optBoolean("canClaim"),
+        )
+    }
+
+    /** ثبت کد/لینک دعوت دوست (فقط تا قبل از اولین ارائه‌ی این حساب). خطا = ApiException با پیام فارسی. */
+    suspend fun inviteClaim(code: String) {
+        call("POST", "/api/invite/claim", JSONObject().put("code", code.trim()))
     }
 
     // ------------------------------------------------------------ پیش‌نمایش و پوستر

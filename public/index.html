@@ -726,6 +726,17 @@ address{font-style:normal}
     <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfTg" inputmode="numeric" autocomplete="off" maxlength="16" placeholder="123456789" style="flex:1"><button class="btn ghost sm" id="pfTgSend" type="button">ارسال کد</button></div>
     <div class="row" id="pfTgCodeRow" style="gap:8px;margin-top:8px" hidden><input class="ltr" type="text" id="pfTgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد ۶ رقمی تلگرام" style="flex:1"><button class="btn sm" id="pfTgVerify" type="button">تایید</button></div>
   </div>
+  <div id="pfInvBox" hidden>
+    <label>🎁 دعوت دوستان</label>
+    <p class="muted" style="margin:0 0 8px;font-size:.86rem">به‌ازای هر ۵ دوستی که با لینک تو وارد شوند و اولین ارائه‌شان را بسازند، ۱ اعتبار پلن پلاس می‌گیری (تا سقف ۵۰ دعوت).</p>
+    <div class="muted" id="pfInvCount" style="margin-bottom:8px"></div>
+    <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfInvLink" readonly style="flex:1" aria-label="لینک دعوت"><button class="btn ghost sm" id="pfInvCopy" type="button">کپی</button></div>
+    <button class="btn ghost sm" id="pfInvShare" type="button" style="margin-top:8px">📤 ارسال به دوستان</button>
+    <div id="pfInvClaim" hidden style="margin-top:12px">
+      <p class="muted" style="margin:0 0 8px;font-size:.86rem">دوستت کد دعوت داده؟ تا قبل از ساخت اولین ارائه‌ات اینجا وارد کن تا دعوتش شمرده شود.</p>
+      <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfInvCode" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="40" placeholder="کد یا لینک دعوت" style="flex:1"><button class="btn ghost sm" id="pfInvSend" type="button">ثبت کد</button></div>
+    </div>
+  </div>
   <div id="pfMsg" class="msg err" role="alert" hidden></div>
   <button class="btn ghost block" id="logout" type="button" style="margin-top:18px">خروج از حساب</button>
 </dialog>
@@ -772,6 +783,25 @@ function h(tag, props = {}, ...kids) { // ساخت DOM امن (بدون innerHTM
   return el;
 }
 const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
+
+// ---------- دعوت دوستان (سایت؛ همان سامانه‌ی ربات‌ها، ایتا و اپ) ----------
+// لینک دعوت یک دوست: /?ref=<شناسه>. کد تا بعد از ورود/ثبت‌نام (حتی با گوگل یا در تب دیگر) در localStorage می‌ماند و بعد از ورود با /api/invite/claim ثبت می‌شود؛
+// پاداش دعوت‌کننده وقتی شمرده می‌شود که دوست اولین ارائه‌اش را بسازد.
+const REF_RE = /^(\d{1,15}|w_[0-9a-f]{16})$/;
+const refStore = {
+  get() { try { const v = JSON.parse(localStorage.getItem("pptRef") || "null"); return v && REF_RE.test(v.c) && Date.now() - v.t < 14 * 864e5 ? v.c : null; } catch { return null; } },
+  set(c) { try { localStorage.setItem("pptRef", JSON.stringify({ c, t: Date.now() })); } catch {} },
+  clear() { try { localStorage.removeItem("pptRef"); } catch {} },
+};
+(function captureRef() {
+  try {
+    const u = new URL(location.href), c = (u.searchParams.get("ref") || "").trim();
+    if (!c) return;
+    if (REF_RE.test(c)) refStore.set(c);
+    u.searchParams.delete("ref");
+    history.replaceState(null, "", u.pathname + u.search + u.hash);
+  } catch {}
+})();
 
 let cfg = null, me = null, tracking = 0, mode = "login", continueGen = false;
 
@@ -824,6 +854,8 @@ async function boot() {
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
   // درخواست تکراری callback (nginx/مرورگر) خطای کاذب برمی‌گرداند ولی نشست از درخواست اول ساخته شده؛ اگر وارد شده‌ایم خطا نمایش داده نشود و از آدرس پاک شود
   if (me) { const sp = new URLSearchParams(location.search); if (sp.has("login_error") || sp.get("login") === "expired") history.replaceState(null, "", "/"); }
+  if (me) claimStoredRef();
+  else if (refStore.get() && !store.get("refHint")) { store.set("refHint", "1"); setTimeout(() => toast("🎁 با لینک دعوت دوستت آمده‌ای؛ ثبت‌نام کن و اولین ارائه‌ات را بساز."), 1200); }
   if (me) { if ($("#authDlg").open) $("#authDlg").close(); renderApp(); } else renderAuthBtn();
   handlePayReturn();
   handleTgLogin();
@@ -929,6 +961,40 @@ $("#authClose").onclick = () => $("#authDlg").close();
 $("#buyClose").onclick = () => $("#buy").close();
 $("#tgBuyClose").onclick = () => $("#tgBuy").close();
 $("#pfClose").onclick = () => $("#profileDlg").close();
+
+async function claimStoredRef() {
+  const c = refStore.get(); if (!c || !me) return;
+  try {
+    await api("/api/invite/claim", { method: "POST", body: { code: c } });
+    refStore.clear();
+    toast("🎁 کد دعوت دوستت ثبت شد؛ با ساخت اولین ارائه‌ات دعوتش شمرده می‌شود.");
+  } catch (e) { if (e.status >= 400 && e.status < 500 && e.status !== 429) refStore.clear(); } // خطای شبکه/سرور یا محدودیت: بعداً دوباره تلاش می‌شود
+}
+async function renderPfInvite() {
+  const box = $("#pfInvBox"); show(box, false);
+  try {
+    const d = await api("/api/invite");
+    $("#pfInvLink").value = d.webLink || d.link;
+    $("#pfInvCount").textContent = `📊 دعوت‌های موفق تو تا الان: ${fa(d.count)} از ${fa(d.max)}`;
+    $("#pfInvCode").value = ""; show($("#pfInvClaim"), !!d.canClaim);
+    show(box, true);
+  } catch {}
+}
+$("#pfInvCopy").onclick = async () => {
+  const el = $("#pfInvLink");
+  try { await navigator.clipboard.writeText(el.value); toast("لینک دعوت کپی شد ✓"); } catch { el.focus(); el.select(); toast("لینک را انتخاب و کپی کن."); }
+};
+$("#pfInvShare").onclick = async () => {
+  const url = $("#pfInvLink").value;
+  if (navigator.share) { try { await navigator.share({ title: "پاورپوینت‌ساز فارسی", text: "ساخت پاورپوینت فارسی با هوش مصنوعی 👇", url }); } catch {} } else $("#pfInvCopy").click();
+};
+$("#pfInvSend").onclick = (ev) => {
+  const msg = $("#pfMsg"); show(msg, false);
+  return busy(ev.currentTarget, "در حال ثبت…", async () => {
+    try { await api("/api/invite/claim", { method: "POST", body: { code: $("#pfInvCode").value } }); refStore.clear(); toast("✓ کد دعوت ثبت شد؛ با ساخت اولین ارائه‌ات دعوتِ دوستت شمرده می‌شود."); renderPfInvite(); }
+    catch (e) { msg.textContent = e.message; show(msg, true); }
+  });
+};
 $("#profileDlg").addEventListener("close", () => { pendingPlan = null; }); // بستن پنجره = انصراف از خرید در انتظار
 for (const d of ["#authDlg", "#buy", "#profileDlg", "#tgBuy"]) $(d).addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 document.querySelectorAll("[data-auth]").forEach((b) => b.onclick = () => openAuth("register", "ثبت‌نام کن؛ ۳ ارائه‌ی رایگان به حسابت اضافه می‌شود."));
@@ -1018,7 +1084,7 @@ function openProfile(note = "") {
   $("#pfName").value = u.name; $("#pfAv").textContent = (u.name || "?").trim().charAt(0);
   const pl = me.plan && (me.plans.find((x) => x.id === me.plan.id) || {}).name;
   $("#pfPlan").textContent = me.plan ? `👑 پلن ${pl || ""} تا ${new Date(me.plan.exp).toLocaleDateString("fa-IR", { year: "numeric", month: "long", day: "numeric" })}` : "پلن رایگان";
-  show($("#pfMsg"), false); renderPfEmail(); renderPfMobile(); renderPfTg(); renderGift();
+  show($("#pfMsg"), false); renderPfEmail(); renderPfMobile(); renderPfTg(); renderGift(); renderPfInvite();
   $("#profileDlg").showModal();
 }
 $("#userName").onclick = openProfile;

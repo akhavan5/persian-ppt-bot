@@ -13,12 +13,14 @@ import { ensureUid, getLinkedTg } from "./link";
 import { listFiles, loadFileDirect } from "./files";
 import { isSampleId, sampleById, sampleCaption, sampleMime } from "./samples";
 import { buildDeckPdf, cachedPdf } from "./pdf";
-import { esc, sendAudio, sendDocument, tg } from "./telegram";
+import { esc, sendAudio, sendDocument } from "./telegram";
 import { audioSeconds } from "./wav";
 import { fileNameWithSite, siteHost, siteLoginUrl } from "./deck-service";
 import { toBaleId } from "./bale-format";
 import { isEitaaId, toEitaaId, validEitaaRawId } from "./eitaa-format";
 import { eitaaWelcome } from "./eitaa";
+import { claimReferral, referralState } from "./referral";
+import { inviteLinkFor, webInviteLink } from "./invite-msg";
 
 const enc = new TextEncoder();
 const INIT_MAX_AGE = 86_400; // ثانیه؛ initData قدیمی‌تر از یک روز پذیرفته نمی‌شود
@@ -200,14 +202,23 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
   }
 }
 
-/** POST /api/miniapp/invite — لینک دعوت اختصاصی (هر ۵ دوست جدید = ۱ اعتبار پلن پلاس تا ۵۰ دعوت؛ مثل /invite ربات) */
-export async function miniappInvite(env: Env, user: WebUser): Promise<Response> {
-  const tgId = await getLinkedTg(env, user.id);
-  if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
-  if (isEitaaId(tgId)) return err("دعوت دوستان در ایتا پشتیبانی نمی‌شود.", 409);
-  const me = await tg<{ username?: string }>(env, "getMe").catch(() => null);
-  if (!me?.username) return err("ساخت لینک دعوت ممکن نشد؛ کمی بعد دوباره امتحان کن.", 502);
-  return json({ link: `https://t.me/${me.username}?start=ref_${tgId}`, max: REF_MAX, every: REF_EVERY });
+/** GET|POST /api/invite (و POST /api/miniapp/invite برای نسخه‌های قدیمی) — دعوت دوستان برای همه‌ی کلاینت‌ها: سایت، اپ اندروید، Mini App تلگرام/بله و برنامک ایتا.
+ *  link = لینک اختصاصی پلتفرم خودِ حساب (ربات تلگرام/بله/روبیکا یا برنامک ایتا)؛ webLink = لینک سایت (برای همه کار می‌کند: ثبت‌نام/ورود در سایت یا اپ، بعد کد خودکار ثبت می‌شود).
+ *  هر ۵ دوست جدید که اولین ارائه‌شان را بسازند = ۱ اعتبار پلن پلاس تا ۵۰ دعوت (مثل /invite ربات). */
+export async function inviteInfo(env: Env, user: WebUser): Promise<Response> {
+  const st = await referralState(env, user.id);
+  if (st.id === null) return err("حساب شما پیدا نشد؛ دوباره وارد شو.", 409);
+  if (st.banned) return err("دسترسی شما مسدود شده است.", 403);
+  const webLink = webInviteLink(env, st.id);
+  const link = (await inviteLinkFor(env, st.id).catch(() => "")) || webLink;
+  return json({ link, webLink, code: String(st.id), count: st.count, max: REF_MAX, every: REF_EVERY, canClaim: st.canClaim });
+}
+
+/** POST /api/invite/claim {code} — ثبت کد/لینک دعوتِ یک دوست برای حساب فعلی (فقط تا قبل از اولین ارائه). سایت بعد از ورود، اپ اندروید با کد واردشده و
+ *  Mini App/برنامک با startapp=ref_… همین را صدا می‌زنند؛ پاداش دعوت‌کننده با ساخت اولین ارائه‌ی این حساب شمرده می‌شود. */
+export async function inviteClaim(env: Env, user: WebUser, body: Record<string, unknown> | null, ip: string): Promise<Response> {
+  const r = await claimReferral(env, user.id, body?.code, ip);
+  return "error" in r ? err(r.error, r.status) : json({ ok: true });
 }
 
 /** POST /api/miniapp/dl {id} ← {path, name} — لینک ۵ دقیقه‌ای برای web_app_request_file_download.

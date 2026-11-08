@@ -18,7 +18,7 @@
  *  هرگز خطا پرتاب نمی‌کند. env باید با withStore ساخته شده باشد. */
 import type { Env } from "./env";
 import { emailOtpEnabled, otpEnabled, type WebUser } from "./auth";
-import { envFor, esc as tgEsc, sendMessage, tg } from "./telegram";
+import { esc as tgEsc, sendMessage } from "./telegram";
 import { BRAND, emailEnabled, sendEmail, siteOf, toBase64 } from "./email";
 import { loadFileDirect } from "./files";
 import { inSendHours } from "./activation-reminder";
@@ -27,7 +27,7 @@ import { buyKbFor, miniappUrl } from "./deck-service";
 import { extraButtons } from "./extras";
 import { PLANS } from "./payment";
 import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES } from "./settings";
-import { inviteBody, inviteShareUrl, telegramInviteLink } from "./invite-msg";
+import { botUsername, inviteBody, inviteLinkFor, inviteMarkup, invitePlatform } from "./invite-msg";
 import { sendWebPush, webPushEnabled, type WebPushMsg } from "./webpush";
 import { isBaleId } from "./bale-format";
 import { isRubikaId } from "./rubika-format";
@@ -558,21 +558,25 @@ ORDER BY x.k LIMIT ?3`,
   marker: (r) => `lc:inv:${r.uid}`,
   note: async (c, r, k) => {
     const id = k.tgId;
-    if (!id || isEitaaId(id)) return null; // لینک دعوت فقط برای تلگرام، بله و روبیکاست
-    const bale = isBaleId(id), rubika = isRubikaId(id);
-    const plat = rubika ? "rubika" : bale ? "bale" : "tg";
-    let name = c.botNames.get(plat);
-    if (name === undefined) {
-      if (!take(c, 1)) return null;
-      name = String((await tg<{ username?: string }>(envFor(c.env, id), "getMe").catch(() => ({ username: "" }))).username ?? "");
-      c.botNames.set(plat, name);
+    if (!id) return null;
+    // لینک اختصاصی پلتفرم خودِ کاربر (تلگرام/بله/روبیکا: ربات، ایتا: برنامک)؛ نام ربات‌ها یک‌بار در هر اجرا گرفته می‌شود
+    const plat = invitePlatform(id);
+    let name: string | undefined;
+    if (plat === "tg" || plat === "bale" || plat === "rubika") {
+      name = c.botNames.get(plat);
+      if (name === undefined) {
+        if (!take(c, 1)) return null;
+        name = await botUsername(c.env, plat);
+        c.botNames.set(plat, name);
+      }
+      if (!name) return null;
     }
-    if (!name) return null;
-    const link = rubika ? `https://rubika.ir/${name}?start=ref_${id}` : bale ? `https://ble.ir/${name}?start=ref_${id}` : telegramInviteLink(name, id);
+    const link = await inviteLinkFor(c.env, id, name);
+    if (!link) return null;
     return {
       tag: "invite-ask",
       tg: `🙌 اگر از ساخت ارائه راضی بودی، به دوستانت هم معرفی کن:\n\n${inviteBody(link, 0)}`,
-      kb: async () => (bale || rubika ? {} : { reply_markup: { inline_keyboard: [[{ text: "📤 ارسال به دوستان", url: inviteShareUrl(link) }]] } }),
+      kb: async () => inviteMarkup(id, link),
     };
   },
 };
