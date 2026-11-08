@@ -142,9 +142,12 @@ export interface Env {
   /** توکن صحت‌سنجی مایکت (پنل توسعه‌دهندگان؛ اختیاری و محرمانه): اگر گذاشته شود، سرور وضعیت خرید را از API مایکت هم می‌پرسد تا خرید برگشت‌خورده فعال نشود. */
   MYKET_ACCESS_TOKEN?: string;
   /** ایمیل با Resend (اختیاری): بدون RESEND_API_KEY هیچ ایمیلی فرستاده نمی‌شود (نه خوش‌آمد، نه رسید خرید، نه کد ورود با ایمیل). کلید را به‌صورت secret بگذارید.
-   *  EMAIL_FROM: فرستنده روی دامنه‌ی تاییدشده در Resend، مثل «پاورپوینت‌ساز فارسی <hello@pptsaz.ir>» (پیش‌فرض: hello@ دامنه‌ی SITE_URL)
+   *  EMAIL_FROM: فرستنده روی دامنه‌ی تاییدشده در Resend، مثل «پاورپوینت‌ساز فارسی <info@pptsaz.ir>» (پیش‌فرض: info@ دامنه‌ی SITE_URL)
    *  EMAIL_REPLY_TO: نشانی دریافت پاسخ کاربران (اختیاری) */
   RESEND_API_KEY?: string;
+  /** سرریز ایمیل با Brevo (اختیاری): وقتی سهمیه یا نرخ Resend پر شد، همان ایمیل با Brevo می‌رود و بعد از ۱۵ دقیقه دوباره اول Resend امتحان می‌شود.
+   *  کلید API را فقط به‌صورت secret بگذارید (wrangler secret put BREVO_API_KEY)؛ فرستنده و دامنه همان EMAIL_FROM است و باید در Brevo هم تأیید شده باشد. */
+  BREVO_API_KEY?: string;
   EMAIL_FROM?: string;
   EMAIL_REPLY_TO?: string;
   /** اعلان وب (Web Push برای PWA/مرورگر؛ webpush.ts): کلید عمومی (۶۵ بایت) و خصوصی (۳۲ بایت) VAPID به‌صورت base64url. ساخت: `npx tsx scripts/vapid-keys.ts`.

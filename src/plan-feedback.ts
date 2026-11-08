@@ -31,7 +31,7 @@ const RETRY_TTL = 2 * 3600;   // ثانیه؛ فقط وقتی ایمیل شکس�
 const MAXC = "\u{10FFFF}";
 
 const addrOf = (s?: string) => s?.match(/<([^<>\s]+@[^<>\s]+)>/)?.[1] ?? (s && /^[^<>\s@]+@[^<>\s@]+$/.test(s.trim()) ? s.trim() : "");
-const replyAddr = (env: Env) => addrOf(env.EMAIL_REPLY_TO) || addrOf(env.EMAIL_FROM) || `hello@${new URL(siteOf(env)).hostname}`;
+const replyAddr = (env: Env) => addrOf(env.EMAIL_REPLY_TO) || addrOf(env.EMAIL_FROM) || `info@${new URL(siteOf(env)).hostname}`;
 
 /** time = مدت پلن تمام شد؛ credits = اعتبار پلن تمام شد (مدت هنوز مانده) */
 export type EndReason = "time" | "credits";
