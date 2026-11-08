@@ -1,0 +1,30 @@
+$ORIGIN pptsaz.ir.
+$TTL 3600
+
+; ===== سایت (در ارووان، «استفاده از سرویس ابری» برای این دو بعد از ایمپورت دوباره روشن شود) =====
+@                  120  IN A     176.97.218.34
+www                120  IN A     176.97.218.34
+
+; ===== Resend =====
+send               3600 IN CNAME send.forge.rmta.net.
+send.mail          3600 IN CNAME send.forge.rmta.net.
+rsend              3600 IN CNAME rsend-apne1.forge.rmta.net.
+rsend.mail         3600 IN CNAME rsend-apne1.forge.rmta.net.
+@                  3600 IN MX    10 receive-apne1.forge.rmta.net.
+mail               3600 IN MX    10 receive-apne1.forge.rmta.net.
+; کلیدهای DKIM رزند در پیام شما نیمه‌کاره کپی شده بود؛ مقدار کامل را از داشبورد Resend (Domains) بردارید و ; اول خط را بردارید:
+; resend._domainkey       3600 IN TXT "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQ...(کامل از Resend)"
+; resend._domainkey.mail  3600 IN TXT "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQ...(کامل از Resend)"
+
+; ===== تأیید مالکیت =====
+@                  3600 IN TXT   "ghesta-f0aac11ac13c6ee30f02b899cc9c7ffa"
+@                  3600 IN TXT   "google-site-verification=NjyO4v8TQ6EvQPCc9mnXqaCdCjc0udFxX8zD3lJdHNg"
+
+; ===== Brevo =====
+@                  3600 IN TXT   "brevo-code:17318c745258742bd55dc93442b35839"
+brevo1._domainkey  3600 IN CNAME b1.pptsaz-ir.dkim.brevo.com.
+brevo2._domainkey  3600 IN CNAME b2.pptsaz-ir.dkim.brevo.com.
+_dmarc             3600 IN TXT   "v=DMARC1; p=none; rua=mailto:rua@dmarc.brevo.com"
+email              3600 IN CNAME email-pptsaz-ir.brand.brevosend.com.
+r.email            3600 IN CNAME email-pptsaz-ir.r.brand.brevosend.com.
+img.email          3600 IN CNAME email-pptsaz-ir.img.brand.brevosend.com.
