@@ -60,3 +60,8 @@
   Content-Security-Policy: frame-ancestors 'self' https://web.telegram.org https://webk.telegram.org https://webz.telegram.org https://*.telegram.org https://*.bale.ai https://*.ble.ir https://bale.ai https://ble.ir
   X-Robots-Tag: noindex, nofollow
   Cache-Control: no-cache
+
+# تصویرهای سئو (scripts/gen-seo-images.py): کش یک‌ماهه؛ نام فایل‌ها نسخه ندارند، پس بیشتر نه
+/img/*
+  Cache-Control: public, max-age=2592000
+  Access-Control-Allow-Origin: *
