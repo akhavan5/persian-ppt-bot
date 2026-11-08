@@ -157,8 +157,8 @@ object Api {
 
     suspend fun files(): List<FileItem> = parseFiles(call("GET", "/api/files"))
 
-    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean, audio: Boolean = false, podcast: Boolean = false): String {
-        val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout).put("images", images)
+    suspend fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean, audio: Boolean = false, podcast: Boolean = false, imagesMany: Boolean = false): String {
+        val b = JSONObject().put("topic", topic).put("slides", slides).put("handout", handout).put("images", images).put("imagesMany", images && imagesMany)
         if (poster != null) b.put("poster", poster)
         if (audio) b.put("audio", true)
         if (podcast) b.put("podcast", true)
@@ -180,6 +180,13 @@ object Api {
 
     suspend fun putSetting(key: String, value: Any) {
         call("PUT", "/api/settings", JSONObject().put(key, value))
+    }
+
+    /** چند تنظیم وابسته در یک درخواست (مثل سطح تصویر: images + imagesMany) */
+    suspend fun putSettings(vararg pairs: Pair<String, Any>) {
+        val b = JSONObject()
+        pairs.forEach { (k, v) -> b.put(k, v) }
+        call("PUT", "/api/settings", b)
     }
 
     /** متن PDF یا عکس را استخراج می‌کند (سرور کار را در پس‌زمینه انجام می‌دهد و ما وضعیت را پیگیری می‌کنیم). */

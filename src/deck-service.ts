@@ -7,7 +7,7 @@ import type { Env } from "./env";
 import type { DeckParams, Mode, Settings } from "./types";
 import { MODES, isMode } from "./themes";
 import {
-  FREE_MAX_IMAGES, FREE_MAX_SLIDES, acquireLock, botPlatform, bumpStat, clampSlides, getSettings, imagesForSlides, isLocked, maxImagesFor, maxSlidesFor,
+  FREE_MAX_IMAGES, FREE_MAX_SLIDES, acquireLock, botPlatform, bumpStat, clampSlides, getSettings, imageCountFor, hasPlanAccess, isLocked, maxImagesFor, maxSlidesFor,
   refundCredit, releaseLock, spendCredit, type Platform,
 } from "./settings";
 import { PLANS } from "./payment";
@@ -92,7 +92,7 @@ const deny = (error: string, status: number, extra: Partial<Denied> = {}): Begin
  * اعتبارسنجی + کسر اعتبار + قفل. uid: شناسه‌ی اصلی کاربر (حساب وب یا تلگرامِ بدون اتصال).
  * بعد از موفقیت، فراخواننده باید یا launchDeck را صدا بزند یا (در صورت خطا) undo را.
  */
-export async function beginDeck(env: Env, uid: string | number, topicRaw: string, want: { slides?: number; /** اسلاید تصویر داشته باشد؟ (تعداد از روی تعداد اسلاید محاسبه می‌شود) */ images?: boolean; mode?: Mode; source?: unknown; /** پوستر همراه ارائه: ۱ اعتبار دیگر */ poster?: boolean; /** جزوه‌ی Word همراه ارائه: ۱ اعتبار دیگر */ handout?: boolean; /** اسلاید صوتی همراه ارائه: ۱ اعتبار دیگر */ audio?: boolean; /** پادکست همراه ارائه: ۱ اعتبار دیگر */ podcast?: boolean } = {}): Promise<Begin> {
+export async function beginDeck(env: Env, uid: string | number, topicRaw: string, want: { slides?: number; /** اسلاید تصویر داشته باشد؟ (تعداد از روی تعداد اسلاید محاسبه می‌شود) */ images?: boolean; /** تصویر «زیاد» (فقط پلن‌دارها): نرمال + ۱ */ imagesMany?: boolean; mode?: Mode; source?: unknown; /** پوستر همراه ارائه: ۱ اعتبار دیگر */ poster?: boolean; /** جزوه‌ی Word همراه ارائه: ۱ اعتبار دیگر */ handout?: boolean; /** اسلاید صوتی همراه ارائه: ۱ اعتبار دیگر */ audio?: boolean; /** پادکست همراه ارائه: ۱ اعتبار دیگر */ podcast?: boolean } = {}): Promise<Begin> {
   const topic = topicRaw.replace(/\s+/g, " ").trim();
   if (topic.length < 3) return deny("موضوع خیلی کوتاه است؛ کمی کامل‌تر بنویس.", 400);
   if (topic.length > 600) return deny("موضوع بیش از حد طولانی است (حداکثر ۶۰۰ کاراکتر).", 400);
@@ -104,6 +104,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
   const wantSlides = typeof want.slides === "number" && Number.isFinite(want.slides) ? Math.round(want.slides) : undefined;
   if (wantSlides !== undefined && wantSlides > maxSlides) return deny(slidesLimitMsg(maxSlides), 403, { needPlan: true });
   const wantImgFlag = typeof want.images === "boolean" ? want.images : undefined;
+  const wantManyFlag = typeof want.imagesMany === "boolean" ? want.imagesMany : undefined;
 
   // ۱) قفل اتمی «یک ارائه در هر لحظه» پیش از کسر اعتبار: درخواست‌های موازی فقط یکی‌شان قفل را می‌گیرد.
   const busy = () => deny("ارائه‌ی قبلی هنوز در حال ساخته شدن است؛ کمی صبر کن.", 409, { busy: true });
@@ -147,8 +148,10 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
     const useImgs = wantImgFlag ?? settings.images; // پیش‌فرض: بله
     if (want.mode && isMode(want.mode)) settings.mode = want.mode; // حالتِ نوشته‌شده در متن کاربر؛ فقط برای همین ارائه (ذخیره نمی‌شود)
     settings.slides = Math.max(settings.slides, MODES[settings.mode].minSlides); // ساختار دانشجویی/کسب‌وکار/معلم حداقل ۸ اسلاید می‌خواهد
-    const imageCount = useImgs ? Math.max(1, Math.min(imagesForSlides(settings.slides), maxImg)) : 0; // تعداد تصویر ضمنی از روی تعداد اسلاید
+    const useMany = useImgs && (wantManyFlag ?? settings.imagesMany === true) && (await hasPlanAccess(env, uid)); // «زیاد» فقط برای پلن‌دارها؛ وگرنه نرمال
+    const imageCount = useImgs ? imageCountFor(settings.slides, maxImg, useMany) : 0; // تعداد تصویر ضمنی از روی تعداد اسلاید (زیاد = نرمال + ۱)
     settings.images = useImgs;
+    settings.imagesMany = useMany;
 
     let undone = false;
     const undo = async () => { // idempotent: دوبار صدا زدن اعتبار را دوبار برنمی‌گرداند

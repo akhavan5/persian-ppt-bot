@@ -6,7 +6,7 @@ import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { TEMPLATES, isTemplate } from "./template";
 import {
   DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, botPlatform, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
-  CONTACT_REWARD_NOTE, EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
+  CONTACT_REWARD_NOTE, EXTRA_IMAGES_MSG, EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, hasPlanAccess, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
 } from "./settings";
 import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
@@ -369,6 +369,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
   const feedback = await feedbackInfo(env, user); // available=true ⇒ ثبت نظر هنوز اعتبار هدیه دارد
   const premium = !!sub || isAdmin(env, user.id);
   settings.slides = Math.min(settings.slides, maxSlides); // پلن تمام شده ⇒ سقف رایگان
+  if (!premium) settings.imagesMany = false; // تصویر «زیاد» فقط برای پلن‌دارها
   const activeJob = running.busy ? running.jobId : null;
   return json({
     user: publicUser(user),
@@ -414,6 +415,10 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
     s.model = b.model;
   }
   for (const k of ["digits", "images", "sources", "questions"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
+  if (typeof b.imagesMany === "boolean") {
+    if (b.imagesMany && !(await hasPlanAccess(env, user.id))) return json({ error: EXTRA_IMAGES_MSG.replace("🔒 ", ""), needPlan: true }, 403);
+    s.imagesMany = b.imagesMany;
+  }
   await saveSettings(env, user.id, s);
   return json({ settings: await getSettings(env, user.id) });
 }
@@ -464,6 +469,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
     source: typeof b?.source === "string" ? b.source : undefined,
     slides: typeof b?.slides === "number" ? b.slides : undefined,
     images: typeof b?.images === "boolean" ? b.images : undefined,
+    imagesMany: typeof b?.imagesMany === "boolean" ? b.imagesMany : undefined,
   });
   if (!begin.ok) {
     const d = begin.denied;

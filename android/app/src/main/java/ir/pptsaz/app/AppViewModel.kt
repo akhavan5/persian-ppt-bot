@@ -376,7 +376,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ ساخت ارائه
 
-    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean, audio: Boolean = false, podcast: Boolean = false) {
+    fun generate(topic: String, slides: Int, handout: Boolean, source: String, poster: String?, images: Boolean, audio: Boolean = false, podcast: Boolean = false, imagesMany: Boolean = false) {
         if (topic.trim().length < 3) {
             toast("موضوع ارائه را بنویسید")
             return
@@ -384,7 +384,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
-                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, images, audio, podcast)
+                val id = Api.generate(topic.trim(), slides, handout, source.trim().take(MAX_SOURCE_CHARS), poster, images, audio, podcast, imagesMany)
                 _state.update { it.copy(busy = false) }
                 if (id.isEmpty()) toast("شروع ساخت انجام نشد") else {
                     watch(id, fresh = true)
@@ -1099,6 +1099,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         "mode" -> s.copy(mode = value as String)
         "slides" -> s.copy(slides = value as Int)
         "images" -> s.copy(images = value as Boolean)
+        "imagesMany" -> s.copy(imagesMany = value as Boolean)
         "digits" -> s.copy(digits = value as Boolean)
         "sources" -> s.copy(sources = value as Boolean)
         "questions" -> s.copy(questions = value as Boolean)
@@ -1123,12 +1124,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     "mode" -> before.mode
                     "slides" -> before.slides
                     "images" -> before.images
+                    "imagesMany" -> before.imagesMany
                     "digits" -> before.digits
                     "sources" -> before.sources
                     "questions" -> before.questions
                     else -> value
                 }
                 _state.update { st -> st.copy(me = st.me?.let { m -> m.copy(settings = applySetting(m.settings, key, old)) }) }
+                toast(e.message ?: "")
+            }
+        }
+    }
+
+    /** سطح تصویر اسلایدها: ۰ = خیر، ۱ = نرمال، ۲ = زیاد (فقط پلن‌دارها؛ تعداد نرمال + ۱). هر دو تنظیم با هم و در یک درخواست ذخیره می‌شوند. */
+    fun setImageLevel(level: Int) {
+        val before = _state.value.me?.settings ?: return
+        if (level == 2 && _state.value.me?.premium != true) {
+            toast("تصویر «زیاد» فقط برای کاربران دارای پلن پلاس/پرو فعال است")
+            return
+        }
+        val images = level > 0
+        val many = level == 2
+        _state.update { st -> st.copy(me = st.me?.let { m -> m.copy(settings = m.settings.copy(images = images, imagesMany = many)) }) }
+        viewModelScope.launch {
+            try {
+                Api.putSettings("images" to images, "imagesMany" to many)
+            } catch (e: ApiException) {
+                _state.update { st -> st.copy(me = st.me?.let { m -> m.copy(settings = m.settings.copy(images = before.images, imagesMany = before.imagesMany)) }) }
                 toast(e.message ?: "")
             }
         }

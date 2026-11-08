@@ -12,20 +12,25 @@ import { toFa } from "./util";
 export type Uid = number | string;
 export const isWebId = (id: Uid) => typeof id === "string" && id.startsWith("w_");
 
-export const DEFAULTS: Settings = { theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, mode: "normal", sources: false, questions: false };
+export const DEFAULTS: Settings = { theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, imagesMany: false, mode: "normal", sources: false, questions: false };
 export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 
 // ---------- سقف اسلاید (فقط وب): رایگان ۸، پلاس ۲۰، پرو ۳۵ ----------
 export const FREE_MAX_SLIDES = 8;
 export const ABS_MAX_SLIDES = 35;
 export const PLAN_MAX_SLIDES: Record<string, number> = { plus: 20, pro: 35 };
-// ---------- سقف تصویر در هر ارائه (فقط وب): رایگان ۱، پلاس ۳، پرو ۶ (ربات تلگرام همچنان ۱ تصویر) ----------
+// ---------- سقف تصویر در هر ارائه: رایگان ۱، پلاس ۴، پرو ۷ (سقف پلن = بیشترین تعداد در حالت «زیاد») ----------
+// حالت «نرمال» حداکثر BASE_MAX_IMAGES (۶) تصویر می‌گیرد (پلاس تا ۳ چون حداکثر ۲۰ اسلاید دارد)؛ «زیاد» (فقط پلن‌دارها) یکی بیشتر: پلاس ۴، پرو ۷.
 export const FREE_MAX_IMAGES = 1;
-export const ABS_MAX_IMAGES = 6;
-export const PLAN_MAX_IMAGES: Record<string, number> = { plus: 3, pro: 6 };
+export const BASE_MAX_IMAGES = 6;
+export const ABS_MAX_IMAGES = BASE_MAX_IMAGES + 1;
+export const PLAN_MAX_IMAGES: Record<string, number> = { plus: 4, pro: 7 };
 /** تعداد تصویر ارائه به‌صورت ضمنی از روی تعداد اسلاید (کاربر فقط «اسلاید تصویر داشته باشد؟ بله/خیر» را می‌بیند):
  *  تا ۱۰ اسلاید ۱ تصویر، تا ۱۵ → ۲، تا ۲۰ → ۳، تا ۲۵ → ۴، تا ۳۰ → ۵، تا ۳۵ → ۶ */
-export const imagesForSlides = (slides: number): number => Math.max(1, Math.min(ABS_MAX_IMAGES, Math.ceil((Math.round(Number(slides) || 0) - 5) / 5)));
+export const imagesForSlides = (slides: number): number => Math.max(1, Math.min(BASE_MAX_IMAGES, Math.ceil((Math.round(Number(slides) || 0) - 5) / 5)));
+/** تعداد تصویر ارائه: «نرمال» = فرمول imagesForSlides (حداکثر سقف پلن)؛ «زیاد» (فقط پلن‌دارها) = همان عدد + ۱ */
+export const imageCountFor = (slides: number, maxImg: number, many: boolean): number =>
+  Math.min(Math.max(1, maxImg), Math.max(1, Math.min(imagesForSlides(slides), maxImg)) + (many ? 1 : 0));
 /** گزینه‌های انتخاب تعداد اسلاید در وب (گزینه‌های بالاتر از سقف پلن کاربر قفل نمایش داده می‌شوند) */
 export const WEB_SLIDE_CHOICES = [5, 6, 8, 10, 12, 15, 20, 25, 30, 35];
 
@@ -42,6 +47,7 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   s.slides = clampSlides(Number(s.slides) || DEFAULTS.slides, ABS_MAX_SLIDES);
   s.digits = !!s.digits;
   s.images = !!s.images;
+  s.imagesMany = !!s.imagesMany;
   delete (s as { imageCount?: unknown }).imageCount; // فیلد قدیمی (تعداد تصویر)؛ حالا از روی تعداد اسلاید محاسبه می‌شود
   s.mode = isMode(s.mode) ? s.mode : "normal";
   s.sources = !!s.sources;
@@ -158,6 +164,7 @@ export const freeModelId = (env: Env) => { const l = modelList(env); return (l.f
 export async function hasPlanAccess(env: Env, userId: Uid): Promise<boolean> {
   return isAdmin(env, userId) || !!(await getActiveSub(env, userId));
 }
+export const EXTRA_IMAGES_MSG = "🔒 تصویر «زیاد» فقط برای کاربران دارای پلن پلاس/پرو فعال است.";
 export const EXTRA_MODEL_MSG = "🔒 این مدل فقط برای کاربران دارای پلن پلاس/پرو فعال است.";
 /** مدل باید در فهرست باشد؛ مدل‌های ویژه (free نیست) فقط برای مدیر و دارندگان پلن فعال مجازند. */
 export async function canUseModel(env: Env, userId: Uid, modelId: string): Promise<boolean> {
@@ -173,7 +180,7 @@ export async function maxSlidesFor(env: Env, userId: Uid): Promise<number> {
   return sub ? (PLAN_MAX_SLIDES[sub.plan] ?? FREE_MAX_SLIDES) : FREE_MAX_SLIDES;
 }
 
-/** سقف تعداد تصویر هر ارائه‌ی وب: مدیر ۶؛ عضو پلن فعال طبق پلن (پلاس ۳، پرو ۶)؛ بقیه ۱ */
+/** سقف تعداد تصویر هر ارائه (حالت «زیاد»): مدیر ۷؛ عضو پلن فعال طبق پلن (پلاس ۴، پرو ۷)؛ بقیه ۱ */
 export async function maxImagesFor(env: Env, userId: Uid): Promise<number> {
   if (isAdmin(env, userId)) return ABS_MAX_IMAGES;
   const sub = await getActiveSub(env, userId);

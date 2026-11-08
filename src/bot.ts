@@ -3,7 +3,7 @@ import type { Mode, Settings } from "./types";
 import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
-  EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
+  EXTRA_IMAGES_MSG, EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
   DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_EVERY, REF_MAX, holdReferral, parseRefId, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
@@ -64,6 +64,9 @@ const getCaps = async (env: Env, uid: Uid): Promise<Caps> => {
 };
 /** اسلایدها تصویر داشته باشند؟ (تعداد تصویر ضمنی و از روی تعداد اسلاید محاسبه می‌شود) */
 const wantsImgs = (s: Settings) => s.images !== false;
+/** تصویر «زیاد» (نرمال + ۱) فقط برای پلن‌دارها */
+const wantsMany = (s: Settings, caps: Caps) => wantsImgs(s) && s.imagesMany === true && caps.premium;
+const imgLabel = (s: Settings, caps: Caps) => (!wantsImgs(s) ? "خیر" : wantsMany(s, caps) ? "زیاد" : "نرمال");
 
 function mainMenu(env: Env, s: Settings, caps: Caps) {
   const models = modelList(env);
@@ -74,7 +77,7 @@ function mainMenu(env: Env, s: Settings, caps: Caps) {
     [{ text: `${tpl.emoji} قالب: ${tpl.name}`, callback_data: "m:tpl" }],
     [{ text: `🎨 تم: ${THEMES[s.theme].name}`, callback_data: "m:theme" }, { text: `🗣 لحن: ${TONES[s.tone]}`, callback_data: "m:tone" }],
     [{ text: `🔤 فونت: ${s.font}`, callback_data: "m:font" }, { text: `📄 اسلاید: ${toFa(String(Math.min(s.slides, caps.maxSlides)))}`, callback_data: "m:slides" }],
-    [{ text: `🖼 تصویر در اسلاید: ${wantsImgs(s) ? "بله" : "خیر"}`, callback_data: "t:images" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
+    [{ text: `🖼 تصویر در اسلاید: ${imgLabel(s, caps)}`, callback_data: "t:images" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
     models.length > 1 ? [{ text: `🤖 مدل: ${model.name}`, callback_data: "m:model" }, modeBtn] : [modeBtn],
     [{ text: `📚 منابع: ${s.mode === "student" || s.mode === "thesis" ? "روشن (" + MODES[s.mode].name + ")" : s.sources ? "روشن" : "خاموش"}`, callback_data: "t:sources" },
       { text: `❓ پرسش پایانی: ${s.mode === "teacher" ? "روشن (معلم)" : s.questions ? "روشن" : "خاموش"}`, callback_data: "t:questions" }],
@@ -118,7 +121,7 @@ type Step = "model" | "slides" | "imgs" | "extras";
 /** پوستر (اینفوگرافیک) همراه ارائه: none = نه، wide = افقی، tall = عمودی */
 type PosterChoice = "none" | "wide" | "tall";
 /** وضعیت ویزارد: موضوع + انتخاب‌های فعلی + مرحله‌ی جاری. هر کاربر یک ویزارد فعال دارد؛ فقط پیام همان ویزارد معتبر است. */
-interface Pending { /** اسلاید صوتی همراه ارائه (۱ اعتبار جدا؛ پیش‌فرض خاموش، فقط وقتی TTS فعال است) */ audio?: boolean; /** پادکست همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا؛ پیش‌فرض خاموش) */ podcast?: boolean; /** جزوه‌ی Word همراه ارائه (۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; /** اسلاید حاوی تصویر باشد؟ (پیش‌فرض بله) */ imgs: boolean; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string; /** منبع از روی لینک وب است (file = نام سایت) */ link?: boolean }
+interface Pending { /** اسلاید صوتی همراه ارائه (۱ اعتبار جدا؛ پیش‌فرض خاموش، فقط وقتی TTS فعال است) */ audio?: boolean; /** پادکست همراه ارائه (آخرین مرحله؛ ۱ اعتبار جدا؛ پیش‌فرض خاموش) */ podcast?: boolean; /** جزوه‌ی Word همراه ارائه (۱ اعتبار جدا) */ handout?: boolean; /** پوستر همراه ارائه (آخرین مرحله؛ فقط وقتی فعال است) */ poster?: PosterChoice; /** متن اصلی ارسالی کاربر (برای گزارش مدیر) */ orig?: string; topic: string; mid: number; slides: number; /** اسلاید حاوی تصویر باشد؟ (پیش‌فرض نرمال) */ imgs: boolean; /** تصویر «زیاد» (فقط پلن‌دارها): تعداد نرمال + ۱ */ many?: boolean; model: string; step: Step; fixed?: boolean; note?: string; /** حالتِ نوشته‌شده در متن کاربر («حالت دانشجویی»)؛ فقط برای همین ارائه و بدون تغییر تنظیمات ذخیره‌شده */ mode?: Mode; /** متن فایل آپلودی (منبع اصلی محتوا) */ source?: string; /** نام فایل آپلودی (فقط برای نمایش) */ file?: string; /** منبع از روی لینک وب است (file = نام سایت) */ link?: boolean }
 const pendKey = (uid: Uid) => `pend:${uid}`;
 const getPending = async (env: Env, uid: Uid) => (await env.KV.get(pendKey(uid), "json")) as Pending | null;
 const putPending = (env: Env, uid: Uid, p: Pending) => env.KV.put(pendKey(uid), JSON.stringify(p), { expirationTtl: 3600 });
@@ -172,7 +175,8 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
   } else {
     ask = "🖼 <b>اسلایدها حاوی تصویر باشند؟</b>" + (steps[steps.length - 1] === "imgs" ? "\n<i>با انتخاب این گزینه ساخت ارائه شروع می‌شود.</i>" : "");
     opts = [[
-      { text: mark(p.imgs, "✅ بله"), callback_data: "p:imgs:1" },
+      { text: mark(p.imgs && !p.many, "✅ نرمال"), callback_data: "p:imgs:1" },
+      { text: lock(!caps.premium, mark(p.imgs && p.many === true, "➕ زیاد")), callback_data: "p:imgs:2" },
       { text: mark(!p.imgs, "❌ خیر"), callback_data: "p:imgs:0" },
     ]];
   }
@@ -207,7 +211,7 @@ function plansText(curId?: string): string {
 async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chatId: number, mid: number, p: Pending, answer: (t?: string, alert?: boolean) => Promise<unknown>) {
   const wantPoster = p.poster === "wide" || p.poster === "tall";
   const wantAudio = p.audio === true && audioEnabled(env), wantPodcast = p.podcast === true && audioEnabled(env); // پیش‌فرض خاموش؛ فقط با انتخاب کاربر و فعال‌بودن TTS
-  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout === true, audio: wantAudio, podcast: wantPodcast, slides: p.slides, images: p.imgs, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
+  const begin = await beginDeck(env, uid, p.topic, { poster: wantPoster && posterEnabled(env), handout: p.handout === true, audio: wantAudio, podcast: wantPodcast, slides: p.slides, images: p.imgs, imagesMany: p.many === true, ...(p.mode ? { mode: p.mode } : {}), ...(p.source ? { source: p.source } : {}) });
   if (!begin.ok) {
     const d = begin.denied;
     if (d.busy) return await answer("ارائه‌ی قبلی شما هنوز در حال ساخته شدن است. وقتی فایلش رسید، دوباره امتحان کن.", true);
@@ -294,7 +298,8 @@ async function handlePending(env: Env, cq: any, uid: Uid, tgId: number, chatId: 
     return await render();
   } else if (a === "imgs") {
     if (!(Number.isInteger(Number(b)) && Number(b) >= 0)) return await answer();
-    p.imgs = Number(b) > 0; s.images = p.imgs;
+    if (Number(b) === 2 && !caps.premium) return await answer(EXTRA_IMAGES_MSG, true);
+    p.imgs = Number(b) > 0; p.many = Number(b) === 2; s.images = p.imgs; s.imagesMany = p.many;
   } else return await answer();
   await saveSettings(env, uid, s).catch((e) => console.error("saveSettings", e));
 
@@ -471,7 +476,11 @@ async function handleCallback(env: Env, cq: any) {
   }
   if (act === "m") view = subMenu(env, a, s, caps);
   else if (act === "t") {
-    if (a === "images") s.images = !s.images;
+    if (a === "images") { // خیر ← نرمال ← زیاد (فقط پلن‌دارها) ← خیر
+      if (!wantsImgs(s)) { s.images = true; s.imagesMany = false; }
+      else if (!s.imagesMany && caps.premium) s.imagesMany = true;
+      else { s.images = false; s.imagesMany = false; }
+    }
     if (a === "digits") s.digits = !s.digits;
     if (a === "mode") s.mode = nextMode(s.mode);
     if (a === "sources") s.sources = !s.sources;
@@ -794,6 +803,7 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     ...(o.orig?.trim() ? { orig: o.orig.replace(/\s+/g, " ").trim().slice(0, 300) } : {}),
     slides: Math.min(o.slides ?? s.slides, caps.maxSlides),
     imgs: wantsImgs(s),
+    many: wantsMany(s, caps),
     model: models.some((m) => m.id === s.model) ? (s.model as string) : (models[0]?.id ?? ""),
     poster: "wide", // پیش‌فرض: با پوستر افقی
     handout: false, // جزوه‌ی Word: پیش‌فرض خاموش (۱ اعتبار)

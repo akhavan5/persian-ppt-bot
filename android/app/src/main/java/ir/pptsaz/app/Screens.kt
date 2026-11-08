@@ -825,11 +825,13 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
                         Spacer(Modifier.height(2.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("اسلاید حاوی تصویر باشد؟", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                            Text(if (s.images) "بله" else "خیر", style = MaterialTheme.typography.titleSmall, color = cs.primary)
+                            Text(imageLevelLabel(imageLevel(s, me.premium)), style = MaterialTheme.typography.titleSmall, color = cs.primary)
                         }
+                        // ۱ = نرمال، ۲ = زیاد (نرمال + ۱ تصویر؛ فقط پلن‌دارها)، ۰ = خیر
                         Segmented(
-                            options = listOf(true, false), selected = s.images, label = { if (it) "بله" else "خیر" },
-                            onSelect = { v -> vm.setSetting("images", v) },
+                            options = listOf(1, 2, 0), selected = imageLevel(s, me.premium), label = { imageLevelLabel(it) },
+                            locked = { it == 2 && !me.premium },
+                            onSelect = { v -> vm.setImageLevel(v) },
                         )
                     }
                 }
@@ -897,7 +899,7 @@ fun CreateTab(st: UiState, me: Me, vm: AppViewModel, form: CreateForm) {
         ) {
             GradientButton(
                 text = if (running) "در حال ساخت…" else "ساخت ارائه",
-                onClick = { vm.generate(form.topic, s.slides, form.handout, form.source, (if (cfg.poster) form.poster.ifEmpty { null } else null), s.images, cfg.audio && form.audio, cfg.audio && form.podcast) },
+                onClick = { vm.generate(form.topic, s.slides, form.handout, form.source, (if (cfg.poster) form.poster.ifEmpty { null } else null), s.images, cfg.audio && form.audio, cfg.audio && form.podcast, s.imagesMany && me.premium) },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !running && !st.busy,
                 icon = AppIcons.Sparkles,
@@ -1505,6 +1507,10 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
         }
     }
 }
+
+/** سطح تصویر اسلایدها: ۰ = خیر، ۱ = نرمال، ۲ = زیاد (فقط پلن‌دارها؛ تعداد نرمال + ۱) */
+private fun imageLevel(s: Settings, premium: Boolean): Int = if (!s.images) 0 else if (s.imagesMany && premium) 2 else 1
+private fun imageLevelLabel(level: Int): String = when (level) { 0 -> "خیر"; 2 -> "زیاد"; else -> "نرمال" }
 
 /** دکمه‌ی ثبت موبایل/ایمیل روی زمینه‌ی رنگی کارت پروفایل */
 @Composable

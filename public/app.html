@@ -173,7 +173,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
 
         <div class="grid2" style="margin-top:12px">
           <div><label class="f" for="slides">تعداد اسلاید</label><select id="slides"></select></div>
-          <div><label class="f" for="imgs">اسلایدها تصویر داشته باشند؟</label><select id="imgs"><option value="1">بله</option><option value="0">خیر</option></select></div>
+          <div><label class="f" for="imgs">اسلایدها تصویر داشته باشند؟</label><select id="imgs"><option value="1">نرمال</option><option value="2">زیاد</option><option value="0">خیر</option></select></div>
         </div>
 
         <div id="modelBox" style="margin-top:12px" hidden><label class="f" for="model">مدل هوش مصنوعی</label><select id="model"></select></div>
@@ -737,7 +737,7 @@ async function restoreDraft() {
     const d = JSON.parse(raw);
     if (typeof d.t === "string" && d.t.trim() && !$("#topic").value) $("#topic").value = d.t.slice(0, 600);
     if ([...$("#slides").options].some((o) => o.value === String(d.s))) $("#slides").value = String(d.s);
-    if ((d.i === "0" || d.i === "1") && !(d.i === "1" && me.maxImages <= 0)) $("#imgs").value = d.i;
+    if ((d.i === "0" || d.i === "1" || (d.i === "2" && me.premium)) && !(d.i !== "0" && me.maxImages <= 0)) $("#imgs").value = d.i;
     if (typeof d.p === "boolean") $("#pOn").checked = d.p;
     if (d.pc === "wide" || d.pc === "tall") $("#pChoice").value = d.pc;
     if (typeof d.h === "boolean") $("#hOn").checked = d.h;
@@ -746,6 +746,7 @@ async function restoreDraft() {
     show($("#pLay"), !!cfg.poster && $("#pOn").checked);
   } catch {}
 }
+$("#imgs").addEventListener("change", (e) => { if (e.target.value === "2" && !me.premium) { e.target.value = "1"; toast("تصویر «زیاد» فقط برای کاربران دارای پلن پلاس/پرو فعال است."); } });
 for (const id of ["#topic", "#slides", "#imgs", "#pOn", "#pChoice", "#hOn", "#aOn", "#cOn"]) for (const ev of ["input", "change"]) $(id).addEventListener(ev, saveDraft);
 
 // ---------- ساخت ----------
@@ -759,9 +760,10 @@ function renderMake() {
   const choices = cfg.slideChoices.filter((n) => n <= max);
   $("#slides").replaceChildren(...choices.map((n) => h("option", { value: n }, fa(n) + " اسلاید")));
   $("#slides").value = String(choices.includes(cur) ? cur : choices[choices.length - 1]);
-  $("#imgs").value = me.settings.images === false || me.maxImages <= 0 ? "0" : "1";
+  $("#imgs").options[1].textContent = "زیاد" + (me.premium ? "" : " 🔒"); // «زیاد» (نرمال + ۱ تصویر) فقط برای پلن‌دارها
+  $("#imgs").value = me.settings.images === false || me.maxImages <= 0 ? "0" : me.settings.imagesMany && me.premium ? "2" : "1";
   if (prevS && choices.includes(Number(prevS))) $("#slides").value = prevS;
-  if (prevI && me.maxImages > 0) $("#imgs").value = prevI;
+  if (prevI && me.maxImages > 0 && (prevI !== "2" || me.premium)) $("#imgs").value = prevI;
   show($("#pRow"), !!cfg.poster); show($("#pLay"), !!cfg.poster && $("#pOn").checked); show($("#linkBtn"), !!cfg.link && !srcText);
   $("#file").accept = FILE_ACCEPT + (cfg.voice ? "," + AUDIO_EXT.map((e) => "." + e).join(",") : "");
   $("#pick").textContent = cfg.voice ? "📎 آپلود فایل یا ویس (اختیاری)" : "📎 آپلود فایل (اختیاری)";
@@ -994,7 +996,7 @@ $("#go").onclick = async () => {
   if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
   try {
     const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: {
-      topic, slides: Number($("#slides").value), images: $("#imgs").value === "1", via: TG.via,
+      topic, slides: Number($("#slides").value), images: $("#imgs").value !== "0", imagesMany: $("#imgs").value === "2", via: TG.via,
       ...(srcText ? { source: srcText } : {}),
       ...(cfg.poster && $("#pOn").checked ? { poster: $("#pChoice").value } : {}),
       ...($("#hOn").checked ? { handout: true } : {}),

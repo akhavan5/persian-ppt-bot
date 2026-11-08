@@ -35,6 +35,8 @@ data class Config(
 data class Settings(val theme: String, val template: String, val tone: String, val font: String, val slides: Int, val model: String = "",
     val mode: String = "normal", val digits: Boolean = false, val sources: Boolean = false, val questions: Boolean = false,
     val images: Boolean = true,
+    /** تصویر «زیاد» (فقط پلن‌دارها): تعداد نرمال + ۱ */
+    val imagesMany: Boolean = false,
 )
 
 data class Me(
@@ -42,6 +44,8 @@ data class Me(
     val mobile: String,
     val email: String,
     val unlimited: Boolean,
+    /** پلن فعال یا مدیر (برای گزینه‌ی تصویر «زیاد») */
+    val premium: Boolean = false,
     val credits: Int,
     val maxSlides: Int,
     val maxImages: Int,
@@ -126,6 +130,7 @@ fun parseMe(j: JSONObject): Me? {
         mobile = u.str("mobile"),
         email = u.str("email"),
         unlimited = cr?.optBoolean("unlimited") ?: false,
+        premium = j.optBoolean("premium"),
         credits = cr?.optInt("total") ?: 0,
         maxSlides = j.optInt("maxSlides", 8),
         maxImages = j.optInt("maxImages", 1),
@@ -139,7 +144,7 @@ fun parseMe(j: JSONObject): Me? {
             slides = st.optInt("slides", 8), model = st.str("model"),
             mode = st.str("mode").ifEmpty { "normal" },
             digits = st.optBoolean("digits"), sources = st.optBoolean("sources"), questions = st.optBoolean("questions"),
-            images = st.optBoolean("images", true),
+            images = st.optBoolean("images", true), imagesMany = st.optBoolean("imagesMany", false),
         ),
         activeJob = j.str("activeJob").ifEmpty { null },
         plans = j.optJSONArray("plans").objects().map {
