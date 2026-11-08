@@ -10,6 +10,8 @@
 import type { Env } from "./env";
 import type { Platform } from "./settings";
 import { askQuick, hasKey, parseJson } from "./llm";
+import { adminIds } from "./settings";
+import { esc, sendMessage } from "./telegram";
 
 /** شناسه ← توضیح برای مدل. «MAIN subject» یعنی موضوع اصلی درخواست، نه وجود یک واژه در متن */
 const CATEGORIES: Record<string, string> = {
@@ -127,4 +129,31 @@ export async function checkPlatformPolicy(env: Env, plat: Platform, topic: strin
   if (viaAi) return viaAi;
   const hit = patternCheck(plat, `${topic}\n${src.slice(0, 40_000)}`);
   return hit ? { blocked: true, category: hit, by: "pattern" } : { blocked: false, category: "none", by: "pattern" };
+}
+
+/** نام نمایشی پلتفرم برای پیام مدیر */
+const PLAT_LABEL: Partial<Record<Platform, string>> = { eitaa: "ایتا" };
+
+/**
+ * وقتی موضوعی به‌خاطر سیاست پلتفرم رد شد، یک پیام یک‌طرفه برای همه‌ی مدیرها (ADMIN_IDS) در تلگرام می‌رود:
+ * پلتفرم، کاربر، دسته و موضوع. هرگز خطا پرتاب نمی‌کند و ساخت/پاسخ کاربر را خراب نمی‌کند.
+ */
+export async function notifyBlockedTopic(
+  env: Env, plat: Platform, user: { id: string; name?: string; email?: string; mobile?: string }, topic: string, pol: PolicyResult, hasSource = false,
+): Promise<void> {
+  try {
+    const ids = adminIds(env);
+    if (!ids.length || !env.TELEGRAM_BOT_TOKEN) return;
+    const who = esc(user.name || user.email || user.mobile || user.id);
+    const contact = [user.email && `✉️ ${esc(user.email)}`, user.mobile && `📞 ${esc(user.mobile)}`].filter(Boolean).join(" · ");
+    const text =
+      `🚫 <b>موضوع رد شد</b> · ${PLAT_LABEL[plat] ?? plat}\n` +
+      `🏷 دسته: <code>${esc(pol.category)}</code> · تشخیص: ${pol.by === "ai" ? "هوش مصنوعی" : "فهرست ثابت"}\n` +
+      `👤 ${who} · <code>${esc(user.id)}</code>${contact ? `\n${contact}` : ""}\n\n` +
+      `📝 ${esc(topic.trim().slice(0, 400)) || "(بدون موضوع)"}` +
+      (hasSource ? "\n📎 همراه متن فایل/منبع" : "");
+    await Promise.allSettled(ids.map((id) => sendMessage(env, Number(id), text)));
+  } catch (e) {
+    console.warn("notifyBlockedTopic", String(e).slice(0, 160));
+  }
 }

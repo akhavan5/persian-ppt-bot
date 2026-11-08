@@ -39,7 +39,7 @@ import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } 
 import { EXTRA_KINDS, audioKind, isMainDeck, missingExtras, startExtra } from "./extras";
 import { isBaleId, fromBaleId } from "./bale-format";
 import { isEitaaId, fromEitaaId } from "./eitaa-format";
-import { checkPlatformPolicy, BLOCKED_MSG } from "./platform-policy";
+import { checkPlatformPolicy, notifyBlockedTopic, BLOCKED_MSG } from "./platform-policy";
 import { isRubikaId } from "./rubika-format";
 import { inviteClaim, inviteInfo, miniappBuy, miniappDlLink, miniappDownload, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
 import { isAudioName } from "./wav";
@@ -463,7 +463,11 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   // سیاست محتوایی پلتفرم (platform-policy.ts): هوش مصنوعی موضوع و متن فایل را برای ایتا بررسی می‌کند؛ قبل از کسر اعتبار و ساخت ارائه
   if (b?.via === "eitaa") {
     const pol = await checkPlatformPolicy(env, "eitaa", String(b?.topic ?? ""), typeof b?.source === "string" ? b.source : undefined);
-    if (pol.blocked) { console.warn("platform-policy blocked", "eitaa", pol.category, pol.by, user.id); return json({ error: BLOCKED_MSG, blockedTopic: true }, 422); }
+    if (pol.blocked) {
+      console.warn("platform-policy blocked", "eitaa", pol.category, pol.by, user.id);
+      await notifyBlockedTopic(env, "eitaa", user, String(b?.topic ?? ""), pol, typeof b?.source === "string" && b.source.length > 0); // پیام به مدیرها در تلگرام
+      return json({ error: BLOCKED_MSG, blockedTopic: true }, 422);
+    }
   }
   // پوستر اختیاری همراه ارائه، ۱ اعتبار دیگر: "wide" | "tall"؛ هر مقدار دیگر = بدون پوستر
   const posterWant = (b?.poster === "wide" || b?.poster === "tall") && posterEnabled(env) ? { layout: b.poster as "wide" | "tall" } : undefined;
