@@ -94,14 +94,17 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * اگر اعلان‌ها خاموش‌اند: در اندروید ۱۳+ فقط یک بار مجوز را می‌پرسد (درست بعد از اولین ساخت)؛
-     * بعد از آن (و در نسخه‌های قدیمی‌تر) یک بار در هر اجرا راهنمایی با دکمه‌ی «فعال‌سازی» نشان می‌دهد.
+     * اگر اعلان‌ها خاموش‌اند، مجوز را در دو مرحله می‌پرسد: [stage] = "start" (بعد از ورود) و "deck" (بعد از آماده‌شدن ارائه).
+     * هر مرحله فقط یک بار پنجره‌ی مجوز را نشان می‌دهد. اگر سیستم پنجره را نشان ندهد (اندروید ۱۲ و قدیمی‌تر، یا دو بار «رد» قبلی)
+     * راهنمای «فعال‌سازی» با میان‌بر تنظیمات اعلان نمایش داده می‌شود.
      */
-    private fun askNotifications() {
+    private fun askNotifications(stage: String) {
         if (NotificationManagerCompat.from(this).areNotificationsEnabled()) return
         val p = getSharedPreferences("prefs", MODE_PRIVATE)
-        if (Build.VERSION.SDK_INT >= 33 && !p.getBoolean("asked_notif", false)) {
-            p.edit().putBoolean("asked_notif", true).apply()
+        val key = "asked_notif_$stage"
+        if (Build.VERSION.SDK_INT >= 33 && !p.getBoolean(key, false)) {
+            p.edit().putBoolean(key, true).apply()
+            if (stage == "deck") notifHintShown = false // اگر پنجره‌ی سیستم باز نشد، راهنمای تنظیمات دوباره نشان داده شود
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
@@ -328,7 +331,8 @@ class MainActivity : ComponentActivity() {
                         vm.events.collect { e ->
                             when (e) {
                                 is Event.Toast -> say(e.msg)
-                                Event.AskNotify -> askNotifications()
+                                Event.AskNotify -> askNotifications("start")
+                                Event.AskNotifyAfterDeck -> askNotifications("deck")
                                 Event.NotifHint -> sayAction(
                                     "اعلان‌ها خاموش است؛ برای خبردار شدن از آماده‌شدن ارائه، فعالشان کنید.", "فعال‌سازی",
                                 ) { openNotificationSettings() }

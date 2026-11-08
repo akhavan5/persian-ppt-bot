@@ -119,6 +119,8 @@ sealed interface Event {
     data object NotifHint : Event
     data class BazaarBuy(val sku: String) : Event
     data object AskNotify : Event
+    /** بار دوم پرسش مجوز اعلان: درست بعد از آماده‌شدن ارائه */
+    data object AskNotifyAfterDeck : Event
     /** اتصال به فروشگاه را قطع و دوباره برقرار کن. */
     data object BillingReconnect : Event
 }
@@ -301,15 +303,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * اندروید ۱۳+: مجوز اعلان تا وقتی پرسیده نشود خاموش است و همه‌ی یادآورهای محلی بی‌صدا رد می‌شوند.
-     * یادآورهای «اولین ارائه‌ات منتظر توست» (act1/act2) دقیقاً برای کاربرانی است که هنوز ارائه‌ای نساخته‌اند؛ پس مجوز فقط بعد از اولین ارائه
-     * پرسیدن آن‌ها را بی‌اثر می‌کرد. حالا یک‌بار بعد از ورود پرسیده می‌شود (asked_notif از تکرار جلوگیری می‌کند؛ بعد از رد کردن فقط راهنمای تنظیمات می‌آید).
+     * مجوز دو بار پرسیده می‌شود: ۱) اول کار، بعد از ورود (برای یادآورهای «اولین ارائه‌ات منتظر توست»)،
+     * ۲) بعد از آماده‌شدن ارائه (برای اعلان «ارائه آماده شد»). هر مرحله پرچم جداگانه دارد (asked_notif_start / asked_notif_deck)
+     * تا هر کدام فقط یک بار پرسیده شود. اگر کاربر قبلاً مجوز داده باشد هیچ‌کدام پرسیده نمی‌شود.
      */
     private fun askNotifyIfNeverAsked() {
         if (android.os.Build.VERSION.SDK_INT < 33) return
         val app = getApplication<Application>()
-        if (app.getSharedPreferences("prefs", Context.MODE_PRIVATE).getBoolean("asked_notif", false)) return
+        val prefs = app.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        // asked_notif = پرچم قدیمی (یک‌بار) برای کاربرانی که قبل از این نسخه پرسیده شده‌اند
+        if (prefs.getBoolean("asked_notif_start", false) || prefs.getBoolean("asked_notif", false)) return
         if (androidx.core.app.NotificationManagerCompat.from(app).areNotificationsEnabled()) return
         _events.trySend(Event.AskNotify)
+    }
+
+    /** بار دوم: بعد از آماده‌شدن ارائه، اگر هنوز اعلان‌ها خاموش‌اند. */
+    private fun askNotifyAfterDeck() {
+        if (androidx.core.app.NotificationManagerCompat.from(getApplication<Application>()).areNotificationsEnabled()) return
+        _events.trySend(Event.AskNotifyAfterDeck)
     }
 
     fun editMobile() {
@@ -451,7 +462,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             val app = getApplication<Application>()
                             Reminders.onDeckDone(app) // یادآورهای فعال‌سازی لغو و یادآور «جزوه/پوستر/پادکست» زمان‌بندی می‌شود
                             onResume(force = true) // اعتبار مصرف‌شده یا برگشت‌خورده فوراً به‌روز شود
-                            _events.trySend(Event.AskNotify) // مجوز اعلان: بعد از اولین ارائه‌ی موفق (نرخ قبول بالاتر)
+                            askNotifyAfterDeck() // مجوز اعلان: بار دوم، بعد از آماده‌شدن ارائه
                             // نسخه‌ی محلی (بی‌صدا): فایل‌ها سمت سرور فقط ۲۴ ساعت می‌مانند
                             val deckTitle = j.optString("title")
                             val deckSlides = j.optInt("slides")
