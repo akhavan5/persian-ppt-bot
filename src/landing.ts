@@ -1,6 +1,7 @@
 // رندر صفحه‌های سئو (کلیدواژه‌ای). داده‌ها در landing-data.ts هستند.
 import { PAGES, PAGE_BY_SLUG, type Page, type Section } from "./landing-data";
 import { POSTS, POST_BY_SLUG } from "./blog-data";
+import { IMG_CSS, heroAlt, heroFigure, heroImages, heroPreload, imageNode, imageTags, pageImagePaths, stepsAlt, stepsFigure, stepsSection } from "./seo-images";
 
 export const BRAND = "پاورپوینت‌ساز فارسی";
 
@@ -55,7 +56,7 @@ export function findLanding(pathname: string): { page: Page; trailingSlash: bool
 
 /** ورودی‌های sitemap برای همه‌ی صفحه‌ها. */
 export function landingSitemapEntries(site: string): string {
-  return PAGES.map((p) => `  <url>\n    <loc>${site}/${p.slug}</loc>\n    <lastmod>${p.updated}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.8</priority>\n  </url>\n`).join("");
+  return PAGES.map((p) => `  <url>\n    <loc>${site}/${p.slug}</loc>\n    <lastmod>${p.updated}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.8</priority>\n${imageTags(site, pageImagePaths("landing", p.slug, !!stepsSection(p.sections)))}  </url>\n`).join("");
 }
 
 export const LANDING_PATHS = PAGES.map((p) => `/${p.slug}`);
@@ -388,14 +389,20 @@ export function renderLanding(p: Page, SITE: string): string {
   const related = [...new Set([...p.related, ...(MORE_RELATED[p.slug] ?? [])])].filter((slug) => slug !== p.slug).map((slug) => PAGE_BY_SLUG.get(slug)).filter((x): x is Page => !!x);
 
   const howTo = howToNode(url, p.sections);
+  const hero = heroImages("landing", p.slug);
+  const alt = heroAlt(p.nav);
+  const stepsSec = stepsSection(p.sections);
+  const stepsAltText = stepsSec?.steps ? stepsAlt(stepsSec.h2, stepsSec.steps) : "";
   const ld = {
     "@context": "https://schema.org",
     "@graph": [
       ...siteNodes(SITE),
+      imageNode(SITE, hero.og, alt),
+      ...(stepsSec ? [imageNode(SITE, { path: `/img/steps/${p.slug}.webp`, w: 1200, h: 630 }, stepsAltText)] : []),
       {
         "@type": "WebPage", "@id": `${url}#webpage`, url, name: p.title, description: p.desc, inLanguage: "fa-IR",
         isPartOf: { "@id": `${SITE}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` }, publisher: { "@id": `${SITE}/#org` }, mainEntity: { "@id": `${url}#faq` },
-        primaryImageOfPage: { "@type": "ImageObject", url: `${SITE}/og-image.png`, width: 1200, height: 630 }, dateModified: p.updated,
+        primaryImageOfPage: { "@id": `${SITE}${hero.og.path}#image` }, image: { "@id": `${SITE}${hero.og.path}#image` }, dateModified: p.updated,
         ...(p.audience ? { audience: { "@type": "Audience", audienceType: p.audience } } : {}),
       },
       {
@@ -409,7 +416,7 @@ export function renderLanding(p: Page, SITE: string): string {
         "@type": "FAQPage", "@id": `${url}#faq`, isPartOf: { "@id": `${url}#webpage` }, inLanguage: "fa-IR",
         mainEntity: p.faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: plain(f.a) } })),
       },
-      ...(howTo ? [howTo] : []),
+      ...(howTo ? [{ ...howTo, image: { "@id": `${SITE}/img/steps/${p.slug}.webp#image` } }] : []),
     ],
   };
 
@@ -434,16 +441,16 @@ export function renderLanding(p: Page, SITE: string): string {
 <meta property="og:title" content="${esc(h1Text)}">
 <meta property="og:description" content="${esc(p.desc)}">
 <meta property="og:url" content="${url}">
-<meta property="og:image" content="${SITE}/og-image.png">
+<meta property="og:image" content="${SITE}${hero.og.path}">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="${esc(h1Text)}">
+<meta property="og:image:alt" content="${esc(alt)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(h1Text)}">
 <meta name="twitter:description" content="${esc(p.desc)}">
-<meta name="twitter:image" content="${SITE}/og-image.png">
-<meta name="twitter:image:alt" content="${esc(h1Text)}">
+<meta name="twitter:image" content="${SITE}${hero.og.path}">
+<meta name="twitter:image:alt" content="${esc(alt)}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -452,10 +459,11 @@ export function renderLanding(p: Page, SITE: string): string {
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="پاورپوینت‌ساز">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+${heroPreload("landing", p.slug)}
 <link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <script type="application/ld+json">${jsonLd(ld)}</script>
-<style>${CSS}</style>
+<style>${CSS}${IMG_CSS}</style>
 </head>
 <body>
 <a class="skip" href="#main">رفتن به محتوا</a>
@@ -476,7 +484,8 @@ export function renderLanding(p: Page, SITE: string): string {
     <p class="upd">آخرین به‌روزرسانی: <time datetime="${p.updated}">${faDate(p.updated)}</time></p>
   </div>
   <article>
-${p.sections.map(renderSection).join("\n")}
+    ${heroFigure("landing", p.slug, alt, `${p.nav}؛ نمونه‌ی اسلایدهای فارسی راست‌به‌چپ و قابل‌ویرایش که با ${BRAND} ساخته می‌شود`)}
+${p.sections.map((x) => renderSection(x) + (x === stepsSec ? stepsFigure("landing", p.slug, stepsAltText, `مراحل ${x.h2}`) : "")).join("\n")}
     <section>
       <h2>${esc(p.topicsTitle)}</h2>
       <p style="color:var(--muted);font-size:.92rem">روی هر مورد بزن تا در کادر موضوع قرار بگیرد و بتوانی آن را تغییر بدهی.</p>

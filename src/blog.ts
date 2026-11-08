@@ -1,6 +1,7 @@
 // رندر وبلاگ: فهرست /blog و مقاله‌ها /blog/<slug>. داده‌ها در blog-data.ts هستند.
 import { PAGES, PAGE_BY_SLUG, type Page } from "./landing-data";
 import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
+import { IMG_CSS, heroAlt, heroFigure, heroImages, heroPreload, imageNode, imageTags, pageImagePaths, stepsAlt, stepsFigure, stepsSection } from "./seo-images";
 import { BRAND, CSS, LANDINGS_FOR_POST, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
@@ -36,8 +37,8 @@ export function findBlog(pathname: string): { kind: "index" } | { kind: "post"; 
 /** ورودی‌های sitemap برای فهرست وبلاگ و همه‌ی مقاله‌ها. */
 export function blogSitemapEntries(site: string): string {
   const newest = POSTS.map((p) => p.updated).sort().at(-1) ?? "";
-  const url = (loc: string, lastmod: string, pr: string) => `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>${pr}</priority>\n  </url>\n`;
-  return url(`${site}/blog`, newest, "0.7") + POSTS.map((p) => url(`${site}/blog/${p.slug}`, p.updated, "0.6")).join("");
+  const url = (loc: string, lastmod: string, pr: string, img = "") => `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>${pr}</priority>\n${img}  </url>\n`;
+  return url(`${site}/blog`, newest, "0.7", imageTags(site, ["/og-image.png"])) + POSTS.map((p) => url(`${site}/blog/${p.slug}`, p.updated, "0.6", imageTags(site, pageImagePaths("blog", p.slug, !!stepsSection(p.sections))))).join("");
 }
 
 
@@ -144,7 +145,7 @@ function words(p: Post): number {
 }
 const readMin = (p: Post) => Math.max(1, Math.round(words(p) / 200));
 
-function head(o: { title: string; desc: string; url: string; site: string; type: "website" | "article"; ld: unknown; imgAlt: string; article?: { published: string; modified: string; section: string } }): string {
+function head(o: { title: string; desc: string; url: string; site: string; type: "website" | "article"; ld: unknown; imgAlt: string; img: string; preload?: string; article?: { published: string; modified: string; section: string } }): string {
   const { title, desc, url, site } = o;
   return `<!doctype html>
 <html lang="fa" dir="rtl">
@@ -165,7 +166,7 @@ ${o.article ? `<meta property="article:published_time" content="${o.article.publ
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${url}">
-<meta property="og:image" content="${site}/og-image.png">
+<meta property="og:image" content="${site}${o.img}">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -173,7 +174,7 @@ ${o.article ? `<meta property="article:published_time" content="${o.article.publ
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(desc)}">
-<meta name="twitter:image" content="${site}/og-image.png">
+<meta name="twitter:image" content="${site}${o.img}">
 <meta name="twitter:image:alt" content="${esc(o.imgAlt)}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
@@ -184,10 +185,10 @@ ${o.article ? `<meta property="article:published_time" content="${o.article.publ
 <meta name="apple-mobile-web-app-title" content="پاورپوینت‌ساز">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="alternate" type="application/rss+xml" title="وبلاگ پاورپوینت‌ساز فارسی" href="/feed.xml">
-<link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
+${o.preload ?? ""}<link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <script type="application/ld+json">${jsonLd(o.ld)}</script>
-<style>${CSS}${EXTRA_CSS}</style>
+<style>${CSS}${EXTRA_CSS}${IMG_CSS}</style>
 </head>`;
 }
 
@@ -244,7 +245,7 @@ export function renderBlogIndex(site: string): string {
 ${groups}
   <article><section class="final"><h2>یک پیش‌نویس سریع می‌خواهی؟</h2><p>موضوع را بنویس و ظرف چند دقیقه فایل PPTX فارسی و قابل‌ویرایش را بگیر.</p><a class="btn" href="/#topic">✨ رایگان شروع کن</a></section></article>
 </main>`;
-  return head({ title: BLOG_TITLE, desc: BLOG_DESC, url, site, type: "website", ld, imgAlt: "وبلاگ پاورپوینت‌ساز فارسی" }) + "\n" + shell(site, "blog", main);
+  return head({ title: BLOG_TITLE, desc: BLOG_DESC, url, site, type: "website", ld, imgAlt: "وبلاگ پاورپوینت‌ساز فارسی: راهنمای ساخت و ارائه‌ی پاورپوینت فارسی", img: "/og-image.png" }) + "\n" + shell(site, "blog", main);
 }
 
 /** مقاله‌ی قبلی و بعدی در همان دسته (لینک‌دهی داخلی و پیمایش). */
@@ -261,16 +262,23 @@ export function renderPost(p: Post, site: string): string {
   // صفحه‌ی اصلی مقاله + صفحه‌هایی که خودشان این مقاله را پیشنهاد می‌دهند (حداکثر ۴ لینک)
   const tools = [...new Set([p.landing, ...(LANDINGS_FOR_POST.get(p.slug) ?? [])])].map((x) => PAGE_BY_SLUG.get(x)).filter((x): x is Page => !!x).slice(0, 4);
   const related = [...new Set([...p.related, ...(MORE_POST_RELATED[p.slug] ?? [])])].filter((x) => x !== p.slug).map((s) => POST_BY_SLUG.get(s)).filter((x): x is Post => !!x);
+  const hero = heroImages("blog", p.slug);
+  const alt = heroAlt(p.nav);
+  const stepsSec = stepsSection(p.sections);
+  const stepsAltText = stepsSec?.steps ? stepsAlt(stepsSec.h2, stepsSec.steps) : "";
+  const imgs = [hero.og, hero.sq!, hero.r43!].map((i) => ({ ...imageNode(site, i, alt) }));
   const ld = {
     "@context": "https://schema.org",
     "@graph": [
       ...siteNodes(site),
+      ...imgs,
+      ...(stepsSec ? [imageNode(site, { path: `/img/blog-steps/${p.slug}.webp`, w: 1200, h: 630 }, stepsAltText)] : []),
       {
         "@type": "BlogPosting", "@id": `${url}#article`, mainEntityOfPage: { "@id": `${url}#webpage` }, headline: p.h1, description: p.desc, inLanguage: "fa-IR",
         datePublished: p.date, dateModified: p.updated, wordCount: words(p), articleSection: p.category, timeRequired: `PT${readMin(p)}M`, keywords: [...(p.kw ?? []), p.category, "پاورپوینت", "ارائه فارسی"].join("، "), isAccessibleForFree: true,
-        author: { "@id": `${site}/#org` }, publisher: { "@id": `${site}/#org` }, image: { "@type": "ImageObject", url: `${site}/og-image.png`, width: 1200, height: 630 },
+        author: { "@id": `${site}/#org` }, publisher: { "@id": `${site}/#org` }, image: imgs.map((i) => ({ "@id": i["@id"] })),
       },
-      { "@type": "WebPage", "@id": `${url}#webpage`, url, name: p.title, description: p.desc, inLanguage: "fa-IR", isPartOf: { "@id": `${site}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` }, primaryImageOfPage: { "@type": "ImageObject", url: `${site}/og-image.png`, width: 1200, height: 630 } },
+      { "@type": "WebPage", "@id": `${url}#webpage`, url, name: p.title, description: p.desc, inLanguage: "fa-IR", isPartOf: { "@id": `${site}/#website` }, breadcrumb: { "@id": `${url}#breadcrumb` }, primaryImageOfPage: { "@id": imgs[0]["@id"] }, image: { "@id": imgs[0]["@id"] } },
       {
         "@type": "BreadcrumbList", "@id": `${url}#breadcrumb`,
         itemListElement: [
@@ -289,10 +297,11 @@ export function renderPost(p: Post, site: string): string {
     <div class="meta"><span>${esc(p.category)}</span><span>آخرین به‌روزرسانی: <time datetime="${p.updated}">${faDate(p.updated)}</time></span><span>${fa(readMin(p))} دقیقه مطالعه</span></div>
   </div>
   <article>
+    ${heroFigure("blog", p.slug, alt, `${p.h1} — تصویر راهنمای مقاله در وبلاگ ${BRAND}`)}
     <section class="tldr"><h2>خلاصه</h2><ul>${p.tldr.map((t) => `<li>${inline(t)}</li>`).join("")}</ul></section>
     <section>${p.intro.map((t) => `<p>${inline(t)}</p>`).join("")}</section>
     <section class="toc"><h2>فهرست مطالب</h2><ol>${p.sections.map((s, i) => `<li><a href="#s${i + 1}">${esc(s.h2)}</a></li>`).join("")}<li><a href="#faq">پرسش‌های متداول</a></li></ol></section>
-${p.sections.map(renderBlogSection).join("\n")}
+${p.sections.map((x, i) => renderBlogSection(x, i) + (x === stepsSec ? stepsFigure("blog", p.slug, stepsAltText, `مراحل ${x.h2}`) : "")).join("\n")}
     <section id="faq">
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
@@ -308,5 +317,5 @@ ${adjacent(p)}    <section>
     </section>
   </article>
 </main>`;
-  return head({ title: p.title, desc: p.desc, url, site, type: "article", ld, imgAlt: p.h1, article: { published: p.date, modified: p.updated, section: p.category } }) + "\n" + shell(site, "post", main);
+  return head({ title: p.title, desc: p.desc, url, site, type: "article", ld, imgAlt: alt, img: hero.og.path, preload: heroPreload("blog", p.slug) + "\n", article: { published: p.date, modified: p.updated, section: p.category } }) + "\n" + shell(site, "post", main);
 }

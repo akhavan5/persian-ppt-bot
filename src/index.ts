@@ -12,6 +12,7 @@ import { FEEDBACK_CRON, sendPlanFeedbackSurveys } from "./plan-feedback";
 import { handleWeb } from "./web";
 import { miniappUrl } from "./deck-service";
 import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from "./landing";
+import { HOME_IMAGES, imageTags } from "./seo-images";
 import { blogFeed, blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
 
 export { DeckWorkflow } from "./workflow";
@@ -60,7 +61,7 @@ function fromProxy(req: Request, env: Env): Request {
 }
 
 // تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
-const SITEMAP_LASTMOD = "2026-11-01";
+const SITEMAP_LASTMOD = "2026-11-08";
 
 export default {
   // پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی D1 (cron در wrangler.jsonc)
@@ -210,7 +211,7 @@ export default {
       return new Response(`User-agent: *\nAllow: /\n# یاندکس: پارامتر topic (پیشنهاد موضوع روی صفحه‌ی اصلی) صفحه‌ی تکراری حساب نشود\nClean-param: topic /\n\nSitemap: ${SMAP}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     if (url.pathname === "/sitemap.xml") {
-      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${SMAP}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n${landingSitemapEntries(SMAP)}${blogSitemapEntries(SMAP)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n  <url>\n    <loc>${SMAP}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n${imageTags(SMAP, HOME_IMAGES)}  </url>\n${landingSitemapEntries(SMAP)}${blogSitemapEntries(SMAP)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     // فید RSS وبلاگ
     if (url.pathname === "/feed.xml" && (req.method === "GET" || req.method === "HEAD")) {
