@@ -4,7 +4,7 @@
  * فقط به themes.ts و util.ts وابسته است تا جدا از Worker هم قابل آزمایش باشد.
  */
 import { THEMES, type Theme } from "./themes";
-import { toFa } from "./util";
+import { faText, toFa } from "./util";
 import type { IgBlock, IgLayout, Infographic } from "./infographic";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -29,7 +29,7 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const W = IG_WIDTH[o.layout];
   const cols = o.layout === "wide" ? 4 : 2;
   const base = o.layout === "wide" ? 80 : 24; // پوستر افقی: فونت پایه ۴۰ ← ۴۸ ← ۵۸ ← ۶۸ ← ۸۰ (بعد از پهن‌تر شدن بوم به ۶۶۵۶px، ۶۸ نسبت به عرض ریز دیده می‌شد و ستون‌های کوتاه جای خالی داشتند) (در مجموع ۴۵٪ بزرگ‌تر از اول) تا در پیش‌نمایش تلگرام خواناتر باشد؛ ۴ ستون در ۶۶۵۶px. اگر مجموع ابعاد عکس (افقی: مقیاس ۱، عمودی: ۱.۵) از سقف ۱۰۰۰۰px تلگرام بگذرد، فقط فایل کامل فرستاده می‌شود (sendDocument)
-  const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
+  const tx = (s: string) => esc(faText(String(s), o.digits));
   const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
   const dark = t.bg.toUpperCase() < "808080"; // پس‌زمینه‌ی تیره (مثل تم نیمه‌شب)
 

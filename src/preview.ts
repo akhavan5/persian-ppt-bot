@@ -7,7 +7,7 @@
  */
 import type { Chart, Deck, Slide } from "./types";
 import { B_FONTS_URL, FONT_URL, FONT_URL_ALT, THEMES, bFontFaceCss, iconOf, isBFont, type Theme } from "./themes";
-import { toFa } from "./util";
+import { faText } from "./util";
 import { fitSize } from "./pptx";
 import { BISMILLAH_IMG } from "./bismillah-img";
 import { BISMILLAH, RAIL, academicPalette, badgeColor, pillRow, railDots } from "./template";
@@ -47,7 +47,7 @@ interface TOpts { bold?: boolean; align?: "right" | "center" | "left"; valign?: 
 export function renderPreview(deck: Deck, o: PreviewOpts): string {
   const t: Theme = THEMES[o.theme] ?? THEMES.violet;
   const ac = o.template === "academic", A = academicPalette(t), bgc = ac ? A.bg : t.bg;
-  const tx = (s: string) => esc(o.digits ? toFa(String(s)) : String(s));
+  const tx = (s: string) => esc(faText(String(s), o.digits));
   const fontName = /^[\w -]{1,40}$/.test(o.font) ? o.font : "Vazirmatn";
   const hasImg = new Set(o.images);
 

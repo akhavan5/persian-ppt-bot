@@ -7,7 +7,7 @@ import JSZip from "jszip";
 import type { Env } from "./env";
 import type { Deck } from "./types";
 import { THEMES, TONES } from "./themes";
-import { toFa } from "./util";
+import { faText } from "./util";
 import { LlmError, askJson, hasKey } from "./llm";
 
 export interface HandoutSection { heading: string; text: string; bullets: string[] }
@@ -104,7 +104,7 @@ export interface DocxOpts { theme: string; font: string; digits: boolean; image?
 export async function buildDocx(h: Handout, o: DocxOpts): Promise<Uint8Array> {
   const th = THEMES[o.theme] ?? THEMES.ocean;
   const font = esc(o.font || "Vazirmatn");
-  const T = (t: string) => esc(o.digits ? toFa(t) : t);
+  const T = (t: string) => esc(faText(t, o.digits, "embed"));
 
   const rpr = (sz: number, extra = "") =>
     `<w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/>${extra}<w:rtl/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/><w:lang w:val="fa-IR" w:bidi="fa-IR"/></w:rPr>`;

@@ -2,7 +2,7 @@
 import PptxGenJS from "pptxgenjs";
 import type { Deck, Slide } from "./types";
 import { THEMES, iconOf, isBFont, type Theme } from "./themes";
-import { toFa } from "./util";
+import { faText } from "./util";
 import { BISMILLAH_IMG } from "./bismillah-img";
 import { BISMILLAH, RAIL, academicPalette, badgeColor, isTemplate, pillRow, railDots } from "./template";
 
@@ -140,7 +140,7 @@ class Builder {
     // B Nazanin / B Titr گلیف همزه‌ی ترکیبی (U+0654/U+0655، مثل «درباره‌ٔ») را ندارند و PowerPoint «دایره‌ی نقطه‌چین» نشان می‌دهد؛
     // علامت (و نیم‌فاصله‌ی پیش از آن) حذف می‌شود: «درباره‌ٔ مشکلات» ← «درباره مشکلات»
     if (isBFont(this.font)) t = t.replace(/‌?[ٕٔ]/g, "");
-    return this.digits ? toFa(t) : t;
+    return faText(t, this.digits, "embed"); // ارقام فارسی فقط بیرون از فرمول‌های لاتین؛ فرمول‌ها چپ‌به‌راست
   }
   /** متن سلول جدول؛ در فونت B تکه‌های لاتین/علامت‌های ناموجود با Times New Roman (وگرنه مربع می‌شوند) */
   private cellRuns(text: string, size: number, color: string, bold: boolean): any {
