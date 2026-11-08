@@ -5,6 +5,11 @@
   if (window.__ppSupport || !window.fetch) return;
   window.__ppSupport = 1;
 
+  /* حالت جاسازی‌شده (Mini App تلگرام/بله و برنامک ایتا، app.html): صفحه قبل از این اسکریپت ppSupportAuth را می‌گذارد
+     (توکن Bearer نشست اپ؛ کوکی در iframe فرستاده نمی‌شود). در این حالت دکمه‌ی شناور نیست و پنجره‌ی گفتگو
+     تمام‌صفحه است؛ app.html آن را با window.ppSupport.open() از کارت «پشتیبانی هوشمند» باز می‌کند. */
+  var embedded = typeof window.ppSupportAuth === "function";
+
   var msgs = [], remaining = 10, limit = 10, open = false, busy = false, guest = false, loaded = false;
   var GREETING = "سلام 👋 من دستیار هوشمند پاورپوینت‌ساز هستم. درباره‌ی قیمت و اعتبار، ساخت ارائه، مشکل‌های فنی یا حتی نکته‌های طراحی و ارائه‌ی سخنرانی بپرس.";
   var CHIPS = ["قیمت پلن‌ها چقدره؟", "اعتبار رایگان چطور می‌گیرم؟", "برای ارائه‌ی ۱۰ دقیقه‌ای چند اسلاید بسازم؟", "خروجی ارائه چه فرمت‌هایی دارد؟"];
@@ -49,12 +54,16 @@
     "#ppsc .pps-send{flex:none;display:flex;align-items:center;justify-content:center;width:auto;height:40px;min-height:0;border:0;border-radius:14px;padding:0 18px;color:#fff;font-weight:700;background:var(--primary,#2563eb);transition:opacity .15s,transform .15s}" +
     "#ppsc .pps-send:hover:not(:disabled){transform:translateY(-1px)}#ppsc .pps-send:disabled{opacity:.5;cursor:default}" +
     "@media (prefers-reduced-motion:no-preference){#ppsc .pps-panel{animation:ppscIn .2s ease-out}@keyframes ppscIn{from{opacity:0;transform:translateY(10px) scale(.98)}}#ppsc .pps-typing i{animation:ppscDot 1.1s infinite ease-in-out}#ppsc .pps-typing i:nth-child(2){animation-delay:.15s}#ppsc .pps-typing i:nth-child(3){animation-delay:.3s}@keyframes ppscDot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-4px);opacity:1}}}" +
+    "#ppsc.pps-emb{left:0;bottom:0;z-index:950;--text:var(--fg,#17212b);--primary:var(--btn,#2481cc);--primary-2:var(--btn,#2481cc);--muted:var(--hint,#6b7a8a);--bg:var(--sec,#f1f3f6);--font:inherit}" +
+    "#ppsc.pps-emb .pps-fab{display:none}" +
+    "#ppsc.pps-emb .pps-panel{position:fixed;inset:0;width:100%;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none}" +
+    "#ppsc.pps-emb .pps-ft{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}" +
     "@media (max-width:480px){#ppsc{left:12px}#ppsc .pps-fab span{display:none}#ppsc .pps-fab{padding:14px}#ppsc .pps-panel{width:calc(100vw - 24px);bottom:64px;border-radius:18px}}";
   document.head.appendChild(css);
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
-  var root = el("div"); root.id = "ppsc";
+  var root = el("div"); root.id = "ppsc"; if (embedded) root.classList.add("pps-emb");
   var fab = el("button", "pps-fab"); fab.type = "button"; fab.setAttribute("aria-label", "گفتگو با دستیار هوشمند"); fab.setAttribute("aria-expanded", "false");
   fab.append(el("b", "", "💬"), el("span", "", "پشتیبانی"));
   var panel = el("div", "pps-panel"); panel.hidden = true; panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "گفتگو با دستیار هوشمند");
@@ -113,15 +122,25 @@
   }
   function err(t) { var e = el("div", "pps-m pps-err", t); list.append(e); list.scrollTop = list.scrollHeight; }
 
-  function req(url, opt) {
+  function req(url, opt, retried) {
     opt = opt || {}; opt.credentials = "same-origin";
-    return fetch(url, opt).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, status: r.status, d: d }; }); });
+    if (embedded) { // توکن Bearer اپ؛ هر بار از app.html خوانده می‌شود تا بعد از ورود دوباره تازه باشد
+      var h = opt.headers || {};
+      try { var t = window.ppSupportAuth(); if (t) h.authorization = "Bearer " + t; } catch (e) {}
+      opt.headers = h;
+    }
+    return fetch(url, opt).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, status: r.status, d: d }; }); })
+      .then(function (x) {
+        if (x.status === 401 && embedded && !retried && typeof window.ppSupportRelogin === "function") // نشست اپ منقضی شده: یک بار دوباره وارد شو و همان درخواست را تکرار کن
+          return Promise.resolve().then(window.ppSupportRelogin).then(function () { return req(url, opt, true); }, function () { return x; });
+        return x;
+      });
   }
 
   function loadHistory() {
     req("/api/support/history").then(function (x) {
       loaded = true;
-      if (x.status === 401) { guest = true; msgs = []; } else if (x.ok) { guest = false; apply(x.d); }
+      if (x.status === 401) { guest = !embedded; msgs = []; } else if (x.ok) { guest = false; apply(x.d); }
       if (open) render();
     }).catch(function () { loaded = true; if (open) render(); });
   }
@@ -131,10 +150,13 @@
     if (!text || busy || guest || remaining <= 0) return;
     busy = true;
     msgs.push({ r: "u", t: text }); ta.value = ""; ta.style.height = "40px"; render();
-    req("/api/support/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: text }) })
+    req("/api/support/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: text, via: embedded ? window.ppSupportVia : undefined }) })
       .then(function (x) {
         busy = false;
-        if (x.status === 401) { guest = true; msgs = []; render(); return; }
+        if (x.status === 401) {
+          if (embedded) { msgs.pop(); render(); err("نشست اپ منقضی شده؛ اپ را ببند و دوباره باز کن."); return; }
+          guest = true; msgs = []; render(); return;
+        }
         if (!x.ok) {
           msgs.pop();
           if (typeof x.d.remaining === "number") remaining = x.d.remaining;
@@ -158,6 +180,7 @@
   root.addEventListener("keydown", function (e) { if (e.key === "Escape" && open) setOpen(false); });
   ta.addEventListener("input", function () { ta.style.height = "40px"; ta.style.height = Math.min(Math.max(ta.scrollHeight, 40), 96) + "px"; });
 
+  window.ppSupport = { open: function () { if (!root.isConnected) document.body.appendChild(root); setOpen(true); } };
   function boot() { document.body.appendChild(root); }
   var go = function () { (window.requestIdleCallback || function (f) { setTimeout(f, 1500); })(boot); };
   if (document.readyState === "complete") go(); else window.addEventListener("load", go);

@@ -171,6 +171,7 @@ export const BOT_COMMANDS = [
   { command: "files", description: "فایل‌های ۲۴ ساعت اخیر من" },
   { command: "app", description: "باز کردن اپ ساخت ارائه (Mini App)" },
   { command: "site", description: "ورود خودکار به سایت (پلن‌ها و پرداخت)" },
+  { command: "support", description: "پشتیبانی هوشمند: سؤال و مشکلت را از دستیار بپرس" },
   { command: "invite", description: "دعوت دوستان (هر ۵ دعوتِ موفق = ۱ اعتبار پلاس)" },
   { command: "id", description: "نمایش شناسه‌ی عددی من" },
 ];

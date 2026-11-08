@@ -282,6 +282,11 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <div id="plansBox" style="margin-top:10px"></div>
         <button class="btn" id="buy2" type="button" style="margin-top:10px">💳 خرید / ارتقای پلن</button>
       </div>
+      <div class="card" id="supCard">
+        <h2>🤖 پشتیبانی هوشمند</h2>
+        <div class="muted">درباره‌ی قیمت و اعتبار، ساخت ارائه یا مشکل فنی سؤال داری؟ از دستیار هوشمند بپرس؛ اگر موضوعی به تیم نیاز داشته باشد (مثل پرداخت) خودش ارجاعش می‌دهد.</div>
+        <button class="btn ghost" id="supBtn" type="button" style="margin-top:10px">💬 گفتگو با دستیار</button>
+      </div>
     </section>
   </div>
 </main>
@@ -600,6 +605,8 @@ async function authFetch(path, init = {}, retried = false) {
   if (r.status === 401 && !retried && TG.initData) { await login(); return authFetch(path, init, true); }
   return r;
 }
+// پشتیبانی هوشمند (support.js): همان نشست Bearer اپ؛ پنجره‌ی گفتگو از کارت «پشتیبانی هوشمند» در تنظیمات باز می‌شود
+window.ppSupportAuth = () => token; window.ppSupportRelogin = login; window.ppSupportVia = TG.via;
 async function busy(btn, label, fn) {
   if (btn.classList.contains("busy")) return;
   const o = btn.textContent; btn.classList.add("busy"); btn.disabled = true; btn.textContent = label;
@@ -1499,11 +1506,13 @@ $("#invSend").onclick = (e) => busy(e.currentTarget, "در حال ثبت…", as
 });
 $("#buy1").onclick = openPlans; // قبل از رفتن به مرورگر، جدول پلن‌ها نشان داده می‌شود
 $("#buy2").onclick = (e) => openBuy(e.currentTarget);
+$("#supBtn").onclick = () => { if (window.ppSupport) window.ppSupport.open(); else toast("گفتگو هنوز بارگذاری نشده؛ چند لحظه بعد دوباره بزن."); };
 
 // برگشت به برنامه (مثلاً بعد از خرید): اعتبار و پلن تازه شود
 document.addEventListener("visibilitychange", () => { if (!document.hidden && me) refreshMe(); });
 
 boot();
 </script>
+<script src="/support.js" defer></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
   EXTRA_IMAGES_MSG, EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
-  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, REF_EVERY, REF_MAX, holdReferral, parseRefId, displayName, noteActive, isWebId,
+  DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, botPlatform, REF_EVERY, REF_MAX, holdReferral, parseRefId, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminSampleCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
@@ -28,6 +28,7 @@ import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, lau
 import { ensureUid, resolveUid } from "./link";
 import { handleProfileCallback, handleProfileInput, showProfile } from "./bot-profile";
 import { notifyInviterJoined } from "./referral";
+import { SUPPORT_MAX_TEXT, supportBotAsk } from "./support-chat";
 import { hasBrowser } from "./browser-api";
 import { parseRequest } from "./parse";
 import { deepgramEnabled } from "./deepgram";
@@ -46,6 +47,7 @@ const HELP =
   "🖼 چند عکس (مثلاً صفحه‌های یک جزوه) را <b>یک‌جا و به‌صورت آلبوم</b> انتخاب و بفرست (حداکثر ۱۰ عدد)؛ همه با هم خوانده می‌شوند و فقط <b>یک ارائه</b> ساخته می‌شود. عکس‌هایی که جدا از هم بفرستی هر کدام ارائه‌ی جداگانه حساب می‌شوند.\n\n" +
   "🔗 یا <b>لینک یک صفحه‌ی وب</b> را بفرست تا ارائه از روی محتوای همان صفحه ساخته شود.\nمثال:\n<code>https://example.com/article</code>\n\n" +
   "👇 با دکمه‌های زیر به همه‌ی بخش‌ها می‌رسی: اعتبار و پلن (هر کاربر جدید ۳ ارائه‌ی رایگان هدیه می‌گیرد و هر روز ۱ اعتبار رایگان دیگر؛ با ثبت و تایید موبایل و ایمیل در /profile هم برای هر کدام ۱ اعتبار هدیه می‌گیری)، تنظیمات (تم، لحن، فونت، حالت، منابع، تعداد اسلاید)، فایل‌های ۲۴ ساعت اخیر، دعوت دوستان (هر ۱۰ دوستی که با لینک تو بیایند و اولین ارائه‌شان را بسازند = ۱ اعتبار پلن پلاس) و ورود خودکار به سایت.\n\n" +
+  "🤖 سؤال یا مشکلی داری؟ با /support از <b>دستیار هوشمند پشتیبانی</b> بپرس.\n\n" +
   "💻 نسخه‌ی وب با امکانات بیشتر: pptsaz.ir"; // زیر هر ارائه‌ی ساخته‌شده هم دکمه‌ی «نسخه‌ی PDF» هست
 
 /** خط ورودی صوتی فقط وقتی DEEPGRAM_API_KEY تنظیم است در راهنما می‌آید */
@@ -405,8 +407,15 @@ async function handleCallback(env: Env, cq: any) {
     if (a === "inv") return await showInvite(env, chatId, userId);
     if (a === "pf") return await showProfile(env, chatId, userId, uid);
     if (a === "site") return await showSite(env, chatId, userId);
+    if (a === "sup") return await showSupport(env, chatId, userId, uid);
+    if (a === "menu") return await sendMessage(env, chatId, HOME_TEXT, homeKb(env, userId, isAdmin(env, userId)));
     if (a === "admin" && isAdmin(env, userId)) return await handleAdmin(env, chatId, "/admin", [], "/admin", userId);
     return;
+  }
+  if (act === "sup") { // «❌ پایان گفتگو» در پشتیبانی هوشمند
+    await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+    await env.KV.delete(supKey(userId)).catch(() => {});
+    return await sendMessage(env, chatId, "✅ گفتگو با دستیار تمام شد. هر وقت خواستی موضوع ارائه‌ات را بفرست.", kb([[{ text: "🏠 منوی اصلی", callback_data: "h:menu" }]]));
   }
   if (act === "pf") return await handleProfileCallback(env, cq, userId, chatId, a); // ثبت موبایل/ایمیل با OTP (bot-profile.ts)
   if (act === "bc") return await handleBroadcastCallback(env, cq);
@@ -552,6 +561,39 @@ async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chat
   return true;
 }
 
+// ---------- پشتیبانی هوشمند (حالت گفتگو) ----------
+// در ربات هر پیام متنی عادی «موضوع ارائه» است، پس گفتگو با دستیار یک حالت جدا دارد: کاربر با /support یا دکمه‌ی «🤖 پشتیبانی هوشمند»
+// وارد می‌شود و تا وقتی در حالت است پیام متنی‌اش سؤال از دستیار است. هر دستور، فایل یا دکمه‌ی «❌ پایان گفتگو» از حالت خارج می‌کند.
+// گفتگو، سقف روزانه و ارجاع به مدیر همان دستیار سایت و اپ است (support-chat.ts؛ حساب وب خودکارِ کاربر ربات).
+const supKey = (userId: number) => `sup:${userId}`;
+const SUP_TTL = 1800; // بعد از ۳۰ دقیقه بی‌فعالیتی حالت گفتگو خودبه‌خود تمام می‌شود
+const supKb = () => kb([[{ text: "❌ پایان گفتگو", callback_data: "sup:x" }]]);
+
+async function showSupport(env: Env, chatId: number, userId: number, uid: Uid) {
+  if (typeof uid !== "string") return await sendMessage(env, chatId, "🤖 دستیار هوشمند پشتیبانی برای کاربران است؛ حساب مدیر پروفایل کاربری ندارد.");
+  await env.KV.put(supKey(userId), "1", { expirationTtl: SUP_TTL });
+  return await sendMessage(env, chatId,
+    "🤖 <b>پشتیبانی هوشمند</b>\nهر سؤالی درباره‌ی قیمت و اعتبار، ساخت ارائه، مشکل فنی یا حتی نکته‌های طراحی و سخنرانی داری همین‌جا بنویس. " +
+    "اگر موضوعی به تیم نیاز داشته باشد (مثل پرداخت یا فایل خراب) خودم برایشان ارجاع می‌دهم.\n\n" +
+    "<i>تا وقتی در این گفتگو هستی پیام‌هایت سؤال از دستیار حساب می‌شود، نه موضوع ارائه. هر دستور، فایل یا دکمه‌ی زیر از گفتگو خارجت می‌کند.</i>", supKb());
+}
+
+/** پیام بعدیِ کاربری که در حالت گفتگوی پشتیبانی است. true = پیام مصرف شد؛ دستور یا پیام غیرمتنی از حالت خارج می‌کند و پیام عادی پردازش می‌شود */
+async function handleSupportInput(env: Env, chatId: number, userId: number, uid: Uid, text: string, isCmd: boolean): Promise<boolean> {
+  if (!(await env.KV.get(supKey(userId)))) return false;
+  if (isCmd || !text) { await env.KV.delete(supKey(userId)).catch(() => {}); return false; }
+  if (text.length > SUPPORT_MAX_TEXT) {
+    await sendMessage(env, chatId, `پیامت خیلی بلند است (حداکثر ${toFa(String(SUPPORT_MAX_TEXT))} نویسه)؛ کوتاه‌تر بنویس.`, supKb());
+    return true;
+  }
+  await env.KV.put(supKey(userId), "1", { expirationTtl: SUP_TTL }).catch(() => {});
+  await tg(env, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {}); // «در حال نوشتن…»؛ در پیام‌رسان‌هایی که ندارند بی‌اثر است
+  const r = await supportBotAsk(env, uid, text, botPlatform(userId));
+  const left = !r.error && r.remaining <= 3 ? `\n\n<i>پیام‌های باقی‌مانده‌ی امروز: ${toFa(String(r.remaining))}</i>` : "";
+  await sendMessage(env, chatId, esc(r.text) + left, supKb());
+  return true;
+}
+
 // ---------- منوی اصلی دکمه‌ای (/start، /help، /menu) ----------
 // هر دکمه همان کار دستور هم‌نامش را انجام می‌دهد؛ دستورها همچنان کار می‌کنند. callback: h:<کار>
 const HOME_TEXT = "🏠 <b>منوی اصلی</b>\nیکی از گزینه‌ها را بزن، یا همین‌جا <b>موضوع ارائه</b> را بنویس و بفرست.";
@@ -561,7 +603,7 @@ function homeKb(env: Env, tgId: number, admin: boolean) {
     [{ text: "💳 اعتبار و پلن", callback_data: "h:credit" }, { text: "⚙️ تنظیمات", callback_data: "h:set" }],
     [{ text: "📁 فایل‌های من", callback_data: "h:files" }, { text: "🎁 دعوت دوستان", callback_data: "h:inv" }],
     [{ text: "👤 پروفایل", callback_data: "h:pf" }, { text: "🌐 سایت و خرید پلن", callback_data: "h:site" }],
-    [{ text: "💬 پشتیبانی", url: supportLink(tgId) }],
+    [{ text: "🤖 پشتیبانی هوشمند", callback_data: "h:sup" }],
   ];
   if (admin) rows.push([{ text: "🛠 پنل مدیریت", callback_data: "h:admin" }]);
   return kb(rows);
@@ -666,6 +708,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   // مرحله‌های ثبت موبایل/ایمیل (شماره/ایمیل ← کد OTP): پیام متنی بعدی کاربر ورودی همان مرحله است
   if (!msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleProfileInput(env, userId, chatId, text, !!cmd).catch((e) => { console.error("profile input", e); return false; }))) return;
 
+  // حالت گفتگوی پشتیبانی هوشمند: پیام متنی سؤال از دستیار است؛ دستور/فایل از حالت خارج می‌کند و ادامه می‌یابد
+  if (await handleSupportInput(env, chatId, userId, uid, text, !!cmd).catch((e) => { console.error("support input", e); return false; })) return;
+
   if (cmd === "/profile") return await showProfile(env, chatId, userId, uid);
   if (cmd === "/app") return await showApp(env, chatId);
   if (cmd === "/site") return await showSite(env, chatId, userId);
@@ -677,6 +722,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
     if (inviter !== null && await holdReferral(env, inviter, userId).catch((e) => { console.error("referral hold", e); return false; })) await notifyInviterJoined(env, inviter);
   }
   if (cmd === "/files") return await showFiles(env, chatId, uid);
+  if (cmd === "/support") return await showSupport(env, chatId, userId, uid);
   if (cmd === "/invite") return await showInvite(env, chatId, userId);
 
   if (cmd === "/credit" || cmd === "/balance") return await showCredit(env, chatId, uid, userId);
