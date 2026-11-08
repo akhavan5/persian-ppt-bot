@@ -1387,20 +1387,6 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(ex.brand)) {
                 Box(Modifier.align(Alignment.TopStart).offset(x = (-40).dp, y = (-40).dp).size(150.dp).background(Color.White.copy(alpha = 0.08f), CircleShape))
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // هدیه‌ی تکمیل پروفایل: بالای کارت (برای هر مورد یک‌بار؛ توضیحش لازم نیست)
-                    val missingContact = me.giftMissing.isNotEmpty() && (("mobile" in me.giftMissing && me.mobile.isEmpty()) || ("email" in me.giftMissing && me.email.isEmpty()))
-                    if (missingContact && me.giftAvailable && me.giftCredits > 0) {
-                        Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                "🎁 با ثبت و تأیید هر مورد، " + me.giftCredits.fa() + " اعتبار هدیه می‌گیرید.",
-                                color = Color.White, style = MaterialTheme.typography.labelLarge,
-                            )
-                            if (me.giftNote.isNotEmpty()) Text(me.giftNote, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
                             val initial = me.name.trim().firstOrNull()?.toString()
@@ -1430,12 +1416,14 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                             color = Color.White, style = MaterialTheme.typography.labelLarge,
                         )
                     }
-                    // ثبت و تأیید موبایل/ایمیل داخل خود کارت پروفایل
+                    // ثبت و تأیید موبایل/ایمیل داخل خود کارت پروفایل؛ هدیه‌ی هر مورد روی همان دکمه (بدون پیام جدا؛ با ثبت و تأیید آن مورد دکمه‌اش ناپدید می‌شود)
+                    // LRM پیش از «+»: در متن راست‌به‌چپ علامت + سمت اشتباه عدد نیفتد
+                    val gift = if (me.giftAvailable && me.giftCredits > 0) " (\u200E+" + me.giftCredits.fa() + " اعتبار هدیه)" else ""
                     if ("mobile" in me.giftMissing && me.mobile.isEmpty()) {
-                        ProfileContactButton("📱 ثبت و تأیید شماره‌ی موبایل") { contactDialog = "mobile" }
+                        ProfileContactButton("📱 ثبت و تأیید شماره‌ی موبایل$gift") { contactDialog = "mobile" }
                     }
                     if ("email" in me.giftMissing && me.email.isEmpty()) {
-                        ProfileContactButton("✉️ ثبت و تأیید ایمیل") { contactDialog = "email" }
+                        ProfileContactButton("✉️ ثبت و تأیید ایمیل$gift") { contactDialog = "email" }
                     }
                 }
             }
