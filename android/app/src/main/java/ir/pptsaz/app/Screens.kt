@@ -46,6 +46,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -91,6 +92,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -1382,6 +1384,20 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(ex.brand)) {
                 Box(Modifier.align(Alignment.TopStart).offset(x = (-40).dp, y = (-40).dp).size(150.dp).background(Color.White.copy(alpha = 0.08f), CircleShape))
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // هدیه‌ی تکمیل پروفایل: بالای کارت (برای هر مورد یک‌بار؛ توضیحش لازم نیست)
+                    val missingContact = me.giftMissing.isNotEmpty() && (("mobile" in me.giftMissing && me.mobile.isEmpty()) || ("email" in me.giftMissing && me.email.isEmpty()))
+                    if (missingContact && me.giftAvailable && me.giftCredits > 0) {
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                "🎁 با ثبت و تأیید هر مورد، " + me.giftCredits.fa() + " اعتبار هدیه می‌گیرید.",
+                                color = Color.White, style = MaterialTheme.typography.labelLarge,
+                            )
+                            if (me.giftNote.isNotEmpty()) Text(me.giftNote, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
                             val initial = me.name.trim().firstOrNull()?.toString()
@@ -1411,39 +1427,21 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                             color = Color.White, style = MaterialTheme.typography.labelLarge,
                         )
                     }
+                    // ثبت و تأیید موبایل/ایمیل داخل خود کارت پروفایل
+                    if ("mobile" in me.giftMissing && me.mobile.isEmpty()) {
+                        ProfileContactButton("📱 ثبت و تأیید شماره‌ی موبایل") { contactDialog = "mobile" }
+                    }
+                    if ("email" in me.giftMissing && me.email.isEmpty()) {
+                        ProfileContactButton("✉️ ثبت و تأیید ایمیل") { contactDialog = "email" }
+                    }
                 }
             }
-
-            InviteCard(vm)
 
             if (cfg != null && cfg.dailyFree > 0 && !me.unlimited && me.planId == null) {
                 SurfaceCard(color = ex.warnBg, borderColor = null) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("🎁", fontSize = 22.sp)
                         Text("هر روز " + cfg.dailyFree.fa() + " اعتبار رایگان هدیه می‌گیرید.", color = ex.warn, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-
-            if (me.giftMissing.isNotEmpty()) {
-                // ثبت موبایل/ایمیل داخل خود اپ؛ هدیه‌ی هر مورد جدا و یک‌بار است و حساب در همه‌ی پلتفرم‌ها یکی می‌ماند
-                SurfaceCard(color = if (me.giftAvailable) ex.warnBg else MaterialTheme.colorScheme.surface, borderColor = null) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (me.giftAvailable && me.giftCredits > 0) {
-                            Text(
-                                "🎁 با ثبت و تأیید هر مورد، " + me.giftCredits.fa() + " اعتبار هدیه می‌گیرید (برای هر مورد یک‌بار).",
-                                color = ex.warn, style = MaterialTheme.typography.bodyMedium,
-                            )
-                            if (me.giftNote.isNotEmpty()) Text(me.giftNote, color = ex.warn, style = MaterialTheme.typography.bodySmall)
-                        } else {
-                            Text("اطلاعات تماس", style = MaterialTheme.typography.titleSmall)
-                        }
-                        if ("mobile" in me.giftMissing && me.mobile.isEmpty()) {
-                            OutlinedButton(onClick = { contactDialog = "mobile" }, Modifier.fillMaxWidth()) { Text("📱 ثبت شماره‌ی موبایل") }
-                        }
-                        if ("email" in me.giftMissing && me.email.isEmpty()) {
-                            OutlinedButton(onClick = { contactDialog = "email" }, Modifier.fillMaxWidth()) { Text("✉️ ثبت ایمیل") }
-                        }
                     }
                 }
             }
@@ -1492,6 +1490,8 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 )
             }
 
+            InviteCard(st.invite, vm)
+
             ContactCard(vm)
 
             SoftButton("بررسی به‌روزرسانی (نسخه‌ی " + BuildConfig.VERSION_NAME + ")", { vm.checkUpdate() }, Modifier.fillMaxWidth(), icon = AppIcons.Refresh)
@@ -1504,6 +1504,16 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
             )
         }
     }
+}
+
+/** دکمه‌ی ثبت موبایل/ایمیل روی زمینه‌ی رنگی کارت پروفایل */
+@Composable
+private fun ProfileContactButton(text: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick, modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
+    ) { Text(text) }
 }
 
 @Composable
@@ -1554,16 +1564,13 @@ private fun ContactRow(icon: ImageVector, brush: Brush, title: String, value: St
 
 // ================================================================== دیالوگ‌ها
 
-/** دعوت دوستان در اپ: لینک سایت (ثبت‌نام/ورود دوست با همان لینک)، شمارنده‌ی دعوت‌های موفق و ورود کد دعوتِ دوست. با همان سامانه‌ی ربات‌ها و سایت یکی است. */
+/** دعوت دوستان در اپ: لینک سایت، شمارنده‌ی دعوت‌های موفق و ورود کد دعوتِ دوست (در هر زمان). اطلاعات از state می‌آید (پیش‌بارگذاری‌شده در ViewModel) تا کارت بدون تأخیر دیده شود. */
 @Composable
-fun InviteCard(vm: AppViewModel) {
+fun InviteCard(d: InviteInfo?, vm: AppViewModel) {
+    if (d == null) return
     val ctx = LocalContext.current
-    var info by remember { mutableStateOf<InviteInfo?>(null) }
     var code by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(tick) { info = vm.loadInvite() }
-    val d = info ?: return
     SurfaceCard(color = MaterialTheme.colorScheme.surface, borderColor = null) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("🎁 دعوت دوستان", style = MaterialTheme.typography.titleSmall)
@@ -1583,7 +1590,7 @@ fun InviteCard(vm: AppViewModel) {
                 Modifier.fillMaxWidth(),
             ) { Text("📤 ارسال لینک دعوت به دوستان") }
             if (d.canClaim) {
-                Text("کد دعوت دارید؟ تا قبل از ساخت اولین ارائه وارد کنید تا دعوتِ دوستتان شمرده شود.", style = MaterialTheme.typography.bodySmall)
+                Text("کد دعوت دارید؟ اینجا وارد کنید.", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = code, onValueChange = { code = it.take(80) }, singleLine = true,
@@ -1595,7 +1602,7 @@ fun InviteCard(vm: AppViewModel) {
                             busy = true
                             vm.claimInvite(normDigits(code)) { ok ->
                                 busy = false
-                                if (ok) { code = ""; tick++ }
+                                if (ok) code = ""
                             }
                         },
                     ) { Text("ثبت") }

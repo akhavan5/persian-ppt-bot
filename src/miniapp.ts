@@ -214,7 +214,7 @@ export async function inviteInfo(env: Env, user: WebUser): Promise<Response> {
   return json({ link, webLink, code: String(st.id), count: st.count, max: REF_MAX, every: REF_EVERY, canClaim: st.canClaim });
 }
 
-/** POST /api/invite/claim {code} — ثبت کد/لینک دعوتِ یک دوست برای حساب فعلی (فقط تا قبل از اولین ارائه). سایت بعد از ورود، اپ اندروید با کد واردشده و
+/** POST /api/invite/claim {code} — ثبت کد/لینک دعوتِ یک دوست برای حساب فعلی (در هر زمان، یک‌بار برای هر حساب). سایت بعد از ورود، اپ اندروید با کد واردشده و
  *  Mini App/برنامک با startapp=ref_… همین را صدا می‌زنند؛ پاداش دعوت‌کننده با ساخت اولین ارائه‌ی این حساب شمرده می‌شود. */
 export async function inviteClaim(env: Env, user: WebUser, body: Record<string, unknown> | null, ip: string): Promise<Response> {
   const r = await claimReferral(env, user.id, body?.code, ip);

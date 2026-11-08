@@ -234,7 +234,7 @@ object Api {
         )
     }
 
-    /** ثبت کد/لینک دعوت دوست (فقط تا قبل از اولین ارائه‌ی این حساب). خطا = ApiException با پیام فارسی. */
+    /** ثبت کد/لینک دعوت دوست (در هر زمان، یک‌بار برای هر حساب). خطا = ApiException با پیام فارسی. */
     suspend fun inviteClaim(code: String) {
         call("POST", "/api/invite/claim", JSONObject().put("code", code.trim()))
     }

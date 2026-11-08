@@ -69,7 +69,8 @@ export async function notifyInviterJoined(env: Env, inviterId: RefId): Promise<v
 export type ClaimResult = { ok: true } | { error: string; status: number };
 
 /** ثبت «دعوت در انتظار» برای حسابی که از سایت، اپ اندروید، برنامک ایتا یا Mini App با کد/لینک دعوت آمده (مسیر ربات‌ها همان holdReferral در bot.ts است).
- *  فقط تا قبل از اولین ارائه‌ی حساب پذیرفته می‌شود؛ بعدش دعوتی ثبت نمی‌شود. تکراری‌بودن (همان دعوت‌کننده) موفق حساب می‌شود تا کلاینت دوباره تلاش نکند. */
+ *  در هر زمان پذیرفته می‌شود (هر حساب فقط یک دعوت): اگر حساب هنوز ارائه نساخته، دعوت تا اولین ارائه در انتظار می‌ماند؛ اگر قبلاً ساخته، همین حالا شمرده می‌شود.
+ *  تکراری‌بودن (همان دعوت‌کننده) موفق حساب می‌شود تا کلاینت دوباره تلاش نکند. */
 export async function claimReferral(env: Env, uid: Uid, rawCode: unknown, ip: string): Promise<ClaimResult> {
   let s = String(rawCode ?? "").trim();
   // کاربر ممکن است کل لینک دعوت را بچسباند (سایت ?ref=…، ربات ?start=ref_…، برنامک ?startapp=ref_…) یا فقط کد/ref_<کد>
@@ -85,9 +86,11 @@ export async function claimReferral(env: Env, uid: Uid, rawCode: unknown, ip: st
   if ((await env.KV.get(`ref:${me}`)) !== null) return { error: "دعوتِ این حساب قبلاً ثبت شده است.", status: 409 };
   const pend = await pendingInviter(env, me);
   if (pend !== null) return String(pend) === String(inviter) ? { ok: true } : { error: "برای این حساب قبلاً کد دعوت دیگری ثبت شده است.", status: 409 };
-  if ((await env.KV.get(`act:${uid}`)) !== null) return { error: "کد دعوت فقط تا قبل از ساخت اولین ارائه ثبت می‌شود.", status: 409 };
+  const alreadyMadeDeck = (await env.KV.get(`act:${uid}`)) !== null;
   if (!(await holdReferral(env, inviter, me))) return { error: "این کد دعوت معتبر نیست یا دعوت‌کننده‌اش فعال نیست.", status: 400 };
-  await notifyInviterJoined(env, inviter);
+  // حساب قبلاً ارائه ساخته: «اولین ارائه»ی دیگری در راه نیست، پس دعوت همین حالا شمرده می‌شود (پیام پاداش را completeReferral به دعوت‌کننده می‌فرستد)
+  if (alreadyMadeDeck) await completeReferral(env, uid).catch((e) => console.error("referral complete", String(e).slice(0, 200)));
+  else await notifyInviterJoined(env, inviter);
   return { ok: true };
 }
 
@@ -95,12 +98,11 @@ export async function claimReferral(env: Env, uid: Uid, rawCode: unknown, ip: st
 export async function referralState(env: Env, uid: Uid): Promise<{ id: RefId | null; count: number; canClaim: boolean; banned: boolean }> {
   const id = await refIdOf(env, uid);
   if (id === null) return { id: null, count: 0, canClaim: false, banned: false };
-  const [count, counted, pend, act, banned] = await Promise.all([
+  const [count, counted, pend, banned] = await Promise.all([
     refCount(env, id),
     env.KV.get(`ref:${id}`).catch(() => null),
     pendingInviter(env, id),
-    env.KV.get(`act:${uid}`).catch(() => null),
     isBanned(env, id),
   ]);
-  return { id, count, canClaim: counted === null && pend === null && act === null, banned };
+  return { id, count, canClaim: counted === null && pend === null, banned };
 }

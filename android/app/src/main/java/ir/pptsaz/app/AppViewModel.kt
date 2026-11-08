@@ -102,6 +102,7 @@ data class UiState(
     val filesError: Boolean = false, // آخرین بارگیری فهرست فایل‌ها به خاطر شبکه ناموفق بود (فهرست ذخیره‌شده نمایش داده می‌شود)
     val smsCode: String? = null, // کدی که از پیامک خوانده شد (SMS User Consent)؛ صفحه‌ی ورود آن را برمی‌دارد
     val otpTick: Int = 0, // با هر ارسال موفق کد یکی زیاد می‌شود (برای شروع دوباره‌ی تایمر و گوش‌دادن به پیامک)
+    val invite: InviteInfo? = null, // اطلاعات «دعوت دوستان»؛ همراه حساب پیش‌بارگذاری می‌شود تا کارت دعوت بدون تأخیر نمایش داده شود
 )
 
 sealed interface Event {
@@ -231,6 +232,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.")
                     Reminders.onMe(getApplication(), me, cfg.dailyFree > 0)
                     loadFiles()
+                    refreshInvite()
                     viewModelScope.launch { Push.sync(getApplication()) } // توکن FCM (اگر پیکربندی شده باشد)
                     if (me.activeJob != null && _state.value.job == null) watch(me.activeJob)
                     flushShare()
@@ -259,6 +261,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: ApiException) { /* بی‌صدا */ }
         }
+        refreshInvite()
     }
 
     /** id: موبایل یا ایمیل (مثل وب در یک کادر). */
@@ -1042,15 +1045,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** دعوت دوستان (همان سامانه‌ی ربات‌ها و سایت): اطلاعات دعوت؛ خطا = null و کارت دعوت پنهان می‌ماند. */
-    suspend fun loadInvite(): InviteInfo? = try { Api.invite() } catch (e: ApiException) { null }
+    /**
+     * دعوت دوستان (همان سامانه‌ی ربات‌ها و سایت): اطلاعات دعوت در پس‌زمینه گرفته و در state نگه داشته می‌شود
+     * (هنگام شروع اپ و برگشت به آن)؛ پس کارت دعوت هنگام باز شدن «حساب من» فوراً با آخرین مقدار نمایش داده می‌شود و فقط آمار بعداً به‌روز می‌شود.
+     * خطای شبکه مقدار قبلی را نگه می‌دارد.
+     */
+    fun refreshInvite() {
+        viewModelScope.launch {
+            try {
+                val d = Api.invite()
+                _state.update { it.copy(invite = d) }
+            } catch (_: ApiException) { /* مقدار قبلی می‌ماند */ }
+        }
+    }
 
     /** ثبت کد دعوت دوست؛ پاداش دعوت‌کننده با ساخت اولین ارائه‌ی همین حساب شمرده می‌شود. */
     fun claimInvite(raw: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
                 Api.inviteClaim(raw)
-                toast("کد دعوت ثبت شد؛ با ساخت اولین ارائه، دعوتِ دوستتان شمرده می‌شود 🎁")
+                toast("کد دعوت ثبت شد 🎁")
+                refreshInvite()
                 onDone(true)
             } catch (e: ApiException) {
                 toast(e.message ?: "")
