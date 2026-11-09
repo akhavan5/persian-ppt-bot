@@ -307,7 +307,10 @@ async function otpVerify(req: Request, env: Env): Promise<Response> {
   if (!user) {
     // جلوگیری از ساخت انبوه حساب برای گرفتن سهمیه‌ی رایگان
     const day = new Date().toISOString().slice(0, 10);
-    if (await hitLimit(env, `rg:${clientIp(req)}:${day}`, 5, 172_800)) return err("تعداد ثبت‌نام از این شبکه امروز به سقف رسیده است.", 429);
+    // شبکه‌های موبایل ایران (CGNAT) یک IP را بین هزاران کاربر مشترک می‌کنند؛ پس سقف باید بالا باشد. تأیید کد پیامکی خودش سد اصلی است.
+    // ایمیل ساخت‌اش ارزان‌تر است، سقف جدا و کمتری دارد. هر دو با SIGNUP_IP_DAILY قابل تنظیم‌اند.
+    const cap = Math.max(1, Math.floor(Number(env.SIGNUP_IP_DAILY) || 100));
+    if (await hitLimit(env, `rg:${email ? "e" : "m"}:${clientIp(req)}:${day}`, email ? Math.min(cap, 30) : cap, 172_800)) return err("تعداد ثبت‌نام از این شبکه امروز به سقف رسیده است.", 429);
     user = email
       ? await createUser(env, { email, emailVerified: true, name: email.split("@")[0], via: fromApp(req) ? "app" : undefined, appUA: appUA(req) })
       : await createUser(env, { mobile: mobile!, name: `کاربر ${mobile!.slice(-4)}`, via: fromApp(req) ? "app" : undefined, appUA: appUA(req) });

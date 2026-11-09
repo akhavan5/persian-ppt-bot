@@ -171,11 +171,11 @@ const otpHash = (code: string, id: string) => sha256hex(`otp:${id}:${code}`);
 
 /** ساخت و ذخیره‌ی کد ۶ رقمی برای یک شناسه (شماره‌ی موبایل یا ایمیل) با محدودیت تلاش. خروجی: {code} یا {error, status}. */
 async function issueCode(env: Env, ip: string, id: string, what: "sms" | "email"): Promise<{ code: string } | { error: string; status: number }> {
-  // محدودیت: ۶۰ ثانیه فاصله بین دو ارسال به یک شناسه، ۵ ارسال در ساعت برای هر شناسه، ۱۵ در ساعت برای هر شبکه
+  // محدودیت: ۶۰ ثانیه فاصله بین دو ارسال به یک شناسه، ۵ ارسال در ساعت برای هر شناسه، ۱۲۰ در ساعت برای هر شبکه (OTP_IP_HOURLY)
   // فاصله‌ی ۶۰ ثانیه‌ای: ادعای اتمی (دو درخواست هم‌زمان نمی‌توانند هر دو کد بفرستند)
   if (await hitLimit(env, `oc:${id}`, 1, 60)) return { error: "کد قبلاً ارسال شده است؛ تا یک دقیقه صبر کن و دوباره بخواه.", status: 429 };
   if (await hitLimit(env, `os:m:${id}`, 5, 3600)) return { error: `تعداد درخواست کد برای این ${what === "sms" ? "شماره" : "ایمیل"} زیاد بود؛ یک ساعت بعد دوباره امتحان کن.`, status: 429 };
-  if (await hitLimit(env, `os:ip:${ip}`, 15, 3600)) return { error: "تعداد درخواست کد از این شبکه زیاد بود؛ کمی بعد دوباره امتحان کن.", status: 429 };
+  if (await hitLimit(env, `os:ip:${ip}`, Math.max(1, Math.floor(Number(env.OTP_IP_HOURLY) || 120)), 3600)) return { error: "تعداد درخواست کد از این شبکه زیاد بود؛ کمی بعد دوباره امتحان کن.", status: 429 };
 
   const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
   const code = String(n).padStart(6, "0");

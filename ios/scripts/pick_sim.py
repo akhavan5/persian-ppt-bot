@@ -5,6 +5,19 @@ import subprocess
 import sys
 
 large = "--large" in sys.argv
+
+
+def sdk_version():
+    """نسخه‌ی SDK شبیه‌ساز Xcode فعال (مثلاً 18.5)؛ شبیه‌ساز هم‌نسخه با آن ترجیح داده می‌شود."""
+    try:
+        return subprocess.check_output(
+            ["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"], text=True
+        ).strip()
+    except Exception:
+        return ""
+
+
+SDK = sdk_version()
 data = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "devices", "available", "-j"]))["devices"]
 cands = []
 for runtime, devs in data.items():
@@ -20,6 +33,8 @@ if not cands:
 def score(c):
     runtime, name, _ = c
     s = 0
+    if SDK and runtime.endswith("iOS-" + SDK.replace(".", "-")):
+        s += 1000  # هم‌نسخه با SDK فعال Xcode
     if large:
         if "Pro Max" in name:
             s += 100
