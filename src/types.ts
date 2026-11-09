@@ -1,3 +1,4 @@
+import type { Platform } from "./settings";
 export type Layout = "title" | "section" | "bullets" | "image_text" | "two_column" | "three_column" | "stats" | "table" | "chart" | "timeline" | "process" | "quote" | "icons" | "sources" | "questions" | "closing";
 
 export interface Column { heading: string; bullets: string[] }
@@ -68,8 +69,8 @@ export interface DeckParams {
   /** کانال تحویل: پیش‌فرض تلگرام. در «web» به‌جای ارسال فایل، در KV ذخیره می‌شود و صفحه‌ی وب آن را دانلود می‌کند */
   channel?: "telegram" | "web";
   /** پلتفرمی که کار از آن شروع شده (برای آمار هفتگی پنل مدیر)؛ خالی = از روی کانال و شناسه حدس زده می‌شود */
-  plat?: "tg" | "bale" | "rubika" | "eitaa" | "web" | "bazaar" | "myket" | "app";
-  /** فقط وقتی کار از اپ اندروید شروع شده: نسخه‌ی اپ و نسخه‌ی اندروید (برای گزارش مدیر) */
+  plat?: Platform;
+  /** فقط وقتی کار از اپ (اندروید یا iOS) شروع شده: نسخه‌ی اپ و نسخه‌ی سیستم‌عامل دستگاه (برای گزارش مدیر) */
   appv?: string;
   andv?: string;
   /** فقط کانال وب و فقط ساخت‌شده از Mini App: پایان کار یک پیام کوتاه با دکمه‌ی «باز کردن اپ» به تلگرامِ وصل‌شده‌ی کاربر می‌رود (وگرنه با بستن اپ خبر آماده شدن نمی‌رسد) */

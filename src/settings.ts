@@ -7,6 +7,7 @@ import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { DEFAULT_TEMPLATE, isTemplate } from "./template";
 import { modelList } from "./llm";
 import { toFa } from "./util";
+import type { AppPlatform, PwaPlatform } from "./app-ua";
 
 /** شناسه‌ی کاربر: عددی برای تلگرام، رشته‌ی «w_…» برای کاربران وب */
 export type Uid = number | string;
@@ -374,10 +375,11 @@ export const releaseLock = (env: Env, userId: Uid) => env.KV.delete(lockKey(user
 
 // ---------- آمار ----------
 export type StatName = "started" | "ok" | "fail" | "newusers" | "newapp";
-/** پلتفرم‌های سرویس: ربات تلگرام (و Mini App آن)، ربات بله، سایت، اپ اندروید به تفکیک فروشگاه
- *  (bazaar / myket = نسخه‌ای که فروشگاه را در User-Agent می‌فرستد؛ app = نسخه‌ی قدیمی اپ که فروشگاهش معلوم نیست) */
-export type Platform = "tg" | "bale" | "rubika" | "eitaa" | "web" | "bazaar" | "myket" | "app";
-export const PLATFORMS: Platform[] = ["tg", "bale", "rubika", "eitaa", "web", "bazaar", "myket", "app"];
+/** پلتفرم‌های سرویس: ربات تلگرام (و Mini App آن)، ربات بله/روبیکا/ایتا، سایت، اپ اندروید به تفکیک فروشگاه
+ *  (bazaar / myket = نسخه‌ای که فروشگاه را در User-Agent می‌فرستد؛ app = نسخه‌ی قدیمی اپ که فروشگاهش معلوم نیست)،
+ *  اپ iOS (ios) و وب‌اپ نصب‌شده (pwa_ios = iPhone/iPad، pwa = بقیه) */
+export type Platform = "tg" | "bale" | "rubika" | "eitaa" | "web" | AppPlatform | PwaPlatform;
+export const PLATFORMS: Platform[] = ["tg", "bale", "rubika", "eitaa", "web", "bazaar", "myket", "app", "ios", "pwa_ios", "pwa"];
 export const isPlatform = (x: unknown): x is Platform => PLATFORMS.includes(x as Platform);
 /** پلتفرم از روی شناسه‌ی عددی گیرنده/کاربر ربات: شناسه‌های بله با BALE_ID_BASE جدا شده‌اند */
 export const botPlatform = (id: unknown): Platform => (isEitaaId(id) ? "eitaa" : isRubikaId(id) ? "rubika" : isBaleId(id) ? "bale" : "tg");

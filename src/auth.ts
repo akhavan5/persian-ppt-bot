@@ -5,7 +5,7 @@
  * - نشست‌ها: توکن تصادفی در کوکی HttpOnly؛ در KV فقط هشِ توکن نگه داشته می‌شود
  * همه‌چیز روی همان KV فعلی است؛ هیچ منبع جدیدی لازم نیست.
  */
-import { appFields, appPlatform, type AppUA } from "./app-ua";
+import { appFields, appPlatform, pwaPlatform, type AppOs, type AppStore, type AppUA } from "./app-ua";
 import type { Env } from "./env";
 import { bumpStat, grantSignupCredit } from "./settings";
 import { sendWelcomeEmail } from "./email-welcome";
@@ -21,11 +21,13 @@ export interface WebUser {
   google?: string; // شناسه‌ی sub گوگل
   verified: boolean; // ایمیل تایید شده؟ (با گوگل یا کد ایمیلی true می‌شود)
   created: number;
-  via?: "app"; // ثبت‌نام‌شده از اپ اندروید (بقیه: وب)
-  app?: boolean; // حداقل یک بار از اپ اندروید وارد شده/استفاده کرده
-  store?: "bazaar" | "myket"; // فروشگاهِ آخرین نسخه‌ی اپ که این کاربر استفاده کرده (فقط از نسخه‌ای که فروشگاه را در User-Agent می‌فرستد)
+  via?: "app"; // ثبت‌نام‌شده از اپ اندروید/iOS (بقیه: وب)
+  app?: boolean; // حداقل یک بار از اپ بومی (اندروید یا iOS) وارد شده/استفاده کرده
+  os?: AppOs; // سیستم‌عامل آخرین اپ بومی که این کاربر استفاده کرده؛ حساب‌های قدیمی (فقط اندروید بود) ندارند ⇒ اندروید
+  store?: AppStore; // فروشگاهِ آخرین نسخه‌ی اپ که این کاربر استفاده کرده (فقط از نسخه‌ای که فروشگاه را در User-Agent می‌فرستد)
   appv?: string; // نسخه‌ی اپ (آخرین مقدار دیده‌شده)
-  andv?: string; // نسخه‌ی اندروید دستگاه (آخرین مقدار دیده‌شده)
+  andv?: string; // نسخه‌ی سیستم‌عامل دستگاه (اندروید یا iOS؛ os مشخص می‌کند) — آخرین مقدار دیده‌شده
+  pwa?: "ios" | "other"; // وب‌اپ نصب‌شده (PWA) استفاده کرده: iPhone/iPad = ios، بقیه = other
 }
 
 const enc = new TextEncoder();
@@ -63,18 +65,18 @@ export async function getUserByEmail(env: Env, email: string): Promise<WebUser |
 }
 const saveUser = (env: Env, u: WebUser) => env.KV.put(`wu:${u.id}`, JSON.stringify(u));
 
-export async function createUser(env: Env, p: { email?: string; mobile?: string; name: string; google?: string; picture?: string; via?: "app"; appUA?: AppUA | null; emailVerified?: boolean }): Promise<WebUser> {
+export async function createUser(env: Env, p: { email?: string; mobile?: string; name: string; google?: string; picture?: string; via?: "app"; appUA?: AppUA | null; pwa?: "ios" | "other" | null; emailVerified?: boolean }): Promise<WebUser> {
   const u: WebUser = {
     id: "w_" + hex(crypto.getRandomValues(new Uint8Array(8))),
     email: p.email ?? "", mobile: p.mobile, name: p.name.slice(0, 64), picture: p.picture, google: p.google,
     verified: !!p.google || !!p.mobile || !!p.emailVerified, created: Date.now(),
-    ...(p.via === "app" ? { via: "app" as const, app: true, ...(p.appUA ? appFields(p.appUA) : {}) } : {}),
+    ...(p.via === "app" ? { via: "app" as const, app: true, ...(p.appUA ? appFields(p.appUA) : {}) } : p.pwa ? { pwa: p.pwa } : {}),
   };
   await saveUser(env, u);
   if (u.email) await env.KV.put(`we:${u.email}`, u.id);
   if (u.mobile) await env.KV.put(`wm:${u.mobile}`, u.id);
   if (u.google) await env.KV.put(`wg:${u.google}`, u.id);
-  await bumpStat(env, "newusers", p.via === "app" ? (p.appUA ? appPlatform(p.appUA) : "app") : "web").catch(() => {});
+  await bumpStat(env, "newusers", p.via === "app" ? (p.appUA ? appPlatform(p.appUA) : "app") : p.pwa ? pwaPlatform(p.pwa) : "web").catch(() => {});
   if (p.via === "app") await bumpStat(env, "newapp").catch(() => {});
   await grantSignupCredit(env, u.id).catch((e) => console.error("signupCredit", e)); // ۳ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
   if (u.email) await sendWelcomeEmail(env, u).catch((e) => console.error("welcomeEmail", e)); // ایمیل خوش‌آمد (فقط حساب‌های دارای ایمیل؛ بدون RESEND_API_KEY بی‌اثر است)

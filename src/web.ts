@@ -21,7 +21,7 @@ import { hasBrowser } from "./browser-api";
 import { putPushToken } from "./push";
 import { removeWebSub, saveWebSub, webPushEnabled } from "./webpush";
 import { getAppVersions } from "./app-version";
-import { appFields, appPlatform, parseAppUA } from "./app-ua";
+import { appFields, appPlatform, parseAppUA, pwaOf, pwaPlatform } from "./app-ua";
 import {
   authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, emailOtpEnabled, getUserByEmail, getUserByMobile, googleCallback,
   googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtp,
@@ -277,19 +277,28 @@ async function googleToken(req: Request, env: Env): Promise<Response> {
 }
 
 /** ورود/ثبت‌نام یکپارچه: حساب موجود ⇒ ورود؛ وگرنه حساب جدید با همین شماره ساخته می‌شود */
-/** درخواست از اپ اندروید؟ اپ در User-Agent عبارت PptSazApp/<نسخه> (<فروشگاه>; Android <نسخه>) می‌فرستد (فقط برای آمار؛ امنیتی نیست).
- *  نسخه‌های قدیمی اپ فقط «PptSazApp/<نسخه>» دارند ⇒ store = null. */
+/** درخواست از اپ بومی؟ اپ در User-Agent عبارت PptSazApp/<نسخه> (<فروشگاه>; Android <نسخه>) یا PptSazApp/<نسخه> (ios; <فروشگاه>; iOS <نسخه>) می‌فرستد (فقط برای آمار؛ امنیتی نیست).
+ *  نسخه‌های قدیمی اپ اندروید فقط «PptSazApp/<نسخه>» دارند ⇒ store = null. */
 const appUA = (req: Request) => parseAppUA(req.headers.get("user-agent"));
 const fromApp = (req: Request) => appUA(req) !== null;
+/** وب‌اپ نصب‌شده (PWA)؛ فقط وقتی اپ بومی نباشد (اپ بومی خودش پلتفرم دارد) */
+const pwaReq = (req: Request) => (appUA(req) ? null : pwaOf(req));
 
-/** علامت «کاربر اپ» + فروشگاه/نسخه‌ی اپ/نسخه‌ی اندروید روی حساب؛ فقط وقتی چیزی عوض شده باشد نوشته می‌شود */
+/** علامت «کاربر اپ» + سیستم‌عامل/فروشگاه/نسخه‌ی اپ/نسخه‌ی سیستم‌عامل (اندروید یا iOS) یا علامت «کاربر PWA» روی حساب؛ فقط وقتی چیزی عوض شده باشد نوشته می‌شود */
 async function noteApp(env: Env, user: WebUser, req: Request): Promise<void> {
   const a = appUA(req);
-  if (!a) return;
-  const f = appFields(a);
-  let changed = !user.app;
-  user.app = true;
-  for (const [k, v] of Object.entries(f)) if ((user as any)[k] !== v) { (user as any)[k] = v; changed = true; }
+  let changed = false;
+  if (a) {
+    const f = appFields(a);
+    if (!user.app) { user.app = true; changed = true; }
+    // کاربرِ iOS که قبلاً از نسخه‌ی اندروید فروشگاه داشت (یا برعکس): فیلدهای فروشگاه/نسخه‌ی قبلی پاک می‌شود تا قاطی نشود
+    if (a.os && user.os !== a.os) { delete user.store; delete user.andv; changed = true; }
+    for (const [k, v] of Object.entries(f)) if ((user as any)[k] !== v) { (user as any)[k] = v; changed = true; }
+    // اپ iOS قدیمی (بدون فروشگاه) روی حسابی که فروشگاه معلوم دارد، فروشگاه را پاک نمی‌کند؛ فقط مقدارهای معلوم نوشته می‌شود
+  } else {
+    const p = pwaOf(req);
+    if (p && user.pwa !== p) { user.pwa = p; changed = true; }
+  }
   if (changed) await saveWebUser(env, user).catch(() => {});
 }
 
@@ -312,8 +321,8 @@ async function otpVerify(req: Request, env: Env): Promise<Response> {
     const cap = Math.max(1, Math.floor(Number(env.SIGNUP_IP_DAILY) || 100));
     if (await hitLimit(env, `rg:${email ? "e" : "m"}:${clientIp(req)}:${day}`, email ? Math.min(cap, 30) : cap, 172_800)) return err("تعداد ثبت‌نام از این شبکه امروز به سقف رسیده است.", 429);
     user = email
-      ? await createUser(env, { email, emailVerified: true, name: email.split("@")[0], via: fromApp(req) ? "app" : undefined, appUA: appUA(req) })
-      : await createUser(env, { mobile: mobile!, name: `کاربر ${mobile!.slice(-4)}`, via: fromApp(req) ? "app" : undefined, appUA: appUA(req) });
+      ? await createUser(env, { email, emailVerified: true, name: email.split("@")[0], via: fromApp(req) ? "app" : undefined, appUA: appUA(req), pwa: pwaReq(req) })
+      : await createUser(env, { mobile: mobile!, name: `کاربر ${mobile!.slice(-4)}`, via: fromApp(req) ? "app" : undefined, appUA: appUA(req), pwa: pwaReq(req) });
   } else {
     await noteApp(env, user, req);
   }
@@ -494,7 +503,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   // Mini App در تلگرام، بله و روبیکا یک کلاینت است؛ پلتفرم واقعی از شناسه‌ی حساب لینک‌شده‌ی همان ورود (w2tg) می‌آید، نه ثابت «تلگرام»
   const ua = appUA(req);
   const miniPlat = b?.via === "miniapp" ? botPlatform(await getLinkedTg(env, user.id).catch(() => null)) : "tg";
-  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? miniPlat : ua ? appPlatform(ua) : "web", ...(ua && b?.via !== "eitaa" && b?.via !== "miniapp" ? { appv: ua.ver, ...(ua.android ? { andv: ua.android } : {}) } : {}), ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) }, posterWant))) {
+  if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? miniPlat : ua ? appPlatform(ua) : pwaReq(req) ? pwaPlatform(pwaReq(req)!) : "web", ...(ua && b?.via !== "eitaa" && b?.via !== "miniapp" ? { appv: ua.ver, ...(ua.osv ? { andv: ua.osv } : {}) } : {}), ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) }, posterWant))) {
     return err("شروع ساخت ارائه ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن.", 503);
   }
   return json({ jobId });

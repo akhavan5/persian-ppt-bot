@@ -818,8 +818,17 @@ const refStore = {
 
 let cfg = null, me = null, tracking = 0, mode = "login", continueGen = false;
 
+// وب‌اپ نصب‌شده (PWA، Add to Home Screen)؟ برای آمار پنل مدیر: iPhone/iPad (navigator.standalone) = "ios"، بقیه = "other"؛ در مرورگر عادی هدر فرستاده نمی‌شود
+const PWA_MODE = (() => {
+  try {
+    if (!(matchMedia("(display-mode: standalone)").matches || navigator.standalone === true)) return "";
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    return ios ? "ios" : "other";
+  } catch { return ""; }
+})();
 async function api(path, { method = "GET", body } = {}) {
-  const r = await fetch(path, { method, credentials: "same-origin", headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+  const headers = {}; if (body) headers["content-type"] = "application/json"; if (PWA_MODE) headers["x-pwa"] = PWA_MODE;
+  const r = await fetch(path, { method, credentials: "same-origin", headers, body: body ? JSON.stringify(body) : undefined });
   let data = null; try { data = await r.json(); } catch {}
   if (!r.ok) { const e = new Error((data && data.error) || "خطایی رخ داد؛ دوباره امتحان کن."); e.status = r.status; e.data = data; throw e; }
   return data;
