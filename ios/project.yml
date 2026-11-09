@@ -1,0 +1,63 @@
+name: PptSaz
+options:
+  bundleIdPrefix: ir.pptsaz
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: fa
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  PptSaz:
+    type: application
+    platform: iOS
+    sources:
+      - PptSaz
+    info:
+      path: PptSaz/Info.plist
+      properties:
+        CFBundleDisplayName: پاورپوینت‌ساز
+        CFBundleName: PptSaz
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleLocalizations: [fa]
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiredDeviceCapabilities: [arm64]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ir.pptsaz.app
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: PptSaz/Info.plist
+  PptSazTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - PptSazTests
+    dependencies:
+      - target: PptSaz
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ir.pptsaz.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  PptSaz:
+    build:
+      targets:
+        PptSaz: all
+    test:
+      targets:
+        - PptSazTests
