@@ -1,0 +1,119 @@
+name: Build iOS app (native)
+
+# خروجی: artifact با نام pptsaz-ios شامل pptsaz-unsigned.ipa (بدون امضا؛ برای نصب با AltStore / Sideloadly / TrollStore)
+# اگر secrets امضا (پایین) تنظیم شده باشند، pptsaz-signed.ipa هم ساخته می‌شود.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/build-ios-app.yml"
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Unit tests (simulator)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)['devices']
+          for rt in sorted(d.keys(), reverse=True):
+              for dev in d[rt]:
+                  if dev.get('isAvailable') and dev['name'].startswith('iPhone'):
+                      print(dev['udid']); sys.exit(0)
+          sys.exit(1)
+          ")
+          echo "Simulator: $UDID"
+          xcodebuild test \
+            -project PptSaz.xcodeproj -scheme PptSaz \
+            -destination "id=$UDID" \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -n 60
+
+      - name: Build unsigned IPA
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project PptSaz.xcodeproj -scheme PptSaz \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tail -n 40
+          APP=build/Build/Products/Release-iphoneos/PptSaz.app
+          test -d "$APP" || { echo "::error::PptSaz.app not found"; exit 1; }
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          mkdir -p ../dist
+          zip -qry ../dist/pptsaz-unsigned.ipa Payload
+          ls -la ../dist
+
+      - name: Build signed IPA (if signing secrets exist)
+        env:
+          CERT_B64: ${{ secrets.IOS_CERT_P12_B64 }}
+          CERT_PASS: ${{ secrets.IOS_CERT_PASSWORD }}
+          PROFILE_B64: ${{ secrets.IOS_PROVISION_B64 }}
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        working-directory: ios
+        run: |
+          if [ -z "$CERT_B64" ] || [ -z "$PROFILE_B64" ] || [ -z "$TEAM_ID" ]; then
+            echo "Signing secrets not set; skipping signed IPA."
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p tmp "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p tmp "$KC"
+          echo "$CERT_B64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$CERT_PASS" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k tmp "$KC"
+          security list-keychains -d user -s "$KC" login.keychain-db
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$PROFILE_B64" | base64 -d > "$RUNNER_TEMP/p.mobileprovision"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i "$RUNNER_TEMP/p.mobileprovision")")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" /dev/stdin <<< "$(security cms -D -i "$RUNNER_TEMP/p.mobileprovision")")
+          cp "$RUNNER_TEMP/p.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          xcodebuild archive \
+            -project PptSaz.xcodeproj -scheme PptSaz \
+            -configuration Release -destination "generic/platform=iOS" \
+            -archivePath build/PptSaz.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" CODE_SIGN_IDENTITY="Apple Distribution"
+          cat > build/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>ad-hoc</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key><dict><key>ir.pptsaz.app</key><string>$PROFILE_NAME</string></dict>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath build/PptSaz.xcarchive -exportPath build/export -exportOptionsPlist build/ExportOptions.plist
+          cp build/export/*.ipa ../dist/pptsaz-signed.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pptsaz-ios
+          path: dist/*
