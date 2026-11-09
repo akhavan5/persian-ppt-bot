@@ -33,15 +33,7 @@ jobs:
         working-directory: ios
         run: |
           set -o pipefail
-          UDID=$(xcrun simctl list devices available -j | python3 -c "
-          import json, sys
-          d = json.load(sys.stdin)['devices']
-          for rt in sorted(d.keys(), reverse=True):
-              for dev in d[rt]:
-                  if dev.get('isAvailable') and dev['name'].startswith('iPhone'):
-                      print(dev['udid']); sys.exit(0)
-          sys.exit(1)
-          ")
+          UDID=$(python3 scripts/pick_sim.py)
           echo "Simulator: $UDID"
           xcodebuild test \
             -project PptSaz.xcodeproj -scheme PptSaz \
@@ -49,25 +41,62 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | tail -n 60
 
-      - name: Build unsigned IPA
+      - name: Archive + unsigned IPA
         working-directory: ios
         run: |
           set -o pipefail
-          xcodebuild build \
+          xcodebuild archive \
             -project PptSaz.xcodeproj -scheme PptSaz \
             -configuration Release \
-            -sdk iphoneos \
             -destination "generic/platform=iOS" \
-            -derivedDataPath build \
+            -archivePath build/PptSaz.xcarchive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             | tail -n 40
-          APP=build/Build/Products/Release-iphoneos/PptSaz.app
-          test -d "$APP" || { echo "::error::PptSaz.app not found"; exit 1; }
+          APP=build/PptSaz.xcarchive/Products/Applications/PptSaz.app
+          test -d "$APP" || { echo "::error::PptSaz.app not found in archive"; exit 1; }
+          mkdir -p ../dist
           rm -rf Payload && mkdir Payload
           cp -R "$APP" Payload/
-          mkdir -p ../dist
           zip -qry ../dist/pptsaz-unsigned.ipa Payload
+          # آرشیو Xcode برای وقتی که روی یک مک بخواهید با SibApp Export خروجی بگیرید
+          (cd build && zip -qry ../../dist/PptSaz.xcarchive.zip PptSaz.xcarchive)
           ls -la ../dist
+
+      - name: Store screenshots (simulator, demo mode)
+        working-directory: ios
+        run: |
+          set -eo pipefail
+          UDID=$(python3 scripts/pick_sim.py --large)
+          echo "Simulator: $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularMode active --cellularBars 4 --wifiBars 3 || true
+          xcrun simctl ui "$UDID" appearance light || true
+          xcodebuild build \
+            -project PptSaz.xcodeproj -scheme PptSaz \
+            -configuration Debug -sdk iphonesimulator \
+            -destination "id=$UDID" -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -n 5
+          SIMAPP=build-sim/Build/Products/Debug-iphonesimulator/PptSaz.app
+          test -d "$SIMAPP"
+          xcrun simctl install "$UDID" "$SIMAPP"
+          mkdir -p ../dist/screenshots
+          shot() {
+            local name="$1"; shift
+            xcrun simctl terminate "$UDID" ir.pptsaz.app >/dev/null 2>&1 || true
+            xcrun simctl launch "$UDID" ir.pptsaz.app -demo YES "$@"
+            sleep 6
+            xcrun simctl io "$UDID" screenshot "../dist/screenshots/$name.png"
+          }
+          shot 01-login -demoLogin YES
+          shot 02-create -demoTab 0
+          shot 03-progress -demoTab 0 -demoJob YES
+          shot 04-files -demoTab 1
+          shot 05-file-detail -demoTab 1 -demoFile YES
+          shot 06-settings -demoTab 2
+          shot 07-plans -demoTab 3 -demoScroll YES
+          ls -la ../dist/screenshots
 
       - name: Build signed IPA (if signing secrets exist)
         env:
