@@ -418,8 +418,8 @@ struct SourceSheet: View {
         error = nil
     }
 
-    private func handleFile(_ result: Result<[URL], Error>) async {
-        guard case .success(let urls) = result, let url = urls.first else { return }
+    private func handleFile(_ result: Result<URL, Error>) async {
+        guard case .success(let url) = result else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url) else {
