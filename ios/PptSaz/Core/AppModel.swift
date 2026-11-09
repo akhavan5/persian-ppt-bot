@@ -35,6 +35,9 @@ final class AppModel: ObservableObject {
     @Published var payURL: IdentURL?
     @Published var needMobile = false
 
+    /// فقط برای اسکرین‌شات‌های معرفی (آرگومان اجرای -demo YES)
+    var isDemo = false
+
     private var jobTask: Task<Void, Never>?
     private var lastResume = Date.distantPast
     private let api = Api.shared
@@ -42,6 +45,7 @@ final class AppModel: ObservableObject {
     // MARK: راه‌اندازی
 
     func bootstrap() async {
+        if UserDefaults.standard.bool(forKey: "demo") { loadDemo(); return }
         phase = .loading
         do {
             cfg = try await api.config()
@@ -76,7 +80,7 @@ final class AppModel: ObservableObject {
     }
 
     func onResume() async {
-        guard phase == .ready, Date().timeIntervalSince(lastResume) > 5 else { return }
+        guard !isDemo, phase == .ready, Date().timeIntervalSince(lastResume) > 5 else { return }
         lastResume = Date()
         await refreshMe()
         await loadFiles()
@@ -84,6 +88,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshMe() async {
+        if isDemo { return }
         do {
             let m = try await api.me()
             if let m = m { me = m } else if phase == .ready { sessionExpired() }
@@ -139,6 +144,7 @@ final class AppModel: ObservableObject {
         guard var s = me?.settings else { return }
         for (k, v) in pairs { s.apply(k, v) }
         me?.settings = s
+        if isDemo { return }
         Task {
             do { try await api.putSettings(pairs) }
             catch {
@@ -164,6 +170,7 @@ final class AppModel: ObservableObject {
     // MARK: فایل‌ها
 
     func loadFiles() async {
+        if isDemo { return }
         do {
             files = try await api.files()
             filesLoaded = true
@@ -248,6 +255,7 @@ final class AppModel: ObservableObject {
     }
 
     func watch(_ id: String) {
+        if isDemo { return }
         jobTask?.cancel()
         if job?.id != id { job = JobState(id: id, message: "در حال ساخت…") }
         jobTask = Task { [weak self] in

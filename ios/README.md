@@ -19,8 +19,13 @@ Actions ← «Build iOS app (native)» ← Run workflow (با تغییر پوش�
 مراحل: ساخت پروژه با XcodeGen ← تست واحد روی شبیه‌ساز ← ساخت Release ← بسته‌بندی IPA.
 خروجی: artifact با نام `pptsaz-ios` شامل:
 - `pptsaz-unsigned.ipa`: **بدون امضا**؛ برای نصب باید با AltStore، Sideloadly یا TrollStore امضا/نصب شود (به حساب توسعه‌دهنده نیاز ندارد؛ Apple ID رایگان کافی است ولی هر ۷ روز باید تمدید شود).
+- `PptSaz.xcarchive.zip`: آرشیو Xcode؛ اگر استور خروجی IPA خودتان را نپذیرفت، روی یک مک با SibApp Export از همین آرشیو خروجی بگیرید.
+- `screenshots/`: ۷ اسکرین‌شات برای صفحه‌ی معرفی اپ (ورود، ساخت، پیشرفت ساخت، فایل‌ها، جزئیات فایل، تنظیمات، پلن‌ها) از شبیه‌ساز iPhone Pro Max.
 - `pptsaz-signed.ipa`: فقط اگر Secrets زیر تنظیم باشد (Ad Hoc، با حساب Apple Developer پولی):
   `IOS_CERT_P12_B64`، `IOS_CERT_PASSWORD`، `IOS_PROVISION_B64`، `IOS_TEAM_ID`
+
+## اسکرین‌شات‌ها و حالت دمو
+اسکرین‌شات‌ها با «حالت دمو» ساخته می‌شوند: اپ با آرگومان اجرای `-demo YES` به‌جای شبکه از داده‌ی نمونه‌ی `DemoData.swift` استفاده می‌کند (آرگومان‌های `-demoTab 0..3`، `-demoJob YES`، `-demoFile YES`، `-demoScroll YES`، `-demoLogin YES`). این حالت فقط با آرگومان اجرا روشن می‌شود و کاربر عادی هرگز آن را نمی‌بیند. برای عوض کردن متن یا قیمت نمونه، `DemoData.swift` را ویرایش کنید.
 
 ## ساخت محلی (روی مک)
 ```

@@ -39,6 +39,11 @@ struct FilesView: View {
             .listStyle(.insetGrouped)
             .refreshable { await m.loadFiles() }
             .navigationTitle("فایل‌ها")
+            .onAppear {
+                if m.isDemo && UserDefaults.standard.bool(forKey: "demoFile") && selected == nil {
+                    selected = m.files.first
+                }
+            }
             .sheet(item: $selected) { f in
                 FileDetailSheet(item: f).environmentObject(m)
             }
@@ -129,7 +134,7 @@ struct FileDetailSheet: View {
                 Text("ساخت پوستر ۱ اعتبار دارد.")
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents(m.isDemo ? [.large] : [.medium, .large])
     }
 
     private var header: some View {

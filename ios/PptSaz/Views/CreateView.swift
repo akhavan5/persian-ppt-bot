@@ -242,6 +242,7 @@ struct CreateView: View {
         slides = m.cfg.slideChoices.contains(me.settings.slides) && me.settings.slides <= me.maxSlides ? me.settings.slides : (m.cfg.slideChoices.filter { $0 <= me.maxSlides }.last ?? 8)
         images = me.settings.images
         imagesMany = me.settings.imagesMany
+        if m.isDemo && m.job == nil { topic = "اصول مدیریت زمان برای دانشجویان" }
     }
 
     private func start() async {

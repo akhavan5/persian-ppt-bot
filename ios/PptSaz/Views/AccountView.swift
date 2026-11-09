@@ -11,13 +11,14 @@ struct AccountView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 if let me = m.me {
                     VStack(spacing: 16) {
                         profileCard(me)
                         creditCard(me)
                         if me.giftAvailable && me.giftCredits > 0 { giftCard(me) }
-                        plansSection(me)
+                        plansSection(me).id("plans")
                         linksSection
                         Button(role: .destructive) { confirmLogout = true } label: {
                             Label("خروج از حساب", systemImage: "rectangle.portrait.and.arrow.right")
@@ -34,6 +35,14 @@ struct AccountView: View {
                 } else {
                     ProgressView().padding(40)
                 }
+            }
+            .onAppear {
+                if m.isDemo && UserDefaults.standard.bool(forKey: "demoScroll") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        withAnimation { proxy.scrollTo("plans", anchor: .top) }
+                    }
+                }
+            }
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("حساب")
