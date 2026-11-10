@@ -33,6 +33,7 @@ struct Config {
     var fonts: [String] = []
     var slideChoices: [Int] = [5, 8, 10]
     var payEnabled = false
+    var sibapp = false
     var otp = true
     var emailOtp = false
     var link = false
@@ -240,6 +241,7 @@ func parseConfig(_ j: J) -> Config {
     let sc = j["slideChoices"].arr.map { $0.int }.filter { $0 > 0 }
     if !sc.isEmpty { c.slideChoices = sc }
     c.payEnabled = j["payEnabled"].bool
+    c.sibapp = j["sibapp"].bool
     c.otp = j["otp"].bool
     c.emailOtp = j["emailOtp"].bool
     c.link = j["link"].bool

@@ -398,7 +398,7 @@ async function storeClaim(
   console.log(`${tag} payment ok`, user.id, plan.id);
   await noteSale(env, { uid: user.id, plan: plan.id, count: plan.credits, amount: plan.price * 10_000, order: key, state: "paid", t: Date.now() }, plan);
   // رسید خرید به ایمیل حساب و ربات تلگرام (هرکدام که موجود باشد)
-  await sendReceipt(env, { uid: user.id, planName: plan.name, credits: plan.credits, days: plan.days, toman: plan.price * 1000, order: orderId, idem: key, method: tag === "myket" ? "مایکت" : "کافه‌بازار", paidAt: Date.now(), expAt: sub.exp });
+  await sendReceipt(env, { uid: user.id, planName: plan.name, credits: plan.credits, days: plan.days, toman: plan.price * 1000, order: orderId, idem: key, method: tag === "myket" ? "مایکت" : tag === "sibapp" ? "سیب‌اپ" : "کافه‌بازار", paidAt: Date.now(), expAt: sub.exp });
   return json({ ok: true, plan: plan.id });
 }
 
@@ -484,8 +484,8 @@ async function myketVerifyRaw(env: Env, user: WebUser, b: Record<string, unknown
 
 
 // ---------- ثبت و ردیابی همه‌ی تلاش‌های خرید فروشگاه‌ها (برای پنل مدیر و لاگ) ----------
-type StoreTag = "bz" | "mk";
-const STORE_NAME: Record<StoreTag, string> = { bz: "کافه‌بازار", mk: "مایکت" };
+type StoreTag = "bz" | "mk" | "sb";
+const STORE_NAME: Record<StoreTag, string> = { bz: "کافه‌بازار", mk: "مایکت", sb: "سیب‌اپ" };
 
 /**
  * رکورد pay:<سفارش> برای خرید فروشگاه‌ها تا در «💰 پرداخت‌ها» و «⚠️ مشکل‌دار» پنل مدیر دیده شود (قبلاً فقط درگاه دیجی‌پی رکورد داشت).
@@ -611,3 +611,96 @@ export async function payReport(env: Env, user: WebUser | null, req: Request, ip
   } catch (e) { console.error("payReport", e); }
   return json({ ok: true });
 }
+
+
+// ---------- سیب‌اپ (اپ iOS، نسخه‌ی سیب‌اپ) ----------
+/**
+ * خرید درون‌برنامه‌ای سیب‌اپ (api.sibapp.net، هدر Secret-Key = توکن پنل توسعه‌دهندگان). هر پلن یک بسته‌ی «خریدنی» در پنل سیب‌اپ است.
+ * جریان: اپ POST /api/pay/sibapp/start {plan} ← { url: "sibapp://package_purchase?package=<id>&developer_payload=<nonce>" } را باز می‌کند؛
+ * سیب‌اپ بعد از خرید اسکیم اپ (pptsaz://?purchase_id=…) را باز می‌کند؛ اپ purchase_id را به POST /api/pay/sibapp می‌فرستد؛
+ * سرور با GET /purchase/<id>/validate تایید می‌کند، پلن را فقط یک بار فعال می‌کند (کلید sbp:<sha256 شناسه>) و خرید را Consume می‌کند.
+ * پاسخ Validate شناسه‌ی بسته ندارد؛ پلن از قیمت بسته (و nonce شروع خرید در developer_payload) مشخص می‌شود، نه از ادعای کلاینت.
+ * متغیرها: SIBAPP_TOKEN (secret)، SIBAPP_PACKAGES مثل «plus:123,pro:456» (شناسه‌ی بسته‌ی هر پلن)، SIBAPP_APP_ID (اختیاری؛ اگر باشد با target.application.id مقایسه می‌شود).
+ */
+const SB_API = "https://api.sibapp.net/api/v1";
+const sbToken = (env: Env) => (env.SIBAPP_TOKEN ?? "").trim();
+export const sibappEnabled = (env: Env) => Boolean(sbToken(env)) && sbPackages(env).size > 0;
+function sbPackages(env: Env): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const part of (env.SIBAPP_PACKAGES ?? "").split(",")) {
+    const [k, v] = part.split(":").map((x) => x.trim());
+    if (k && v && PLANS.some((p) => p.id === k) && /^[\w-]{1,64}$/.test(v)) m.set(k, v);
+  }
+  return m;
+}
+
+/** POST /api/pay/sibapp/start { plan } → { ok, url } */
+export async function sibappStart(env: Env, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
+  if (!sibappEnabled(env)) return json({ error: "پرداخت از طریق سیب‌اپ هنوز فعال نشده است." }, 503);
+  const plan = PLANS.find((p) => p.id === b?.plan);
+  const pkg = plan ? sbPackages(env).get(plan.id) : undefined;
+  if (!plan || !pkg) return json({ error: "پلن نامعتبر است." }, 400);
+  if (await hitLimit(env, `sbrl:${user.id}`, 30, 3600)) return json({ error: "درخواست‌های زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  await env.KV.put(`sbn:${nonce}`, JSON.stringify({ uid: user.id, plan: plan.id }), { expirationTtl: 86_400 });
+  return json({ ok: true, url: `sibapp://package_purchase?package=${encodeURIComponent(pkg)}&developer_payload=${nonce}` });
+}
+
+async function sbCall(env: Env, method: "GET" | "POST", path: string): Promise<{ status: number; data: any } | null> {
+  const r = await fetch(`${SB_API}${path}`, { method, headers: { "content-type": "application/json", "secret-key": sbToken(env) }, signal: AbortSignal.timeout(20_000) })
+    .catch((e) => { console.error("sibapp api", path.replace(/\/purchase\/[^/]+/, "/purchase/…"), e); return null; });
+  if (!r) return null;
+  return { status: r.status, data: await r.json().catch(() => null) };
+}
+
+async function sibappVerifyRaw(env: Env, user: WebUser, b: Record<string, unknown> | null): Promise<Response> {
+  if (!sibappEnabled(env)) return json({ error: "پرداخت از طریق سیب‌اپ هنوز فعال نشده است." }, 503);
+  const purchaseId = String(b?.purchaseToken ?? "").trim();
+  if (!/^[\w-]{4,100}$/.test(purchaseId)) return json({ error: "اطلاعات خرید نامعتبر است." }, 400);
+  if (await hitLimit(env, `sbrl:${user.id}`, 30, 3600)) return json({ error: "درخواست‌های زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
+
+  const key = `sbp:${await sha256hex(purchaseId)}`;
+  let planOf: Plan | undefined;
+  const seen = async (): Promise<Response | null> => {
+    const r = (await env.KV.get(key, "json")) as { uid?: string; plan?: string } | null;
+    if (!r) return null;
+    return r.uid === user.id ? json({ ok: true, plan: r.plan ?? planOf?.id, already: true }) : json({ error: "این خرید قبلاً برای حساب دیگری ثبت شده است." }, 409);
+  };
+  const dup = await seen();
+  if (dup) return dup;
+
+  const v = await sbCall(env, "GET", `/purchase/${encodeURIComponent(purchaseId)}/validate`);
+  if (!v) return json({ error: "تایید خرید با سیب‌اپ ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن (اپ را باز کنید؛ خرید شما از بین نمی‌رود)." }, 502);
+  if (v.status === 404 || v.status === 400 || v.status === 403) { console.error("sibapp validate invalid", v.status, JSON.stringify(v.data).slice(0, 200)); return json({ error: "خرید در سیب‌اپ پیدا نشد." }, 400); }
+  if (v.status < 200 || v.status >= 300) { console.error("sibapp validate failed", v.status, JSON.stringify(v.data).slice(0, 300)); return json({ error: "تایید خرید با سیب‌اپ ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن (خرید شما از بین نمی‌رود)." }, 502); }
+  const d = v.data as { id?: unknown; developer_payload?: unknown; target?: { price?: unknown; application?: { id?: unknown }; package?: { id?: unknown } } } | null;
+  if (!d || String(d.id ?? "") !== purchaseId) { console.error("sibapp validate mismatch", JSON.stringify(d).slice(0, 200)); return json({ error: "خرید نامعتبر است." }, 400); }
+  const appId = (env.SIBAPP_APP_ID ?? "").trim();
+  if (appId && String(d.target?.application?.id ?? "") !== appId) return json({ error: "این خرید برای این برنامه نیست." }, 400);
+
+  // پلن: از قیمت بسته (تومان یا ریال) و شناسه‌ی بسته اگر پاسخ داشت؛ nonce شروع خرید (اگر بود) باید برای همین کاربر و همین پلن باشد
+  const price = Number(d.target?.price);
+  const byPrice = PLANS.filter((p) => price === p.price * 1000 || price === p.price * 10_000);
+  const pkgId = d.target?.package?.id != null ? String(d.target.package.id) : "";
+  const byPkg = pkgId ? PLANS.filter((p) => sbPackages(env).get(p.id) === pkgId) : byPrice;
+  const plan = byPrice.find((p) => byPkg.includes(p));
+  if (!plan) { console.error("sibapp unknown package", price, pkgId); return json({ error: "این بسته مربوط به هیچ پلنی نیست." }, 400); }
+  planOf = plan;
+  const nonce = String(d.developer_payload ?? "");
+  if (/^[0-9a-f]{32}$/.test(nonce)) {
+    const n = (await env.KV.get(`sbn:${nonce}`, "json")) as { uid?: string; plan?: string } | null;
+    if (n && (n.uid !== user.id || n.plan !== plan.id)) return json({ error: "این خرید برای حساب دیگری شروع شده است." }, 409);
+  }
+
+  return storeClaim(env, user, plan, `plan_${plan.id}`, key, purchaseId, "sibapp", seen);
+}
+
+export const sibappVerify = async (env: Env, user: WebUser, b: Record<string, unknown> | null) => {
+  const b2 = { productId: "sibapp", purchaseToken: String(b?.purchaseId ?? b?.purchaseToken ?? "") };
+  const res = await trackStore(env, user, "sb", b2, () => sibappVerifyRaw(env, user, b2));
+  if (res.ok && b2.purchaseToken) {
+    const c = await sbCall(env, "POST", `/purchase/${encodeURIComponent(b2.purchaseToken.trim())}/consume`);
+    if (!c || c.status < 200 || c.status >= 300) console.error("sibapp consume failed", c?.status, JSON.stringify(c?.data).slice(0, 200)); // اپ/سرور بعداً هم می‌تواند دوباره تلاش کند؛ پلن فعال شده است
+  }
+  return res;
+};

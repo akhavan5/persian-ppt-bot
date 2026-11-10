@@ -246,6 +246,18 @@ final class Api {
         return u
     }
 
+    /// سیب‌اپ: نشانی sibapp://package_purchase… برای خرید پلن
+    func sibappStart(plan: String) async throws -> URL {
+        let r = try await call("POST", "/api/pay/sibapp/start", ["plan": plan])["url"].str
+        guard let u = URL(string: r), u.scheme == "sibapp" else { throw ApiError(message: "اتصال به سیب‌اپ ممکن نشد.") }
+        return u
+    }
+
+    /// سیب‌اپ: تایید خرید با شناسه‌ی خرید و فعال‌سازی پلن
+    func sibappVerify(purchaseId: String) async throws {
+        _ = try await call("POST", "/api/pay/sibapp", ["purchaseId": purchaseId])
+    }
+
     // MARK: فایل‌ها
 
     func files() async throws -> [FileItem] { parseFiles(try await call("GET", "/api/files")) }

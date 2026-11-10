@@ -34,9 +34,17 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UIRequiredDeviceCapabilities: [arm64]
         ITSAppUsesNonExemptEncryption: false
+        # نسخه‌ی فروشگاه: direct (پیش‌فرض، درگاه Safari) یا sibapp (خرید درون‌برنامه‌ای سیب‌اپ)؛ در ساخت با PPTSAZ_STORE=sibapp عوض می‌شود
+        PptSazStore: $(PPTSAZ_STORE)
+        # اسکیم برگشت از سیب‌اپ: pptsaz://?purchase_id=…  (همین «pptsaz» را در پنل سیب‌اپ بخش خرید ← تنظیمات بسته‌ها بگذارید)
+        CFBundleURLTypes:
+          - CFBundleURLName: ir.pptsaz.app
+            CFBundleURLSchemes: [pptsaz]
+        LSApplicationQueriesSchemes: [sibapp]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ir.pptsaz.app
+        PPTSAZ_STORE: direct
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

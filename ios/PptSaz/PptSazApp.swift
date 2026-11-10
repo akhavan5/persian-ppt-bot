@@ -12,9 +12,10 @@ struct PptSazApp: App {
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, Locale(identifier: "fa_IR"))
                 .tint(Theme.brand)
-                .task { await model.bootstrap() }
+                .task { await model.bootstrap(); await model.claimSibappPending() }
+                .onOpenURL { model.handleURL($0) }
                 .onChange(of: scenePhase) { phase in
-                    if phase == .active { Task { await model.onResume() } }
+                    if phase == .active { Task { await model.onResume(); await model.claimSibappPending() } }
                 }
         }
     }

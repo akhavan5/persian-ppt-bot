@@ -141,6 +141,10 @@ export interface Env {
   MYKET_PAY?: string;
   /** توکن صحت‌سنجی مایکت (پنل توسعه‌دهندگان؛ اختیاری و محرمانه): اگر گذاشته شود، سرور وضعیت خرید را از API مایکت هم می‌پرسد تا خرید برگشت‌خورده فعال نشود. */
   MYKET_ACCESS_TOKEN?: string;
+  /** پرداخت درون‌برنامه‌ای سیب‌اپ (اپ iOS): SIBAPP_TOKEN = توکن پنل توسعه‌دهندگان (secret)؛ SIBAPP_PACKAGES = «plus:<شناسه‌ی بسته>,pro:<شناسه‌ی بسته>»؛ SIBAPP_APP_ID اختیاری */
+  SIBAPP_TOKEN?: string;
+  SIBAPP_PACKAGES?: string;
+  SIBAPP_APP_ID?: string;
   /** ایمیل با Resend (اختیاری): بدون RESEND_API_KEY هیچ ایمیلی فرستاده نمی‌شود (نه خوش‌آمد، نه رسید خرید، نه کد ورود با ایمیل). کلید را به‌صورت secret بگذارید.
    *  EMAIL_FROM: فرستنده روی دامنه‌ی تاییدشده در Resend، مثل «پاورپوینت‌ساز فارسی <info@pptsaz.ir>» (پیش‌فرض: info@ دامنه‌ی SITE_URL)
    *  EMAIL_REPLY_TO: نشانی دریافت پاسخ کاربران (اختیاری) */

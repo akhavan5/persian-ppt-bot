@@ -12,7 +12,7 @@ import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
 import { appCrash } from "./app-crash";
 import { feedbackInfo, submitFeedback } from "./feedback";
-import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
+import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, sibappEnabled, sibappStart, sibappVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { listSamples, sampleLabel } from "./samples";
 import { renderPreview } from "./preview";
@@ -102,6 +102,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       bazaar: bazaarEnabled(env),
       // خرید درون‌برنامه‌ای مایکت (فقط نسخه‌ی مایکت اپ اندروید)
       myket: myketEnabled(env),
+      // خرید درون‌برنامه‌ای سیب‌اپ (فقط نسخه‌ی سیب‌اپ اپ iOS)
+      sibapp: sibappEnabled(env),
       // نسخه‌ی اپ اندروید برای هر فروشگاه جدا: app.stores.<bazaar|myket> = { latest: آخرین نسخه‌ی منتشرشده، min: کمترین نسخه‌ی مجاز (۰ = بدون بررسی) }
       // مقدار را مدیر از پنل ربات (یا /appver) می‌گذارد (بدون دیپلوی)؛ اگر نگذاشته باشد از متغیرهای ANDROID_* خوانده می‌شود.
       // app.latest/min (کمترین مقدار بین فروشگاه‌ها) و app.url فقط برای نسخه‌های قدیمی اپ‌اند؛ urls لینک مستقیم صفحه‌ی اپ در هر فروشگاه (اپ کلید همان فروشگاه خودش را برمی‌دارد)
@@ -217,6 +219,8 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/pay/start" && method === "POST") return startPayment(env, url, user, await readBody(req));
   if (path === "/api/pay/bazaar" && method === "POST") return bazaarVerify(env, user, await readBody(req));
   if (path === "/api/pay/myket" && method === "POST") return myketVerify(env, user, await readBody(req));
+  if (path === "/api/pay/sibapp/start" && method === "POST") return sibappStart(env, user, await readBody(req));
+  if (path === "/api/pay/sibapp" && method === "POST") return sibappVerify(env, user, await readBody(req));
 
   if (path.startsWith("/api/jobs/") && method === "GET") return jobStatus(env, user, path.slice("/api/jobs/".length));
 

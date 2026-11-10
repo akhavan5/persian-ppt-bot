@@ -358,7 +358,45 @@ final class AppModel: ObservableObject {
 
     // MARK: پرداخت
 
+    /// نسخه‌ی سیب‌اپ اپ؟ (کلید PptSazStore در Info.plist؛ در ساخت با PPTSAZ_STORE=sibapp)
+    static let isSibappBuild = (Bundle.main.object(forInfoDictionaryKey: "PptSazStore") as? String) == "sibapp"
+    private static let pendingKey = "sibappPending"
+
+    /// pptsaz://?purchase_id=… (برگشت از سیب‌اپ). شناسه تا تایید سرور ذخیره می‌ماند تا اگر شبکه قطع بود دوباره تلاش شود.
+    func handleURL(_ url: URL) {
+        guard url.scheme == "pptsaz",
+              let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "purchase_id" })?.value,
+              id.range(of: "^[A-Za-z0-9_-]{4,100}$", options: .regularExpression) != nil else { return }
+        UserDefaults.standard.set(id, forKey: Self.pendingKey)
+        Task { await claimSibappPending() }
+    }
+
+    func claimSibappPending() async {
+        guard me != nil, let id = UserDefaults.standard.string(forKey: Self.pendingKey) else { return }
+        do {
+            try await api.sibappVerify(purchaseId: id)
+            UserDefaults.standard.removeObject(forKey: Self.pendingKey)
+            Haptic.success()
+            toast("پرداخت انجام شد و پلن فعال شد.")
+            await refreshMe()
+        } catch {
+            if let e = error as? ApiError, e.status >= 400 && e.status < 500 && e.status != 429 {
+                UserDefaults.standard.removeObject(forKey: Self.pendingKey) // رد قطعی؛ دیگر تلاش نمی‌کنیم
+            }
+            report(error)
+        }
+    }
+
     func startPay(_ plan: PlanInfo) async {
+        if Self.isSibappBuild && cfg.sibapp {
+            do {
+                let u = try await api.sibappStart(plan: plan.id)
+                _ = await UIApplication.shared.open(u)
+            } catch {
+                if let e = error as? ApiError, e.needMobile { needMobile = true; toast(e.message) } else { report(error) }
+            }
+            return
+        }
         if !cfg.payEnabled {
             if let u = URL(string: plan.url), !plan.url.isEmpty { payURL = IdentURL(url: u) }
             else { toast("پرداخت آنلاین هنوز فعال نشده است.") }
