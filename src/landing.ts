@@ -171,7 +171,7 @@ export function renderFooter(): string {
       <div class="all"><h4>راهنماها</h4><ul class="cols">${guides}</ul></div>
       <div class="all"><h4>از وبلاگ</h4><ul class="cols">${arts}<li><a href="/blog">همه‌ی مقاله‌ها</a></li></ul></div>
     </div>
-    <div class="copy">© ${BRAND} (pptsaz.ir) — همه‌ی حقوق محفوظ است.</div>
+    <div class="copy">© ${BRAND} (pptsaz.ir) — همه‌ی حقوق محفوظ است. · قدرت‌گرفته از <a href="https://1xai.ir" target="_blank" rel="noopener" style="unicode-bidi:isolate">1xAi</a></div>
   </div>
 </footer>`;
 }
