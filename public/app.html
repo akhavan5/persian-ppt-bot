@@ -308,6 +308,10 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
 
 <script>
 "use strict";
+// ابتدای اجرا: به بله اطلاع بده صفحه آماده است (لودر بله گیر نکند) و خطاهای قبل از boot() روی صفحه دیده شوند
+try { window.Bale && window.Bale.WebApp && window.Bale.WebApp.ready(); } catch {}
+addEventListener("error", (e) => { const m = document.querySelector("#bootMsg"); if (m) m.textContent = "خطا: " + e.message; });
+addEventListener("unhandledrejection", (e) => { const m = document.querySelector("#bootMsg"); if (m) m.textContent = "خطا: " + ((e.reason && e.reason.message) || e.reason); });
 const $ = (s) => document.querySelector(s);
 const fa = (n) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -665,16 +669,20 @@ function savedToken() {
 let cfg = null, me = null, token = (savedToken() || {}).t || "", tracking = 0, srcText = "";
 let tab = "make", lastTopic = "", syncT = 0;
 // خطای شبکه (آفلاین، فیلتر، قطعی) از خطای سرور جدا می‌شود: e.net = true
-async function netFetch(url, init) {
-  try { return await fetch(url, init); }
+async function netFetch(url, init = {}) {
+  const { timeout, ...rest } = init; // timeout (میلی‌ثانیه) اختیاری است؛ فقط برای درخواست‌های ورود استفاده می‌شود
+  const ac = new AbortController();
+  const t = timeout ? setTimeout(() => ac.abort(), timeout) : 0;
+  try { return await fetch(url, timeout ? { ...rest, signal: ac.signal } : rest); }
   catch {
     const e = new Error(navigator.onLine === false ? "اینترنت قطع است؛ اتصالت را بررسی کن و دوباره امتحان کن." : "اتصال به سرور برقرار نشد؛ اینترنت (یا فیلترشکن) را بررسی کن.");
     e.net = true; throw e;
-  }
+  } finally { clearTimeout(t); }
 }
 async function raw(path, { method = "GET", body } = {}) {
   const headers = {}; if (body) headers["content-type"] = "application/json"; if (token) headers.authorization = "Bearer " + token;
-  return netFetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const timeout = /^\/api\/(config|me)$/.test(path) ? 15000 : 0;
+  return netFetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, timeout });
 }
 let loginP = null;
 // چند درخواستِ هم‌زمانِ ۴۰۱ فقط یک ورود می‌سازند. سرور اگر توکن فعلی معتبر و مال همین کاربر باشد همان را تمدید می‌کند.
@@ -682,7 +690,7 @@ function login() {
   return loginP || (loginP = (async () => {
     try {
       const headers = { "content-type": "application/json" }; if (token) headers.authorization = "Bearer " + token;
-      const r = await netFetch("/api/auth/miniapp", { method: "POST", headers, body: JSON.stringify({ initData: TG.initData, ...(IS_EITAA ? { platform: "eitaa" } : IS_BALE ? { platform: "bale" } : {}) }) });
+      const r = await netFetch("/api/auth/miniapp", { method: "POST", headers, body: JSON.stringify({ initData: TG.initData, ...(IS_EITAA ? { platform: "eitaa" } : IS_BALE ? { platform: "bale" } : {}) }), timeout: 15000 });
       const d = await r.json().catch(() => null);
       if (!r.ok) { const e = new Error((d && d.error) || "ورود انجام نشد؛ دوباره امتحان کن."); e.status = r.status; throw e; }
       token = d.token; keep.set({ t: token, tg: myTg, at: Date.now() });
@@ -1608,6 +1616,7 @@ $("#supBtn").onclick = () => { if (window.ppSupport) window.ppSupport.open(); el
 // برگشت به برنامه (مثلاً بعد از خرید): اعتبار و پلن تازه شود
 document.addEventListener("visibilitychange", () => { if (!document.hidden && me) refreshMe(); });
 
+setTimeout(() => { if (!$("#boot").hidden) $("#bootMsg").textContent = `در حال ورود… SDK:${!!window.Bale} initData:${!!TG.initData} cfg:${!!cfg}`; }, 8000);
 boot();
 </script>
 <script src="/support.js" defer></script>
