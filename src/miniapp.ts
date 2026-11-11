@@ -53,7 +53,8 @@ export async function verifyInitData(botToken: string, initData: string, now = D
   if (!/^[0-9a-f]{64}$/.test(hash)) return null;
   p.delete("hash");
   const check = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join("\n");
-  // کلید امضا: تلگرام HMAC("WebAppData", توکن) است. مستندات بله شیوه‌ی ساخت کلید را صریح نمی‌نویسد؛ برای بله علاوه بر همان روش، خود توکن هم به‌عنوان کلید امتحان می‌شود
+  // کلید امضا: HMAC("WebAppData", توکن) — هم در تلگرام و هم در مستندات مینی‌اپ بله (secret_key = HMAC_SHA256(<bot_token>, "WebAppData")).
+  // fallback با خود توکن به‌عنوان کلید عمداً نگه داشته شده تا اگر کلاینت واقعی بله فرق داشت ورود نشکند؛ بعد از تست روی دستگاه واقعی بله می‌توان حذفش کرد
   let okSig = safeEqual(hex(await hmac(await hmac(enc.encode("WebAppData"), botToken), check)), hash);
   if (!okSig && bale) okSig = safeEqual(hex(await hmac(enc.encode(botToken), check)), hash);
   if (!okSig) return null;
@@ -90,13 +91,17 @@ export async function miniappLogin(req: Request, env: Env, ip: string): Promise<
     const x = await verifyInitData(env.EITAA_APP_TOKEN, initData);
     return x && validEitaaRawId(x.id) ? { ...x, id: toEitaaId(x.id) } : null;
   };
-  const eitaaFirst = b?.platform === "eitaa";
-  let u: TgUser | null = eitaaFirst ? await asEitaa() : null;
-  if (!u) u = await verifyInitData(env.TELEGRAM_BOT_TOKEN, initData);
-  if (!u && env.BALE_BOT_TOKEN) { // Mini App بله: امضا با توکن ربات بله؛ شناسه‌ی کاربر مثل ربات بله با BALE_ID_BASE جمع می‌شود تا از تلگرام جدا بماند
+  // Mini App بله: امضا با توکن ربات بله؛ شناسه‌ی کاربر مثل ربات بله با BALE_ID_BASE جمع می‌شود تا از تلگرام جدا بماند.
+  // کلاینت بله (صفحه‌ی /bale-app) platform را می‌فرستد تا اول همان امتحان شود؛ تصمیم همیشه با امضاست
+  const asBale = async (): Promise<TgUser | null> => {
+    if (!env.BALE_BOT_TOKEN) return null;
     const bb = await verifyInitData(env.BALE_BOT_TOKEN, initData, Date.now(), true);
-    if (bb) u = { ...bb, id: toBaleId(bb.id) };
-  }
+    return bb ? { ...bb, id: toBaleId(bb.id) } : null;
+  };
+  const eitaaFirst = b?.platform === "eitaa", baleFirst = b?.platform === "bale";
+  let u: TgUser | null = eitaaFirst ? await asEitaa() : baleFirst ? await asBale() : null;
+  if (!u) u = await verifyInitData(env.TELEGRAM_BOT_TOKEN, initData);
+  if (!u) u = await asBale();
   if (!u && !eitaaFirst) u = await asEitaa();
   if (!u || u.is_bot) return err("ورود از تلگرام/بله تایید نشد؛ Mini App را بسته و دوباره از داخل ربات باز کن.", 401);
   if (await hitLimit(env, `mal:t:${u.id}`, TG_LOGIN_MAX, 600)) return err("تعداد ورود زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);

@@ -408,7 +408,103 @@ function makeEitaa(W) {
   };
 }
 
-const TG = IS_EITAA ? makeEitaa(EW) : (() => {
+// ---------- مینی‌اپ بله ----------
+// صفحه‌ی /bale-app همین فایل است با اسکریپت رسمی SDK بله (https://tapi.bale.ai/miniapp.js) به‌عنوان اولین اسکریپت <head> (index.ts).
+// اگر window.Bale.WebApp و initData باشد، به‌جای پل تلگرام از SDK بله استفاده می‌شود. نسخه‌ی SDK بله 1.x است (نه نسخه‌های ۶.x تلگرام)،
+// پس since() اینجا با نسخه‌ی خود بله مقایسه می‌شود. بله MainButton و CloudStorage و رویداد themeChanged ندارد (مستندات مینی‌اپ بله).
+const BLW = window.Bale && window.Bale.WebApp;
+const IS_BALE = !IS_EITAA && !!(BLW && BLW.initData);
+const BALE_ID_BASE = 100000000000000; // باید با bale-format.ts یکی باشد
+const TG_SHARE_TEXT = "ساخت پاورپوینت فارسی با هوش مصنوعی 👇";
+function makeBale(W) {
+  const t = (f) => { try { return f(); } catch { return undefined; } };
+  const since = (v) => {
+    const a = String(W.version || "1.0").split(".").map(Number), b = v.split(".").map(Number);
+    for (let i = 0; i < 2; i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x > y; }
+    return true;
+  };
+  // پارامتر startapp: طبق مستندات در query با نام tgWebAppStartParam و در start_param از initData می‌آید (نه فقط هش)
+  const startParam = new URLSearchParams(location.search).get("tgWebAppStartParam")
+    || new URLSearchParams(location.hash.slice(1)).get("tgWebAppStartParam")
+    || t(() => W.initDataUnsafe.start_param)
+    || t(() => new URLSearchParams(W.initData).get("start_param"))
+    || "";
+  const hs = {};
+  const on = (type, f) => { (hs[type] = hs[type] || []).push(f); t(() => W.onEvent(type, f)); };
+  const LIGHT = { bg_color: "#ffffff", text_color: "#17212b", hint_color: "#6b7a8a", link_color: "#2481cc", button_color: "#2481cc", button_text_color: "#ffffff", secondary_bg_color: "#f1f3f6", section_bg_color: "#ffffff", destructive_text_color: "#d14343" };
+  const DARK = { bg_color: "#18222d", text_color: "#f5f5f5", hint_color: "#8a9aab", link_color: "#6ab3f3", button_color: "#2ea6ff", button_text_color: "#ffffff", secondary_bg_color: "#101921", section_bg_color: "#1f2c39", destructive_text_color: "#ff6b6b" };
+  function applyTheme() {
+    // themeParams خود بله (اگر داد)؛ وگرنه colorScheme (light/dark) کلاینت بله
+    let p = t(() => W.themeParams) || {};
+    if (!p.bg_color) p = W.colorScheme === "dark" ? DARK : W.colorScheme === "light" ? LIGHT : null;
+    if (!p) return;
+    const m = { bg_color: "--bg", text_color: "--fg", hint_color: "--hint", link_color: "--link", button_color: "--btn", button_text_color: "--btn-fg", secondary_bg_color: "--sec", section_bg_color: "--card", destructive_text_color: "--danger" };
+    const r = document.documentElement.style;
+    for (const [k, v] of Object.entries(m)) if (typeof p[k] === "string" && /^#[0-9a-f]{6}$/i.test(p[k])) r.setProperty(v, p[k]);
+    if (p.section_bg_color == null && p.bg_color) r.setProperty("--card", p.bg_color);
+    if (p.bg_color) r.setProperty("--line", "color-mix(in srgb, " + (p.hint_color || "#888") + " 28%, transparent)");
+    document.documentElement.style.colorScheme = W.colorScheme === "dark" ? "dark" : W.colorScheme === "light" ? "light" : "";
+  }
+  function paint() {
+    const sec = getComputedStyle(document.documentElement).getPropertyValue("--sec").trim();
+    if (/^#[0-9a-f]{6}$/i.test(sec) && since("1.1")) t(() => W.setHeaderColor(sec));
+  }
+  // بله رویداد themeChanged ندارد؛ تغییر تم را از تغییر تم سیستم و برگشت به صفحه می‌فهمیم
+  const retheme = () => { applyTheme(); paint(); };
+  t(() => matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme));
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) retheme(); });
+  applyTheme();
+  t(() => W.ready()); t(() => W.expand());
+  paint();
+
+  const main = { ok: false, onPress: null, set() {} }; // MainButton در بله نیست؛ دکمه‌ی داخل صفحه استفاده می‌شود
+
+  let backKey = null;
+  const back = { onPress: null, set(v) { if (backKey === !!v) return; backKey = !!v; t(() => (v ? W.BackButton.show() : W.BackButton.hide())); } };
+  t(() => W.BackButton.onClick(() => { if (back.onPress) back.onPress(); }));
+
+  let closeKey = null;
+  const confirmClose = (v) => { if (closeKey === !!v) return; closeKey = !!v; t(() => (v ? W.enableClosingConfirmation() : W.disableClosingConfirmation())); };
+  const haptic = (kind) => { if (!since("1.5")) return; t(() => {
+    const H = W.HapticFeedback; if (!H) return;
+    if (kind === "select") H.selectionChanged(); else if (kind === "light") H.impactOccurred("light"); else H.notificationOccurred(kind);
+  }); };
+  const cloud = { get: async () => "", set: async () => null }; // CloudStorage در بله نیست؛ پیش‌نویس فقط روی همین دستگاه می‌ماند
+  const download = () => Promise.resolve(null); // SDK بله دانلود فایل ندارد؛ «ارسال به چت» (sendDocument ربات) راه تحویل فایل است
+  const canPaste = since("1.5") || !!(navigator.clipboard && navigator.clipboard.readText);
+  const readClipboard = () => new Promise((res) => {
+    if (since("1.5") && typeof W.readTextFromClipboard === "function") { // با تأیید کاربر؛ callback با متن یا null
+      let done = false; const fin = (v) => { if (!done) { done = true; res(typeof v === "string" ? v : null); } };
+      try { W.readTextFromClipboard(fin); } catch { fin(null); }
+      setTimeout(() => fin(null), 20000);
+    } else (navigator.clipboard && navigator.clipboard.readText ? navigator.clipboard.readText() : Promise.resolve(null)).then(res, () => res(null));
+  });
+  const openLink = (url) => { try { W.openLink(url); } catch { window.open(url, "_blank"); } };
+  // نظرسنجی بله (askReview، نسخه‌ی ۱.۴+): حداکثر ماهی یک بار و فقط برای کاربرانی که چند ارائه ساخته‌اند؛ سرور بله خودش هم محدود می‌کند
+  const askReview = () => {
+    if (!since("1.4") || typeof W.askReview !== "function") return;
+    try {
+      const n = Number(localStorage.getItem("pptsaz.bRevN") || 0) + 1; localStorage.setItem("pptsaz.bRevN", String(n)); // localStorage: store فقط sessionStorage است
+      const last = Number(localStorage.getItem("pptsaz.bRevT") || 0);
+      if (n < 3 || Date.now() - last < 30 * 86400000) return;
+      localStorage.setItem("pptsaz.bRevT", String(Date.now()));
+      W.askReview({ delay_seconds: 8 });
+    } catch {}
+  };
+  return {
+    initData: W.initData, startParam, since, on, main, back, confirmClose, haptic, cloud, download, paint, readClipboard, canPaste,
+    canDownload: false,
+    via: "miniapp", idBase: BALE_ID_BASE,
+    openTg(path) { openLink("https://t.me" + path); },
+    openLink,
+    // اشتراک‌گذاری: پیوند https://ble.ir/share (مستندات «پیوندهای بله»)؛ کاربر گفتگو را انتخاب می‌کند و پیش از ارسال می‌تواند متن را ویرایش کند
+    share(link) { openLink("https://ble.ir/share?" + new URLSearchParams({ url: link, text: TG_SHARE_TEXT }).toString()); },
+    askWrite() {},
+    askReview,
+  };
+}
+
+const TG = IS_EITAA ? makeEitaa(EW) : IS_BALE ? makeBale(BLW) : (() => {
   const hp = new URLSearchParams(location.hash.slice(1));
   const BW = window.Bale && window.Bale.WebApp; // مینی‌اپ بله: همان پروتکل هش (#tgWebAppData=…)؛ اگر شیء Bale.WebApp هم باشد از آن هم استفاده می‌شود
   const initData = hp.get("tgWebAppData") || (BW && BW.initData) || store.get("tgInit") || "";
@@ -416,7 +512,7 @@ const TG = IS_EITAA ? makeEitaa(EW) : (() => {
   let themeRaw = hp.get("tgWebAppThemeParams") || store.get("tgTheme") || "";
   const ver = hp.get("tgWebAppVersion") || store.get("tgVer") || "0";
   if (hp.get("tgWebAppVersion")) store.set("tgVer", ver);
-  const startParam = hp.get("tgWebAppStartParam") || "";
+  const startParam = hp.get("tgWebAppStartParam") || new URLSearchParams(location.search).get("tgWebAppStartParam") || ""; // بله: startapp در query می‌آید
   const platform = hp.get("tgWebAppPlatform") || store.get("tgPlat") || "";
   if (hp.get("tgWebAppPlatform")) store.set("tgPlat", platform);
   const winDesktop = platform === "tdesktop" && /Windows/i.test(navigator.userAgent); // در تلگرام دسکتاپ ویندوز دکمه‌ی اصلی (MainButton) درست کار نمی‌کند؛ فقط دکمه‌ی داخل صفحه
@@ -586,7 +682,7 @@ function login() {
   return loginP || (loginP = (async () => {
     try {
       const headers = { "content-type": "application/json" }; if (token) headers.authorization = "Bearer " + token;
-      const r = await netFetch("/api/auth/miniapp", { method: "POST", headers, body: JSON.stringify({ initData: TG.initData, ...(IS_EITAA ? { platform: "eitaa" } : {}) }) });
+      const r = await netFetch("/api/auth/miniapp", { method: "POST", headers, body: JSON.stringify({ initData: TG.initData, ...(IS_EITAA ? { platform: "eitaa" } : IS_BALE ? { platform: "bale" } : {}) }) });
       const d = await r.json().catch(() => null);
       if (!r.ok) { const e = new Error((d && d.error) || "ورود انجام نشد؛ دوباره امتحان کن."); e.status = r.status; throw e; }
       token = d.token; keep.set({ t: token, tg: myTg, at: Date.now() });
@@ -1082,7 +1178,7 @@ async function fbSubmit() {
   if (!text && !fbRating) { err.textContent = "لطفاً امتیاز بده یا نظرت را بنویس."; show(err, true); return; }
   show(err, false); btn.disabled = true; btn.textContent = "در حال ارسال…";
   try {
-    const r = await api("/api/feedback", { method: "POST", body: { text, rating: fbRating, title: fbTitle, via: IS_EITAA ? "eitaa" : "telegram" } });
+    const r = await api("/api/feedback", { method: "POST", body: { text, rating: fbRating, title: fbTitle, via: IS_EITAA ? "eitaa" : IS_BALE ? "bale" : "telegram" } });
     $("#fbThanksTxt").textContent = r.rewarded ? "🙏 ممنون از نظرت! 🎁 " + fa(r.credits || 1) + " اعتبار رایگان به حسابت اضافه شد." : "🙏 ممنون از نظرت! به دست ما رسید.";
     show($("#fbForm"), false); show($("#fbThanks"), true); TG.haptic("success");
     if (me) me.feedback = { available: false, credits: (me.feedback && me.feedback.credits) || 1 };
@@ -1092,6 +1188,7 @@ async function fbSubmit() {
 
 function showDone(jobId, s, took = 0) {
   lastTopic = $("#topic").value.trim(); TG.haptic("success");
+  if (IS_BALE && TG.askReview) TG.askReview(); // بعد از تحویل موفق ارائه
   const dl = $("#doneDl"); show(dl, TG.canDownload); dl.onclick = (e) => dlFile(jobId, e.currentTarget);
   $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = (s.slides ? ` — ${fa(s.slides)} اسلاید` : "") + (took ? ` · ساخته‌شده در ${fmtDur(took)}` : "");
   $("#doneSend").onclick = (e) => sendToChat(jobId, e.currentTarget);
@@ -1459,7 +1556,7 @@ async function copyText(v) {
   try { const ta = document.createElement("textarea"); ta.value = v; ta.style.cssText = "position:fixed;opacity:0"; document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch { return false; }
 }
 async function shareInvite(link) {
-  if (/^https:\/\/t\.me\//.test(link) && TG.share) return TG.share(link);
+  if ((/^https:\/\/t\.me\//.test(link) || (IS_BALE && /^https?:\/\/(ble\.ir|web\.bale\.ai)\//.test(link))) && TG.share) return TG.share(link);
   if (navigator.share) { try { await navigator.share({ title: "پاورپوینت‌ساز فارسی", text: "ساخت پاورپوینت فارسی با هوش مصنوعی 👇", url: link }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
   if (await copyText(link)) toast("لینک دعوت کپی شد؛ برای دوستانت بفرست ✓"); else window.prompt("لینک دعوت را کپی کن:", link);
 }

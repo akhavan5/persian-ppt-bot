@@ -28,7 +28,8 @@ export function baleWebhookUrl(env: Env): string {
 export async function handleBaleUpdate(env: Env, update: unknown): Promise<void> {
   const u = normalizeBaleUpdate(update);
   if (!u) return;
-  const benv: Env = { ...env, PLATFORM: "bale" };
+  const cqChat = u.callback_query?.message?.chat?.id;
+  const benv: Env = { ...env, PLATFORM: "bale", ...(typeof cqChat === "number" ? { BALE_CQ_CHAT: cqChat } : {}) };
   try {
     await handleUpdate(benv, u);
   } catch (e) {
@@ -46,7 +47,7 @@ export async function setupBale(env: Env): Promise<{ ok: boolean; error?: string
   try {
     const me = await tg<{ username?: string }>(benv, "getMe");
     await tg(benv, "setWebhook", { url: baleWebhookUrl(env) });
-    await tg(benv, "setMyCommands", { commands: BOT_COMMANDS }).catch(() => {}); // در مستندات بله نیست؛ اگر نبود بی‌اثر است
+    await tg(benv, "setMyCommands", { commands: BOT_COMMANDS }); // مستند است: یک فهرست برای همه‌ی کاربران (scope/language_code پشتیبانی نمی‌شود)؛ فرمان نامعتبر کل درخواست را رد می‌کند
     const info = await tg<{ url?: string; pending_update_count?: number; last_error_message?: string }>(benv, "getWebhookInfo").catch(() => null);
     const host = (() => { try { return new URL(info?.url || baleWebhookUrl(env)).host; } catch { return ""; } })();
     return { ok: true, bot: me.username ? `@${me.username}` : undefined, webhook: `https://${host}/bale/…`, pending: info?.pending_update_count, last_error: info?.last_error_message };

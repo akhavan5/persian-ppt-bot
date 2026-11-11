@@ -110,12 +110,21 @@ type AnyBtn = { text?: string; callback_data?: string; url?: string; web_app?: {
 export const hasWebApp = (markup: unknown): boolean =>
   !!(markup as { inline_keyboard?: AnyBtn[][] } | undefined)?.inline_keyboard?.some((r) => r.some((b) => b.web_app));
 
+/** آدرس مینی‌اپ برای بله: صفحه‌ی /app به /bale-app می‌رود که اسکریپت رسمی SDK بله (miniapp.js) در آن تزریق می‌شود */
+export function baleAppUrl(u: string): string {
+  try {
+    const x = new URL(u);
+    if (x.pathname === "/app") x.pathname = "/bale-app";
+    return x.toString();
+  } catch { return u; }
+}
+
 export function baleMarkup(markup: unknown, siteUrl: string, webApp = true): unknown {
   const mk = markup as { inline_keyboard?: AnyBtn[][] } | undefined;
   if (!mk || !Array.isArray(mk.inline_keyboard)) return markup;
   const rows = mk.inline_keyboard.map((row) => row.map((b): AnyBtn => {
     const text = baleWording(String(b.text ?? "").replace(/<[^>]+>/g, ""));
-    if (b.web_app) return webApp && b.web_app.url ? { text, web_app: { url: b.web_app.url } } : { text, url: b.web_app.url || siteUrl };
+    if (b.web_app) return webApp && b.web_app.url ? { text, web_app: { url: baleAppUrl(b.web_app.url) } } : { text, url: b.web_app.url || siteUrl };
     if (b.url) return { text, url: b.url };
     return { text, callback_data: String(b.callback_data ?? "").slice(0, 64) };
   })).filter((row) => row.length);

@@ -34,8 +34,17 @@ export const fileUrl = (env: Env, filePath: string): string => {
 };
 const siteOf = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
 
-/** متدهایی که در مستندات بله نیامده یا برای تجربه‌ی کاربر ضروری نیستند؛ خطایشان بی‌صدا نادیده گرفته می‌شود */
-const BALE_OPTIONAL = new Set(["answerCallbackQuery", "editMessageReplyMarkup", "editMessageCaption", "setMyCommands", "deleteMyCommands", "setChatMenuButton", "sendChatAction"]);
+/** متدهایی که برای تجربه‌ی کاربر ضروری نیستند؛ خطایشان بی‌صدا نادیده گرفته می‌شود (بقیه‌ی متدهای مستند بله، مثل setMyCommands و edit*، خطا را بالا می‌دهند) */
+const BALE_OPTIONAL = new Set(["answerCallbackQuery", "sendChatAction"]);
+/** متدهای تلگرامی که در API بله وجود ندارند؛ اصلاً فراخوانی نمی‌شوند (دکمه‌ی منوی بازو در بله از @botfather تنظیم می‌شود) */
+const BALE_UNSUPPORTED = new Set(["setChatMenuButton"]);
+
+/** متن خطا؛ اگر سرور «retry_after» را در parameters داد (بله) به متن اضافه می‌شود تا منطق تلاش‌مجدد (broadcast) آن را بخواند */
+function apiError(label: string, method: string, j: any, status: number): Error {
+  const wait = Number(j?.parameters?.retry_after);
+  const desc = String(j?.description ?? status);
+  return new Error(`${label} ${method}: ${desc}${Number.isFinite(wait) && wait > 0 && !/retry after/i.test(desc) ? ` (retry after ${Math.ceil(wait)})` : ""}`);
+}
 
 /** پارامترهای تلگرام را به پارامترهای قابل‌فهم برای بله تبدیل می‌کند (بدون parse_mode: متن HTML به Markdown بله تبدیل می‌شود) */
 function baleParams(env: Env, method: string, body: Record<string, unknown>, webApp = true): Record<string, unknown> {
@@ -53,6 +62,14 @@ export async function tg<T = any>(env: Env, method: string, body: Record<string,
   if (isEitaaId(body.chat_id ?? body.user_id)) return (await eitaaTg(env, method, body)) as T; // ایتا: فقط متن (eitaa.ts)
   const r = route(env, body.chat_id ?? body.user_id);
   if (r.rubika) return (await rubikaTg(env, method, body)) as T;
+  if (r.bale && BALE_UNSUPPORTED.has(method)) return true as T;
+  // کلاینت‌های قدیمی بله از answerCallbackQuery پشتیبانی نمی‌کنند (شناسه‌ی callback با «1» شروع می‌شود)؛ متن را به‌صورت پیام عادی می‌فرستیم
+  if (r.bale && method === "answerCallbackQuery" && String(body.callback_query_id ?? "").startsWith("1")) {
+    const chat = env.BALE_CQ_CHAT;
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (text && chat) await tg(env, "sendMessage", { chat_id: chat, text: esc(text) }).catch(() => {});
+    return true as T;
+  }
   const call = async (payload: unknown) => {
     const res = await fetch(`${r.base}/bot${r.token}/${method}`, {
       method: "POST",
@@ -69,7 +86,7 @@ export async function tg<T = any>(env: Env, method: string, body: Record<string,
     const name = r.bale ? "bale" : "telegram";
     console.error(`${name} api error`, method, JSON.stringify(j).slice(0, 400));
     if (r.bale && BALE_OPTIONAL.has(method)) return true as T;
-    throw new Error(`${r.bale ? "Bale" : "Telegram"} ${method}: ${j.description ?? res.status}`);
+    throw apiError(r.bale ? "Bale" : "Telegram", method, j, res.status);
   }
   return j.result as T;
 }
@@ -117,7 +134,7 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
     method: "POST", body: form, signal: AbortSignal.timeout(120_000),
   });
   const j = (await r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }))) as any;
-  if (!j.ok) throw new Error(`${rt.bale ? "Bale" : "Telegram"} sendDocument: ${j.description ?? r.status}`);
+  if (!j.ok) throw apiError(rt.bale ? "Bale" : "Telegram", "sendDocument", j, r.status);
 }
 
 /** ارسال فایل صوتی (پخش‌کننده‌ی تلگرام با عنوان و مدت). تلگرام رسماً MP3/M4A می‌خواهد (خروجی پیش‌فرض اکنون MP3 است)؛ اگر WAV را نپذیرفت، همان فایل به‌صورت سند فرستاده می‌شود (باز هم داخل تلگرام پخش می‌شود). */
@@ -159,7 +176,7 @@ export async function sendPhoto(env: Env, chatId: number, data: Uint8Array, file
     method: "POST", body: form, signal: AbortSignal.timeout(120_000),
   });
   const j = (await r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }))) as any;
-  if (!j.ok) throw new Error(`${rt.bale ? "Bale" : "Telegram"} sendPhoto: ${j.description ?? r.status}`);
+  if (!j.ok) throw apiError(rt.bale ? "Bale" : "Telegram", "sendPhoto", j, r.status);
 }
 
 export const BOT_COMMANDS = [

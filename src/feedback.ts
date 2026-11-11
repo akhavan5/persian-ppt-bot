@@ -13,7 +13,7 @@ import { esc, sendMessage } from "./telegram";
 import { toFa } from "./util";
 
 const MAX_TEXT = 1500;
-const VIA: Record<string, string> = { web: "سایت", telegram: "مینی‌اپ تلگرام", eitaa: "برنامک ایتا", app: "اپ اندروید" };
+const VIA: Record<string, string> = { web: "سایت", telegram: "مینی‌اپ تلگرام", bale: "مینی‌اپ بله", eitaa: "برنامک ایتا", app: "اپ اندروید" };
 
 /** وضعیت هدیه‌ی نظر برای رابط: available = هنوز می‌شود با ثبت نظر اعتبار گرفت */
 export async function feedbackInfo(env: Env, user: WebUser): Promise<{ available: boolean; credits: number }> {

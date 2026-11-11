@@ -107,6 +107,8 @@ export interface Env {
   EITAA_MINIAPP_LINK?: string;
   /** پرچم داخلی (در wrangler تعریف نمی‌شود): env ساخته‌شده برای پردازش آپدیت بله؛ متدهای بدون chat_id مثل answerCallbackQuery و getFile با آن به بله می‌روند */
   PLATFORM?: "bale" | "rubika";
+  /** پرچم داخلی: شناسه‌ی چتِ callback در حال پردازش (بله)؛ برای کلاینت‌های قدیمی که answerCallbackQuery ندارند، متن به‌صورت پیام در همین چت فرستاده می‌شود */
+  BALE_CQ_CHAT?: number;
 
   /** فقط برای تست محلی با سرور شبیه‌ساز تلگرام؛ در تولید تنظیم نکنید */
   TELEGRAM_API_BASE?: string;

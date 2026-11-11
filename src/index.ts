@@ -257,6 +257,22 @@ export default {
       return new Response(req.method === "HEAD" ? null : html, { status: 200, headers: h });
     }
 
+    // مینی‌اپ بله: همان صفحه‌ی /app با اسکریپت رسمی SDK بله (docs.bale.ai/miniapp: باید اولین اسکریپت <head> باشد).
+    // آدرس مینی‌اپ اصلی در @botfather و دکمه‌های web_app بازو همین /bale-app است (baleMarkup خودکار /app را به آن تبدیل می‌کند).
+    // وب بله مینی‌اپ را در iframe باز می‌کند: X-Frame-Options حذف و frame-ancestors برای bale.ai / ble.ir مجاز می‌شود.
+    if (url.pathname === "/bale-app" && (req.method === "GET" || req.method === "HEAD")) {
+      const res = await env.ASSETS.fetch(new Request(`${url.origin}/app`, { headers: req.headers }));
+      if (!res.ok) return res;
+      const html = (await res.text()).replace(/<head[^>]*>/i, (m) => `${m}\n<script src="https://tapi.bale.ai/miniapp.js"></script>`);
+      const h = new Headers(res.headers);
+      for (const k of ["content-length", "content-encoding", "etag", "x-frame-options"]) h.delete(k);
+      h.set("content-type", "text/html; charset=utf-8");
+      h.set("cache-control", "no-cache");
+      h.set("x-robots-tag", "noindex, nofollow");
+      h.set("content-security-policy", "frame-ancestors 'self' https://*.bale.ai https://bale.ai https://*.ble.ir https://ble.ir");
+      return new Response(req.method === "HEAD" ? null : html, { status: 200, headers: h });
+    }
+
     // هر چیز دیگر: صفحه‌ی وب و فایل‌های استاتیک (پوشه‌ی public)
     return env.ASSETS.fetch(req);
   },
