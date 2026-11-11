@@ -307,6 +307,8 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
+// کل اسکریپت داخل تابع است تا با متغیرهای سراسری SDK بله (مثل me) تداخل نکند
+(() => {
 "use strict";
 // ابتدای اجرا: به بله اطلاع بده صفحه آماده است (لودر بله گیر نکند) و خطاهای قبل از boot() روی صفحه دیده شوند
 try { window.Bale && window.Bale.WebApp && window.Bale.WebApp.ready(); } catch {}
@@ -1618,6 +1620,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && me
 
 setTimeout(() => { if (!$("#boot").hidden) $("#bootMsg").textContent = `در حال ورود… SDK:${!!window.Bale} initData:${!!TG.initData} cfg:${!!cfg}`; }, 8000);
 boot();
+})();
 </script>
 <script src="/support.js" defer></script>
 </body>
