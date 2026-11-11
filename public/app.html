@@ -1533,7 +1533,7 @@ function renderProfile() {
         h("button", { class: "btn", type: "button", onclick: (e) => busy(e.currentTarget, "در حال ارسال…", async () => {
           const v = pfValue();
           if (!v) return toast(isM ? "شماره‌ی موبایل را وارد کن." : "ایمیل را وارد کن.");
-          try { await api("/api/auth/otp/send", { method: "POST", body: { [pf.kind]: v } }); pf.step = "c"; pf.c = ""; toast(isM ? "کد پیامک شد" : "کد به ایمیلت فرستاده شد"); renderProfile(); }
+          try { const sr = await api("/api/auth/otp/send", { method: "POST", body: { [pf.kind]: v } }); pf.step = "c"; pf.c = ""; toast(isM ? (sr && sr.bale ? (sr.sms === false ? "ارسال پیامک ناموفق بود، اما کد در بله ارسال شد" : "کد پیامک شد و به بله هم ارسال شد") : "کد پیامک شد") : "کد به ایمیلت فرستاده شد"); renderProfile(); }
           catch (err) { toast(err.message); }
         }) }, "ارسال کد"),
         h("button", { class: "btn ghost", type: "button", onclick: () => { pf = null; renderProfile(); } }, "انصراف"));

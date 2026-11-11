@@ -11,6 +11,7 @@ import { bumpStat, grantSignupCredit } from "./settings";
 import { sendWelcomeEmail } from "./email-welcome";
 import { sendOtpEmail } from "./email-otp";
 import { emailEnabled } from "./email";
+import { sendBaleOtp } from "./safir";
 
 export interface WebUser {
   id: string; // w_ + ۱۶ نویسه‌ی هگز
@@ -195,13 +196,8 @@ async function dropCode(env: Env, id: string) {
   await env.KV.delete(`oc:${id}`);
 }
 
-/** ارسال کد ۶ رقمی با پیامک. خروجی: null = موفق، وگرنه {error, status}. */
-export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ error: string; status: number } | null> {
-  if (!otpEnabled(env)) return { error: "ورود با پیامک فعال نیست.", status: 503 };
-  const c = await issueCode(env, ip, mobile, "sms");
-  if ("error" in c) return c;
-  const code = c.code;
-
+/** ارسال کد با پیامک؛ true = سرویس پیامک پذیرفت */
+async function sendSms(env: Env, mobile: string, code: string): Promise<boolean> {
   const token = (env.SMS_API_TOKEN ?? "").trim().replace(/^Bearer\s+/i, "");
   const template = Number.isFinite(Number(env.SMS_TEMPLATE)) && String(env.SMS_TEMPLATE ?? "").trim() !== "" ? Number(env.SMS_TEMPLATE) : 1;
   try {
@@ -212,13 +208,31 @@ export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ e
       signal: AbortSignal.timeout(12_000),
     });
     const j = (await r.json().catch(() => null)) as { success?: boolean; data?: boolean; message?: string | null } | null;
-    if (r.ok && (j?.success === true || j?.data === true)) return null;
+    if (r.ok && (j?.success === true || j?.data === true)) return true;
     console.error("sms otp failed", r.status, JSON.stringify(j).slice(0, 300));
   } catch (e) {
     console.error("sms otp error", String(e).slice(0, 200));
   }
+  return false;
+}
+
+/** ارسال کد ۶ رقمی: پیامک همیشه ارسال می‌شود (رسیدن به بله جلوی پیامک را نمی‌گیرد) و هم‌زمان در بله هم فرستاده می‌شود (اگر سفیر تنظیم باشد و کاربر بله داشته باشد).
+ *  موفق = دست‌کم یکی از دو کانال رسید؛ sms/bale نشان می‌دهد کد از کدام راه فرستاده شد (پیامک ناموفق + بله موفق ⇒ ورود ممکن است، با پیام جدا برای کاربر).
+ *  هر دو ناموفق ⇒ خطا. */
+export async function sendOtpEx(env: Env, ip: string, mobile: string): Promise<{ sms: boolean; bale: boolean } | { error: string; status: number }> {
+  if (!otpEnabled(env)) return { error: "ورود با پیامک فعال نیست.", status: 503 };
+  const c = await issueCode(env, ip, mobile, "sms");
+  if ("error" in c) return c;
+  const [sms, bale] = await Promise.all([sendSms(env, mobile, c.code), sendBaleOtp(env, mobile, c.code)]);
+  if (sms || bale) return { sms, bale };
   await dropCode(env, mobile);
   return { error: "ارسال پیامک ناموفق بود؛ چند دقیقه بعد دوباره امتحان کن.", status: 502 };
+}
+
+/** نسخه‌ی ساده برای فراخوان‌هایی که فقط موفقیت/خطا می‌خواهند (پروفایل و ربات). خروجی: null = موفق، وگرنه {error, status}. */
+export async function sendOtp(env: Env, ip: string, mobile: string): Promise<{ error: string; status: number } | null> {
+  const r = await sendOtpEx(env, ip, mobile);
+  return "error" in r ? r : null;
 }
 
 /** ارسال کد ۶ رقمی به ایمیل (Resend). خروجی: null = موفق، وگرنه {error, status}. */

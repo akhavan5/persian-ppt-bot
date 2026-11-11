@@ -24,7 +24,7 @@ import { getAppVersions } from "./app-version";
 import { appFields, appPlatform, parseAppUA, pwaOf, pwaPlatform } from "./app-ua";
 import {
   authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, emailOtpEnabled, getUserByEmail, getUserByMobile, googleCallback,
-  googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtp,
+  googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtpEx,
   sessionCookie, validEmail, type WebUser,
 } from "./auth";
 import { audioEnabled, beginDeck, fileNameWithSite, launchDeck, posterEnabled, runningJob, siteHost, slidesLimitMsg } from "./deck-service";
@@ -257,8 +257,8 @@ async function otpSend(req: Request, env: Env): Promise<Response> {
   }
   const mobile = normMobile(b?.mobile);
   if (!mobile) return err("شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن.");
-  const e = await sendOtp(env, clientIp(req), mobile);
-  return e ? err(e.error, e.status) : json({ ok: true });
+  const r = await sendOtpEx(env, clientIp(req), mobile);
+  return "error" in r ? err(r.error, r.status) : json({ ok: true, sms: r.sms, bale: r.bale });
 }
 
 /** اپ اندروید: کد یک‌بارمصرف بازگشت از ورود مرورگر ← نشست */

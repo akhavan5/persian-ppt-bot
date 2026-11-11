@@ -1051,7 +1051,9 @@ document.querySelectorAll("[data-plan]").forEach((b) => b.onclick = () => buyPla
 
 // id: شماره‌ی موبایل یا ایمیلِ نرمال‌شده؛ سرور از فیلد «email» یا «mobile» تشخیص می‌دهد
 const idBody = (id) => (id.includes("@") ? { email: id } : { mobile: id });
-async function sendCode(id) { await api("/api/auth/otp/send", { method: "POST", body: idBody(id) }); }
+async function sendCode(id) { return api("/api/auth/otp/send", { method: "POST", body: idBody(id) }); }
+// متن کانال ارسال کد (پیامک / بله)؛ r.bale یعنی کد در بله هم رسید
+const sentVia = (r) => (r && r.bale ? (r.sms === false ? "ارسال پیامک ناموفق بود، اما در بله برایت ارسال شد" : "پیامک شد و به بله هم ارسال شد") : "پیامک شد");
 $("#otpForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const btn = $("#authSubmit"), msg = $("#authMsg");
@@ -1062,10 +1064,10 @@ $("#otpForm").addEventListener("submit", async (ev) => {
     if (!otpMobile) {
       const p = parseLoginId($("#fMob").value);
       if (p.error) throw new Error(p.error);
-      await sendCode(p.id);
+      const sr = await sendCode(p.id);
       otpMobile = p.id; otpKind = p.kind;
       show($("#otpStep1"), false); show($("#otpStep2"), true);
-      $("#otpSent").textContent = p.kind === "email" ? `کد ۶ رقمی به ایمیل ${p.id} فرستاده شد؛ پوشه‌ی هرزنامه (اسپم) را هم نگاه کن.` : `کد ۶ رقمی به ${fa(p.id)} پیامک شد.`;
+      $("#otpSent").textContent = p.kind === "email" ? `کد ۶ رقمی به ایمیل ${p.id} فرستاده شد؛ پوشه‌ی هرزنامه (اسپم) را هم نگاه کن.` : `کد ۶ رقمی به ${fa(p.id)} ${sentVia(sr)}.`;
       $("#fCodeLbl").textContent = p.kind === "email" ? "کد ۶ رقمی ایمیل‌شده" : "کد ۶ رقمی پیامک‌شده";
       btn.textContent = "ورود"; countdown($("#otpResend"), 60, "ارسال دوباره"); $("#fCode").focus();
     } else {
@@ -1079,7 +1081,7 @@ $("#otpForm").addEventListener("submit", async (ev) => {
 $("#otpResend").onclick = (ev) => {
   const msg = $("#authMsg"); show(msg, false);
   return busy(ev.currentTarget, "در حال ارسال…", async () => {
-    try { await sendCode(otpMobile); countdown($("#otpResend"), 60, "ارسال دوباره"); toast("کد دوباره ارسال شد"); }
+    try { const sr = await sendCode(otpMobile); countdown($("#otpResend"), 60, "ارسال دوباره"); toast(sr && sr.bale ? "کد دوباره ارسال شد (بله هم)" : "کد دوباره ارسال شد"); }
     catch (e) { msg.textContent = e.message; show(msg, true); }
   });
 };
@@ -1149,7 +1151,7 @@ $("#pfMobSend").onclick = (ev) => {
   const m = normMob($("#pfMob").value);
   if (!m) { msg.textContent = "شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن."; show(msg, true); return; }
   return busy(ev.currentTarget, "در حال ارسال پیامک…", async () => {
-    try { await sendCode(m); show($("#pfCodeRow"), true); $("#pfCode").focus(); countdown($("#pfMobSend"), 60, "ارسال دوباره"); toast("کد پیامک شد"); }
+    try { const sr = await sendCode(m); show($("#pfCodeRow"), true); $("#pfCode").focus(); countdown($("#pfMobSend"), 60, "ارسال دوباره"); toast("کد " + sentVia(sr)); }
     catch (e) { msg.textContent = e.message; show(msg, true); }
   });
 };

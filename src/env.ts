@@ -163,6 +163,11 @@ export interface Env {
   VAPID_SUBJECT?: string;
   /** ورود با پیامک یک‌بارمصرف (OTP) از وب‌سرویس s.api.ir؛ بدون SMS_API_TOKEN ورود با شماره‌ی موبایل غیرفعال است */
   SMS_API_TOKEN?: string;
+  /** ارسال کد ورود در بله (علاوه بر پیامک، نه جایگزین آن) با سرویس سفیر (safir.bale.ai؛ safir.ts)؛ بدون SAFIR_API_KEY خاموش است.
+   *  SAFIR_API_KEY: «Api Access Key» از پنل کسب‌وکار بله (secret: wrangler secret put SAFIR_API_KEY)
+   *  SAFIR_BOT_ID: شناسه‌ی عددی بازوی فرستنده (اختیاری؛ پیش‌فرض بازوی فعلی) */
+  SAFIR_API_KEY?: string;
+  SAFIR_BOT_ID?: string;
   /** سقف ثبت‌نام جدید در روز برای هر IP (پیش‌فرض ۱۰۰؛ برای ایمیل حداکثر ۳۰). شبکه‌های موبایل ایران IP مشترک دارند، پس کم نگذارید. */
   SIGNUP_IP_DAILY?: string;
   /** سقف درخواست کد (پیامک/ایمیل) در ساعت برای هر IP (پیش‌فرض ۱۲۰) */
