@@ -384,9 +384,14 @@ ORDER BY x.k LIMIT ?3`,
   marker: (r) => `lc:fl:${r.uid}:${r.d}`,
   note: async (c, r, k) => {
     if (!k.email) return null;
-    let left = 23;
-    try { left = Math.max(1, Math.round((JSON.parse(r.v).l + 24 * HOUR - c.now) / HOUR)); } catch { /* پیش‌فرض */ }
+    let left = 23, ago = 1;
+    try {
+      const l = JSON.parse(r.v).l;
+      left = Math.max(1, Math.round((l + 24 * HOUR - c.now) / HOUR));
+      ago = Math.max(1, Math.round((c.now - l) / HOUR)); // ایمیل بین ۱ تا ۲۰ ساعت بعد از ساخت می‌رود (ساعت مجاز و سقف ۲۰ ساعته)؛ پس «یک ساعت پیش» ثابت نادرست است
+    } catch { /* پیش‌فرض */ }
     const lf = toFa(String(left));
+    const agoTxt = ago <= 1 ? "یک ساعت" : `حدود ${toFa(String(ago))} ساعت`;
     // فایل PPTX همان ارائه از KV فایل‌ها (۱ زیردرخواست)؛ اگر نبود/بزرگ بود/بودجه تمام شد، ایمیل بدون پیوست و فقط با لینک می‌رود
     let attach: { filename: string; content: string }[] | undefined;
     if (r.d && take(c, 1)) {
@@ -403,7 +408,7 @@ ORDER BY x.k LIMIT ?3`,
       mail: {
         subject: `فایل ارائه‌ات آماده است — ${BRAND}`,
         m: {
-          href: utm(c.env, "files"), head: "فایل‌هایت آماده است 📂", sub: `${firstName(k.name)}، ارائه‌ات یک ساعت پیش ساخته شد.`,
+          href: utm(c.env, "files"), head: "فایل‌هایت آماده است 📂", sub: `${firstName(k.name)}، ارائه‌ات ${agoTxt} پیش ساخته شد.`,
           paras: [
             attach ? "فایل PPTX ارائه‌ات به همین ایمیل پیوست شده است." : "فایل ارائه‌ات در سایت آماده‌ی دانلود است.",
             `فایل‌های ساخته‌شده ۲۴ ساعت در سایت نگه‌داری می‌شوند؛ تا حدود ${lf} ساعت دیگر می‌توانی دوباره از آنجا بگیری‌شان.`,
