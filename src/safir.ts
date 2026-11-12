@@ -7,6 +7,8 @@ import type { Env } from "./env";
 const SAFIR_URL = "https://safir.bale.ai/api/v3/send_message";
 /** شناسه‌ی بازوی فرستنده (عمومی است، محرمانه نیست)؛ با SAFIR_BOT_ID عوض می‌شود */
 const DEFAULT_BOT_ID = 1186583240;
+/** قالب پیام خوش‌آمد (بدون فیلد) که در پنل کسب‌وکار بله تأیید شده؛ با SAFIR_WELCOME_TEMPLATE عوض می‌شود و مقدار off آن را خاموش می‌کند */
+const DEFAULT_WELCOME_TEMPLATE = "413y0Z";
 
 export const safirEnabled = (env: Env): boolean => !!(env.SAFIR_API_KEY ?? "").trim();
 
@@ -35,8 +37,24 @@ async function safirSend(env: Env, mobile: string, messageData: Record<string, u
   return false;
 }
 
-/** OTP را در بله می‌فرستد. true = کد در بله رسید. */
+/** پیام خوش‌آمد (قالب تأییدشده) فقط یک بار برای هر شماره، اولین بار که کد در بله به او رسید؛ بعدش دیگر فرستاده نمی‌شود.
+ *  خطا یا ناموفق بودنش هیچ اثری روی ورود ندارد (در صورت ناموفق بودن، دفعه‌ی بعد دوباره تلاش می‌شود). */
+async function sendWelcomeOnce(env: Env, mobile: string): Promise<void> {
+  const tpl = (env.SAFIR_WELCOME_TEMPLATE ?? DEFAULT_WELCOME_TEMPLATE).trim();
+  if (!tpl || tpl.toLowerCase() === "off") return;
+  try {
+    const key = `bw:${mobile}`;
+    if (await env.KV.get(key)) return;
+    if (await safirSend(env, mobile, { template_message: { template_id: tpl, text_fields: {} } }, 6_000)) await env.KV.put(key, "1");
+  } catch (e) {
+    console.error("safir welcome error", String(e).slice(0, 200));
+  }
+}
+
+/** OTP را در بله می‌فرستد؛ اگر رسید و این اولین بار است، پیام خوش‌آمد هم پشتش می‌آید. true = کد در بله رسید. */
 export async function sendBaleOtp(env: Env, mobile: string, code: string): Promise<boolean> {
   if (!safirEnabled(env)) return false;
-  return safirSend(env, mobile, { otp_message: { otp: code } }, 8_000);
+  const ok = await safirSend(env, mobile, { otp_message: { otp: code } }, 8_000);
+  if (ok) await sendWelcomeOnce(env, mobile);
+  return ok;
 }

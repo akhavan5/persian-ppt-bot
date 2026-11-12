@@ -165,9 +165,11 @@ export interface Env {
   SMS_API_TOKEN?: string;
   /** ارسال کد ورود در بله (علاوه بر پیامک، نه جایگزین آن) با سرویس سفیر (safir.bale.ai؛ safir.ts)؛ بدون SAFIR_API_KEY خاموش است.
    *  SAFIR_API_KEY: «Api Access Key» از پنل کسب‌وکار بله (secret: wrangler secret put SAFIR_API_KEY)
-   *  SAFIR_BOT_ID: شناسه‌ی عددی بازوی فرستنده (اختیاری؛ پیش‌فرض بازوی فعلی) */
+   *  SAFIR_BOT_ID: شناسه‌ی عددی بازوی فرستنده (اختیاری؛ پیش‌فرض بازوی فعلی)
+   *  SAFIR_WELCOME_TEMPLATE: شناسه‌ی قالب پیام خوش‌آمد (اختیاری؛ پیش‌فرض قالب فعلی، off = ارسال نشود) */
   SAFIR_API_KEY?: string;
   SAFIR_BOT_ID?: string;
+  SAFIR_WELCOME_TEMPLATE?: string;
   /** سقف ثبت‌نام جدید در روز برای هر IP (پیش‌فرض ۱۰۰؛ برای ایمیل حداکثر ۳۰). شبکه‌های موبایل ایران IP مشترک دارند، پس کم نگذارید. */
   SIGNUP_IP_DAILY?: string;
   /** سقف درخواست کد (پیامک/ایمیل) در ساعت برای هر IP (پیش‌فرض ۱۲۰) */
