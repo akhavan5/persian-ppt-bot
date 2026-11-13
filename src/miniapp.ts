@@ -48,6 +48,7 @@ export interface TgUser { id: number; first_name?: string; last_name?: string; u
 
 /** بررسی امضای initData طبق مستندات تلگرام؛ کاربر تلگرام یا null (امضا نادرست/منقضی) */
 export async function verifyInitData(botToken: string, initData: string, now = Date.now(), bale = false): Promise<TgUser | null> {
+  botToken = (botToken || "").trim(); // فاصله/خط جدیدِ چسبیده به توکن در wrangler secret put امضا را خراب می‌کرد
   if (!botToken) return null;
   const p = new URLSearchParams(initData);
   const hash = p.get("hash") ?? "";
@@ -59,7 +60,7 @@ export async function verifyInitData(botToken: string, initData: string, now = D
   let okSig = safeEqual(hex(await hmac(await hmac(enc.encode("WebAppData"), botToken), check)), hash);
   if (!okSig && bale) {
     // نسخه‌های دیگرِ مستندات بله/سروش‌پلاس: کلید = خود توکن، یا HMAC(توکن، "WebAppData")؛ و data-check-string بدون فیلد signature
-    const keys = [enc.encode(botToken), new Uint8Array(await hmac(enc.encode(botToken), "WebAppData"))];
+    const keys = [enc.encode(botToken), new Uint8Array(await hmac(enc.encode(botToken), "WebAppData")), new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(botToken)))];
     const checks = [check, [...p.entries()].filter(([k]) => k !== "signature").map(([k, v]) => `${k}=${v}`).sort().join("\n")];
     const std = await hmac(enc.encode("WebAppData"), botToken);
     outer: for (const c of checks) {
@@ -121,7 +122,7 @@ export async function miniappLogin(req: Request, env: Env, ip: string): Promise<
   if (!u) u = await asSplus();
   if (!u && !eitaaFirst) u = await asEitaa();
   if (!u && splusFirst && !env.SPLUS_BOT_TOKEN) return err("SPLUS_BOT_TOKEN روی سرور تنظیم نشده است.", 503);
-  if (!u && splusFirst) console.error("splus miniapp login failed", `len=${initData.length}`, `fields=${[...new URLSearchParams(initData).keys()].join(",")}`);
+  if (!u && splusFirst) console.error("splus miniapp login failed", `len=${initData.length}`, `fields=${[...new URLSearchParams(initData).keys()].join(",")}`, `TEMP_DEBUG_REMOVE initData=${initData}`);
   if (!u || u.is_bot) return err("ورود از تلگرام/بله تایید نشد؛ Mini App را بسته و دوباره از داخل ربات باز کن.", 401);
   if (await hitLimit(env, `mal:t:${u.id}`, TG_LOGIN_MAX, 600)) return err("تعداد ورود زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);
 
