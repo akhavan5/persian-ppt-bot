@@ -75,7 +75,7 @@ export const SUPPORT_CONTACT_RUBIKA = "@akhavan7";
 /** پشتیبانی در ایتا (کاربران برنامک ایتا به این حساب وصل می‌شوند؛ لینک ایتا متن آماده ندارد) */
 export const SUPPORT_CONTACT_EITAA = "@akhavan5";
 /** پشتیبانی در سروش‌پلاس (کاربران سروش‌پلاس به این حساب وصل می‌شوند؛ نام کاربری را در صورت نیاز عوض کن) */
-export const SUPPORT_CONTACT_SPLUS = "@akhavan4";
+export const SUPPORT_CONTACT_SPLUS = "@akhavan2";
 const contactUrl = (userId: Uid, text: string) =>
   isSplusId(userId)
     ? `https://splus.ir/${SUPPORT_CONTACT_SPLUS.slice(1)}`
