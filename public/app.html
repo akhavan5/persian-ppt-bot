@@ -312,6 +312,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
 "use strict";
 // ابتدای اجرا: به بله اطلاع بده صفحه آماده است (لودر بله گیر نکند) و خطاهای قبل از boot() روی صفحه دیده شوند
 try { window.Bale && window.Bale.WebApp && window.Bale.WebApp.ready(); } catch {}
+try { window.Soroush && window.Soroush.WebApp && window.Soroush.WebApp.ready(); } catch {}
 addEventListener("error", (e) => { const m = document.querySelector("#bootMsg"); if (m) m.textContent = "خطا: " + e.message; });
 addEventListener("unhandledrejection", (e) => { const m = document.querySelector("#bootMsg"); if (m) m.textContent = "خطا: " + ((e.reason && e.reason.message) || e.reason); });
 const $ = (s) => document.querySelector(s);
@@ -510,7 +511,72 @@ function makeBale(W) {
   };
 }
 
-const TG = IS_EITAA ? makeEitaa(EW) : IS_BALE ? makeBale(BLW) : (() => {
+// ---------- برنامک سروش‌پلاس ----------
+// صفحه‌ی /splus-app همین فایل است با اسکریپت رسمی https://app.splus.ir/js/soroush-web-app.js در ابتدای <head> (index.ts) که window.Soroush.WebApp را می‌سازد.
+// API آن شبیه تلگرام است (themeParams، BackButton، HapticFeedback، openLink، رویداد themeChanged و نسخه‌ی ۶.x)؛ دکمه‌ی اصلی و CloudStorage استفاده نمی‌شوند
+// (دکمه‌ی داخل صفحه و ذخیره‌ی محلی کافی است) و ارسال فایل با «ارسال به چت» (sendDocument ربات) انجام می‌شود.
+const SPW = window.Soroush && window.Soroush.WebApp;
+const IS_SPLUS = !IS_EITAA && !IS_BALE && !!(SPW && SPW.initData);
+const SPLUS_ID_BASE = 400000000000000; // باید با splus-format.ts یکی باشد
+function makeSplus(W) {
+  const t = (f) => { try { return f(); } catch { return undefined; } };
+  const since = (v) => !!t(() => W.isVersionAtLeast(v));
+  const startParam = t(() => W.initDataUnsafe.start_param)
+    || t(() => new URLSearchParams(W.initData).get("start_param"))
+    || new URLSearchParams(location.search).get("tgWebAppStartParam") || "";
+  const hs = {};
+  const on = (type, f) => { (hs[type] = hs[type] || []).push(f); t(() => W.onEvent(type, f)); };
+  const MAP = { bg_color: "--bg", text_color: "--fg", hint_color: "--hint", link_color: "--link", button_color: "--btn", button_text_color: "--btn-fg", secondary_bg_color: "--sec", section_bg_color: "--card", destructive_text_color: "--danger" };
+  function applyTheme() {
+    const p = t(() => W.themeParams) || {};
+    const r = document.documentElement.style;
+    for (const [k, v] of Object.entries(MAP)) if (typeof p[k] === "string" && /^#[0-9a-f]{6}$/i.test(p[k])) r.setProperty(v, p[k]);
+    if (p.section_bg_color == null && p.bg_color) r.setProperty("--card", p.bg_color);
+    if (p.bg_color) r.setProperty("--line", "color-mix(in srgb, " + (p.hint_color || "#888") + " 28%, transparent)");
+    r.colorScheme = W.colorScheme === "dark" ? "dark" : W.colorScheme === "light" ? "light" : "";
+  }
+  function paint() {
+    const sec = getComputedStyle(document.documentElement).getPropertyValue("--sec").trim();
+    if (/^#[0-9a-f]{6}$/i.test(sec) && since("6.9")) t(() => W.setHeaderColor(sec));
+  }
+  applyTheme();
+  on("themeChanged", () => { applyTheme(); paint(); });
+  t(() => W.ready()); t(() => W.expand());
+  paint();
+
+  const main = { ok: false, onPress: null, set() {} }; // دکمه‌ی داخل صفحه استفاده می‌شود
+
+  let backKey = null;
+  const back = { onPress: null, set(v) { if (backKey === !!v) return; backKey = !!v; t(() => (v ? W.BackButton.show() : W.BackButton.hide())); } };
+  t(() => W.BackButton.onClick(() => { if (back.onPress) back.onPress(); }));
+
+  let closeKey = null;
+  const confirmClose = (v) => { if (closeKey === !!v) return; closeKey = !!v; t(() => (v ? W.enableClosingConfirmation() : W.disableClosingConfirmation())); };
+  const haptic = (kind) => t(() => {
+    const H = W.HapticFeedback; if (!H) return;
+    if (kind === "select") H.selectionChanged(); else if (kind === "light") H.impactOccurred("light"); else H.notificationOccurred(kind);
+  });
+  const cloud = { get: async () => "", set: async () => null };
+  const download = () => Promise.resolve(null);
+  const readClipboard = () => new Promise((res) => {
+    let done = false; const fin = (v) => { if (!done) { done = true; res(typeof v === "string" ? v : null); } };
+    if (typeof W.readTextFromClipboard === "function") { try { W.readTextFromClipboard(fin); } catch { fin(null); } setTimeout(() => fin(null), 20000); }
+    else (navigator.clipboard && navigator.clipboard.readText ? navigator.clipboard.readText() : Promise.resolve(null)).then(res, () => res(null));
+  });
+  const openLink = (url) => { try { W.openLink(url); } catch { window.open(url, "_blank"); } };
+  return {
+    initData: W.initData, startParam, since, on, main, back, confirmClose, haptic, cloud, download, paint, readClipboard,
+    canPaste: typeof W.readTextFromClipboard === "function" || !!(navigator.clipboard && navigator.clipboard.readText),
+    canDownload: false,
+    via: "miniapp", idBase: SPLUS_ID_BASE,
+    openTg(path) { openLink("https://t.me" + path); },
+    openLink,
+    share() {},
+    askWrite() {},
+  };
+}
+
+const TG = IS_EITAA ? makeEitaa(EW) : IS_BALE ? makeBale(BLW) : IS_SPLUS ? makeSplus(SPW) : (() => {
   const hp = new URLSearchParams(location.hash.slice(1));
   const BW = window.Bale && window.Bale.WebApp; // مینی‌اپ بله: همان پروتکل هش (#tgWebAppData=…)؛ اگر شیء Bale.WebApp هم باشد از آن هم استفاده می‌شود
   const initData = hp.get("tgWebAppData") || (BW && BW.initData) || store.get("tgInit") || "";
@@ -692,7 +758,7 @@ function login() {
   return loginP || (loginP = (async () => {
     try {
       const headers = { "content-type": "application/json" }; if (token) headers.authorization = "Bearer " + token;
-      const r = await netFetch("/api/auth/miniapp", { method: "POST", headers, body: JSON.stringify({ initData: TG.initData, ...(IS_EITAA ? { platform: "eitaa" } : IS_BALE ? { platform: "bale" } : {}) }), timeout: 15000 });
+      const r = await netFetch("/api/auth/miniapp", { method: "POST", headers, body: JSON.stringify({ initData: TG.initData, ...(IS_EITAA ? { platform: "eitaa" } : IS_BALE ? { platform: "bale" } : IS_SPLUS ? { platform: "splus" } : {}) }), timeout: 15000 });
       const d = await r.json().catch(() => null);
       if (!r.ok) { const e = new Error((d && d.error) || "ورود انجام نشد؛ دوباره امتحان کن."); e.status = r.status; throw e; }
       token = d.token; keep.set({ t: token, tg: myTg, at: Date.now() });
@@ -1188,7 +1254,7 @@ async function fbSubmit() {
   if (!text && !fbRating) { err.textContent = "لطفاً امتیاز بده یا نظرت را بنویس."; show(err, true); return; }
   show(err, false); btn.disabled = true; btn.textContent = "در حال ارسال…";
   try {
-    const r = await api("/api/feedback", { method: "POST", body: { text, rating: fbRating, title: fbTitle, via: IS_EITAA ? "eitaa" : IS_BALE ? "bale" : "telegram" } });
+    const r = await api("/api/feedback", { method: "POST", body: { text, rating: fbRating, title: fbTitle, via: IS_EITAA ? "eitaa" : IS_BALE ? "bale" : IS_SPLUS ? "splus" : "telegram" } });
     $("#fbThanksTxt").textContent = r.rewarded ? "🙏 ممنون از نظرت! 🎁 " + fa(r.credits || 1) + " اعتبار رایگان به حسابت اضافه شد." : "🙏 ممنون از نظرت! به دست ما رسید.";
     show($("#fbForm"), false); show($("#fbThanks"), true); TG.haptic("success");
     if (me) me.feedback = { available: false, credits: (me.feedback && me.feedback.credits) || 1 };

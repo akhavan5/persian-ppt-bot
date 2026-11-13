@@ -17,6 +17,7 @@ import { esc, sendAudio, sendDocument } from "./telegram";
 import { audioSeconds } from "./wav";
 import { fileNameWithSite, siteHost, siteLoginUrl } from "./deck-service";
 import { toBaleId } from "./bale-format";
+import { toSplusId } from "./splus-format";
 import { isEitaaId, toEitaaId, validEitaaRawId } from "./eitaa-format";
 import { eitaaWelcome } from "./eitaa";
 import { claimReferral, referralState } from "./referral";
@@ -98,10 +99,17 @@ export async function miniappLogin(req: Request, env: Env, ip: string): Promise<
     const bb = await verifyInitData(env.BALE_BOT_TOKEN, initData, Date.now(), true);
     return bb ? { ...bb, id: toBaleId(bb.id) } : null;
   };
-  const eitaaFirst = b?.platform === "eitaa", baleFirst = b?.platform === "bale";
-  let u: TgUser | null = eitaaFirst ? await asEitaa() : baleFirst ? await asBale() : null;
+  // برنامک سروش‌پلاس: امضا با توکن بات سروش‌پلاس (مستندات: secret_key = HMAC_SHA256(<bot_token>, "WebAppData")؛ مثل بله fallback با خود توکن هم امتحان می‌شود)؛ شناسه با SPLUS_ID_BASE جمع می‌شود
+  const asSplus = async (): Promise<TgUser | null> => {
+    if (!env.SPLUS_BOT_TOKEN) return null;
+    const sp = await verifyInitData(env.SPLUS_BOT_TOKEN, initData, Date.now(), true);
+    return sp ? { ...sp, id: toSplusId(sp.id) } : null;
+  };
+  const eitaaFirst = b?.platform === "eitaa", baleFirst = b?.platform === "bale", splusFirst = b?.platform === "splus";
+  let u: TgUser | null = eitaaFirst ? await asEitaa() : baleFirst ? await asBale() : splusFirst ? await asSplus() : null;
   if (!u) u = await verifyInitData(env.TELEGRAM_BOT_TOKEN, initData);
   if (!u) u = await asBale();
+  if (!u) u = await asSplus();
   if (!u && !eitaaFirst) u = await asEitaa();
   if (!u || u.is_bot) return err("ورود از تلگرام/بله تایید نشد؛ Mini App را بسته و دوباره از داخل ربات باز کن.", 401);
   if (await hitLimit(env, `mal:t:${u.id}`, TG_LOGIN_MAX, 600)) return err("تعداد ورود زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);

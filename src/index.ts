@@ -294,6 +294,22 @@ export default {
       return new Response(req.method === "HEAD" ? null : html, { status: 200, headers: h });
     }
 
+    // برنامک سروش‌پلاس: همان صفحه‌ی /app با اسکریپت رسمی SDK سروش‌پلاس به‌عنوان اولین اسکریپت <head> (مستندات برنامک‌ها).
+    // آدرس برنامک را در پنل مدیریت بات (دکمه‌ی منو) روی https://<دامنه>/splus-app بگذار. وب سروش‌پلاس برنامک را در iframe باز می‌کند:
+    // X-Frame-Options حذف و frame-ancestors برای دامنه‌های سروش‌پلاس مجاز می‌شود.
+    if (url.pathname === "/splus-app" && (req.method === "GET" || req.method === "HEAD")) {
+      const res = await env.ASSETS.fetch(new Request(`${url.origin}/app`, { headers: req.headers }));
+      if (!res.ok) return res;
+      const html = (await res.text()).replace(/<head[^>]*>/i, (m) => `${m}\n<script src="https://app.splus.ir/js/soroush-web-app.js"></script>`);
+      const h = new Headers(res.headers);
+      for (const k of ["content-length", "content-encoding", "etag", "x-frame-options"]) h.delete(k);
+      h.set("content-type", "text/html; charset=utf-8");
+      h.set("cache-control", "no-cache");
+      h.set("x-robots-tag", "noindex, nofollow");
+      h.set("content-security-policy", "frame-ancestors 'self' https://*.splus.ir https://splus.ir https://*.soroushplus.com https://soroushplus.com");
+      return new Response(req.method === "HEAD" ? null : html, { status: 200, headers: h });
+    }
+
     // هر چیز دیگر: صفحه‌ی وب و فایل‌های استاتیک (پوشه‌ی public)
     return env.ASSETS.fetch(req);
   },
