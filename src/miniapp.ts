@@ -57,8 +57,17 @@ export async function verifyInitData(botToken: string, initData: string, now = D
   // کلید امضا: HMAC("WebAppData", توکن) — هم در تلگرام و هم در مستندات مینی‌اپ بله (secret_key = HMAC_SHA256(<bot_token>, "WebAppData")).
   // fallback با خود توکن به‌عنوان کلید عمداً نگه داشته شده تا اگر کلاینت واقعی بله فرق داشت ورود نشکند؛ بعد از تست روی دستگاه واقعی بله می‌توان حذفش کرد
   let okSig = safeEqual(hex(await hmac(await hmac(enc.encode("WebAppData"), botToken), check)), hash);
-  if (!okSig && bale) okSig = safeEqual(hex(await hmac(enc.encode(botToken), check)), hash);
-  if (!okSig) return null;
+  if (!okSig && bale) {
+    // نسخه‌های دیگرِ مستندات بله/سروش‌پلاس: کلید = خود توکن، یا HMAC(توکن، "WebAppData")؛ و data-check-string بدون فیلد signature
+    const keys = [enc.encode(botToken), new Uint8Array(await hmac(enc.encode(botToken), "WebAppData"))];
+    const checks = [check, [...p.entries()].filter(([k]) => k !== "signature").map(([k, v]) => `${k}=${v}`).sort().join("\n")];
+    const std = await hmac(enc.encode("WebAppData"), botToken);
+    outer: for (const c of checks) {
+      if (safeEqual(hex(await hmac(std, c)), hash)) { okSig = true; break; }
+      for (const k of keys) if (safeEqual(hex(await hmac(k, c)), hash)) { okSig = true; break outer; }
+    }
+  }
+  if (!okSig) { if (bale) console.error("initData signature mismatch", [...p.keys()].join(",")); return null; }
   const age = now / 1000 - Number(p.get("auth_date"));
   if (!Number.isFinite(age) || age > INIT_MAX_AGE || age < -300) return null;
   try {
@@ -111,6 +120,8 @@ export async function miniappLogin(req: Request, env: Env, ip: string): Promise<
   if (!u) u = await asBale();
   if (!u) u = await asSplus();
   if (!u && !eitaaFirst) u = await asEitaa();
+  if (!u && splusFirst && !env.SPLUS_BOT_TOKEN) return err("SPLUS_BOT_TOKEN روی سرور تنظیم نشده است.", 503);
+  if (!u && splusFirst) console.error("splus miniapp login failed", `len=${initData.length}`, `fields=${[...new URLSearchParams(initData).keys()].join(",")}`);
   if (!u || u.is_bot) return err("ورود از تلگرام/بله تایید نشد؛ Mini App را بسته و دوباره از داخل ربات باز کن.", 401);
   if (await hitLimit(env, `mal:t:${u.id}`, TG_LOGIN_MAX, 600)) return err("تعداد ورود زیاد بود؛ چند دقیقه بعد دوباره امتحان کن.", 429);
 
