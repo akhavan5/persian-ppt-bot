@@ -140,7 +140,19 @@ async function applyKeypad(env: Env, h: number, rec: MsgRec, markup: unknown, ht
     await env.KV.put(`rb:a:${await rubikaMsgHandle(rec.c, s.mid)}`, String(h), { expirationTtl: MSG_TTL });
     return;
   }
-  if (rec.k && (await editKeypad(env, rec.c, rec.m, { rows: [] }))) await putMsg(env, h, { ...rec, k: 0 });
+  // برداشتن دکمه‌ها: مستندات روبیکا برای Inline Keypad متدی برای «حذف» ندارد (editChatKeypad/Remove فقط کیبورد پایین چت است) و editMessageKeypad با rows خالی
+  // INVALID_INPUT می‌دهد (هر دو نام متد، لاگ‌شده). پس درخواستِ بی‌فایده فرستاده نمی‌شود:
+  //  - متن پیام در دست است (ویرایش متن): پیام حذف و بدون دکمه دوباره فرستاده می‌شود؛
+  //  - فقط ویرایش دکمه (متن نیست): دکمه‌ی قدیمی می‌ماند و کلیکش مثل «درخواست منقضی» جواب می‌گیرد.
+  if (!rec.k) return;
+  if (html !== undefined) {
+    await rubikaCall(env, "deleteMessage", { chat_id: rec.c, message_id: rec.m }).catch(() => {});
+    const s = await sendText(env, rec.c, html, undefined);
+    await putMsg(env, h, { c: rec.c, m: s.mid, k: s.k });
+    await env.KV.put(`rb:a:${await rubikaMsgHandle(rec.c, s.mid)}`, String(h), { expirationTtl: MSG_TTL });
+    return;
+  }
+  await putMsg(env, h, { ...rec, k: 0 });
 }
 
 /** فایل را آپلود و با sendFile می‌فرستد (requestSendFile ← آدرس آپلود ← file_id). برمی‌گرداند: دستگیره‌ی پیام */
