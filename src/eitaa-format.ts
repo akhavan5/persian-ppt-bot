@@ -2,15 +2,15 @@
  * برنامک ایتا: توابع خالص برای شناسه‌ها و قالب‌بندی پیام.
  *
  * شناسه‌ی هر کاربر ایتا با EITAA_ID_BASE جمع می‌شود تا با تلگرام، بله و روبیکا هرگز یکی نشود (اعتبار، پلن، فایل‌ها جدا بمانند)
- * و همچنان عددی مثبت و کمتر از ۱۵ رقم بماند (normTgId در link.ts). بازه‌ها: تلگرام < ۱۰^۱۴ ≤ بله < ۲×۱۰^۱۴ ≤ روبیکا < ۳×۱۰^۱۴ ≤ ایتا.
+ * و همچنان عددی مثبت و کمتر از ۱۵ رقم بماند (normTgId در link.ts). بازه‌ها: تلگرام < ۱۰^۱۴ ≤ بله < ۲×۱۰^۱۴ ≤ روبیکا < ۳×۱۰^۱۴ ≤ ایتا < ۴×۱۰^۱۴ ≤ سروش‌پلاس.
  * این فایل عمداً به ماژول دیگری وابسته نیست.
  */
 export const EITAA_ID_BASE = 300_000_000_000_000; // ۳×۱۰^۱۴
-const EITAA_ID_MAX = 700_000_000_000_000; // سقف شناسه‌ی خود ایتا تا مجموع از ۱۰^۱۵ رد نشود (شناسه‌های واقعی خیلی کوچک‌ترند)
+const EITAA_ID_MAX = 100_000_000_000_000; // سقف شناسه‌ی خود ایتا تا مجموع از ۴×۱۰^۱۴ (شروع بازه‌ی سروش‌پلاس) رد نشود (شناسه‌های واقعی خیلی کوچک‌ترند)
 
 export const isEitaaId = (n: unknown): boolean => {
   const v = typeof n === "string" && /^\d+$/.test(n) ? Number(n) : n;
-  return typeof v === "number" && Number.isSafeInteger(v) && v >= EITAA_ID_BASE && v < 1_000_000_000_000_000;
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= EITAA_ID_BASE && v < 400_000_000_000_000; // بالاتر از آن: سروش‌پلاس (splus-format.ts)
 };
 export const toEitaaId = (n: number): number => EITAA_ID_BASE + n;
 export const fromEitaaId = (n: number): number => n - EITAA_ID_BASE;

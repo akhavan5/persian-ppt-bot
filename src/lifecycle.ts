@@ -32,6 +32,7 @@ import { sendWebPush, webPushEnabled, type WebPushMsg } from "./webpush";
 import { isBaleId } from "./bale-format";
 import { isRubikaId } from "./rubika-format";
 import { isEitaaId } from "./eitaa-format";
+import { isSplusId } from "./splus-format";
 import { toFa } from "./util";
 
 
@@ -77,7 +78,7 @@ const GONE_RE = /bot was blocked by the user|user is deactivated|chat not found|
 const BLK_TTL = 90 * 86_400;
 
 const botReady = (env: Env, id: number): boolean =>
-  isBaleId(id) ? !!env.BALE_BOT_TOKEN : isRubikaId(id) ? !!env.RUBIKA_BOT_TOKEN : isEitaaId(id) ? !!env.EITAA_APP_TOKEN : !!env.TELEGRAM_BOT_TOKEN;
+  isSplusId(id) ? !!env.SPLUS_BOT_TOKEN : isBaleId(id) ? !!env.BALE_BOT_TOKEN : isRubikaId(id) ? !!env.RUBIKA_BOT_TOKEN : isEitaaId(id) ? !!env.EITAA_APP_TOKEN : !!env.TELEGRAM_BOT_TOKEN;
 
 function contactOf(c: Ctx, r: Base): Contact {
   let u: WebUser | null = null;
@@ -567,7 +568,7 @@ ORDER BY x.k LIMIT ?3`,
     // لینک اختصاصی پلتفرم خودِ کاربر (تلگرام/بله/روبیکا: ربات، ایتا: برنامک)؛ نام ربات‌ها یک‌بار در هر اجرا گرفته می‌شود
     const plat = invitePlatform(id);
     let name: string | undefined;
-    if (plat === "tg" || plat === "bale" || plat === "rubika") {
+    if (plat === "tg" || plat === "bale" || plat === "rubika" || plat === "splus") {
       name = c.botNames.get(plat);
       if (name === undefined) {
         if (!take(c, 1)) return null;
@@ -678,7 +679,7 @@ export async function runLifecycle(env: Env): Promise<Record<string, number>> {
     const now = Date.now();
     if (!inSendHours(now)) return sent;
     const mailOn = emailEnabled(env);
-    if (!mailOn && !env.TELEGRAM_BOT_TOKEN && !env.BALE_BOT_TOKEN && !env.RUBIKA_BOT_TOKEN && !env.EITAA_APP_TOKEN && !webPushEnabled(env)) return sent;
+    if (!mailOn && !env.TELEGRAM_BOT_TOKEN && !env.BALE_BOT_TOKEN && !env.SPLUS_BOT_TOKEN && !env.RUBIKA_BOT_TOKEN && !env.EITAA_APP_TOKEN && !webPushEnabled(env)) return sent;
     await env.KV.ready();
     const c: Ctx = { env, now, nowSec: Math.floor(now / 1000), left: SUBREQUEST_BUDGET, mailOn, botNames: new Map() };
     // پرداخت و هشدار اعتبار همیشه اول؛ بقیه هر ساعت با ترتیب چرخشی تا هیچ‌کدام گرسنه نماند

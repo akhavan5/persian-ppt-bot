@@ -4,6 +4,7 @@ import { isRubikaId } from "./rubika-format";
 import { rubikaSendFile, rubikaTg } from "./rubika-api";
 import { isEitaaId } from "./eitaa-format";
 import { eitaaTg } from "./eitaa";
+import { SPLUS_API_DEFAULT, fromSplusId, isSplusId, splusMarkup, splusText } from "./splus-format";
 
 const apiBase = (env: Env) => env.TELEGRAM_API_BASE || "https://api.telegram.org";
 
@@ -12,19 +13,22 @@ export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;")
 // ---------- تلگرام یا بله؟ ----------
 // شناسه‌ی گیرنده‌ی بله با BALE_ID_BASE جمع شده (bale-format.ts)، پس هر ارسال فقط از روی chat_id مسیر خودش را پیدا می‌کند.
 // متدهای بدون chat_id (answerCallbackQuery، getFile، getMe) فقط داخل پردازش آپدیت بله صدا زده می‌شوند و از پرچم env.PLATFORM می‌فهمند.
-interface Route { bale: boolean; rubika: boolean; base: string; token: string }
+interface Route { bale: boolean; rubika: boolean; splus: boolean; base: string; token: string }
 function route(env: Env, chatId?: unknown): Route {
   const known = chatId !== undefined && chatId !== null && chatId !== "";
   // روبیکا: آدرس و توکن را rubika-api.ts خودش از env می‌خواند (متدها و قالب پاسخ با تلگرام فرق دارد)
-  if (known ? isRubikaId(chatId) : env.PLATFORM === "rubika") return { bale: false, rubika: true, base: "", token: "" };
+  if (known ? isRubikaId(chatId) : env.PLATFORM === "rubika") return { bale: false, rubika: true, splus: false, base: "", token: "" };
+  // سروش‌پلاس: API هم‌شکل تلگرام با HTML؛ آدرس و توکن از env
+  if (known ? isSplusId(chatId) : env.PLATFORM === "splus") return { bale: false, rubika: false, splus: true, base: (env.SPLUS_API_BASE || SPLUS_API_DEFAULT).replace(/\/+$/, ""), token: env.SPLUS_BOT_TOKEN ?? "" };
   const bale = known ? isBaleId(chatId) : env.PLATFORM === "bale";
   return bale
-    ? { bale, rubika: false, base: (env.BALE_API_BASE || BALE_API_DEFAULT).replace(/\/+$/, ""), token: env.BALE_BOT_TOKEN ?? "" }
-    : { bale, rubika: false, base: apiBase(env), token: env.TELEGRAM_BOT_TOKEN };
+    ? { bale, rubika: false, splus: false, base: (env.BALE_API_BASE || BALE_API_DEFAULT).replace(/\/+$/, ""), token: env.BALE_BOT_TOKEN ?? "" }
+    : { bale, rubika: false, splus: false, base: apiBase(env), token: env.TELEGRAM_BOT_TOKEN };
 }
 /** نسخه‌ی env برای پردازش چیزی که از بله آمده (مثلاً خواندن فایل در Workflow)؛ برای گیرنده‌ی تلگرام همان env برمی‌گردد */
 export const envFor = (env: Env, chatId: unknown): Env =>
   isRubikaId(chatId) ? (env.PLATFORM !== "rubika" ? { ...env, PLATFORM: "rubika" } : env)
+  : isSplusId(chatId) ? (env.PLATFORM !== "splus" ? { ...env, PLATFORM: "splus" } : env)
   : isBaleId(chatId) && env.PLATFORM !== "bale" ? { ...env, PLATFORM: "bale" } : env;
 /** آدرس دانلود فایل (بعد از getFile)؛ پلتفرم از پرچم env.PLATFORM می‌آید (getFile شناسه‌ی چت ندارد) */
 export const fileUrl = (env: Env, filePath: string): string => {
@@ -58,11 +62,23 @@ function baleParams(env: Env, method: string, body: Record<string, unknown>, web
   return b;
 }
 
+/** پارامترهای تلگرام ← سروش‌پلاس: HTML همان است؛ شناسه‌ها به شناسه‌ی اصلی برمی‌گردند و گزینه‌های نامستند حذف می‌شوند */
+function splusParams(env: Env, body: Record<string, unknown>): Record<string, unknown> {
+  const b: Record<string, unknown> = { ...body };
+  for (const k of ["link_preview_options", "disable_web_page_preview", "caption_entities", "entities", "message_thread_id"]) delete b[k];
+  if (isSplusId(b.chat_id)) b.chat_id = fromSplusId(Number(b.chat_id));
+  if (isSplusId(b.user_id)) b.user_id = fromSplusId(Number(b.user_id));
+  if (typeof b.text === "string") b.text = splusText(b.text);
+  if (typeof b.caption === "string") b.caption = splusText(b.caption);
+  if (b.reply_markup) b.reply_markup = splusMarkup(b.reply_markup, siteOf(env));
+  return b;
+}
+
 export async function tg<T = any>(env: Env, method: string, body: Record<string, unknown> = {}): Promise<T> {
   if (isEitaaId(body.chat_id ?? body.user_id)) return (await eitaaTg(env, method, body)) as T; // ایتا: فقط متن (eitaa.ts)
   const r = route(env, body.chat_id ?? body.user_id);
   if (r.rubika) return (await rubikaTg(env, method, body)) as T;
-  if (r.bale && BALE_UNSUPPORTED.has(method)) return true as T;
+  if ((r.bale || r.splus) && BALE_UNSUPPORTED.has(method)) return true as T; // دکمه‌ی منوی بازو در بله و سروش‌پلاس از BotFather تنظیم می‌شود
   // کلاینت‌های قدیمی بله از answerCallbackQuery پشتیبانی نمی‌کنند (شناسه‌ی callback با «1» شروع می‌شود)؛ متن را به‌صورت پیام عادی می‌فرستیم
   if (r.bale && method === "answerCallbackQuery" && String(body.callback_query_id ?? "").startsWith("1")) {
     const chat = env.BALE_CQ_CHAT;
@@ -79,14 +95,14 @@ export async function tg<T = any>(env: Env, method: string, body: Record<string,
     });
     return { res, j: (await res.json().catch(() => ({ ok: false, description: `HTTP ${res.status}` }))) as any };
   };
-  let { res, j } = await call(r.bale ? baleParams(env, method, body) : body);
+  let { res, j } = await call(r.bale ? baleParams(env, method, body) : r.splus ? splusParams(env, body) : body);
   // اگر بله دکمه‌ی web_app (Mini App) را نپذیرفت، همان پیام یک بار با دکمه‌ی لینک ساده ارسال می‌شود تا کاربر بی‌پاسخ نماند
   if (!j.ok && r.bale && hasWebApp(body.reply_markup)) ({ res, j } = await call(baleParams(env, method, body, false)));
   if (!j.ok) {
-    const name = r.bale ? "bale" : "telegram";
+    const name = r.bale ? "bale" : r.splus ? "splus" : "telegram";
     console.error(`${name} api error`, method, JSON.stringify(j).slice(0, 400));
-    if (r.bale && BALE_OPTIONAL.has(method)) return true as T;
-    throw apiError(r.bale ? "Bale" : "Telegram", method, j, res.status);
+    if ((r.bale || r.splus) && BALE_OPTIONAL.has(method)) return true as T;
+    throw apiError(r.bale ? "Bale" : r.splus ? "Splus" : "Telegram", method, j, res.status);
   }
   return j.result as T;
 }
@@ -96,7 +112,7 @@ export async function sendMessage(env: Env, chatId: number, text: string, extra:
     return await tg<{ message_id: number }>(env, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, ...extra });
   } catch (e) {
     // اگر تلگرام HTML پیام را نپذیرفت، همان متن را بدون قالب‌بندی بفرست تا پیام گم نشود
-    if (!String(e).includes("parse entities")) throw e;
+    if (!/parse entities|can't parse|parse_mode|entit/i.test(String(e))) throw e;
     const plain = text.replace(/<[^>]+>/g, "");
     return await tg<{ message_id: number }>(env, "sendMessage", { chat_id: chatId, text: plain, link_preview_options: { is_disabled: true }, ...extra });
   }
@@ -114,8 +130,8 @@ export async function editMessage(env: Env, chatId: number, messageId: number, t
 /** فرم مشترک ارسال فایل: تلگرام با parse_mode=HTML، بله با کپشن Markdown (بدون parse_mode) و شناسه‌ی اصلی چت */
 function mediaForm(_env: Env, rt: Route, chatId: number, caption: string): FormData {
   const form = new FormData();
-  form.append("chat_id", String(rt.bale ? fromBaleId(chatId) : chatId));
-  form.append("caption", rt.bale ? baleText(caption).slice(0, 1024) : caption);
+  form.append("chat_id", String(rt.bale ? fromBaleId(chatId) : rt.splus ? fromSplusId(chatId) : chatId));
+  form.append("caption", rt.bale ? baleText(caption).slice(0, 1024) : rt.splus ? splusText(caption) : caption);
   if (!rt.bale) form.append("parse_mode", "HTML");
   return form;
 }
@@ -128,13 +144,13 @@ export async function sendDocument(env: Env, chatId: number, data: Uint8Array, f
   const rt = route(env, chatId);
   if (rt.rubika) { await rubikaSendFile(env, chatId, data, filename, caption, "File", extra.reply_markup); return; }
   const form = mediaForm(env, rt, chatId, caption);
-  if (extra.reply_markup) form.append("reply_markup", JSON.stringify(rt.bale ? baleMarkup(extra.reply_markup, siteOf(env)) : extra.reply_markup));
+  if (extra.reply_markup) form.append("reply_markup", JSON.stringify(rt.bale ? baleMarkup(extra.reply_markup, siteOf(env)) : rt.splus ? splusMarkup(extra.reply_markup, siteOf(env)) : extra.reply_markup));
   form.append("document", new Blob([data], { type: extra.mime ?? PPTX_MIME }), filename);
   const r = await fetch(`${rt.base}/bot${rt.token}/sendDocument`, {
     method: "POST", body: form, signal: AbortSignal.timeout(120_000),
   });
   const j = (await r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }))) as any;
-  if (!j.ok) throw apiError(rt.bale ? "Bale" : "Telegram", "sendDocument", j, r.status);
+  if (!j.ok) throw apiError(rt.bale ? "Bale" : rt.splus ? "Splus" : "Telegram", "sendDocument", j, r.status);
 }
 
 /** ارسال فایل صوتی (پخش‌کننده‌ی تلگرام با عنوان و مدت). تلگرام رسماً MP3/M4A می‌خواهد (خروجی پیش‌فرض اکنون MP3 است)؛ اگر WAV را نپذیرفت، همان فایل به‌صورت سند فرستاده می‌شود (باز هم داخل تلگرام پخش می‌شود). */
@@ -150,15 +166,15 @@ export async function sendAudio(env: Env, chatId: number, data: Uint8Array, file
   if (extra.title) form.append("title", extra.title.slice(0, 200));
   if (extra.performer) form.append("performer", extra.performer.slice(0, 100));
   if (extra.duration) form.append("duration", String(extra.duration));
-  if (extra.reply_markup) form.append("reply_markup", JSON.stringify(extra.reply_markup));
+  if (extra.reply_markup) form.append("reply_markup", JSON.stringify(rt.splus ? splusMarkup(extra.reply_markup, siteOf(env)) : extra.reply_markup));
   form.append("audio", new Blob([data], { type: mime }), filename);
   try {
     const r = await fetch(`${rt.base}/bot${rt.token}/sendAudio`, { method: "POST", body: form, signal: AbortSignal.timeout(180_000) });
     const j = (await r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }))) as any;
     if (j.ok) return;
-    console.error(`${rt.bale ? "bale" : "telegram"} sendAudio`, String(j.description ?? r.status).slice(0, 200));
+    console.error(`${rt.bale ? "bale" : rt.splus ? "splus" : "telegram"} sendAudio`, String(j.description ?? r.status).slice(0, 200));
   } catch (e) {
-    console.error(`${rt.bale ? "bale" : "telegram"} sendAudio`, String(e).slice(0, 200));
+    console.error(`${rt.bale ? "bale" : rt.splus ? "splus" : "telegram"} sendAudio`, String(e).slice(0, 200));
   }
   await sendDocument(env, chatId, data, filename, caption, { mime, ...(extra.reply_markup ? { reply_markup: extra.reply_markup } : {}) });
 }
@@ -176,7 +192,7 @@ export async function sendPhoto(env: Env, chatId: number, data: Uint8Array, file
     method: "POST", body: form, signal: AbortSignal.timeout(120_000),
   });
   const j = (await r.json().catch(() => ({ ok: false, description: `HTTP ${r.status}` }))) as any;
-  if (!j.ok) throw apiError(rt.bale ? "Bale" : "Telegram", "sendPhoto", j, r.status);
+  if (!j.ok) throw apiError(rt.bale ? "Bale" : rt.splus ? "Splus" : "Telegram", "sendPhoto", j, r.status);
 }
 
 export const BOT_COMMANDS = [

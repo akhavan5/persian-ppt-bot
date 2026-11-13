@@ -1,6 +1,7 @@
 import { BALE_ID_BASE, isBaleId } from "./bale-format";
 import { isRubikaId } from "./rubika-format";
 import { isEitaaId } from "./eitaa-format";
+import { isSplusId } from "./splus-format";
 import type { Env } from "./env";
 import type { Settings } from "./types";
 import { FONTS, THEMES, TONES, isMode } from "./themes";
@@ -73,8 +74,12 @@ export const SUPPORT_CONTACT_BALE = "@akhavan4";
 export const SUPPORT_CONTACT_RUBIKA = "@akhavan7";
 /** پشتیبانی در ایتا (کاربران برنامک ایتا به این حساب وصل می‌شوند؛ لینک ایتا متن آماده ندارد) */
 export const SUPPORT_CONTACT_EITAA = "@akhavan5";
+/** پشتیبانی در سروش‌پلاس (کاربران سروش‌پلاس به این حساب وصل می‌شوند؛ نام کاربری را در صورت نیاز عوض کن) */
+export const SUPPORT_CONTACT_SPLUS = "@akhavan4";
 const contactUrl = (userId: Uid, text: string) =>
-  isEitaaId(userId)
+  isSplusId(userId)
+    ? `https://splus.ir/${SUPPORT_CONTACT_SPLUS.slice(1)}`
+    : isEitaaId(userId)
     ? `https://eitaa.com/${SUPPORT_CONTACT_EITAA.slice(1)}`
     : isRubikaId(userId)
     ? `https://rubika.ir/${SUPPORT_CONTACT_RUBIKA.slice(1)}`
@@ -378,11 +383,11 @@ export type StatName = "started" | "ok" | "fail" | "newusers" | "newapp";
 /** پلتفرم‌های سرویس: ربات تلگرام (و Mini App آن)، ربات بله/روبیکا/ایتا، سایت، اپ اندروید به تفکیک فروشگاه
  *  (bazaar / myket = نسخه‌ای که فروشگاه را در User-Agent می‌فرستد؛ app = نسخه‌ی قدیمی اپ که فروشگاهش معلوم نیست)،
  *  اپ iOS (ios) و وب‌اپ نصب‌شده (pwa_ios = iPhone/iPad، pwa = بقیه) */
-export type Platform = "tg" | "bale" | "rubika" | "eitaa" | "web" | AppPlatform | PwaPlatform;
-export const PLATFORMS: Platform[] = ["tg", "bale", "rubika", "eitaa", "web", "bazaar", "myket", "app", "ios", "pwa_ios", "pwa"];
+export type Platform = "tg" | "bale" | "rubika" | "eitaa" | "splus" | "web" | AppPlatform | PwaPlatform;
+export const PLATFORMS: Platform[] = ["tg", "bale", "rubika", "eitaa", "splus", "web", "bazaar", "myket", "app", "ios", "pwa_ios", "pwa"];
 export const isPlatform = (x: unknown): x is Platform => PLATFORMS.includes(x as Platform);
 /** پلتفرم از روی شناسه‌ی عددی گیرنده/کاربر ربات: شناسه‌های بله با BALE_ID_BASE جدا شده‌اند */
-export const botPlatform = (id: unknown): Platform => (isEitaaId(id) ? "eitaa" : isRubikaId(id) ? "rubika" : isBaleId(id) ? "bale" : "tg");
+export const botPlatform = (id: unknown): Platform => (isSplusId(id) ? "splus" : isEitaaId(id) ? "eitaa" : isRubikaId(id) ? "rubika" : isBaleId(id) ? "bale" : "tg");
 
 /** شمارنده‌ی روزانه: همیشه کل (stat:نام:تاریخ) و، اگر پلتفرم معلوم باشد، شمارنده‌ی همان پلتفرم (pst:پلتفرم:نام:تاریخ).
  *  شمارنده‌ی کل از همه‌ی پلتفرم‌ها جداست تا آمار و نمای ماهانه‌ی قبلی دست‌نخورده بماند. */

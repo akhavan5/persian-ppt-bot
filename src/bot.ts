@@ -19,6 +19,7 @@ import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./te
 import { audioSeconds, isAudioName } from "./wav";
 import { siteHost } from "./deck-service";
 import { isBaleId } from "./bale-format";
+import { isSplusId } from "./splus-format";
 import { isRubikaId } from "./rubika-format";
 import { toEn, toFa } from "./util";
 import { modelList } from "./llm";
@@ -549,8 +550,8 @@ async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chat
   await env.KV.delete(fbKey(userId)).catch(() => {});
   const rewarded = canReward && (await claimFeedbackReward(env, uid).catch((e) => { console.error("feedbackReward", e); return false; }));
   const from = msg.from;
-  const who = isBaleId(userId) || isRubikaId(userId)
-    ? `${esc(displayName(from) || String(userId))} <i>(${isRubikaId(userId) ? "روبیکا" : "بله"})</i>${from.username ? ` (@${esc(from.username)})` : ""}` // لینک tg://user برای کاربر بله کار نمی‌کند
+  const who = isBaleId(userId) || isRubikaId(userId) || isSplusId(userId)
+    ? `${esc(displayName(from) || String(userId))} <i>(${isSplusId(userId) ? "سروش‌پلاس" : isRubikaId(userId) ? "روبیکا" : "بله"})</i>${from.username ? ` (@${esc(from.username)})` : ""}` // لینک tg://user برای کاربر بله کار نمی‌کند
     : `<a href="tg://user?id=${userId}">${esc(displayName(from) || String(userId))}</a>${from.username ? ` (@${esc(from.username)})` : ""}`;
   const out = `💬 <b>نظر کاربر</b>\n👤 ${who}\n🆔 <code>${userId}</code>\n📄 ارائه: ${esc(title)}${rewarded ? `\n🎁 ${toFa(String(FEEDBACK_CREDITS))} اعتبار هدیه داده شد` : ""}\n\n${esc(text.slice(0, 2000))}`;
   const adminKb = kb([[{ text: "👤 کارت کاربر", callback_data: `ad:nu:${userId}` }, { text: "🗂 فایل‌ها", callback_data: `ad:nd:${userId}` }]]);

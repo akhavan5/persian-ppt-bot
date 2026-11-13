@@ -39,6 +39,7 @@ import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } 
 import { EXTRA_KINDS, audioKind, isMainDeck, missingExtras, startExtra } from "./extras";
 import { isBaleId, fromBaleId } from "./bale-format";
 import { isEitaaId, fromEitaaId } from "./eitaa-format";
+import { isSplusId, fromSplusId } from "./splus-format";
 import { checkPlatformPolicy, notifyBlockedTopic, BLOCKED_MSG } from "./platform-policy";
 import { isRubikaId } from "./rubika-format";
 import { inviteClaim, inviteInfo, miniappBuy, miniappDlLink, miniappDownload, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
@@ -392,8 +393,8 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     user: publicUser(user),
     telegram, // آیدی عددی تلگرامِ وصل‌شده (یا null)؛ برای بله/ایتا/روبیکا همان شناسه‌ی داخلی (جمع‌شده با پایه) است
     // پروفایل سایت: پیام‌رسانِ وصل‌شده ("tg" | "bale" | "eitaa" | "rubika") و شناسه‌ی واقعی خودش (روبیکا: null چون شناسه‌اش هش است)
-    telegramPlat: telegram ? (isEitaaId(telegram) ? "eitaa" : isRubikaId(telegram) ? "rubika" : isBaleId(telegram) ? "bale" : "tg") : null,
-    telegramShown: telegram ? (isEitaaId(telegram) ? fromEitaaId(telegram) : isRubikaId(telegram) ? null : isBaleId(telegram) ? fromBaleId(telegram) : telegram) : null,
+    telegramPlat: telegram ? (isSplusId(telegram) ? "splus" : isEitaaId(telegram) ? "eitaa" : isRubikaId(telegram) ? "rubika" : isBaleId(telegram) ? "bale" : "tg") : null,
+    telegramShown: telegram ? (isSplusId(telegram) ? fromSplusId(telegram) : isEitaaId(telegram) ? fromEitaaId(telegram) : isRubikaId(telegram) ? null : isBaleId(telegram) ? fromBaleId(telegram) : telegram) : null,
     dailyFree,
     // هدیه‌ی تکمیل پروفایل: available=true یعنی با ثبت و تایید یکی از موارد missing (mobile/email) هنوز می‌شود credits اعتبار گرفت؛ note = جمله‌ی کنار هدیه
     contactReward: { ...(await contactRewardInfo(env, user)), note: CONTACT_REWARD_NOTE },

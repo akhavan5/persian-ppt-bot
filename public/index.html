@@ -1105,7 +1105,7 @@ function renderPfTg() {
   const t = me.telegram;
   // حساب از بله/ایتا/روبیکا وصل شده؟ برچسب و شناسه‌ی همان پیام‌رسان نشان داده می‌شود (نه «تلگرام» و نه شناسه‌ی داخلی جمع‌شده با پایه)
   const plat = t ? (me.telegramPlat || "tg") : "tg";
-  $("#pfTgLabel").textContent = { tg: "تلگرام", bale: "بله", eitaa: "ایتا", rubika: "روبیکا" }[plat] || "تلگرام";
+  $("#pfTgLabel").textContent = { tg: "تلگرام", bale: "بله", eitaa: "ایتا", rubika: "روبیکا", splus: "سروش‌پلاس" }[plat] || "تلگرام";
   const shown = plat === "tg" ? t : me.telegramShown;
   $("#pfTgSet").textContent = t ? `✅ وصل است${shown ? ` (${fa(shown)})` : ""}` : ""; show($("#pfTgSet"), !!t);
   show($("#pfTgAdd"), !t);

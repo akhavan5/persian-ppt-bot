@@ -92,6 +92,13 @@ export interface Env {
   BALE_BOT_TOKEN?: string;
   BALE_WEBHOOK_BASE?: string;
   BALE_API_BASE?: string;
+  /** ربات سروش‌پلاس (اختیاری): بدون SPLUS_BOT_TOKEN خاموش است و رفتار بقیه‌ی پلتفرم‌ها تغییری نمی‌کند.
+   *  SPLUS_BOT_TOKEN: توکن بات از splus.ir/botfather (secret؛ هرگز در کد یا مخزن نگذارید)
+   *  SPLUS_WEBHOOK_BASE: دامنه‌ای که سروش‌پلاس به آن وبهوک می‌زند (پیش‌فرض SITE_URL؛ پورت ۴۴۳/۸۰/۸۸/۸۴۴۳)
+   *  SPLUS_API_BASE: آدرس API (پیش‌فرض https://api.splus.ir) */
+  SPLUS_BOT_TOKEN?: string;
+  SPLUS_WEBHOOK_BASE?: string;
+  SPLUS_API_BASE?: string;
   /** ربات روبیکا (اختیاری): بدون RUBIKA_BOT_TOKEN ربات روبیکا خاموش است و رفتار تلگرام و بله هیچ تغییری نمی‌کند.
    *  RUBIKA_BOT_TOKEN: توکن بازو از @BotFather در روبیکا (secret)
    *  راز آدرس وبهوک (/rubika/<secret>) همان TELEGRAM_WEBHOOK_SECRET است (روبیکا هدر محرمانه نمی‌فرستد)
@@ -106,7 +113,7 @@ export interface Env {
   EITAA_APP_TOKEN?: string;
   EITAA_MINIAPP_LINK?: string;
   /** پرچم داخلی (در wrangler تعریف نمی‌شود): env ساخته‌شده برای پردازش آپدیت بله؛ متدهای بدون chat_id مثل answerCallbackQuery و getFile با آن به بله می‌روند */
-  PLATFORM?: "bale" | "rubika";
+  PLATFORM?: "bale" | "rubika" | "splus";
   /** پرچم داخلی: شناسه‌ی چتِ callback در حال پردازش (بله)؛ برای کلاینت‌های قدیمی که answerCallbackQuery ندارند، متن به‌صورت پیام در همین چت فرستاده می‌شود */
   BALE_CQ_CHAT?: number;
 

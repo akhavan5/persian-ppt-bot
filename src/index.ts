@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { handleUpdate } from "./bot";
 import { baleEnabled, baleSecret, handleBaleUpdate, setupBale } from "./bale";
+import { splusEnabled, splusSecret, handleSplusUpdate, setupSplus } from "./splus";
 import { handleRubikaUpdate, rubikaEnabled, rubikaSecret, setupRubika } from "./rubika";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
@@ -143,6 +144,26 @@ export default {
         return noindex(new Response("forbidden", { status: 403 }));
       }
       return noindex(Response.json(await setupBale(env)));
+    }
+
+    // وبهوک سروش‌پلاس: راز بخشی از آدرس است (/splus/<TELEGRAM_WEBHOOK_SECRET>)؛ بدون SPLUS_BOT_TOKEN همه‌چیز 403 است و بقیه‌ی پلتفرم‌ها بی‌تأثیر می‌مانند
+    const splusHook = url.pathname.match(/^\/splus\/([A-Za-z0-9_-]{1,128})$/);
+    if (splusHook) {
+      if (req.method !== "POST") return noindex(new Response("method not allowed", { status: 405, headers: { allow: "POST" } }));
+      const secret = splusSecret(env);
+      if (!splusEnabled(env) || !secret || !safeEqual(splusHook[1], secret)) return noindex(new Response("forbidden", { status: 403 }));
+      const update = await req.json().catch(() => null);
+      if (update) ctx.waitUntil(handleSplusUpdate(env, update)); // فوراً 200؛ کار اصلی بعد از پاسخ انجام می‌شود
+      return noindex(new Response("ok"));
+    }
+
+    // ثبت وبهوک سروش‌پلاس: یک بار در مرورگر باز کن → /splus-setup?secret=<TELEGRAM_WEBHOOK_SECRET>
+    if (url.pathname === "/splus-setup") {
+      const secret = url.searchParams.get("secret") ?? "";
+      if (!env.TELEGRAM_WEBHOOK_SECRET || !safeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
+        return noindex(new Response("forbidden", { status: 403 }));
+      }
+      return noindex(Response.json(await setupSplus(env)));
     }
 
     // وبهوک روبیکا: راز بخشی از آدرس است (/rubika/<TELEGRAM_WEBHOOK_SECRET>)؛ بدون RUBIKA_BOT_TOKEN همه‌چیز 403 است و تلگرام و بله بی‌تأثیر می‌مانند

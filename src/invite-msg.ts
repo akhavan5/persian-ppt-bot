@@ -10,7 +10,7 @@ import { eitaaLink } from "./eitaa";
 export const INVITE_TOKEN = "{invite}";
 
 /** پلتفرم دعوت‌کننده: پیام‌رسان از روی بازه‌ی شناسه، «web» برای حساب فقط‌وب/اپ (شناسه‌ی w_…) */
-export type InvitePlatform = "tg" | "bale" | "rubika" | "eitaa" | "web";
+export type InvitePlatform = "tg" | "bale" | "rubika" | "eitaa" | "splus" | "web";
 export const invitePlatform = (id: RefId): InvitePlatform => (typeof id === "string" ? "web" : (botPlatform(id) as InvitePlatform));
 
 /** لینک اختصاصی دعوت (تلگرام) */
@@ -24,10 +24,10 @@ export const eitaaInviteLink = (env: Env, id: RefId) => { const l = eitaaLink(en
 
 // نام کاربری هر ربات (getMe) در حافظه‌ی همین نمونه نگه داشته می‌شود؛ ربات‌ها عوض نمی‌شوند و getMe یک درخواست شبکه است
 const botNames = new Map<string, string>();
-const envOf = (env: Env, plat: "tg" | "bale" | "rubika"): Env =>
+const envOf = (env: Env, plat: "tg" | "bale" | "rubika" | "splus"): Env =>
   plat === "tg" ? (env.PLATFORM ? { ...env, PLATFORM: undefined } : env) : env.PLATFORM === plat ? env : { ...env, PLATFORM: plat };
 /** نام کاربری ربات پلتفرم (بدون @)؛ ناموفق = "" */
-export async function botUsername(env: Env, plat: "tg" | "bale" | "rubika"): Promise<string> {
+export async function botUsername(env: Env, plat: "tg" | "bale" | "rubika" | "splus"): Promise<string> {
   const hit = botNames.get(plat);
   if (hit) return hit;
   const name = String((await tg<{ username?: string }>(envOf(env, plat), "getMe").catch(() => ({ username: "" }))).username ?? "");
@@ -43,7 +43,7 @@ export async function inviteLinkFor(env: Env, id: RefId, botName?: string): Prom
   if (plat === "eitaa") return eitaaInviteLink(env, id);
   const name = botName || (await botUsername(env, plat));
   if (!name) return "";
-  return plat === "rubika" ? `https://rubika.ir/${name}?start=ref_${id}` : plat === "bale" ? `https://ble.ir/${name}?start=ref_${id}` : telegramInviteLink(name, Number(id));
+  return plat === "splus" ? `https://splus.ir/${name}?start=ref_${id}` : plat === "rubika" ? `https://rubika.ir/${name}?start=ref_${id}` : plat === "bale" ? `https://ble.ir/${name}?start=ref_${id}` : telegramInviteLink(name, Number(id));
 }
 
 /** متن HTML پیام دعوت؛ done = دعوت‌های موفق این کاربر تا الان */

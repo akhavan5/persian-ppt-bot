@@ -180,7 +180,7 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
           // لینک اختصاصی دقیقاً برای پلتفرم همین کاربر (قبلاً همه لینک تلگرام می‌گرفتند و برای کاربران بله/روبیکا/ایتا خراب بود)
           const plat = invitePlatform(id);
           let name = botNames.get(plat);
-          if (name === undefined && (plat === "tg" || plat === "bale" || plat === "rubika")) {
+          if (name === undefined && (plat === "tg" || plat === "bale" || plat === "rubika" || plat === "splus")) {
             name = await botUsername(this.env, plat); used += 1; botNames.set(plat, name);
           }
           const link = await inviteLinkFor(this.env, id, name || undefined).catch(() => "");

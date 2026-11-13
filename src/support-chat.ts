@@ -40,12 +40,12 @@ const MAX_TEXT = 600;
 export const SUPPORT_MAX_TEXT = MAX_TEXT;
 
 /** کانالی که کاربر از آن با دستیار حرف می‌زند؛ هم در پرامپت (وضعیت کاربر) و هم در اعلان مدیر می‌آید */
-export type SupportChannel = "web" | "miniapp" | "eitaa" | "tg" | "bale" | "rubika";
+export type SupportChannel = "web" | "miniapp" | "eitaa" | "tg" | "bale" | "rubika" | "splus";
 const CHANNEL_LABEL: Record<SupportChannel, string> = {
   web: "سایت یا اپ اندروید", miniapp: "اپ داخل تلگرام/بله (Mini App)", eitaa: "برنامک ایتا",
-  tg: "ربات تلگرام", bale: "ربات بله", rubika: "ربات روبیکا",
+  tg: "ربات تلگرام", bale: "ربات بله", rubika: "ربات روبیکا", splus: "ربات سروش‌پلاس",
 };
-const PLATFORM_LABEL: Partial<Record<Platform, string>> = { tg: "تلگرام", bale: "بله", rubika: "روبیکا", eitaa: "ایتا" };
+const PLATFORM_LABEL: Partial<Record<Platform, string>> = { tg: "تلگرام", bale: "بله", rubika: "روبیکا", eitaa: "ایتا", splus: "سروش‌پلاس" };
 const MAX_STORED = 60; // فقط آخرین ۲۰۰ پیام نگه داشته می‌شود (قدیمی‌ترها حذف می‌شوند)
 const USER_VIEW = 60; // کاربر فقط آخرین ۶۰ پیام را در چت می‌بیند
 const HISTORY_FOR_MODEL = 12;
@@ -351,7 +351,7 @@ export async function supportBotAsk(env: Env, uid: Uid, rawText: string, plat: P
   if (!text) return fail("پیام نامعتبر است.");
   const user = typeof uid === "string" ? await getUserById(env, uid).catch(() => null) : null;
   if (!user) return fail("گفتگو با دستیار هوشمند برای این حساب در دسترس نیست.");
-  const channel: SupportChannel = plat === "bale" || plat === "rubika" || plat === "eitaa" ? plat : "tg";
+  const channel: SupportChannel = plat === "bale" || plat === "rubika" || plat === "eitaa" || plat === "splus" ? plat : "tg";
   const t = await supportTurn(env, user, text, "", channel);
   if (t.status !== 200) return fail(String(t.body.error ?? "ارسال نشد؛ دوباره امتحان کن."), Number(t.body.remaining) || 0);
   return { text: String(t.body.reply ?? ""), referred: !!t.body.referred, remaining: Number(t.body.remaining) || 0, error: false };
