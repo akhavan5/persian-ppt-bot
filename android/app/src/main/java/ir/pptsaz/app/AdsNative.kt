@@ -25,6 +25,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import ir.tapsell.mediation.Tapsell
 import ir.tapsell.mediation.ad.AdStateListener
 import ir.tapsell.mediation.ad.request.RequestResultListener
+import ir.tapsell.mediation.ad.show.AdShowCompletionState
 import ir.tapsell.mediation.ad.views.ntv.NativeAdView
 import ir.tapsell.mediation.ad.views.ntv.NativeAdViewContainer
 
@@ -85,6 +86,7 @@ object AdsNative {
                                 Tapsell.showNativeAd(id, view, activity, object : AdStateListener.Native {
                                     override fun onAdImpression() { container.visibility = View.VISIBLE; loaded = true }
                                     override fun onAdClicked() {}
+                                    override fun onAdClosed(completionState: AdShowCompletionState) {}
                                     override fun onAdFailed(message: String) { container.visibility = View.GONE }
                                 })
                                 container.visibility = View.VISIBLE
