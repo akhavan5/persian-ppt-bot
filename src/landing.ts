@@ -28,6 +28,28 @@ export function siteNodes(SITE: string) {
   ];
 }
 
+/** اسکریپت یکتانت (نوتیفیکیشن شناور همسان). طبق قوانین یکتانت باید بدون هیچ تغییری و داخل head قرار بگیرد؛ این متن را دست‌کاری نکنید. */
+export const YEKTANET_SCRIPT = `<script>
+        !function(e,t,n){
+            e.yektanetAnalyticsObject=n,
+            e[n]=e[n]||function(){e[n].q.push(arguments)},
+            e[n].q=e[n].q||[];
+            var a=t.getElementsByTagName("head")[0],
+                r=new Date,
+                c="https://cdn.yektanet.ir/superscript-v2/Pq312DDt/native-49323/yn_pub.js?v="
+                    +r.getFullYear().toString()+"0"+r.getMonth()+"0"+r.getDate()+"0"+r.getHours(),
+                s=t.createElement("link");
+            s.rel="preload",
+            s.as="script",
+            s.href=c,
+            a.appendChild(s);
+            var l=t.createElement("script");
+            l.async=!0,
+            l.src=c,
+            a.appendChild(l);
+        }(window,document,"yektanet");
+        </script>`;
+
 /** سربرگ‌های امنیتی و کش مشترک پاسخ‌های HTML ساخته‌شده در Worker. stale-while-revalidate: بازدید بعد از انقضا هم فوری جواب می‌گیرد. */
 export const HTML_HEADERS: Record<string, string> = {
   "content-type": "text/html; charset=utf-8", "content-language": "fa",
@@ -466,6 +488,7 @@ ${heroPreload("landing", p.slug)}
 <link rel="preload" href="/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <script type="application/ld+json">${jsonLd(ld)}</script>
 <style>${CSS}${IMG_CSS}</style>
+${YEKTANET_SCRIPT}
 </head>
 <body>
 <a class="skip" href="#main">رفتن به محتوا</a>
