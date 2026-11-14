@@ -50,6 +50,9 @@ export const YEKTANET_SCRIPT = `<script>
         }(window,document,"yektanet");
         </script>`;
 
+/** جایگاه تبلیغ تصویری یکتانت (انتهای مطلب). فقط در انتهای محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
+export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
+
 /** سربرگ‌های امنیتی و کش مشترک پاسخ‌های HTML ساخته‌شده در Worker. stale-while-revalidate: بازدید بعد از انقضا هم فوری جواب می‌گیرد. */
 export const HTML_HEADERS: Record<string, string> = {
   "content-type": "text/html; charset=utf-8", "content-language": "fa",
@@ -533,6 +536,7 @@ ${articles.length ? `    <section>
       <p>موضوع را بنویس و ظرف چند دقیقه فایل PPTX فارسی و قابل‌ویرایش را بگیر.</p>
       <a class="btn" href="/#topic">${esc(p.cta)}</a>
     </section>
+    ${YEKTANET_SLOT}
   </article>
 </main>
 ${renderFooter()}
