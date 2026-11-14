@@ -70,6 +70,7 @@ jobs:
             echo "::error::myket APK is missing ir.mservices.market.BILLING (manifest placeholders?)"; exit 1
           fi
           if "$BT/aapt2" dump xmltree --file AndroidManifest.xml dist/pptsaz-myket.apk | grep -qi farsitel; then
+            "$BT/aapt2" dump xmltree --file AndroidManifest.xml dist/pptsaz-myket.apk | grep -i -B6 farsitel
             echo "::error::myket APK manifest still references com.farsitel.bazaar"; exit 1
           fi
 
