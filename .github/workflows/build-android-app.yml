@@ -46,6 +46,14 @@ jobs:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID }}
+          # تبلیغات تپسل: بدون TAPSELL_APP_KEY در بیلد release تبلیغ کاملاً خاموش است؛ هر جایگاهِ خالی هم همان نوع تبلیغ را خاموش می‌کند
+          TAPSELL_APP_KEY: ${{ secrets.TAPSELL_APP_KEY }}
+          TAPSELL_BANNER_ZONE: ${{ secrets.TAPSELL_BANNER_ZONE }}
+          TAPSELL_INTERSTITIAL_ZONE: ${{ secrets.TAPSELL_INTERSTITIAL_ZONE }}
+          TAPSELL_INTERSTITIAL_BANNER_ZONE: ${{ secrets.TAPSELL_INTERSTITIAL_BANNER_ZONE }}
+          TAPSELL_NATIVE_BANNER_ZONE: ${{ secrets.TAPSELL_NATIVE_BANNER_ZONE }}
+          TAPSELL_NATIVE_VIDEO_ZONE: ${{ secrets.TAPSELL_NATIVE_VIDEO_ZONE }}
+          TAPSELL_REWARDED_ZONE: ${{ secrets.TAPSELL_REWARDED_ZONE }}
         run: gradle -p android assembleBazaarRelease assembleMyketRelease bundleBazaarRelease bundleMyketRelease --no-daemon --stacktrace
 
       - name: Verify APKs
