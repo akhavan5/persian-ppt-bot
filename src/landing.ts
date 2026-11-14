@@ -50,6 +50,9 @@ export const YEKTANET_SCRIPT = `<script>
         }(window,document,"yektanet");
         </script>`;
 
+/** بنر بالای مطلب یکتانت (دسکتاپ ۷۲۸×۹۰، موبایل ۳۰۰×۱۰۰). فقط یک بار در هر صفحه؛ اسکریپت یکتانت دوباره اضافه نشود. شناسه و کلاس را تغییر ندهید. */
+export const YEKTANET_BANNER = `<div class="yn-bnr" id="ynpos-21502"></div>`;
+
 /** جایگاه تبلیغ تصویری یکتانت (انتهای مطلب). فقط در انتهای محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
@@ -512,6 +515,7 @@ ${YEKTANET_SCRIPT}
     <p class="upd">آخرین به‌روزرسانی: <time datetime="${p.updated}">${faDate(p.updated)}</time></p>
   </div>
   <article>
+    ${YEKTANET_BANNER}
     ${heroFigure("landing", p.slug, alt, `${p.nav}؛ نمونه‌ی اسلایدهای فارسی راست‌به‌چپ و قابل‌ویرایش که با ${BRAND} ساخته می‌شود`)}
 ${p.sections.map((x) => renderSection(x) + (x === stepsSec ? stepsFigure("landing", p.slug, stepsAltText, `مراحل ${x.h2}`) : "")).join("\n")}
     <section>
