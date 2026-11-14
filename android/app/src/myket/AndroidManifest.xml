@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- فقط نسخه‌ی مایکت: کتابخانه‌ی تبلیغات تپسل در manifest خودش برنامه‌ی کافه‌بازار را در queries می‌آورد؛ نسخه‌ی مایکت نباید هیچ ارجاعی به بازار داشته باشد. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <queries>
+        <package android:name="com.farsitel.bazaar" tools:node="remove" />
+    </queries>
+</manifest>
