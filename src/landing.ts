@@ -53,6 +53,9 @@ export const YEKTANET_SCRIPT = `<script>
 /** بنر بالای مطلب یکتانت (دسکتاپ ۷۲۸×۹۰، موبایل ۳۰۰×۱۰۰). فقط یک بار در هر صفحه؛ اسکریپت یکتانت دوباره اضافه نشود. شناسه و کلاس را تغییر ندهید. */
 export const YEKTANET_BANNER = `<div class="yn-bnr" id="ynpos-21502"></div>`;
 
+/** جایگاه تبلیغ متنی یکتانت (انتهای مطلب، قبل از جایگاه تصویری). شناسه را تغییر ندهید. */
+export const YEKTANET_TEXT = `<div id="pos-article-text-124202"></div>`;
+
 /** جایگاه تبلیغ تصویری یکتانت (انتهای مطلب). فقط در انتهای محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
@@ -540,6 +543,7 @@ ${articles.length ? `    <section>
       <p>موضوع را بنویس و ظرف چند دقیقه فایل PPTX فارسی و قابل‌ویرایش را بگیر.</p>
       <a class="btn" href="/#topic">${esc(p.cta)}</a>
     </section>
+    ${YEKTANET_TEXT}
     ${YEKTANET_SLOT}
   </article>
 </main>
