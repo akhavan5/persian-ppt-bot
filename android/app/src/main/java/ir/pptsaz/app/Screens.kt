@@ -82,6 +82,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -528,6 +529,8 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
         bottomBar = {
             if (!wide) {
                 Column {
+                    // بنر استاندارد تپسل (برای کاربر پولی یا «۲۴ ساعت بدون تبلیغ» ترسیم نمی‌شود)
+                    Ads.Banner(paid = me.premium || me.planId != null)
                     HorizontalDivider(color = cs.outlineVariant)
                     NavigationBar(containerColor = cs.surface, tonalElevation = 0.dp) {
                         NAV.forEachIndexed { i, item ->
@@ -1139,7 +1142,18 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(st.files, key = { it.id }) { f -> FileRow(f, vm, f.id in localIds, st.config?.pdf == true, st.extraJobs) }
+                    itemsIndexed(st.files, key = { _, f -> f.id }) { i, f ->
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            FileRow(f, vm, f.id in localIds, st.config?.pdf == true, st.extraJobs)
+                            // تبلیغ همسان: بنر بعد از ردیف سوم، ویدئو بعد از ردیف ششم (در فهرست کوتاه‌تر: آخر فهرست)
+                            val paid = st.me?.let { it.premium || it.planId != null } == true
+                            val n = st.files.size
+                            val bannerAt = minOf(2, n - 1)
+                            val videoAt = if (n > 5) 5 else if (n > 3) n - 1 else -1
+                            if (i == bannerAt) AdsNative.Card(AdsNative.bannerZone, paid)
+                            if (i == videoAt) AdsNative.Card(AdsNative.videoZone, paid)
+                        }
+                    }
                     if (localOnly.isNotEmpty()) {
                         item(key = "local-header") {
                             Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -1385,6 +1399,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
         ScreenHeader("حساب من")
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             // کارت پروفایل
+            Ads.RewardCard(me.adEvery, me.adProgress, me.adCredits, onClaimed = { if (it > 0) vm.onResume(force = true) }, say = { vm.toast(it) })
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(ex.brand)) {
                 Box(Modifier.align(Alignment.TopStart).offset(x = (-40).dp, y = (-40).dp).size(150.dp).background(Color.White.copy(alpha = 0.08f), CircleShape))
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {

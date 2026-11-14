@@ -11,6 +11,23 @@ val ksFile: String? = System.getenv("KEYSTORE_FILE")
 val ksPass: String? = System.getenv("KS_PASS")
 val hasKeystore = !ksFile.isNullOrEmpty() && !ksPass.isNullOrEmpty()
 
+// تبلیغ تپسل: کلید برنامه و شناسه‌ی جایگاه آنی از متغیر محیطی (GitHub Secrets) می‌آید.
+// بدون آن‌ها: بیلد debug با کلیدهای تست تپسل کار می‌کند و در بیلد release تبلیغ کاملاً خاموش می‌ماند (تبلیغ تستی منتشر نشود).
+val tapsellVersion = "1.3.0" // آخرین نسخه‌ی پایدار؛ در صورت نیاز با maven.tapsell.ir تطبیق دهید
+val tapsellKeyEnv = (System.getenv("TAPSELL_APP_KEY") ?: "").trim()
+val tapsellReal = tapsellKeyEnv.isNotEmpty()
+val tapsellTestKey = "76798342-99a7-4a5f-bf5a-60a088d5dcfb"
+// شناسه‌ی جایگاه‌ها از متغیر محیطی؛ هر کدام خالی باشد همان نوع تبلیغ خاموش است.
+// در debug اگر متغیر نبود جایگاه تست تپسل (همه‌ی شبکه‌ها) استفاده می‌شود.
+val tapsellZones = listOf(
+    Triple("TAPSELL_INTERSTITIAL_ZONE", "b3972749-f62a-475a-9ff2-cfc9e2a40f87", "آنی ویدئو"),
+    Triple("TAPSELL_INTERSTITIAL_BANNER_ZONE", "b3972749-f62a-475a-9ff2-cfc9e2a40f87", "بنر آنی"),
+    Triple("TAPSELL_BANNER_ZONE", "e3d5999c-5990-4e31-8ce9-642ce040a7f4", "بنر استاندارد"),
+    Triple("TAPSELL_NATIVE_BANNER_ZONE", "d217e3e6-0070-4120-925d-5d39d0298893", "بنر همسان"),
+    Triple("TAPSELL_NATIVE_VIDEO_ZONE", "d217e3e6-0070-4120-925d-5d39d0298893", "ویدئو همسان"),
+    Triple("TAPSELL_REWARDED_ZONE", "1d710cc7-5e96-46ac-a3e9-8463300333e6", "ویدئو جایزه‌ای"),
+)
+
 android {
     namespace = "ir.pptsaz.app"
     compileSdk = 36
@@ -19,8 +36,9 @@ android {
         applicationId = "ir.pptsaz.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.0.5"
+        versionCode = 7
+        versionName = "1.0.6"
+        manifestPlaceholders["TapsellMediationAppKey"] = if (tapsellReal) tapsellKeyEnv else tapsellTestKey
         // اعلان FCM: از متغیرهای محیطی (GitHub Secrets) می‌آید؛ خالی = اعلان خاموش. فایل google-services.json لازم نیست.
         for (k in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {
             buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim().replace("\"", "") + "\"")
@@ -61,7 +79,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "ADS_ENABLED", "true")
+            for ((k, test, _) in tapsellZones) buildConfigField("String", k, "\"" + ((System.getenv(k) ?: "").trim().ifEmpty { test }) + "\"")
+        }
         release {
+            buildConfigField("boolean", "ADS_ENABLED", tapsellReal.toString())
+            for ((k, _, _) in tapsellZones) buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim() + "\"")
             // R8: کوچک‌سازی و مبهم‌سازی کد + حذف منابع بلااستفاده (حجم کمتر)
             isMinifyEnabled = true
             isShrinkResources = true
@@ -115,6 +139,9 @@ dependencies {
     // ویجت صفحه‌ی اصلی (Jetpack Glance)
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // تبلیغات تپسل (Mediation)
+    implementation("ir.tapsell:tapsell:$tapsellVersion")
+    implementation("ir.tapsell.mediation.adapter:legacy:$tapsellVersion")
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)
     "bazaarImplementation"("com.github.cafebazaar.Poolakey:poolakey:2.2.0")
     // به‌روزرسانی درون‌برنامه‌ای بازار (فقط نسخه‌ی بازار)

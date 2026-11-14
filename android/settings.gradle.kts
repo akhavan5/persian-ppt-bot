@@ -5,6 +5,11 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google(); mavenCentral()
+        // کتابخانه‌ی تبلیغات تپسل (فقط گروه‌های خودش)
+        maven {
+            url = uri("https://maven.tapsell.ir")
+            content { includeGroupByRegex("ir\\.tapsell.*") }
+        }
         // فقط کتابخانه‌های پرداخت فروشگاه‌ها از JitPack گرفته می‌شوند (قطعی یا تغییر بقیه‌ی بسته‌های آن روی بیلد اثر نگذارد)
         maven {
             url = uri("https://jitpack.io")

@@ -301,11 +301,21 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleIntent(intent)
         billing = BazaarBilling(this) { ok -> vm.setBazaarReady(ok) }
         billing.connect()
+        Ads.start(this)
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 AppTheme {
                     val st by vm.state.collectAsState()
                     val ctx = LocalContext.current
+                    // تبلیغ آنی بعد از آماده‌شدن ارائه؛ فقط برای کاربر بدون پلن پولی و فقط وقتی اپ جلوی چشم است
+                    val deckDoneId = st.job?.takeIf { it.done }?.id
+                    LaunchedEffect(deckDoneId) {
+                        if (deckDoneId != null) {
+                            delay(2500)
+                            val me = st.me
+                            if (AppForeground.on && me != null) Ads.onDeckDone(this@MainActivity, me.premium || me.planId != null)
+                        }
+                    }
                     val snack = remember { SnackbarHostState() }
                     val scope = rememberCoroutineScope()
                     // فایل ذخیره‌شده در حافظه‌ی اختصاصی اپ (اندروید ۷–۹): پرسیدن «باز کردن» یا «ذخیره در گوشی»

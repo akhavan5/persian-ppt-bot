@@ -6,7 +6,7 @@ import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { TEMPLATES, isTemplate } from "./template";
 import {
   DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, botPlatform, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
-  CONTACT_REWARD_NOTE, EXTRA_IMAGES_MSG, EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, hasPlanAccess, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
+  AD_REWARD_CREDITS, AD_REWARD_EVERY, adRewardProgress, claimAdView, CONTACT_REWARD_NOTE, EXTRA_IMAGES_MSG, EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, hasPlanAccess, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
 } from "./settings";
 import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
@@ -205,6 +205,11 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   // دعوت دوستان برای همه‌ی پلتفرم‌ها (سایت، اپ اندروید، Mini App تلگرام/بله، برنامک ایتا)؛ /api/miniapp/invite برای نسخه‌های قدیمی Mini App می‌ماند
   if ((path === "/api/invite" && (method === "GET" || method === "POST")) || (path === "/api/miniapp/invite" && method === "POST")) return inviteInfo(env, user);
   if (path === "/api/invite/claim" && method === "POST") return inviteClaim(env, user, await readBody(req, 500), clientIp(req));
+  // ویدئوی جایزه‌ای تپسل در اپ اندروید: هر ۵ ویدئو = ۱ اعتبار (settings.ts ← claimAdView)
+  if (path === "/api/ad-reward" && method === "POST") {
+    const r = await claimAdView(env, user.id);
+    return r.ok ? json({ ok: true, progress: r.progress, every: AD_REWARD_EVERY, granted: r.granted }) : err(r.error, r.status);
+  }
   if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
   if (path === "/api/profile/email" && method === "POST") return linkEmail(req, env, user);
@@ -399,6 +404,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     // هدیه‌ی تکمیل پروفایل: available=true یعنی با ثبت و تایید یکی از موارد missing (mobile/email) هنوز می‌شود credits اعتبار گرفت؛ note = جمله‌ی کنار هدیه
     contactReward: { ...(await contactRewardInfo(env, user)), note: CONTACT_REWARD_NOTE },
     feedback,
+    adReward: { every: AD_REWARD_EVERY, progress: await adRewardProgress(env, user.id).catch(() => 0), credits: AD_REWARD_CREDITS },
     decks, // تعداد ارائه‌های موفق (اپ اندروید برای یادآور فعال‌سازی)
     credit: c.unlimited
       ? { unlimited: true }

@@ -327,6 +327,51 @@ export async function claimFeedbackReward(env: Env, userId: Uid): Promise<boolea
   return true;
 }
 
+// ---------- اعتبار هدیه‌ی ویدئو جایزه‌ای (اپ اندروید، تبلیغ تپسل) ----------
+/** هر AD_REWARD_EVERY ویدئوی کامل = AD_REWARD_CREDITS اعتبار رایگان. ۰ = خاموش */
+export const AD_REWARD_EVERY = 5;
+export const AD_REWARD_CREDITS = 1;
+/** سقف ویدئوی حساب‌شده در هر روز (≈ ۲ اعتبار در روز) و حداقل فاصله‌ی دو ویدئو؛ چون تایید «ویدئو دیده شد» سمت کلاینت است، این دو سقف سوءاستفاده را محدود می‌کنند. */
+export const AD_REWARD_DAILY_MAX = 10;
+export const AD_REWARD_MIN_GAP_S = 20;
+const adProgKey = (uid: Uid) => `adr:p:${uid}`;
+
+/** تعداد ویدئوهای حساب‌شده برای اعتبار بعدی (۰ تا EVERY-1). */
+export async function adRewardProgress(env: Env, uid: Uid): Promise<number> {
+  return Math.max(0, Math.floor(Number(await env.KV.get(adProgKey(uid))) || 0)) % Math.max(1, AD_REWARD_EVERY);
+}
+
+export type AdRewardResult = { ok: true; progress: number; granted: number } | { ok: false; error: string; status: number };
+
+/** ثبت یک ویدئوی جایزه‌ای دیده‌شده. هر EVERY ویدئو ⇒ CREDITS اعتبار هدیه (به اعتبار هدیه‌ی bonus اضافه می‌شود). */
+export async function claimAdView(env: Env, uid: Uid): Promise<AdRewardResult> {
+  if (AD_REWARD_EVERY <= 0 || AD_REWARD_CREDITS <= 0) return { ok: false, error: "این قابلیت فعال نیست.", status: 404 };
+  if (await isBanned(env, uid)) return { ok: false, error: "این قابلیت برای حساب شما فعال نیست.", status: 403 };
+  const db = await rawDb(env), now = nowSec();
+  // حداقل فاصله بین دو ویدئو (ردیف با انقضا؛ فقط وقتی منقضی شده باشد دوباره گرفته می‌شود)
+  const gap = await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, '1', ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp WHERE exp IS NOT NULL AND exp <= ?3")
+    .bind(`adr:g:${uid}`, now + AD_REWARD_MIN_GAP_S, now).run();
+  if (!changed(gap)) return { ok: false, error: "کمی صبر کنید و بعد ویدئوی بعدی را ببینید.", status: 429 };
+  // سقف روزانه
+  const dayRow = await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, '1', ?2) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT) RETURNING v")
+    .bind(`adr:d:${uid}:${today()}`, now + 90000).first<{ v: string }>();
+  if ((Number(dayRow?.v) || 0) > AD_REWARD_DAILY_MAX) return { ok: false, error: "سقف ویدئوهای امروز تمام شد؛ فردا دوباره امتحان کنید.", status: 429 };
+  // شمارنده‌ی پیشرفت
+  const row = await db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, '1', NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT), exp = NULL RETURNING v")
+    .bind(adProgKey(uid)).first<{ v: string }>();
+  const n = Number(row?.v) || 1;
+  if (n < AD_REWARD_EVERY) return { ok: true, progress: n, granted: 0 };
+  await db.batch([
+    db.prepare("UPDATE kv SET v = CAST(CAST(v AS INTEGER) - ?2 AS TEXT) WHERE k = ?1").bind(adProgKey(uid), AD_REWARD_EVERY),
+    db.prepare("INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + ?2 AS TEXT), exp = NULL")
+      .bind(bonusKey(uid), String(AD_REWARD_CREDITS)),
+  ]);
+  return { ok: true, progress: n - AD_REWARD_EVERY, granted: AD_REWARD_CREDITS };
+}
+
 // ---------- اعتبار هدیه‌ی تکمیل پروفایل (موبایل یا ایمیل «تاییدشده با کد یک‌بارمصرف») ----------
 /** هدیه‌ی ثبت و تایید موبایل/ایمیل برای حسابی که آن را نداشت؛ به‌ازای «هر مورد» (موبایل ۱ و ایمیل ۱) برای هر حساب یک‌بار و برای هر شماره/ایمیل یک‌بار. ۰ = خاموش */
 export const CONTACT_CREDITS = 1;

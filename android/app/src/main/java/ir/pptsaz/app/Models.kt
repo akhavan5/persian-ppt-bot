@@ -66,6 +66,10 @@ data class Me(
     val giftNote: String = "",
     /** موردهای ثبت‌نشده‌ی پروفایل که سرور ثبتشان را پشتیبانی می‌کند: "mobile" و/یا "email" */
     val giftMissing: List<String> = emptyList(),
+    /** ویدئوی جایزه‌ای: هر adEvery ویدئو = adCredits اعتبار؛ adProgress = ویدئوهای حساب‌شده برای اعتبار بعدی */
+    val adEvery: Int = 5,
+    val adProgress: Int = 0,
+    val adCredits: Int = 1,
 )
 
 /**
@@ -155,6 +159,9 @@ fun parseMe(j: JSONObject): Me? {
         giftAvailable = j.optJSONObject("contactReward")?.optBoolean("available") ?: false,
         giftCredits = j.optJSONObject("contactReward")?.optInt("credits") ?: 0,
         giftNote = j.optJSONObject("contactReward")?.str("note") ?: "",
+        adEvery = j.optJSONObject("adReward")?.optInt("every", 5) ?: 5,
+        adProgress = j.optJSONObject("adReward")?.optInt("progress") ?: 0,
+        adCredits = j.optJSONObject("adReward")?.optInt("credits", 1) ?: 1,
         giftMissing = j.optJSONObject("contactReward")?.optJSONArray("missing")?.let { a -> (0 until a.length()).map { i -> a.optString(i) } } ?: emptyList(),
     )
 }
