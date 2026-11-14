@@ -36,21 +36,21 @@ final class ParsingTests: XCTestCase {
     func testParseMe() throws {
         let json = """
         {"user":{"name":"رضا","mobile":"09121234567","email":""},
-         "credit":{"total":7,"plan":7,"bonus":0,"unlimited":false},
+         "credit":{"total":5,"plan":5,"bonus":0,"unlimited":false},
          "premium":true,"maxSlides":20,"maxImages":4,
          "plan":{"id":"plus","exp":1800000000000},
          "settings":{"theme":"ocean","slides":10,"mode":"student","images":true},
-         "plans":[{"id":"plus","name":"پلاس","price":399,"credits":7,"days":30,"maxSlides":20,"maxImages":4},
-                  {"id":"pro","name":"پرو","price":599,"credits":15,"days":30,"maxSlides":35,"maxImages":7}]}
+         "plans":[{"id":"plus","name":"پلاس","price":490,"credits":5,"days":30,"maxSlides":20,"maxImages":4},
+                  {"id":"pro","name":"پرو","price":740,"credits":11,"days":30,"maxSlides":35,"maxImages":7}]}
         """
         let obj = try JSONSerialization.jsonObject(with: Data(json.utf8))
         let me = try XCTUnwrap(parseMe(J(obj)))
         XCTAssertEqual(me.name, "رضا")
-        XCTAssertEqual(me.credits, 7)
+        XCTAssertEqual(me.credits, 5)
         XCTAssertTrue(me.premium)
         XCTAssertEqual(me.planId, "plus")
         XCTAssertEqual(me.settings.mode, "student")
-        XCTAssertEqual(me.plans.map { $0.price }, [399, 599])
+        XCTAssertEqual(me.plans.map { $0.price }, [490, 740])
     }
 
     func testParseMeLoggedOut() throws {

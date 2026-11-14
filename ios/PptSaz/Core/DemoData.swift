@@ -42,13 +42,13 @@ enum DemoData {
         var m = Me()
         m.name = "مریم"
         m.mobile = "09121234567"
-        m.credits = 7
+        m.credits = 5
         m.premium = true
         m.maxSlides = 20
         m.maxImages = 4
         m.planId = "plus"
         m.planExp = Date().timeIntervalSince1970 * 1000 + 20 * 86_400_000
-        m.planCredits = 7
+        m.planCredits = 5
         var s = Settings()
         s.theme = "ocean"
         s.template = "modern"
@@ -62,8 +62,8 @@ enum DemoData {
         s.images = true
         m.settings = s
         m.plans = [
-            PlanInfo(id: "plus", name: "پلاس", price: 399, credits: 7, days: 30, maxSlides: 20, maxImages: 4, url: ""),
-            PlanInfo(id: "pro", name: "پرو", price: 599, credits: 15, days: 30, maxSlides: 35, maxImages: 7, url: "")
+            PlanInfo(id: "plus", name: "پلاس", price: 490, credits: 5, days: 30, maxSlides: 20, maxImages: 4, url: ""),
+            PlanInfo(id: "pro", name: "پرو", price: 740, credits: 11, days: 30, maxSlides: 35, maxImages: 7, url: "")
         ]
         return m
     }
