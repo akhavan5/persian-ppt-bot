@@ -342,6 +342,26 @@ address{font-style:normal}
 .plan li::before{content:"✓ ";color:var(--ok);font-weight:800}
 .fnav{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px}.fnav a{color:#cfdcf3;text-decoration:none;font-weight:600;font-size:.88rem}.fnav a:hover{color:#fff}
 </style>
+<script>
+        !function(e,t,n){
+            e.yektanetAnalyticsObject=n,
+            e[n]=e[n]||function(){e[n].q.push(arguments)},
+            e[n].q=e[n].q||[];
+            var a=t.getElementsByTagName("head")[0],
+                r=new Date,
+                c="https://cdn.yektanet.ir/superscript-v2/Pq312DDt/native-49323/yn_pub.js?v="
+                    +r.getFullYear().toString()+"0"+r.getMonth()+"0"+r.getDate()+"0"+r.getHours(),
+                s=t.createElement("link");
+            s.rel="preload",
+            s.as="script",
+            s.href=c,
+            a.appendChild(s);
+            var l=t.createElement("script");
+            l.async=!0,
+            l.src=c,
+            a.appendChild(l);
+        }(window,document,"yektanet");
+        </script>
 </head>
 <body>
 <header class="top">
@@ -1215,34 +1235,10 @@ $("#pfTgVerify").onclick = (ev) => {
 };
 $("#logout").onclick = async () => { $("#profileDlg").close(); try { await api("/api/auth/logout", { method: "POST" }); } catch {} tracking++; me = null; jobView(null); $("#go").disabled = false; await boot(); };
 
-// ---------- تبلیغات یکتانت ----------
-// فقط برای کاربر واردشده‌ی بدون پلن (me.premium = پلن فعال یا مدیر)؛ مثل اپ اندروید، کاربر پولی تبلیغ نمی‌بیند. یک‌بار در هر بارگذاری صفحه اجرا می‌شود.
-let yektanetLoaded = false;
-function loadYektanet() {
-  if (yektanetLoaded || !me || me.premium) return;
-  yektanetLoaded = true;
-  try {
-    (function (e, t, n) {
-      e.yektanetAnalyticsObject = n;
-      e[n] = e[n] || function () { e[n].q.push(arguments); };
-      e[n].q = e[n].q || [];
-      var a = t.getElementsByTagName("head")[0],
-        r = new Date,
-        c = "https://cdn.yektanet.ir/superscript-v2/Pq312DDt/native-49323/yn_pub.js?v=" +
-          r.getFullYear().toString() + "0" + r.getMonth() + "0" + r.getDate() + "0" + r.getHours(),
-        s = t.createElement("link");
-      s.rel = "preload"; s.as = "script"; s.href = c; a.appendChild(s);
-      var l = t.createElement("script");
-      l.async = true; l.src = c; a.appendChild(l);
-    })(window, document, "yektanet");
-  } catch (e) { yektanetLoaded = false; }
-}
-
 // ---------- بخش کاربر واردشده ----------
 function renderApp() {
   $("#userName").textContent = me.user.name;
   renderCredit();
-  loadYektanet();
   $("#tone").replaceChildren(...Object.entries(cfg.tones).map(([k, v]) => h("option", { value: k }, v)));
   $("#font").replaceChildren(...cfg.fonts.map((f) => h("option", { value: f }, f)));
   syncSettings();
