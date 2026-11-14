@@ -28,9 +28,31 @@ val tapsellZones = listOf(
     Triple("TAPSELL_REWARDED_ZONE", "1d710cc7-5e96-46ac-a3e9-8463300333e6", "ویدئو جایزه‌ای"),
 )
 
+// ---------------------------------------------------------------- سوئیچ تپسل (فعلاً خاموش)
+// TAPSELL_ENABLED=true در محیط بیلد ⇒ تپسل دوباره روشن می‌شود (کد src/tapsell و وابستگی SDK وارد اپ می‌شوند).
+// پیش‌فرض خاموش: کد خالی src/tapsellOff کامپایل می‌شود و SDK تپسل اصلاً در APK نیست (نه مقداردهی، نه درخواست تبلیغ).
+val tapsellEnabled = (System.getenv("TAPSELL_ENABLED") ?: "").trim().lowercase() in listOf("true", "1", "yes")
+
+// ---------------------------------------------------------------- تبلیغ ادیوری
+// شناسه‌ی برنامه و جایگاه‌ها از متغیر محیطی (GitHub Secrets) می‌آید. بدون ADIVERY_APP_ID: debug با شناسه‌های تست ادیوری کار می‌کند
+// و در release تبلیغ ادیوری کاملاً خاموش است. هر جایگاهِ خالی هم همان نوع تبلیغ را خاموش می‌کند.
+val adiveryVersion = "4.10.0"
+val adiveryAppEnv = (System.getenv("ADIVERY_APP_ID") ?: "").trim()
+val adiveryReal = adiveryAppEnv.isNotEmpty()
+val adiveryTestApp = "7e27fb38-5aff-473a-998f-437b89426f66"
+val adiveryPlacements = listOf(
+    Pair("ADIVERY_INTERSTITIAL_PLACEMENT", "0045a4aa-1498-4790-9eed-6e33ac870e5f"), // آنی
+    Pair("ADIVERY_REWARDED_PLACEMENT", "3f97dc4d-3e09-4024-acaf-931862c03ba8"),     // ویدئو جایزه‌ای
+    Pair("ADIVERY_BANNER_PLACEMENT", "2f71ec44-f30a-4043-9cc1-f32347a07f8b"),       // بنر استاندارد
+    Pair("ADIVERY_NATIVE_PLACEMENT", "25928bf1-d4f7-432c-aaf7-1780602796c3"),       // همسان
+)
+
 android {
     namespace = "ir.pptsaz.app"
     compileSdk = 36
+
+    // فقط یکی از این دو پوشه کامپایل می‌شود: پیاده‌ی واقعی تپسل یا نسخه‌ی خالی هم‌API
+    sourceSets.getByName("main").java.srcDir(if (tapsellEnabled) "src/tapsell/java" else "src/tapsellOff/java")
 
     defaultConfig {
         applicationId = "ir.pptsaz.app"
@@ -81,11 +103,19 @@ android {
     buildTypes {
         debug {
             buildConfigField("boolean", "ADS_ENABLED", "true")
+            buildConfigField("boolean", "TAPSELL_ENABLED", tapsellEnabled.toString())
             for ((k, test, _) in tapsellZones) buildConfigField("String", k, "\"" + ((System.getenv(k) ?: "").trim().ifEmpty { test }) + "\"")
+            buildConfigField("boolean", "ADIVERY_ENABLED", "true")
+            buildConfigField("String", "ADIVERY_APP_ID", "\"" + adiveryAppEnv.ifEmpty { adiveryTestApp } + "\"")
+            for ((k, test) in adiveryPlacements) buildConfigField("String", k, "\"" + ((System.getenv(k) ?: "").trim().ifEmpty { test }) + "\"")
         }
         release {
-            buildConfigField("boolean", "ADS_ENABLED", tapsellReal.toString())
+            buildConfigField("boolean", "ADS_ENABLED", ((tapsellEnabled && tapsellReal) || adiveryReal).toString())
+            buildConfigField("boolean", "TAPSELL_ENABLED", (tapsellEnabled && tapsellReal).toString())
             for ((k, _, _) in tapsellZones) buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim() + "\"")
+            buildConfigField("boolean", "ADIVERY_ENABLED", adiveryReal.toString())
+            buildConfigField("String", "ADIVERY_APP_ID", "\"" + adiveryAppEnv + "\"")
+            for ((k, _) in adiveryPlacements) buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim() + "\"")
             // R8: کوچک‌سازی و مبهم‌سازی کد + حذف منابع بلااستفاده (حجم کمتر)
             isMinifyEnabled = true
             isShrinkResources = true
@@ -139,9 +169,13 @@ dependencies {
     // ویجت صفحه‌ی اصلی (Jetpack Glance)
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // تبلیغات تپسل (Mediation)
-    implementation("ir.tapsell:tapsell:$tapsellVersion")
-    implementation("ir.tapsell.mediation.adapter:legacy:$tapsellVersion")
+    // تبلیغات ادیوری (بنر، آنی، جایزه‌ای، همسان)
+    implementation("com.adivery:sdk:$adiveryVersion")
+    // تبلیغات تپسل (Mediation) — فقط با TAPSELL_ENABLED=true وارد اپ می‌شود
+    if (tapsellEnabled) {
+        implementation("ir.tapsell:tapsell:$tapsellVersion")
+        implementation("ir.tapsell.mediation.adapter:legacy:$tapsellVersion")
+    }
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)
     "bazaarImplementation"("com.github.cafebazaar.Poolakey:poolakey:2.2.0")
     // به‌روزرسانی درون‌برنامه‌ای بازار (فقط نسخه‌ی بازار)

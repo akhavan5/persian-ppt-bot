@@ -19,3 +19,7 @@
 -keep class com.android.vending.billing.** { *; }
 -keep interface com.android.vending.billing.** { *; }
 -dontwarn ir.myket.billingclient.**
+
+# ادیوری (تبلیغات)
+-keep class com.adivery.sdk.** { *; }
+-dontwarn com.adivery.sdk.**

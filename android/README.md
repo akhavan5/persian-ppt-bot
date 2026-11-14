@@ -24,3 +24,11 @@ Secrets: `ANDROID_KEYSTORE_B64` و `ANDROID_KEYSTORE_PASSWORD` (alias کلید: 
 ## تست
 تست‌های واحد منطق خالص (شماره‌ی موبایل، کد پیامکی، خواندن txt/docx) در `app/src/test` هستند و در workflow بالا قبل از بیلد اجرا می‌شوند.
 محلی: `gradle -p android testBazaarDebugUnitTest`
+
+
+## تبلیغات (ادیوری + تپسل)
+
+- **ادیوری روشن است**: بنر، آنی، ویدئو جایزه‌ای و همسان. در release فقط وقتی کار می‌کند که `ADIVERY_APP_ID` (و شناسه‌ی جایگاه‌ها) در GitHub Secrets باشد؛ در debug با شناسه‌های تست ادیوری کار می‌کند.
+  Secrets: `ADIVERY_APP_ID`، `ADIVERY_BANNER_PLACEMENT`، `ADIVERY_INTERSTITIAL_PLACEMENT`، `ADIVERY_REWARDED_PLACEMENT`، `ADIVERY_NATIVE_PLACEMENT`.
+- **تپسل فعلاً خاموش است** (SDK اصلاً در APK نیست). برای روشن‌کردن دوباره: در GitHub → Settings → Variables متغیر `TAPSELL_ENABLED=true` را بگذارید (و `TAPSELL_*` Secrets همچنان لازم‌اند). اگر هر دو روشن باشند، ابتدا تپسل و در صورت آماده‌نبودنش ادیوری استفاده می‌شود.
+- ساختار کد: `Ads.kt` / `AdsNative.kt` نقطه‌ی ورود مشترک؛ `AdiveryAds.kt` ادیوری؛ `src/tapsell/…/TapsellAds.kt` تپسل واقعی؛ `src/tapsellOff/…/TapsellAds.kt` نسخه‌ی خالی هم‌API.
