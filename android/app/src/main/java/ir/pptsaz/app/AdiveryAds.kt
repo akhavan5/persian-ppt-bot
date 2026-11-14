@@ -5,12 +5,9 @@ import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -23,10 +20,8 @@ import com.adivery.sdk.Adivery
 import com.adivery.sdk.AdiveryAdListener
 import com.adivery.sdk.AdiveryBannerAdView
 import com.adivery.sdk.AdiveryListener
-import com.adivery.sdk.AdiveryNativeCallback
+import com.adivery.sdk.AdiveryNativeAdView
 import com.adivery.sdk.BannerSize
-import com.adivery.sdk.NativeAd
-import com.adivery.sdk.networks.adivery.AdiveryNativeAd
 
 /**
  * تبلیغات ادیوری (Adivery): بنر، آنی (میان‌صفحه‌ای)، ویدئو جایزه‌ای و همسان.
@@ -130,7 +125,7 @@ object AdiveryAds {
     }
 
     // ---------------------------------------------------------------- تبلیغ همسان
-    /** کارت همسان لابه‌لای فهرست؛ ظاهر از رنگ‌های تم اپ ساخته می‌شود و تا آمدن تبلیغ جایی اشغال نمی‌کند. */
+    /** کارت همسان لابه‌لای فهرست (AdiveryNativeAdView + res/layout/adivery_native_card.xml)؛ رنگ‌ها از تم اپ و تا آمدن تبلیغ جایی اشغال نمی‌کند. */
     @Composable
     fun NativeCard(modifier: Modifier = Modifier) {
         if (!nativeOn) return
@@ -144,59 +139,31 @@ object AdiveryAds {
             modifier = modifier.fillMaxWidth(),
             factory = { c ->
                 val d = c.resources.displayMetrics.density
-                fun dp(v: Int) = (v * d).toInt()
-                val root = LinearLayout(c).apply {
-                    orientation = LinearLayout.VERTICAL
-                    visibility = View.GONE
-                    background = GradientDrawable().apply { setColor(surface); cornerRadius = 16 * d }
-                    setPadding(dp(14), dp(12), dp(14), dp(12))
-                }
-                val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                val icon = ImageView(c).apply { layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(10) }; visibility = View.GONE }
-                val titles = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
-                val title = TextView(c).apply { setTextColor(onSurface); textSize = 15f; maxLines = 1 }
-                val sponsored = TextView(c).apply { setTextColor(onVariant); textSize = 11f; maxLines = 1; text = "تبلیغ" }
-                titles.addView(title); titles.addView(sponsored)
-                head.addView(icon); head.addView(titles)
-                val desc = TextView(c).apply { setTextColor(onVariant); textSize = 13f; maxLines = 3; setPadding(0, dp(8), 0, dp(8)) }
-                val image = ImageView(c).apply {
-                    adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER; visibility = View.GONE
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                }
-                val cta = Button(c).apply {
-                    setTextColor(onPrimary)
-                    background = GradientDrawable().apply { setColor(primary); cornerRadius = 12 * d }
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(8) }
-                }
-                root.addView(head); root.addView(desc); root.addView(image); root.addView(cta)
-                try {
-                    Adivery.requestNativeAd(c, BuildConfig.ADIVERY_NATIVE_PLACEMENT, object : AdiveryNativeCallback() {
-                        override fun onAdLoaded(ad: NativeAd) {
-                            // فقط تبلیغ بومی خود ادیوری رندر می‌شود؛ بقیه‌ی شبکه‌ها کارت را مخفی نگه می‌دارند
-                            if (ad !is AdiveryNativeAd) return
-                            root.post {
+                AdiveryNativeAdView(c).also { v ->
+                    v.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    v.visibility = View.GONE
+                    v.background = GradientDrawable().apply { setColor(surface); cornerRadius = 16 * d }
+                    try {
+                        v.setPlacementId(BuildConfig.ADIVERY_NATIVE_PLACEMENT)
+                        v.setNativeAdLayout(R.layout.adivery_native_card)
+                        v.setListener(object : AdiveryAdListener() {
+                            override fun onAdLoaded() {
                                 try {
-                                    val h = ad.headline
-                                    if (h.isNullOrBlank()) return@post
-                                    title.text = h
-                                    desc.text = ad.description.orEmpty()
-                                    desc.visibility = if (ad.description.isNullOrBlank()) View.GONE else View.VISIBLE
-                                    ad.advertiser?.takeIf { it.isNotBlank() }?.let { sponsored.text = it }
-                                    cta.text = ad.callToAction?.takeIf { it.isNotBlank() } ?: "بیشتر بدانید"
-                                    ad.icon?.let { icon.setImageDrawable(it); icon.visibility = View.VISIBLE }
-                                    ad.image?.let { image.setImageDrawable(it); image.visibility = View.VISIBLE }
-                                    val click = View.OnClickListener { try { ad.recordClick() } catch (_: Throwable) {} }
-                                    root.setOnClickListener(click); cta.setOnClickListener(click)
-                                    root.visibility = View.VISIBLE
-                                    ad.recordImpression()
-                                } catch (_: Throwable) { root.visibility = View.GONE }
+                                    v.findViewById<TextView>(R.id.adivery_headline)?.setTextColor(onSurface)
+                                    v.findViewById<TextView>(R.id.adivery_description)?.setTextColor(onVariant)
+                                    v.findViewById<TextView>(R.id.adivery_advertiser)?.setTextColor(onVariant)
+                                    v.findViewById<Button>(R.id.adivery_call_to_action)?.apply {
+                                        setTextColor(onPrimary)
+                                        background = GradientDrawable().apply { setColor(primary); cornerRadius = 12 * d }
+                                    }
+                                    v.visibility = View.VISIBLE
+                                } catch (_: Throwable) {}
                             }
-                        }
-                        override fun onAdLoadFailed(reason: String) {}
-                        override fun onAdShowFailed(reason: String) { root.post { root.visibility = View.GONE } }
-                    })
-                } catch (_: Throwable) {}
-                root
+                            override fun onError(reason: String) { v.visibility = View.GONE }
+                        })
+                        v.loadAd()
+                    } catch (_: Throwable) {}
+                }
             },
         )
     }

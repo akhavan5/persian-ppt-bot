@@ -34,17 +34,17 @@ val tapsellZones = listOf(
 val tapsellEnabled = (System.getenv("TAPSELL_ENABLED") ?: "").trim().lowercase() in listOf("true", "1", "yes")
 
 // ---------------------------------------------------------------- تبلیغ ادیوری
-// شناسه‌ی برنامه و جایگاه‌ها از متغیر محیطی (GitHub Secrets) می‌آید. بدون ADIVERY_APP_ID: debug با شناسه‌های تست ادیوری کار می‌کند
+// شناسه‌ی برنامه و جایگاه‌ها از متغیر محیطی (GitHub Secrets) می‌آید. بدون ADIVERY_APP_ID: debug با شناسه‌های تست رسمی ادیوری (docs.adivery.com/testing) کار می‌کند
 // و در release تبلیغ ادیوری کاملاً خاموش است. هر جایگاهِ خالی هم همان نوع تبلیغ را خاموش می‌کند.
 val adiveryVersion = "4.10.0"
 val adiveryAppEnv = (System.getenv("ADIVERY_APP_ID") ?: "").trim()
 val adiveryReal = adiveryAppEnv.isNotEmpty()
-val adiveryTestApp = "7e27fb38-5aff-473a-998f-437b89426f66"
+val adiveryTestApp = "59c36ce3-7125-40a7-bd34-144e6906c796"
 val adiveryPlacements = listOf(
-    Pair("ADIVERY_INTERSTITIAL_PLACEMENT", "0045a4aa-1498-4790-9eed-6e33ac870e5f"), // آنی
-    Pair("ADIVERY_REWARDED_PLACEMENT", "3f97dc4d-3e09-4024-acaf-931862c03ba8"),     // ویدئو جایزه‌ای
-    Pair("ADIVERY_BANNER_PLACEMENT", "2f71ec44-f30a-4043-9cc1-f32347a07f8b"),       // بنر استاندارد
-    Pair("ADIVERY_NATIVE_PLACEMENT", "25928bf1-d4f7-432c-aaf7-1780602796c3"),       // همسان
+    Pair("ADIVERY_INTERSTITIAL_PLACEMENT", "38b301f2-5e0c-4776-b671-c6b04a612311"), // آنی
+    Pair("ADIVERY_REWARDED_PLACEMENT", "16414bae-368e-4904-b259-c5b89362206d"),     // ویدئو جایزه‌ای
+    Pair("ADIVERY_BANNER_PLACEMENT", "a355be22-970a-46b8-bc52-f0a59c4ded05"),       // بنر استاندارد
+    Pair("ADIVERY_NATIVE_PLACEMENT", "ff454979-efaa-4ab8-b084-7db19e995d9b"),       // همسان
 )
 
 android {
@@ -171,6 +171,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // تبلیغات ادیوری (بنر، آنی، جایزه‌ای، همسان)
     implementation("com.adivery:sdk:$adiveryVersion")
+    // شناسه‌ی تبلیغاتی گوگل (GAID) برای هدف‌گیری بهتر؛ ادیوری فقط در صورت وجود این کتابخانه آن را می‌خواند
+    implementation("com.google.android.gms:play-services-ads-identifier:18.0.1")
     // تبلیغات تپسل (Mediation) — فقط با TAPSELL_ENABLED=true وارد اپ می‌شود
     if (tapsellEnabled) {
         implementation("ir.tapsell:tapsell:$tapsellVersion")
