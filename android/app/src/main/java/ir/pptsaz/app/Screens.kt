@@ -529,8 +529,12 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
         bottomBar = {
             if (!wide) {
                 Column {
-                    // بنر استاندارد تپسل (برای کاربر پولی یا «۲۴ ساعت بدون تبلیغ» ترسیم نمی‌شود)
-                    Ads.Banner(paid = me.premium || me.planId != null)
+                    // بنر استاندارد فقط در تب «تنظیمات» (اندیس ۲) و وسط‌چین؛ برای کاربر پولی یا «۲۴ ساعت بدون تبلیغ» ترسیم نمی‌شود
+                    if (st.tab == 2) {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                            Ads.Banner(paid = me.premium || me.planId != null, modifier = Modifier.width(320.dp))
+                        }
+                    }
                     HorizontalDivider(color = cs.outlineVariant)
                     NavigationBar(containerColor = cs.surface, tonalElevation = 0.dp) {
                         NAV.forEachIndexed { i, item ->
@@ -1399,7 +1403,6 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
         ScreenHeader("حساب من")
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             // کارت پروفایل
-            Ads.RewardCard(me.adEvery, me.adProgress, me.adCredits, onClaimed = { if (it > 0) vm.onResume(force = true) }, say = { vm.toast(it) })
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(ex.brand)) {
                 Box(Modifier.align(Alignment.TopStart).offset(x = (-40).dp, y = (-40).dp).size(150.dp).background(Color.White.copy(alpha = 0.08f), CircleShape))
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -1500,6 +1503,8 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
             }
 
             InviteCard(st.invite, vm)
+
+            Ads.RewardCard(me.adEvery, me.adProgress, me.adCredits, onClaimed = { if (it > 0) vm.onResume(force = true) }, say = { vm.toast(it) })
 
             ContactCard(vm)
 
