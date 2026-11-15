@@ -186,6 +186,17 @@ async function platformReport(env: Env, days: number, st: Record<string, Record<
   return lines.join("\n") + (rest > 0 ? "\n<i>ℹ️ بخشی از این بازه مربوط به پیش از ثبت پلتفرم است و فقط در جمع کل می‌آید.</i>" : "");
 }
 
+/** تکمیل پروفایل: حساب‌هایی که «بعداً» موبایل یا ایمیل اضافه و با کد تایید کرده‌اند (قفل‌های هدیه‌ی pcr:u:<حساب>:mobile|email در settings.ts).
+ *  فقط ثبت‌های بعد از فعال شدن هدیه شمرده می‌شود؛ شماره/ایمیلی که قبلاً برای حساب دیگری هدیه گرفته بود قفل ندارد و در شمار نمی‌آید. */
+async function profileCompletion(env: Env): Promise<{ accounts: number; mobile: number; email: number; both: number }> {
+  const d = await db(env);
+  const r = await d.prepare(
+    "SELECT COUNT(*) a, COALESCE(SUM(m),0) m, COALESCE(SUM(e),0) e, COALESCE(SUM(m*e),0) b FROM (" +
+    "SELECT MAX(k LIKE '%:mobile') m, MAX(k LIKE '%:email') e FROM kv WHERE k >= ?1 AND k < ?2 GROUP BY substr(k, 7, length(k) - 6 - CASE WHEN k LIKE '%:mobile' THEN 7 ELSE 6 END))",
+  ).bind("pcr:u:", "pcr:u:" + MAXC).first<{ a: number | null; m: number | null; e: number | null; b: number | null }>();
+  return { accounts: Number(r?.a ?? 0), mobile: Number(r?.m ?? 0), email: Number(r?.e ?? 0), both: Number(r?.b ?? 0) };
+}
+
 async function homeScreen(env: Env): Promise<Screen> {
   const [tgUsers, baleUsers, webUsers, appUsers, subs, banned, st, payIssues, rubikaUsers, eitaaUsers, bazaarUsers, myketUsers, chatUsers, iosUsers, pwaIosUsers, pwaOtherUsers, splusUsers] = await Promise.all([
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_TG}`, "seen:", "seen:" + MAXC),
@@ -206,6 +217,7 @@ async function homeScreen(env: Env): Promise<Screen> {
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${PWA_OTHER}`, "wu:", "wu:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_SPLUS}`, "seen:", "seen:" + MAXC),
   ]);
+  const pc = await profileCompletion(env).catch(() => null);
   const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
   const week = await platformReport(env, n, st, true, 7);
   const wk = await platStats(env, n - 1, 0);
@@ -220,6 +232,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       `🍎 اپ iOS ${fa(iosUsers)} · 🍏 PWA آیفون/آیپد ${fa(pwaIosUsers)} · 📲 PWA بقیه ${fa(pwaOtherUsers)}\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
       `👥 کاربرانِ دارای گفتگو: <b>${fa(chatUsers)}</b>\n` +
+      (pc ? `🎁 <b>تکمیل پروفایل</b> (بعداً موبایل/ایمیل افزوده‌اند): <b>${fa(pc.accounts)}</b> حساب · 📱 موبایل ${fa(pc.mobile)} · ✉️ ایمیل ${fa(pc.email)} · هر دو ${fa(pc.both)}\n` : "") +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
       `\n📅 <b>گزارش هفتگی</b> (شنبه تا امروز، ${range})\n${week}\n` +
       "<i>▶️ شروع‌شده · ✅ موفق · ❌ ناموفق · 🆕 کاربر جدید · ▲▼ نسبت به همین روزهای هفته‌ی قبل. هفته از شنبه شروع می‌شود.</i>\n\n" +
