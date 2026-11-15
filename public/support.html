@@ -3,158 +3,239 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>یک قهوه مهمان پاورپوینت‌ساز کن</title>
+<title>یه قهوه بده، به ما انرژی بده | پاورپوینت‌ساز</title>
+<meta name="description" content="اگر پاورپوینت‌ساز به کارت آمد، یک قهوه مهمانش کن؛ حمایتت خرج سرور، هوش مصنوعی و امکانات تازه می‌شود.">
 <style>
 @font-face{font-family:Vazirmatn;font-weight:400;font-display:swap;src:url(/fonts/Vazirmatn-Regular.woff2) format("woff2")}
 @font-face{font-family:Vazirmatn;font-weight:700;font-display:swap;src:url(/fonts/Vazirmatn-Bold.woff2) format("woff2")}
 :root{
-  --bg:#e8eef3; --card:#ffffff; --ink:#14213d; --muted:#51607a; --line:#cdd7e2;
-  --coffee:#6f4a30; --coffee-d:#4a2f1d; --mint:#bfe3d0; --cup:#ffffff; --cup-line:#14213d;
-  --btn-ink:#ffffff; --focus:#1f6feb;
+  --bg:#fbf5ec; --card:#ffffff; --ink:#2b1d14; --muted:#7a6656; --line:#ecdcc8; --soft:#fff3e0;
+  --coffee:#8a5a35; --coffee-d:#6b4326; --gold:#f2a93b; --ok:#1c8a5a; --err:#c0392b; --focus:#1f6feb;
+  --btn-ink:#ffffff;
   box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#0f1824; --card:#172335; --ink:#e8eef6; --muted:#9db0c8; --line:#2a3b53;
-    --coffee:#c28a5c; --coffee-d:#e0b48c; --mint:#24473a; --cup:#223049; --cup-line:#e8eef6;
-    --btn-ink:#14100c; --focus:#6ea8ff; color-scheme:dark;
+    --bg:#1a120d; --card:#251a13; --ink:#f6ebdd; --muted:#c3ad98; --line:#3b2b20; --soft:#32231a;
+    --coffee:#d19a69; --coffee-d:#e8b98c; --gold:#f2b84f; --ok:#52c08a; --err:#ff8a7a; --focus:#6ea8ff;
+    --btn-ink:#1a120d; color-scheme:dark;
   }
-}
-:root[data-theme="dark"]{
-  --bg:#0f1824; --card:#172335; --ink:#e8eef6; --muted:#9db0c8; --line:#2a3b53;
-  --coffee:#c28a5c; --coffee-d:#e0b48c; --mint:#24473a; --cup:#223049; --cup-line:#e8eef6;
-  --btn-ink:#14100c; --focus:#6ea8ff; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:"Vazirmatn",Tahoma,"Segoe UI",sans-serif;line-height:1.9;font-size:16px}
-.wrap{max-width:1040px;margin:0 auto;padding:40px 20px 56px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:40px;align-items:center}
-h1{font-size:clamp(26px,4.4vw,42px);line-height:1.5;font-weight:700;margin:0 0 14px;letter-spacing:0}
-.lead{color:var(--muted);margin:0 0 28px;max-width:34em}
-.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px}
-label,.lbl{display:block;font-weight:700;font-size:15px;margin-bottom:8px}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.chip{font:inherit;color:var(--ink);background:transparent;border:1.5px solid var(--line);border-radius:999px;padding:6px 18px;cursor:pointer;min-height:44px}
-.chip[aria-checked="true"]{background:var(--ink);color:var(--card);border-color:var(--ink)}
-input,textarea{font:inherit;width:100%;color:var(--ink);background:transparent;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;min-height:44px}
-textarea{resize:vertical;min-height:84px}
-.row{display:grid;grid-template-columns:110px 1fr;gap:12px;margin-bottom:16px}
-.field{margin-bottom:16px}
-:is(button,input,textarea):focus-visible{outline:3px solid var(--focus);outline-offset:2px}
-.pay{font:inherit;font-weight:700;font-size:17px;width:100%;min-height:52px;border:0;border-radius:14px;background:var(--coffee);color:var(--btn-ink);cursor:pointer;transition:transform .12s,background .2s}
-.pay:hover{background:var(--coffee-d)}
-.pay:active{transform:scale(.98)}
-.note{color:var(--muted);font-size:13.5px;margin:12px 0 0;min-height:1.9em}
-.stage{display:flex;flex-direction:column;align-items:center;gap:6px}
-.stage svg{width:min(100%,340px);height:auto}
-.count{font-weight:700;font-size:20px;margin:0}
-.fill{transition:transform .6s cubic-bezier(.2,.8,.2,1)}
-.steam path{fill:none;stroke:var(--muted);stroke-width:4;stroke-linecap:round;opacity:.55;animation:steam 3.2s ease-in-out infinite}
-.steam path:nth-child(2){animation-delay:.8s}.steam path:nth-child(3){animation-delay:1.6s}
-@keyframes steam{0%,100%{transform:translateY(6px);opacity:0}50%{transform:translateY(-6px);opacity:.55}}
-.uses{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:8px 0 0;padding:0;list-style:none}
-.uses li{border-top:3px solid var(--mint);padding-top:12px;color:var(--muted);font-size:15px}
-.uses b{display:block;color:var(--ink);font-size:16px}
-@media (max-width:760px){
-  .wrap{grid-template-columns:1fr;gap:24px;padding-top:24px}
-  .stage{order:-1}.stage svg{width:200px}
-  .uses{grid-template-columns:1fr}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Vazirmatn,Tahoma,"Segoe UI",sans-serif;line-height:1.9;font-size:16px}
+a{color:var(--coffee)}
+.top{max-width:760px;margin:0 auto;padding:14px 20px 0;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.top a{text-decoration:none;font-weight:700}
+.wrap{max-width:760px;margin:0 auto;padding:12px 20px 56px}
+.hero{text-align:center;padding:20px 0 26px}
+.hero .em{font-size:44px;line-height:1.2}
+h1{font-size:clamp(26px,5vw,38px);line-height:1.5;margin:6px 0 10px;font-weight:700}
+.sub{color:var(--muted);margin:0 auto 16px;max-width:30em}
+.tags{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:0;padding:0;list-style:none}
+.tags li{background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:2px 14px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:24px;margin-bottom:22px}
+h2{font-size:19px;margin:0 0 4px;font-weight:700}
+.hint{color:var(--muted);font-size:14px;margin:0 0 16px}
+.tiers{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.tier{position:relative;font:inherit;color:var(--ink);background:var(--bg);border:2px solid var(--line);border-radius:16px;padding:14px 6px 12px;cursor:pointer;text-align:center;min-height:44px;transition:border-color .15s}
+.tier:hover{border-color:var(--gold)}
+.tier[aria-checked="true"]{border-color:var(--coffee);background:var(--soft)}
+.tier .ic{display:block;font-size:26px;line-height:1.3}
+.tier b{display:block;font-size:14px}
+.tier .pr{display:block;font-size:15px;color:var(--coffee-d);font-weight:700}
+.tier .bd{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--gold);color:#2b1d14;font-size:11px;font-weight:700;border-radius:999px;padding:0 10px;white-space:nowrap}
+label{display:block;font-weight:700;font-size:14px;margin-bottom:6px}
+input[type=text],input[type=email],input[type=tel],textarea{font:inherit;width:100%;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;min-height:46px}
+input[dir=ltr]{text-align:left}
+textarea{min-height:92px;resize:vertical}
+.amt{position:relative;margin-bottom:6px}
+.amt input{font-size:20px;font-weight:700;padding-inline-end:70px}
+.amt span{position:absolute;inset-inline-end:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.full{grid-column:1/-1}
+.chk{display:flex;gap:8px;align-items:center;font-weight:400;font-size:14px;color:var(--muted);margin:2px 0 16px}
+.chk input{width:18px;height:18px;accent-color:var(--coffee)}
+:is(button,input,textarea,a):focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.pay{font:inherit;font-weight:700;font-size:18px;width:100%;min-height:54px;border:0;border-radius:16px;background:var(--coffee);color:var(--btn-ink);cursor:pointer;transition:background .2s,transform .12s}
+.pay:hover{background:var(--coffee-d)}.pay:active{transform:scale(.98)}.pay:disabled{opacity:.6;cursor:wait}
+.st{min-height:1.9em;margin:12px 0 0;font-size:14.5px;color:var(--muted);text-align:center}
+.st.bad{color:var(--err)}
+.trust{margin:10px 0 0;text-align:center;font-size:13px;color:var(--muted)}
+.thanks{display:none;background:var(--soft);border:1px solid var(--gold);border-radius:18px;padding:14px 18px;margin-bottom:22px;text-align:center;font-weight:700}
+.thanks.on{display:block}
+ol.steps{margin:0;padding:0 22px 0 0;color:var(--muted)}
+ol.steps li{margin-bottom:4px}
+.wall{display:grid;gap:12px}
+.msg{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:12px 16px}
+.msg p{margin:0 0 4px;overflow-wrap:anywhere}
+.msg small{color:var(--muted);font-weight:700}
+.pg{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;margin-top:16px}
+.pg button{font:inherit;color:var(--ink);background:var(--card);border:1.5px solid var(--line);border-radius:10px;min-width:42px;min-height:42px;padding:0 12px;cursor:pointer}
+.pg button[aria-current=page]{background:var(--coffee);border-color:var(--coffee);color:var(--btn-ink)}
+.pg button:disabled{opacity:.45;cursor:default}
+.empty{text-align:center;color:var(--muted);margin:0}
+.foot{text-align:center;color:var(--muted);font-size:14px;margin-top:8px}
+@media (max-width:620px){
+  .tiers{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.card{padding:18px}
 }
-@media (prefers-reduced-motion:reduce){.steam path{animation:none;opacity:.4}.fill{transition:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
+<div class="top"><a href="/">پاورپوینت‌ساز</a><span aria-hidden="true">☕✨</span></div>
 <main class="wrap">
-  <section>
-    <h1>اگر پاورپوینت‌ساز به کارت آمد، یک قهوه مهمانش کن</h1>
-    <p class="lead">پاورپوینت‌ساز را یک نفر می‌نویسد و نگه می‌دارد. هزینه‌ی سرور و هوش مصنوعی هر ماه از حمایت‌هایی مثل همین تامین می‌شود. حمایت اختیاری است و چیزی را برایت باز یا بسته نمی‌کند.</p>
+  <header class="hero">
+    <div class="em" aria-hidden="true">☕</div>
+    <h1>یه قهوه بده، به ما انرژی بده</h1>
+    <p class="sub">هر قهوه یک جرقه است برای ساختن، نوشتن و رشد کردن. حمایتت خرج سرور، هوش مصنوعی و امکانات تازه‌ی پاورپوینت‌ساز می‌شود.</p>
+    <ul class="tags"><li>ساخت ابزار جدید</li><li>نوشتن محتوای خوب</li><li>رشد و پیشرفت</li></ul>
+  </header>
 
-    <div class="card">
-      <div class="lbl" id="cl">چند قهوه؟</div>
-      <div class="chips" role="radiogroup" aria-labelledby="cl" id="chips"></div>
-      <div class="row">
-        <div><label for="n">تعداد دیگر</label><input id="n" type="number" inputmode="numeric" min="1" max="50" value="3"></div>
-        <div><label for="who">اسمت (اختیاری)</label><input id="who" maxlength="40" autocomplete="name"></div>
-      </div>
-      <div class="field">
-        <label for="msg">پیام برای من (اختیاری)</label>
-        <textarea id="msg" maxlength="140"></textarea>
-      </div>
-      <button class="pay" id="pay" type="button"></button>
-      <p class="note" id="st" role="status" aria-live="polite">پرداخت در درگاه امن انجام می‌شود و اطلاعات کارتت پیش ما نمی‌ماند.</p>
+  <div class="thanks" id="thanks" role="status">ممنون که قهوه تعارف کردی! حمایتت ثبت شد ☕❤️</div>
+
+  <section class="card" aria-labelledby="h-pick">
+    <h2 id="h-pick">☕ امروز چه قهوه‌ای دوست داری؟</h2>
+    <p class="hint">یک قهوه = یک انرژی تازه</p>
+    <div class="tiers" id="tiers" role="radiogroup" aria-labelledby="h-pick"></div>
+
+    <label for="amt">هر مبلغی که دوست داری (از ۱۰ هزار تومان به بالا)</label>
+    <div class="amt"><input id="amt" type="text" inputmode="numeric" autocomplete="off" dir="ltr"><span>تومان</span></div>
+
+    <h2 style="margin-top:22px">چه کسی پشت این قهوه‌ست؟ ☕</h2>
+    <p class="hint">اسمت را بگو تا با هم انرژی بگیریم؛ همه‌ی فیلدها اختیاری‌اند.</p>
+    <div class="grid">
+      <div><label for="who">اسم تو</label><input id="who" type="text" maxlength="40" autocomplete="name"></div>
+      <div><label for="mob">شماره موبایل</label><input id="mob" type="tel" inputmode="numeric" maxlength="11" placeholder="09123456789" dir="ltr" autocomplete="tel"></div>
+      <div class="full"><label for="mail">ایمیل</label><input id="mail" type="email" maxlength="120" dir="ltr" autocomplete="email"></div>
+      <div class="full"><label for="msg">یه پیام محبت‌آمیز یا پیشنهاد</label><textarea id="msg" maxlength="200"></textarea></div>
     </div>
+    <label class="chk"><input type="checkbox" id="hide"> پیامم در دیوار حامیان نمایش داده نشود</label>
+
+    <button class="pay" id="pay" type="button">یه قهوه بده</button>
+    <p class="st" id="st" role="status" aria-live="polite"></p>
+    <p class="trust">🔒 پرداخت در درگاه امن آقای پرداخت انجام می‌شود و اطلاعات کارتت پیش ما ذخیره نمی‌شود.</p>
   </section>
 
-  <section class="stage" aria-hidden="true">
-    <svg viewBox="0 0 320 300">
-      <defs><clipPath id="cupIn"><path d="M60 110h170v70a85 85 0 0 1-85 85h0a85 85 0 0 1-85-85z"/></clipPath></defs>
-      <g class="steam"><path d="M110 90c-14-16 14-26 0-44"/><path d="M145 90c-14-16 14-26 0-44"/><path d="M180 90c-14-16 14-26 0-44"/></g>
-      <ellipse cx="145" cy="278" rx="120" ry="14" fill="var(--mint)"/>
-      <path d="M230 135h18a30 30 0 0 1 0 60h-26" fill="none" stroke="var(--cup-line)" stroke-width="7" stroke-linecap="round"/>
-      <path d="M60 110h170v70a85 85 0 0 1-85 85h0a85 85 0 0 1-85-85z" fill="var(--cup)"/>
-      <g clip-path="url(#cupIn)"><rect class="fill" id="lvl" x="50" y="110" width="190" height="170" fill="var(--coffee)" style="transform:translateY(170px)"/></g>
-      <path d="M60 110h170v70a85 85 0 0 1-85 85h0a85 85 0 0 1-85-85z" fill="none" stroke="var(--cup-line)" stroke-width="7" stroke-linejoin="round"/>
-    </svg>
-    <p class="count" id="cc"></p>
+  <section class="card">
+    <h2>بیا یه قهوه بهمون برسون ☕</h2>
+    <ol class="steps">
+      <li>مبلغ دلخواهت را انتخاب کن (حداقل ۱۰ هزار تومان)</li>
+      <li>روی دکمه‌ی «یه قهوه بده» بزن</li>
+      <li>به درگاه امن آقای پرداخت هدایت می‌شوی و پرداخت را انجام می‌دهی</li>
+      <li>بعد از پرداخت موفق، خودکار به همین صفحه برمی‌گردی</li>
+      <li>پیامت در بخش «دوستانی که یه قهوه تعارف کردن» نمایش داده می‌شود</li>
+    </ol>
   </section>
 
-  <ul class="uses">
-    <li><b>سرور و ذخیره‌سازی</b>نگه‌داشتن ربات و سایت برای همه، شبانه‌روز.</li>
-    <li><b>هزینه‌ی هوش مصنوعی</b>ساختن متن و اسلاید هر ارائه هزینه دارد.</li>
-    <li><b>امکانات تازه</b>وقتی برای ساختن و رفع ایرادها کنار گذاشته می‌شود.</li>
-  </ul>
+  <section class="card" aria-labelledby="h-wall">
+    <h2 id="h-wall">دوستانی که یه قهوه تعارف کردن ☕</h2>
+    <p class="hint">فقط اسم و پیام نمایش داده می‌شود؛ مبلغ و اطلاعات تماس هرگز.</p>
+    <div class="wall" id="wall"><p class="empty">در حال بارگذاری…</p></div>
+    <nav class="pg" id="pg" aria-label="صفحه‌بندی"></nav>
+  </section>
+
+  <p class="foot">با عشق و انرژی قهوه 💛</p>
 </main>
 
 <script>
 (function(){
-  // قیمت هر قهوه (تومان)؛ باید با PRICE در src/support.ts یکی باشد (سرور مبلغ را خودش حساب می‌کند)
-  var PRICE = 50000;
-  var PRESETS = [1, 3, 5, 10];
-  var n = 3;
+  var MIN = 10000; // باید با MIN در src/support.ts یکی باشد (سرور مبلغ را دوباره بررسی می‌کند)
+  var TIERS = [
+    { ic: "☕", name: "اسپرسو", v: 35000 },
+    { ic: "🥛", name: "لاته", v: 65000, badge: "🔥 محبوب" },
+    { ic: "✨", name: "کاپوچینو طلایی", v: 120000 },
+    { ic: "🌟", name: "موکا افسانه‌ای", v: 250000 }
+  ];
   var $ = function(id){ return document.getElementById(id); };
   var fa = function(x){ return Number(x).toLocaleString("fa-IR"); };
-  var chips = $("chips"), inp = $("n");
+  var amt = 0, busy = false;
 
-  PRESETS.forEach(function(v){
+  var tiers = $("tiers");
+  TIERS.forEach(function(t){
     var b = document.createElement("button");
-    b.type = "button"; b.className = "chip"; b.setAttribute("role", "radio");
-    b.dataset.v = v; b.textContent = fa(v) + " قهوه";
-    b.onclick = function(){ set(v); };
-    chips.appendChild(b);
+    b.type = "button"; b.className = "tier"; b.setAttribute("role", "radio"); b.dataset.v = t.v;
+    if (t.badge) { var bd = document.createElement("span"); bd.className = "bd"; bd.textContent = t.badge; b.appendChild(bd); }
+    var ic = document.createElement("span"); ic.className = "ic"; ic.textContent = t.ic;
+    var nm = document.createElement("b"); nm.textContent = t.name;
+    var pr = document.createElement("span"); pr.className = "pr"; pr.textContent = fa(t.v);
+    b.appendChild(ic); b.appendChild(nm); b.appendChild(pr);
+    b.onclick = function(){ setAmt(t.v, true); };
+    tiers.appendChild(b);
   });
 
-  function set(v){
-    v = Math.max(1, Math.min(50, Math.round(Number(v)) || 1));
-    n = v; inp.value = v;
-    [].forEach.call(chips.children, function(c){ c.setAttribute("aria-checked", String(Number(c.dataset.v) === v)); });
-    var total = v * PRICE;
-    $("pay").textContent = "حمایت با " + fa(total) + " تومان";
-    $("cc").textContent = fa(v) + " قهوه";
-    // سطح قهوه در فنجان: از خالی (۱۷۰) تا نزدیک لبه (۰) با ۶ قهوه پر می‌شود
-    $("lvl").style.transform = "translateY(" + Math.round(170 - 160 * Math.min(v, 6) / 6) + "px)";
+  // ارقام فارسی/عربی را به انگلیسی تبدیل می‌کند و فقط رقم نگه می‌دارد
+  function digits(s){
+    return String(s).replace(/[۰-۹]/g, function(d){ return d.charCodeAt(0) - 1776; })
+      .replace(/[٠-٩]/g, function(d){ return d.charCodeAt(0) - 1632; }).replace(/\D/g, "");
   }
-  inp.addEventListener("input", function(){ if (inp.value !== "") set(inp.value); });
-  inp.addEventListener("blur", function(){ set(inp.value); });
+  function setAmt(v, fromTier){
+    amt = Math.max(0, Math.min(20000000, Number(v) || 0));
+    if (fromTier) $("amt").value = amt ? amt.toLocaleString("en-US") : "";
+    [].forEach.call(tiers.children, function(c){ c.setAttribute("aria-checked", String(Number(c.dataset.v) === amt)); });
+  }
+  $("amt").addEventListener("input", function(){
+    var n = Number(digits(this.value)) || 0;
+    this.value = n ? n.toLocaleString("en-US") : "";
+    setAmt(n, false);
+  });
 
-  var busy = false;
+  function say(msg, cls){ var st = $("st"); st.textContent = msg; st.className = "st" + (cls ? " " + cls : ""); }
+
   $("pay").onclick = function(){
     if (busy) return;
-    var st = $("st"), btn = $("pay");
-    busy = true; btn.disabled = true; st.textContent = "در حال انتقال به درگاه پرداخت…";
+    if (amt < MIN) { say("حداقل مبلغ حمایت ۱۰ هزار تومان است.", "bad"); return; }
+    var btn = $("pay"); busy = true; btn.disabled = true; say("در حال انتقال به درگاه پرداخت…");
     fetch("/api/support/start", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ coffees: n, name: $("who").value.trim(), note: $("msg").value.trim() }) })
+      body: JSON.stringify({ amount: amt, name: $("who").value.trim(), mobile: digits($("mob").value), email: $("mail").value.trim(), note: $("msg").value.trim(), hide: $("hide").checked }) })
       .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
       .then(function(x){
         if (x.ok && x.d.url) { location.href = x.d.url; return; }
         throw new Error(x.d && x.d.error || "خطا");
       })
-      .catch(function(e){ st.textContent = e.message || "اتصال برقرار نشد؛ دوباره امتحان کن."; busy = false; btn.disabled = false; });
+      .catch(function(e){ say(e.message || "اتصال برقرار نشد؛ دوباره امتحان کن.", "bad"); busy = false; btn.disabled = false; });
   };
+
+  // دیوار حامیان (متن‌ها فقط با textContent نمایش داده می‌شوند)
+  function note(text){ var w = $("wall"); w.textContent = ""; var e = document.createElement("p"); e.className = "empty"; e.textContent = text; w.appendChild(e); }
+  function wall(page){
+    fetch("/api/support/wall?page=" + page).then(function(r){ return r.json(); }).then(function(d){
+      if (!d.items || !d.items.length) { note("هنوز کسی قهوه نفرستاده؛ اولین نفر تو باش ☕"); $("pg").textContent = ""; return; }
+      var w = $("wall"); w.textContent = "";
+      d.items.forEach(function(it){
+        var m = document.createElement("div"); m.className = "msg";
+        var p = document.createElement("p"); p.textContent = "«" + it.m + "»";
+        var s = document.createElement("small"); s.textContent = "— " + it.n;
+        m.appendChild(p); m.appendChild(s); w.appendChild(m);
+      });
+      pager(d.page, d.pages);
+    }).catch(function(){ note("بارگذاری پیام‌ها ممکن نشد."); });
+  }
+  function pager(cur, pages){
+    var pg = $("pg"); pg.textContent = "";
+    if (pages < 2) return;
+    function btn(label, p, disabled, current){
+      var b = document.createElement("button"); b.type = "button"; b.textContent = label; b.disabled = !!disabled;
+      if (current) b.setAttribute("aria-current", "page");
+      b.onclick = function(){ wall(p); };
+      pg.appendChild(b);
+    }
+    btn("‹ قبلی", cur - 1, cur <= 1);
+    for (var i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || Math.abs(i - cur) <= 1) btn(fa(i), i, false, i === cur);
+      else if (Math.abs(i - cur) === 2) { var d = document.createElement("span"); d.textContent = "…"; pg.appendChild(d); }
+    }
+    btn("بعدی ›", cur + 1, cur >= pages);
+  }
+
   // نتیجه‌ی بازگشت از درگاه
-  var q = new URLSearchParams(location.search), th = q.get("thanks"), pr = q.get("pay");
-  if (th) $("st").textContent = "ممنون! حمایتت (" + fa(Number(th) || 1) + " قهوه) ثبت شد.";
-  else if (pr) $("st").textContent = pr === "cancel" ? "پرداخت انجام نشد. هر وقت خواستی دوباره امتحان کن." : pr === "error" ? "تایید پرداخت با خطای موقت روبه‌رو شد؛ اگر پول کم شده، تا چند ساعت دیگر به حسابت برمی‌گردد یا با پشتیبانی تماس بگیر." : "پرداخت تایید نشد. اگر پول کم شده، با پشتیبانی تماس بگیر.";
-  set(n);
+  var q = new URLSearchParams(location.search), pr = q.get("pay");
+  if (q.get("thanks")) $("thanks").className = "thanks on";
+  else if (pr) say(pr === "cancel" ? "پرداخت انجام نشد. هر وقت خواستی دوباره امتحان کن." : pr === "error" ? "تایید پرداخت با خطای موقت روبه‌رو شد؛ اگر پول کم شده، تا چند ساعت دیگر برمی‌گردد یا با پشتیبانی تماس بگیر." : "پرداخت تایید نشد. اگر پول کم شده، با پشتیبانی تماس بگیر.", "bad");
+  if (q.get("thanks") || pr) history.replaceState(null, "", location.pathname);
+
+  setAmt(TIERS[0].v, true);
+  wall(1);
 })();
 </script>
 </body>

@@ -12,7 +12,7 @@ import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
 import { appCrash } from "./app-crash";
 import { feedbackInfo, submitFeedback } from "./feedback";
-import { startSupport, supportCallback } from "./support";
+import { startSupport, supportCallback, supportWall } from "./support";
 import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, sibappEnabled, sibappStart, sibappVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { listSamples, sampleLabel } from "./samples";
@@ -87,11 +87,12 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/pay/go" && method === "GET") return paymentGo(env, url);
   if (path === "/api/pay/callback") return paymentCallback(env, req, url);
   if (path === "/api/support/callback" && method === "GET") return supportCallback(env, url);
+  if (path === "/api/support/wall" && method === "GET") return supportWall(env, url);
 
   // حفاظت CSRF: درخواست‌های تغییردهنده فقط از همین سایت
   if (method !== "GET" && method !== "HEAD" && req.headers.get("origin") !== url.origin) return err("درخواست نامعتبر", 403);
 
-  if (path === "/api/support/start" && method === "POST") return startSupport(env, url, req, await readBody(req, 2_000));
+  if (path === "/api/support/start" && method === "POST") return startSupport(env, url, req, await readBody(req, 3_000));
 
   if (path === "/api/config" && method === "GET") {
     const ver = await getAppVersions(env);
