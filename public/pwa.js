@@ -129,7 +129,11 @@
   // سرور فقط وقتی VAPID دارد کلید می‌دهد؛ بدون آن هیچ‌چیز نشان داده نمی‌شود. اجازه‌ی مرورگر فقط بعد از اولین ارائه‌ی موفق و با کلیک کاربر خواسته می‌شود.
   var PUSH_KEY = "pwa_push_dismissed";
   function pushOk() { return !inTelegram && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && (location.protocol === "https:" || location.hostname === "localhost"); }
-  function pushDismissed() { try { return Date.now() - (+localStorage.getItem(PUSH_KEY) || 0) < 14 * 864e5; } catch (e) { return false; } }
+  var PUSH_N = "pwa_push_n", PUSH_VISITS = "pwa_visits", PUSH_COOL = 864e5, PUSH_MAX = 5; // بین دو پیشنهاد ۱ روز؛ حداکثر ۵ بار (هر بار بستن یا «روشن کن»ِ نیمه‌کاره)
+  function pushDismissed() {
+    try { return (+localStorage.getItem(PUSH_N) || 0) >= PUSH_MAX || Date.now() - (+localStorage.getItem(PUSH_KEY) || 0) < PUSH_COOL; } catch (e) { return false; }
+  }
+  function pushAsked() { try { localStorage.setItem(PUSH_KEY, String(Date.now())); localStorage.setItem(PUSH_N, String((+localStorage.getItem(PUSH_N) || 0) + 1)); } catch (e) {} }
   function u8(b64) {
     var s = b64.replace(/-/g, "+").replace(/_/g, "/"); s += "===".slice((s.length + 3) % 4);
     var raw = atob(s), out = new Uint8Array(raw.length);
@@ -157,7 +161,7 @@
     if (!pushOk()) return Promise.resolve(false);
     return Notification.requestPermission().then(function (p) { return p === "granted" ? pushRefresh() : false; }).catch(function () { return false; });
   }
-  // بعد از ارائه‌ی موفق صدا زده می‌شود؛ فقط یک‌بار در ۱۴ روز و فقط اگر اجازه هنوز پرسیده نشده
+  // بعد از ارائه‌ی موفق، بعد از ورود/ثبت‌نام (index.html) و در بازدید دوم و سوم صدا زده می‌شود؛ حداکثر روزی یک‌بار و ۵ بار در کل، و فقط اگر اجازه هنوز پرسیده نشده
   function pushOffer() {
     if (!pushOk()) return;
     if (Notification.permission === "granted") { pushRefresh(); return; }
@@ -166,11 +170,25 @@
       if (!key) return;
       box({
         id: "pwa-push", title: "وقتی ارائه آماده شد خبرت کنیم؟", msg: "اعلان مرورگر؛ هر وقت خواستی از تنظیمات مرورگر خاموشش کن.", label: "روشن کن", top: true,
-        onAction: function () { try { localStorage.setItem(PUSH_KEY, String(Date.now())); } catch (e) {} drop("pwa-push"); pushEnable(); },
-        onClose: function () { try { localStorage.setItem(PUSH_KEY, String(Date.now())); } catch (e) {} },
+        onAction: function () { pushAsked(); drop("pwa-push"); pushEnable(); },
+        onClose: pushAsked,
       });
     });
   }
+  // بازدید دوم و سوم (هر نشست یک بازدید): فقط برای واردشده‌ها، چون اشتراک به حساب وصل می‌شود و مهمان اشتراکش ثبت نمی‌شود
+  function visitNo() {
+    try {
+      if (!sessionStorage.getItem("pwa_vs")) { sessionStorage.setItem("pwa_vs", "1"); localStorage.setItem(PUSH_VISITS, String((+localStorage.getItem(PUSH_VISITS) || 0) + 1)); }
+      return +localStorage.getItem(PUSH_VISITS) || 0;
+    } catch (e) { return 0; }
+  }
+  addEventListener("load", function () {
+    var n = visitNo();
+    if ((n !== 2 && n !== 3) || !pushOk()) return;
+    setTimeout(function () {
+      fetch("/api/me", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (j) { if (j && j.user) pushOffer(); }).catch(function () {});
+    }, 4000);
+  });
   window.pptPush = { supported: pushOk, offer: pushOffer, refresh: pushRefresh, enable: pushEnable };
 
   if (standalone || inTelegram) return;

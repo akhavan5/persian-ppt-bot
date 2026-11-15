@@ -917,6 +917,8 @@ async function boot() {
       }
     } catch {}
   }
+  // ورود/ثبت‌نام تازه (مهمان بودن در بارگذاری قبلی ← واردشدن؛ با کد یا گوگل): پیشنهاد اعلان وب
+  try { if (!me) localStorage.setItem("pwa_guest", "1"); else if (localStorage.getItem("pwa_guest") === "1") { localStorage.removeItem("pwa_guest"); if (window.pptPush) setTimeout(() => window.pptPush.offer(), 2500); } } catch {}
   if (me && me.dailyFree) toast("🎁 اعتبار رایگان امروزت اضافه شد.");
   renderCommon(); initPoster(); initLink(); initVoice();
   show($("#guestBar"), !me); show($("#userbar"), !!me); show($("#userOnly"), !!me);
