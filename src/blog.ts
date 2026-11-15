@@ -307,7 +307,8 @@ ${p.sections.map((x, i) => renderBlogSection(x, i) + (x === stepsSec ? stepsFigu
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
     </section>
-${adjacent(p)}    <section>
+${adjacent(p)}    ${YEKTANET_TEXT}
+    <section>
       <h2>مقاله‌های مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/blog/${r.slug}">${esc(r.nav)}<span>${esc(r.category)}</span></a>`).join("")}${tools.map((x) => `<a href="/${x.slug}">${esc(x.nav)}<span>ابزار ساخت</span></a>`).join("")}</div>
     </section>
@@ -316,7 +317,6 @@ ${adjacent(p)}    <section>
       <p>موضوع را بنویس و ظرف چند دقیقه فایل PPTX فارسی و قابل‌ویرایش را بگیر؛ با ثبت‌نام ۳ ارائه‌ی رایگان هدیه می‌گیری.</p>
       <a class="btn" href="/#topic">${esc(p.cta)}</a>
     </section>
-    ${YEKTANET_TEXT}
     ${YEKTANET_SLOT}
   </article>
 </main>`;

@@ -50,7 +50,7 @@ export const YEKTANET_SCRIPT = `<script>
         }(window,document,"yektanet");
         </script>`;
 
-/** جایگاه تبلیغ متنی یکتانت (انتهای مطلب، قبل از جایگاه تصویری). شناسه را تغییر ندهید. */
+/** جایگاه تبلیغ متنی یکتانت: دو بلوک (بخش) بالاتر از جایگاه تصویری انتهای صفحه، نه چسبیده به آن. شناسه را تغییر ندهید. */
 export const YEKTANET_TEXT = `<div id="pos-article-text-124202"></div>`;
 
 /** جایگاه تبلیغ تصویری یکتانت (انتهای مطلب). فقط در انتهای محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
@@ -530,7 +530,8 @@ ${articles.length ? `    <section>
       <h2>مقاله‌های مرتبط در وبلاگ</h2>
       <div class="rel">${articles.map((a) => `<a href="/blog/${a!.slug}">${esc(a!.nav)}<span>${esc(a!.category)}</span></a>`).join("")}</div>
     </section>
-` : ""}    <section>
+` : ""}    ${YEKTANET_TEXT}
+    <section>
       <h2>راهنماهای مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/${r.slug}">${esc(r.nav)}<span>${esc(r.title.split("|")[0].trim())}</span></a>`).join("")}</div>
     </section>
@@ -539,7 +540,6 @@ ${articles.length ? `    <section>
       <p>موضوع را بنویس و ظرف چند دقیقه فایل PPTX فارسی و قابل‌ویرایش را بگیر.</p>
       <a class="btn" href="/#topic">${esc(p.cta)}</a>
     </section>
-    ${YEKTANET_TEXT}
     ${YEKTANET_SLOT}
   </article>
 </main>
