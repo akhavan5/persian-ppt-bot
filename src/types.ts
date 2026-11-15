@@ -54,6 +54,8 @@ export interface Settings {
   /** افزودن اسلاید منابع / پرسش‌های پایانی */
   sources: boolean;
   questions: boolean;
+  /** یادداشت سخنرانی زیر هر اسلاید (در PPTX، پیش‌نمایش و PDF)؛ پیش‌فرض روشن (undefined = روشن) */
+  notes?: boolean;
   /** نام مدل انتخابی (از فهرست OPENAI_MODELS)؛ خالی = مدل اول */
   model?: string;
 }

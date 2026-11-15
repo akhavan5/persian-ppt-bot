@@ -260,6 +260,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <label class="sw"><span>ارقام فارسی</span><input type="checkbox" id="digits"></label>
           <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
           <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
+          <label class="sw"><span>یادداشت سخنرانی</span><input type="checkbox" id="notes"></label>
         </div>
       </div>
       <div class="card" id="pfCard">
@@ -1547,6 +1548,7 @@ function renderSettings() {
   show($("#modelBox"), (cfg.models || []).length > 1);
   fill("#model", (cfg.models || []).map((m) => [m.id, m.name + (m.free === false ? " (ویژه)" : "")]), s.model || (cfg.models.find((m) => m.free !== false) || cfg.models[0] || {}).id);
   for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
+  $("#notes").checked = s.notes !== false; // پیش‌فرض روشن
   renderCreditInfo(); renderProfile();
 }
 async function save(patch) {
@@ -1558,7 +1560,7 @@ $("#tone").onchange = (e) => save({ tone: e.target.value });
 $("#font").onchange = (e) => save({ font: e.target.value });
 $("#tpl").onchange = (e) => save({ template: e.target.value });
 $("#model").onchange = (e) => save({ model: e.target.value });
-for (const k of ["digits", "sources", "questions"]) $("#" + k).onchange = (e) => save({ [k]: e.target.checked });
+for (const k of ["digits", "sources", "questions", "notes"]) $("#" + k).onchange = (e) => save({ [k]: e.target.checked });
 
 // ---------- خرید پلن (در مرورگر بیرونی؛ لینک یک‌بارمصرف با ورود خودکار) ----------
 async function openBuy(btn) {

@@ -500,9 +500,12 @@ export function normalizeOutline(data: any, topic: string): Outline {
 }
 
 // ---------- تولید ----------
-export interface ContentOpts { model?: string; audience?: string; mode?: Mode; sources?: boolean; questions?: boolean; maxImages?: number; /** مرور نهایی کیفیت (فقط پلن‌های پولی) */ review?: boolean; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوا */ source?: string }
+export interface ContentOpts { model?: string; audience?: string; mode?: Mode; sources?: boolean; questions?: boolean; /** یادداشت سخنرانی؛ undefined = روشن */ notes?: boolean; maxImages?: number; /** مرور نهایی کیفیت (فقط پلن‌های پولی) */ review?: boolean; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوا */ source?: string }
 const wantSources = (o: ContentOpts) => o.mode === "student" || o.mode === "thesis" || !!o.sources;
 const wantQuestions = (o: ContentOpts) => o.mode === "teacher" || !!o.questions;
+const wantNotes = (o: ContentOpts) => o.notes !== false;
+/** وقتی یادداشت سخنرانی خاموش است، یادداشت همه‌ی اسلایدها حذف می‌شود (PPTX، پیش‌نمایش و PDF خودبه‌خود بدون یادداشت می‌شوند) */
+const stripNotes = (d: Deck): Deck => { for (const s of d.slides) delete s.notes; return d; };
 
 /** مخاطب پیش‌فرض و سبک نوشتن هر حالت (فقط برای حالت‌های غیر از عادی چیزی اضافه می‌شود) */
 const audienceOf = (o: ContentOpts) => o.audience || (o.mode === "student" ? "university class" : o.mode === "business" ? "managers, clients or investors who decide quickly" : o.mode === "teacher" ? "school students in a classroom" : o.mode === "thesis" ? "an academic examination committee (professors and examiners)" : "general");
@@ -580,7 +583,7 @@ ${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model); // ۳۵ اسلا
 }
 
 export async function makeDeck(env: Env, topic: string, title: string, outline: OutlineItem[], tone: string, o: ContentOpts = {}): Promise<Deck> {
-  if (!hasKey(env)) return mockDeck(title || topic, outline);
+  if (!hasKey(env)) return wantNotes(o) ? mockDeck(title || topic, outline) : stripNotes(mockDeck(title || topic, outline));
   const st = MODE_STYLE[o.mode ?? "normal"];
 
   // محتوا به دسته‌های کوچک (۳ تا ۴ اسلاید) شکسته می‌شود و دسته‌ها هم‌زمان ساخته می‌شوند:
@@ -620,7 +623,7 @@ Return JSON: {"title": "...", "slides": [{
   "quote": {"text": "...", "author": "optional"},
   "items": [{"icon": "...", "heading": "...", "text": "..."}],
   "image_query": "ONLY on slides whose layout is image_text — omit this field on every other layout. English description of ONE concrete visual scene for this slide (objects, setting; no abstract words), max 12 words. It must directly depict the subject of THIS presentation topic (e.g. solar panels and wind turbines for renewable energy); never generic landmarks, mosques, buildings or cultural stereotypes unless the topic itself is about them",
-  "notes": "speaker notes in Persian"}]}
+  ${wantNotes(o) ? '"notes": "speaker notes in Persian"' : '"notes": ""'}}]}
 
 Quality rules:
 - Each outline item has a "message": the takeaway of that slide. Build the slide around it, so every slide makes one clear point. Keep the outline title as the slide title (you may shorten it slightly); title/closing/sources/questions slides keep a plain title.
@@ -645,13 +648,14 @@ ${edges}
 - Use "three_column", "timeline", "process", "icons" and "quote" sparingly: each at most once in this part, never on special (sources/questions) slides, and only where the content naturally fits; otherwise use "bullets".
 - "section": only for a divider between big parts, and only in decks of 10+ slides.
 - Vary layouts; do not use the same one more than 3 times in a row.
-- Include "notes" for every slide: ${st.notes}. Do not just repeat the slide text: add an example, a question for the audience, or a useful extra detail.
+${wantNotes(o) ? `- Include "notes" for every slide: ${st.notes}. Do not just repeat the slide text: add an example, a question for the audience, or a useful extra detail.` : `- The user turned speaker notes off: set "notes" to an empty string on every slide.`}
 - "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.${modeLayoutRules(o)}`,
       st.tokens * slice.length + 500, o.model);
     return normalizeDeck(data, slice).slides.slice(0, slice.length); // normalizeDeck کمبود را از روی سرفصل پر می‌کند ⇒ ترتیب دسته‌ها به‌هم نمی‌خورد
   }));
 
   const deck: Deck = { title: title || topic, slides: parts.flat() };
+  if (!wantNotes(o)) stripNotes(deck);
   deck.slides.forEach((sl, i) => { const k = outline[i]?.kind; if (k) sl.layout = k; }); // چیدمان اسلایدهای ویژه ثابت است
   // برخی مدل‌ها (مثل gpt-oss) خودسرانه layout "sources"/"questions" می‌دهند، حتی وقتی در سرفصل چنین اسلایدی نیست
   // (مثلاً کاربر «منابع» را خاموش کرده): اسلاید «icons» با items خالی نمایش داده می‌شد و اسلاید پایانی به «منابع» تبدیل می‌شد.
@@ -706,7 +710,7 @@ export async function reviewDeck(env: Env, deck: Deck, topic: string, o: Content
   if (!hasKey(env) || deck.slides.length < 4 || o.source) return deck; // با فایل آپلودی، وفاداری به منبع مهم‌تر است
   const n = deck.slides.length;
   const view = deck.slides.map((s, i) => ({ s, i })).filter(({ s, i }) => i > 0 && i < n - 1 && !SPECIAL_LAYOUTS.has(s.layout))
-    .map(({ s, i }) => ({ i, layout: s.layout, title: s.title, bullets: s.bullets, columns: s.columns, notes: s.notes }));
+    .map(({ s, i }) => ({ i, layout: s.layout, title: s.title, bullets: s.bullets, columns: s.columns, ...(wantNotes(o) ? { notes: s.notes } : {}) }));
   if (!view.length) return deck;
   const allowed = new Set(view.map((v) => v.i));
   const max = Math.max(2, Math.ceil(n / 3));
@@ -715,7 +719,7 @@ export async function reviewDeck(env: Env, deck: Deck, topic: string, o: Content
 Find the WEAK slides: (a) the title is a bare label instead of a specific headline that states the point; (b) vague filler, clichés, or bullets that could fit any topic; (c) ideas repeated from another slide; (d) bullets all of the same shape and length with no concrete example, number or name; (e) claims, numbers, names or quotes that look invented or unsupported.
 Rewrite ONLY the weak slides (at most ${max}), in fluent Persian, keeping each slide's topic, layout, and the SAME number of bullets and columns. Make them more specific only when the background notes or facts you are certain of support it; otherwise make them concrete but general, and remove doubtful numbers or names instead of inventing. If the deck is fine, return {"fixes": []}.${researchBlock(o)}
 Slides (JSON): ${JSON.stringify(view)}
-Return JSON: {"fixes": [{"i": <slide index>, "title": "...", "bullets": ["..."], "columns": [{"heading": "...", "bullets": ["..."]}], "notes": "..."}]} — include only the fields you changed.`,
+Return JSON: {"fixes": [{"i": <slide index>, "title": "...", "bullets": ["..."], "columns": [{"heading": "...", "bullets": ["..."]}]${wantNotes(o) ? ', "notes": "..."' : ""}}]} — include only the fields you changed.`,
       Math.min(4000, 700 + max * 500), o.model);
     const fixes: any[] = Array.isArray(data?.fixes) ? data.fixes.slice(0, max) : [];
     const out: Deck = structuredClone(deck);
@@ -735,7 +739,7 @@ Return JSON: {"fixes": [{"i": <slide index>, "title": "...", "bullets": ["..."],
         });
         sl.columns = nc;
       }
-      const notes = str(f.notes);
+      const notes = wantNotes(o) ? str(f.notes) : "";
       if (notes) sl.notes = notes;
     }
     return out;

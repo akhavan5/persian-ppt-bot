@@ -438,7 +438,7 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
     if (!(await canUseModel(env, user.id, b.model))) return json({ error: EXTRA_MODEL_MSG.replace("🔒 ", ""), needPlan: true }, 403);
     s.model = b.model;
   }
-  for (const k of ["digits", "images", "sources", "questions"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
+  for (const k of ["digits", "images", "sources", "questions", "notes"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
   if (typeof b.imagesMany === "boolean") {
     if (b.imagesMany && !(await hasPlanAccess(env, user.id))) return json({ error: EXTRA_IMAGES_MSG.replace("🔒 ", ""), needPlan: true }, 403);
     s.imagesMany = b.imagesMany;

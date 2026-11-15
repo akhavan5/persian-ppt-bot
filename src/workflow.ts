@@ -49,7 +49,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
     const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
     const maxImages = Math.max(1, event.payload.maxImages ?? 1); // تلگرام: ۱ تصویر؛ وب: طبق پلن
-    const contentOpts: ContentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, maxImages: settings.images ? maxImages : 0, source: event.payload.source || undefined };
+    const contentOpts: ContentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, notes: settings.notes !== false, maxImages: settings.images ? maxImages : 0, source: event.payload.source || undefined };
     const web = event.payload.channel === "web";
     const deckPlat = event.payload.plat ?? (web ? "web" : botPlatform(event.payload.tgId ?? userId)); // پلتفرم مبدأ برای آمار هفتگی (کارهای قدیمیِ در جریان plat ندارند)
     // کاربر دارای پلن (اعتبار این ارائه از پلن کم شده) ⇒ فایل‌ها بدون واترمارک؛ رایگان/هدیه ⇒ با نام سایت. نام فایل‌ها برای همه آدرس سایت دارد.

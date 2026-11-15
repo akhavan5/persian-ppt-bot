@@ -58,6 +58,7 @@ struct Settings {
     var digits = false
     var sources = false
     var questions = false
+    var notes = true
     var images = true
     var imagesMany = false
 
@@ -73,6 +74,7 @@ struct Settings {
         case "digits": digits = value as? Bool ?? digits
         case "sources": sources = value as? Bool ?? sources
         case "questions": questions = value as? Bool ?? questions
+        case "notes": notes = value as? Bool ?? notes
         case "images": images = value as? Bool ?? images
         case "imagesMany": imagesMany = value as? Bool ?? imagesMany
         default: break
@@ -287,6 +289,7 @@ func parseMe(_ j: J) -> Me? {
     s.digits = st["digits"].bool
     s.sources = st["sources"].bool
     s.questions = st["questions"].bool
+    s.notes = st["notes"].exists ? st["notes"].bool : true
     s.images = st["images"].exists ? st["images"].bool : true
     s.imagesMany = st["imagesMany"].bool
     m.settings = s

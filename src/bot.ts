@@ -84,6 +84,7 @@ function mainMenu(env: Env, s: Settings, caps: Caps) {
     models.length > 1 ? [{ text: `🤖 مدل: ${model.name}`, callback_data: "m:model" }, modeBtn] : [modeBtn],
     [{ text: `📚 منابع: ${s.mode === "student" || s.mode === "thesis" ? "روشن (" + MODES[s.mode].name + ")" : s.sources ? "روشن" : "خاموش"}`, callback_data: "t:sources" },
       { text: `❓ پرسش پایانی: ${s.mode === "teacher" ? "روشن (معلم)" : s.questions ? "روشن" : "خاموش"}`, callback_data: "t:questions" }],
+    [{ text: `📝 یادداشت سخنرانی: ${s.notes === false ? "خاموش" : "روشن"}`, callback_data: "t:notes" }],
     [{ text: "✅ بستن", callback_data: "x:close" }],
   ];
   return { text: "⚙️ <b>تنظیمات</b>\nگزینه‌ای را برای تغییر انتخاب کن:", ...kb(rows) };
@@ -495,6 +496,7 @@ async function handleCallback(env: Env, cq: any) {
     if (a === "mode") s.mode = nextMode(s.mode);
     if (a === "sources") s.sources = !s.sources;
     if (a === "questions") s.questions = !s.questions;
+    if (a === "notes") s.notes = s.notes === false;
     await saveSettings(env, uid, s);
     view = mainMenu(env, s, caps);
   } else if (act === "v") {

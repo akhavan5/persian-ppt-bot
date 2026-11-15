@@ -1360,6 +1360,8 @@ fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
                 HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 ToggleRow("اسلاید پرسش‌های پایانی", "پرسش و پاسخ برای جمع‌بندی", null, s.questions) { vm.setSetting("questions", it) }
                 HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+                ToggleRow("یادداشت سخنرانی", "متن پیشنهادی برای ارائه‌ی هر اسلاید", null, s.notes) { vm.setSetting("notes", it) }
+                HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 ToggleRow("ذخیره‌ی خودکار روی گوشی", "بعد از ساخت، یک نسخه روی گوشی می‌ماند تا بعد از ۲۴ ساعت هم در دسترس باشد", null, st.autoSave) { vm.setAutoSave(it) }
             }
 

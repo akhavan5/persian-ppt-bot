@@ -518,6 +518,7 @@ address{font-style:normal}
           <label class="sw"><span>ارقام فارسی</span><input type="checkbox" id="digits"></label>
           <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
           <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
+          <label class="sw"><span>یادداشت سخنرانی</span><input type="checkbox" id="notes"></label>
         </div>
         <p class="muted" style="margin-bottom:0">فونت Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد؛ Tahoma و Arial همه‌جا کار می‌کنند.</p>
       </details>
@@ -1267,6 +1268,7 @@ function syncSettings() {
   $("#mode").value = s.mode;
   $("#modeHint").textContent = MODE_HINTS[s.mode] || "";
   for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
+  $("#notes").checked = s.notes !== false; // پیش‌فرض روشن
   renderImages();
   // در حالت‌های دانشجویی و دفاع پایان‌نامه اسلاید منابع و در حالت معلم اسلاید پرسش‌ها همیشه ساخته می‌شود
   const srcForced = s.mode === "student" || s.mode === "thesis";
@@ -1318,7 +1320,7 @@ async function saveSetting(patch) {
 $("#tone").onchange = (e) => saveSetting({ tone: e.target.value });
 $("#font").onchange = (e) => saveSetting({ font: e.target.value });
 $("#mode").onchange = (e) => saveSetting({ mode: e.target.value });
-for (const k of ["digits", "sources", "questions"]) $("#" + k).onchange = (e) => saveSetting({ [k]: e.target.checked });
+for (const k of ["digits", "sources", "questions", "notes"]) $("#" + k).onchange = (e) => saveSetting({ [k]: e.target.checked });
 
 // ---------- مدل‌های هوش مصنوعی (روی صفحه‌ی اصلی) ----------
 // لوگوی اختیاری: فایل /models/<brand>.svg را در public/models بگذار و نام برند را به LOGO_FILES اضافه کن (مثلاً ["qwen", "openai"])؛

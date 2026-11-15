@@ -37,6 +37,8 @@ data class Settings(val theme: String, val template: String, val tone: String, v
     val images: Boolean = true,
     /** تصویر «زیاد» (فقط پلن‌دارها): تعداد نرمال + ۱ */
     val imagesMany: Boolean = false,
+    /** یادداشت سخنرانی زیر هر اسلاید؛ پیش‌فرض روشن */
+    val notes: Boolean = true,
 )
 
 data class Me(
@@ -148,7 +150,7 @@ fun parseMe(j: JSONObject): Me? {
             slides = st.optInt("slides", 8), model = st.str("model"),
             mode = st.str("mode").ifEmpty { "normal" },
             digits = st.optBoolean("digits"), sources = st.optBoolean("sources"), questions = st.optBoolean("questions"),
-            images = st.optBoolean("images", true), imagesMany = st.optBoolean("imagesMany", false),
+            images = st.optBoolean("images", true), imagesMany = st.optBoolean("imagesMany", false), notes = st.optBoolean("notes", true),
         ),
         activeJob = j.str("activeJob").ifEmpty { null },
         plans = j.optJSONArray("plans").objects().map {

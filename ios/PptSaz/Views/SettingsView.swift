@@ -80,6 +80,7 @@ struct SettingsView: View {
                         Toggle("ارقام فارسی", isOn: Binding(get: { s.digits }, set: { m.setSetting("digits", $0) }))
                         Toggle("اسلاید منابع", isOn: Binding(get: { s.sources }, set: { m.setSetting("sources", $0) }))
                         Toggle("اسلاید پرسش‌های پایانی", isOn: Binding(get: { s.questions }, set: { m.setSetting("questions", $0) }))
+                        Toggle("یادداشت سخنرانی", isOn: Binding(get: { s.notes }, set: { m.setSetting("notes", $0) }))
                         Toggle("تصویر در اسلایدها", isOn: Binding(get: { s.images }, set: { m.setSetting("images", $0) }))
                     } header: {
                         Text("گزینه‌ها")

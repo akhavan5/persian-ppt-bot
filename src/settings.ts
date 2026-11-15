@@ -14,7 +14,7 @@ import type { AppPlatform, PwaPlatform } from "./app-ua";
 export type Uid = number | string;
 export const isWebId = (id: Uid) => typeof id === "string" && id.startsWith("w_");
 
-export const DEFAULTS: Settings = { theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, imagesMany: false, mode: "normal", sources: false, questions: false };
+export const DEFAULTS: Settings = { theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, imagesMany: false, mode: "normal", sources: false, questions: false, notes: true };
 export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 
 // ---------- سقف اسلاید (فقط وب): رایگان ۸، پلاس ۲۰، پرو ۳۵ ----------
@@ -54,6 +54,7 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   s.mode = isMode(s.mode) ? s.mode : "normal";
   s.sources = !!s.sources;
   s.questions = !!s.questions;
+  s.notes = s.notes !== false; // کاربران قدیمی (بدون این فیلد) هم روشن
   const models = modelList(env);
   s.model = models.some((m) => m.id === s.model) ? s.model : defaultModelId(env); // کاربر جدید / مدل نامعتبر ⇒ اولین مدل custom
   // مدل‌هایی که پرچم free ندارند (ارائه‌دهنده‌ی دیگر، EXTRA_LLM_MODELS) فقط برای مدیر و دارندگان پلن فعال؛ بقیه به مدل رایگان برمی‌گردند
