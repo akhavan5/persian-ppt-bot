@@ -17,7 +17,7 @@ const MAX_PAYLOAD = 3000; // بایت؛ سقف یک رکورد aes128gcm با rs
 
 export const webPushEnabled = (env: Env) => !!(env.VAPID_PUBLIC_KEY?.trim() && env.VAPID_PRIVATE_KEY?.trim());
 export interface WebPushMsg { title: string; body: string; url?: string; tag?: string }
-interface Device { e: string; p: string; a: string; t: number }
+export interface Device { e: string; p: string; a: string; t: number }
 
 // ---------- base64url و ابزارهای بایتی ----------
 export const bytesToB64u = (b: Uint8Array): string => {
@@ -168,4 +168,40 @@ export async function sendWebPush(env: Env, uid: string, msg: WebPushMsg): Promi
     console.error("sendWebPush", String(e).slice(0, 200));
     return { ok: 0, tried: 0 };
   }
+}
+
+// ---------- ارسال همگانی از پنل مدیر (BroadcastWorkflow با webPush) ----------
+export const WP_PREFIX = "wps:";
+/** تعداد حساب‌ها و دستگاه‌های دارای اشتراک فعال */
+export async function webPushCounts(env: Env): Promise<{ accounts: number; devices: number }> {
+  await env.KV.ready();
+  const r = await env.DB.prepare(
+    "SELECT COUNT(*) a, COALESCE(SUM(CASE WHEN json_valid(v) AND json_type(v)='array' THEN json_array_length(v) ELSE 0 END),0) d FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3)",
+  ).bind(WP_PREFIX, WP_PREFIX + "\u{10FFFF}", Math.floor(Date.now() / 1000)).first<{ a: number | null; d: number | null }>();
+  return { accounts: Number(r?.a ?? 0), devices: Number(r?.d ?? 0) };
+}
+/** یک صفحه از اشتراک‌ها همراه با دستگاه‌هایشان (یک پرس‌وجو). next = کلید آخرین ردیف صفحه (برای ادامه) */
+export async function webPushPage(env: Env, cursor: string | undefined, limit: number): Promise<{ rows: { key: string; uid: string; devices: Device[] }[]; next: string | null }> {
+  await env.KV.ready();
+  const res = await env.DB.prepare("SELECT k, v FROM kv WHERE k > ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) ORDER BY k LIMIT ?4")
+    .bind(cursor ?? WP_PREFIX, WP_PREFIX + "\u{10FFFF}", Math.floor(Date.now() / 1000), limit + 1).all<{ k: string; v: string }>();
+  const all = (res.results ?? []) as { k: string; v: string }[];
+  const page = all.slice(0, limit);
+  const rows = page.map((r) => {
+    let devices: Device[] = [];
+    try { const j = JSON.parse(r.v); if (Array.isArray(j)) devices = j.filter((d) => d && typeof d.e === "string" && typeof d.p === "string" && typeof d.a === "string"); } catch { /* نامعتبر */ }
+    return { key: r.k, uid: r.k.slice(WP_PREFIX.length), devices };
+  });
+  return { rows, next: all.length > limit ? page[page.length - 1].k : null };
+}
+/** به دستگاه‌های از‌پیش‌خوانده‌شده‌ی یک حساب می‌فرستد (حداکثر ۳ تازه‌ترین)؛ اشتراک مرده حذف می‌شود. cost = تعداد درخواست‌های بیرونی/نوشتن برای بودجه‌ی Workflow */
+export async function sendWebPushDevices(env: Env, uid: string, all: Device[], msg: WebPushMsg): Promise<{ ok: number; tried: number; cost: number }> {
+  const targets = all.slice(0, 3);
+  if (!targets.length) return { ok: 0, tried: 0, cost: 0 };
+  const body = te.encode(JSON.stringify({ title: msg.title.slice(0, 80), body: msg.body.slice(0, 300), url: msg.url ?? "/", tag: msg.tag ?? "ppt" }));
+  if (body.length > MAX_PAYLOAD) return { ok: 0, tried: 0, cost: 0 };
+  const res = await Promise.all(targets.map((d) => sendOne(env, d, body)));
+  const gone = new Set(targets.filter((_, i) => res[i] === "gone").map((d) => d.e));
+  if (gone.size) await writeDevices(env, uid, all.filter((d) => !gone.has(d.e))).catch(() => {});
+  return { ok: res.filter((r) => r === "ok").length, tried: targets.length, cost: targets.length + (gone.size ? 1 : 0) };
 }

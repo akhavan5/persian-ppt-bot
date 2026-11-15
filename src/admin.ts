@@ -25,6 +25,7 @@ import {
   PUSH_BODY_MAX, PUSH_SEGMENTS, PUSH_TITLE_MAX, clearPushDraft, getPushDraft, getPushSegment, isPushSegment, launchAppPush, parsePushDraft, pushDeviceCounts,
   pushEnabled, pushPreviewText, savePushDraft, setPushSegment,
 } from "./push";
+import { webPushCounts, webPushEnabled, type WebPushMsg } from "./webpush";
 import { STORE_LABEL, osTag } from "./app-ua";
 import { APPVER_HELP, STORES, STORE_NAMES, appVerText, applyAppVer, getAppVersions, isStoreId, type StoreId } from "./app-version";
 
@@ -128,7 +129,7 @@ async function identify(env: Env, id: Uid): Promise<Ident> {
 const cardId = (i: Ident): Uid => i.tgId ?? (i.webId as string);
 
 // ---------- ورودی متنی منتظر (جستجو، اعتبار دلخواه، پیام به کاربر، پیام همگانی) ----------
-type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "ver"; s: StoreId | "all" } | { k: "pushw" };
+type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "ver"; s: StoreId | "all" } | { k: "pushw" } | { k: "wpushw" };
 const inKey = (adminId: number) => `adm:in:${adminId}`;
 const setInput = (env: Env, adminId: number, p: Pending) => env.KV.put(inKey(adminId), JSON.stringify(p), { expirationTtl: 600 });
 const clearInput = (env: Env, adminId: number) => env.KV.delete(inKey(adminId));
@@ -820,6 +821,7 @@ async function appScreen(env: Env, head = ""): Promise<Screen> {
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${PWA_OTHER}`, "wu:", "wu:" + MAXC).catch(() => 0),
   ]);
   const iosInfo = `🍎 <b>اپ iOS</b>: ${fa(iosN)} کاربر\n📲 <b>PWA</b>: آیفون/آیپد ${fa(pwaI)} · بقیه ${fa(pwaO)}\n<i>نسخه‌ی اجباری/پیشنهادی و اعلان فعلاً فقط برای اندروید است؛ کاربران و نسخه‌ی iOS در تب «🍎 iOS» پنل کاربران و کارت هر کاربر دیده می‌شود.</i>`;
+  const wpc = webPushEnabled(env) ? await webPushCounts(env).catch(() => null) : null;
   const push = pushEnabled(env)
     ? `✅ فعال${dev ? ` · دستگاه با اعلان روشن: <b>${fa(dev.on)}</b> · خاموش: ${fa(dev.off)}` : ""}`
     : "❌ غیرفعال (رمز <code>FCM_SERVICE_ACCOUNT</code> تنظیم نشده)";
@@ -829,9 +831,10 @@ async function appScreen(env: Env, head = ""): Promise<Screen> {
   ];
   const manual = STORES.filter((s) => v.stores[s].manual);
   if (manual.length) kb.push(manual.map((s) => cb(`🧹 ${STORE_NAMES[s]}: برگشت به متغیر محیطی`, `ad:av:c:${s}`)));
-  kb.push([cb("📲 ارسال اعلان به اپ", "ad:pu")]);
+  kb.push([cb("📲 ارسال اعلان به اپ", "ad:pu"), cb("🔔 پوش وب", "ad:wq")]);
   kb.push([cb("🔄 تازه‌سازی", "ad:ap"), ...backHome]);
-  return { text: `${head ? head + "\n\n" : ""}${ver}\n\n📲 <b>اعلان به اپ</b>: ${push}\n\n${iosInfo}`, kb };
+  const wpLine = webPushEnabled(env) ? `🔔 <b>پوش وب</b>: ✅ فعال${wpc ? ` · مشترک: <b>${fa(wpc.accounts)}</b> حساب · ${fa(wpc.devices)} دستگاه` : ""}` : "🔔 <b>پوش وب</b>: ❌ غیرفعال (کلیدهای VAPID تنظیم نشده)";
+  return { text: `${head ? head + "\n\n" : ""}${ver}\n\n📲 <b>اعلان به اپ</b>: ${push}\n${wpLine}\n\n${iosInfo}`, kb };
 }
 
 async function pushScreen(env: Env, chatId: number, head = ""): Promise<Screen> {
@@ -851,6 +854,22 @@ async function pushScreen(env: Env, chatId: number, head = ""): Promise<Screen> 
     text: `${top}📲 <b>پیش‌نمایش اعلان</b>\n\n${pushPreviewText(draft)}\n\n— — —\n🎯 مخاطبان: <b>${esc(PUSH_SEGMENTS[seg])}</b>\n<i>فقط دستگاه‌هایی که اعلان تبلیغاتی را روشن دارند.</i>`,
     kb: [[chip("all")], [chip("nocredit")], [chip("expiring")], [chip("inactive")], [cb("✅ ارسال", "ad:ps"), cb("✍️ نوشتن دوباره", "ad:pw")], [cb("🗑 حذف پیش‌نویس", "ad:pc")], back],
   };
+}
+
+// ---------- پوش وب (PWA/مرورگر): شمارنده و ارسال همگانی ----------
+const wpDraftKey = (chatId: number) => `webpush:draft:${chatId}`;
+async function webPushScreen(env: Env, chatId: number, head = ""): Promise<Screen> {
+  const top = head ? head + "\n\n" : "";
+  const back = [cb("🔙 اپ اندروید/iOS", "ad:ap"), ...backHome];
+  if (!webPushEnabled(env)) return { text: `${top}⚠️ پوش وب فعال نیست: <code>VAPID_PUBLIC_KEY</code> و <code>VAPID_PRIVATE_KEY</code> تنظیم نشده‌اند (ساخت: <code>npx tsx scripts/vapid-keys.ts</code>).`, kb: [back] };
+  const c = await webPushCounts(env).catch(() => null);
+  const stat = c ? `👥 مشترک: <b>${fa(c.accounts)}</b> حساب · ${fa(c.devices)} دستگاه` : "👥 شمارش مشترک‌ها ممکن نشد.";
+  const raw = await env.KV.get(wpDraftKey(chatId)).catch(() => null);
+  const draft = raw ? parsePushDraft(raw) : null;
+  if (!draft) {
+    return { text: `${top}🔔 <b>پوش وب</b>\n${stat}\n\nپیش‌نویسی نیست. با «✍️ نوشتن» متن را بنویس؛ پیش‌نمایش را می‌بینی و با دکمه تایید می‌کنی.\n<i>به همه‌ی حساب‌های دارای اشتراک (تا ۳ دستگاه‌ی تازه‌تر هر حساب) فرستاده می‌شود.</i>`, kb: [[cb("✍️ نوشتن پوش", "ad:ww")], [cb("🔄 تازه‌سازی", "ad:wq")], back] };
+  }
+  return { text: `${top}🔔 <b>پیش‌نمایش پوش وب</b>\n${stat}\n\n${pushPreviewText(draft)}\n\n— — —\n🎯 مخاطبان: همه‌ی مشترک‌ها`, kb: [[cb(`✅ ارسال به ${c ? fa(c.accounts) : ""} حساب`, "ad:ws"), cb("✍️ نوشتن دوباره", "ad:ww")], [cb("🗑 حذف پیش‌نویس", "ad:wc")], back] };
 }
 
 async function userFilesScreen(env: Env, id: Uid): Promise<Screen> {
@@ -1077,6 +1096,17 @@ export async function handleAdminInput(env: Env, chatId: number, adminId: number
     return true;
   }
 
+  if (p.k === "wpushw") {
+    const msg = parsePushDraft(text);
+    const again = async (why: string) => { await setInput(env, adminId, p); await sendMessage(env, chatId, `${why}\n\nدوباره بفرست، یا /cancel.`); return true; };
+    if (!msg) return await again("قالب درست نیست. به این شکل بفرست:\n<code>عنوان | متن | لینک https (اختیاری)</code>");
+    if (msg.title.length > PUSH_TITLE_MAX) return await again(`عنوان بلند است (${fa(msg.title.length)} نویسه؛ حداکثر ${fa(PUSH_TITLE_MAX)}).`);
+    if (msg.body.length > PUSH_BODY_MAX) return await again(`متن بلند است (${fa(msg.body.length)} نویسه؛ حداکثر ${fa(PUSH_BODY_MAX)}).`);
+    await env.KV.put(wpDraftKey(chatId), JSON.stringify(msg), { expirationTtl: 3600 });
+    await sendScreen(env, chatId, await webPushScreen(env, chatId));
+    return true;
+  }
+
   if (p.k === "cr") {
     const n = Math.trunc(Number(toEn(text).replace(/[+\s]/g, "")));
     if (!Number.isFinite(n) || n === 0 || Math.abs(n) > 1000) {
@@ -1184,6 +1214,26 @@ export async function handlePanelCallback(env: Env, cq: any) {
           return await show(await appScreen(env, r.msg));
         }
         return await prompt({ k: "ver", s: t }, `✏️ <b>تنظیم نسخه‌ی اپ — ${name}</b>\nشماره‌ی نسخه (versionCode) را بفرست:\n\n${APPVER_HELP}`, "ad:ap");
+      }
+      case "wq": return await show(await webPushScreen(env, chatId));
+      case "ww": return await prompt({ k: "wpushw" },
+        `✍️ <b>نوشتن پوش وب</b>\nدر یک پیام و به این شکل بفرست:\n<code>عنوان | متن | لینک https (اختیاری)</code>\n\nعنوان حداکثر ${fa(PUSH_TITLE_MAX)} و متن حداکثر ${fa(PUSH_BODY_MAX)} نویسه.`, "ad:wq");
+      case "wc": await env.KV.delete(wpDraftKey(chatId)); return await show(await webPushScreen(env, chatId, "🗑 پیش‌نویس حذف شد."));
+      case "ws": {
+        if (!webPushEnabled(env)) return await show(await webPushScreen(env, chatId));
+        const raw = await env.KV.get(wpDraftKey(chatId));
+        const draft = raw ? parsePushDraft(raw) : null;
+        if (!draft) return await show(await webPushScreen(env, chatId, "⌛️ پیش‌نویس منقضی شده است؛ دوباره بنویس."));
+        await env.KV.delete(wpDraftKey(chatId)); // جلوگیری از ارسال دوباره با دو بار زدن دکمه
+        const wmsg: WebPushMsg = { ...draft, tag: "promo" };
+        try { await env.BROADCAST_WORKFLOW.create({ id: `wp-${Date.now()}`, params: { adminChatId: chatId, text: "", webPush: wmsg } }); }
+        catch (e) {
+          console.error("web push create failed", e);
+          await env.KV.put(wpDraftKey(chatId), JSON.stringify(draft), { expirationTtl: 3600 });
+          return await show(await webPushScreen(env, chatId, "❌ شروع ارسال ممکن نشد؛ دوباره امتحان کن."));
+        }
+        await logAction(env, adminId, `پوش وب: ${draft.title.slice(0, 40)}`);
+        return await show({ text: "🔔 ارسال پوش وب شروع شد.\nوقتی تمام شد، گزارش را همین‌جا می‌فرستم.", kb: [[cb("🔙 پوش وب", "ad:wq"), ...backHome]] });
       }
       case "pu": return await show(await pushScreen(env, chatId));
       case "pw": return await prompt({ k: "pushw" },

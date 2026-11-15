@@ -5,6 +5,7 @@ import { esc, sendMessage } from "./telegram";
 import { INVITE_TOKEN, botUsername, inviteBody, inviteLinkFor, inviteMarkup, invitePlatform } from "./invite-msg";
 import { toFa } from "./util";
 import { withStore } from "./store";
+import { sendWebPushDevices, webPushPage, type WebPushMsg } from "./webpush";
 import { PUSH_SEGMENTS, filterSegment, pushTokenPage, sendPush, type PushMsg, type PushSegment } from "./push";
 import { DAILY_FREE_CREDITS, DAILY_FREE_MSG, adminIds, claimDailyFreeMany, isAdmin, today } from "./settings";
 
@@ -15,7 +16,7 @@ export const isAudience = (x: unknown): x is Audience => typeof x === "string" &
 
 /** daily: اعتبار رایگان روزانه (از cron) — به هر کاربر تلگرامِ بدون اعتبار ۱ اعتبار اضافه می‌کند و فقط به همان‌ها DAILY_FREE_MSG می‌فرستد؛ text/adminChatId نادیده گرفته می‌شود */
 export interface BroadcastParams {
-  adminChatId: number; text: string; audience?: Audience; daily?: boolean; appPush?: PushMsg; appSegment?: PushSegment;
+  adminChatId: number; text: string; audience?: Audience; daily?: boolean; appPush?: PushMsg; appSegment?: PushSegment; webPush?: WebPushMsg;
   /** ارسال زنجیره‌ای: هر نمونه (instance) فقط تا سقف زیردرخواست خودش می‌فرستد و بقیه را به نمونه‌ی بعدی می‌سپارد */
   ids?: number[]; offset?: number; acc?: { ok: number; failed: number; skipped: number }; rootId?: string;
   /** اعلان اپ (زنجیره‌ای): نشانگر صفحه‌ی بعد، شمارنده‌ی نمونه و جمع نتایج تا اینجا */
@@ -140,10 +141,11 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
   constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
 
   async run(event: WorkflowEvent<BroadcastParams>, step: WorkflowStep) {
-    const { adminChatId, text, audience, daily, appPush, appSegment } = event.payload;
+    const { adminChatId, text, audience, daily, appPush, appSegment, webPush } = event.payload;
     const root = event.payload.rootId ?? event.instanceId;
     const P = event.payload;
     if (daily) return await this.runDaily(step, root, P);
+    if (webPush) return await this.runWebPush(step, root, P, adminChatId, webPush);
     if (appPush) return await this.runAppPush(step, root, P, adminChatId, appPush, appSegment ?? "all");
     const aud: Audience = isAudience(audience) ? audience : "all";
 
@@ -221,6 +223,39 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
       await sendMessage(this.env, adminChatId,
         `📣 <b>ارسال همگانی تمام شد</b> (${AUDIENCES[aud]})\n✅ موفق: ${toFa(String(t.ok))}\n❌ ناموفق: ${toFa(String(t.failed))} (کاربرانی که ربات را بلاک کرده‌اند از فهرست گیرندگان حذف شدند و دیگر پیام نمی‌گیرند)` +
         (t.skipped ? `\n⛔️ مسدودشده (ارسال نشد): ${toFa(String(t.skipped))}` : ""));
+    }).catch(() => {});
+  }
+
+  /** پوش وب به همه‌ی حساب‌های دارای اشتراک (زنجیره‌ای): هر نمونه با بودجه‌ی زیردرخواست خودش چند حساب را می‌زند و ادامه را به نمونه‌ی بعدی می‌سپارد.
+   *  هزینه: هر صفحه ۲، هر حساب = تعداد دستگاه‌های ارسال‌شده (+۱ اگر اشتراک مرده حذف شد) */
+  private async runWebPush(step: WorkflowStep, root: string, P: BroadcastParams, adminChatId: number, msg: WebPushMsg) {
+    const acc0 = P.pacc ?? { ok: 0, dead: 0, failed: 0, skipped: 0 };
+    const seq = P.seq ?? 0;
+    const r = await step.do("wpush", { retries: { limit: 0, delay: "1 second" }, timeout: "5 minutes" }, async () => {
+      const out = { ok: 0, dead: 0, failed: 0, skipped: 0, next: null as string | null };
+      let used = 2;
+      let cursor: string | undefined = P.pcursor;
+      for (;;) {
+        const page = await webPushPage(this.env, cursor, 15); used += 1;
+        let last: string | undefined, stopped = false;
+        for (const row of page.rows) {
+          if (used > SUB_BUDGET - 5) { stopped = true; break; } // بودجه‌ی این نمونه تمام شد (هر حساب حداکثر ۴)
+          if (!row.devices.length) { out.skipped++; last = row.key; continue; }
+          const res = await sendWebPushDevices(this.env, row.uid, row.devices, msg); used += res.cost;
+          if (res.ok > 0) out.ok++; else out.failed++;
+          last = row.key;
+        }
+        if (stopped) { out.next = last ?? cursor ?? null; break; }
+        if (!page.next) { out.next = null; break; }
+        cursor = page.next; out.next = cursor;
+        if (used > SUB_BUDGET - 10) break;
+      }
+      return out;
+    });
+    const total = { ok: acc0.ok + r.ok, dead: 0, failed: acc0.failed + r.failed, skipped: acc0.skipped + r.skipped };
+    if (r.next) return await this.handoff(step, root, { adminChatId, text: "", webPush: msg, rootId: root, pcursor: r.next, seq: seq + 1, pacc: total }, `w${seq + 1}`);
+    await step.do("report", async () => {
+      await sendMessage(this.env, adminChatId, `🔔 <b>پوش وب ارسال شد</b>\n✅ حساب‌هایی که دست‌کم یک دستگاهشان دریافت کرد: ${toFa(String(total.ok))}\n❌ ناموفق (اشتراک مرده/خطای مرورگر): ${toFa(String(total.failed))}` + (total.skipped ? `\n⏭ بدون دستگاه معتبر: ${toFa(String(total.skipped))}` : ""));
     }).catch(() => {});
   }
 
