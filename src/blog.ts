@@ -2,7 +2,7 @@
 import { PAGES, PAGE_BY_SLUG, type Page } from "./landing-data";
 import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
 import { IMG_CSS, heroAlt, heroFigure, heroImages, heroPreload, imageNode, imageTags, pageImagePaths, stepsAlt, stepsFigure, stepsSection } from "./seo-images";
-import { BRAND, CSS, LANDINGS_FOR_POST, YEKTANET_SCRIPT, YEKTANET_SLOT, YEKTANET_TEXT, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
+import { BRAND, CSS, LANDINGS_FOR_POST, YEKTANET_SCRIPT, MEDIAAD_SCRIPT, MEDIAAD_SLOT, YEKTANET_SLOT, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
 const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: موضوع پاورپوینت جالب برای مدرسه و دانشگاه، فونت فارسی، جدول فارسی در اسلاید، رفع جدا شدن حروف فارسی در پاورپوینت، نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، اینفوگرافیک و جزوه، تبدیل لینک، Excel و عکس به پاورپوینت، پرامپت ساخت پاورپوینت، ساخت پاورپوینت با چت جی پی تی و مقایسه‌ی صادقانه‌ی ابزارها.";
@@ -190,6 +190,7 @@ ${o.preload ?? ""}<link rel="preload" href="/fonts/Vazirmatn-Regular.woff2" as="
 <script type="application/ld+json">${jsonLd(o.ld)}</script>
 <style>${CSS}${EXTRA_CSS}${IMG_CSS}</style>
 ${YEKTANET_SCRIPT}
+${MEDIAAD_SCRIPT}
 </head>`;
 }
 
@@ -307,7 +308,7 @@ ${p.sections.map((x, i) => renderBlogSection(x, i) + (x === stepsSec ? stepsFigu
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
     </section>
-${adjacent(p)}    ${YEKTANET_TEXT}
+${adjacent(p)}    ${MEDIAAD_SLOT}
     <section>
       <h2>مقاله‌های مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/blog/${r.slug}">${esc(r.nav)}<span>${esc(r.category)}</span></a>`).join("")}${tools.map((x) => `<a href="/${x.slug}">${esc(x.nav)}<span>ابزار ساخت</span></a>`).join("")}</div>

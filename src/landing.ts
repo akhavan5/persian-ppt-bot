@@ -50,8 +50,20 @@ export const YEKTANET_SCRIPT = `<script>
         }(window,document,"yektanet");
         </script>`;
 
-/** جایگاه تبلیغ متنی یکتانت: دو بلوک (بخش) بالاتر از جایگاه تصویری انتهای صفحه، نه چسبیده به آن. شناسه را تغییر ندهید. */
-export const YEKTANET_TEXT = `<div id="pos-article-text-124202"></div>`;
+/** اسکریپت مدیاد (mediaad)؛ جایگاهش MEDIAAD_SLOT است. */
+export const MEDIAAD_SCRIPT = `<script type="text/javascript">
+(function () {
+  const head = document.getElementsByTagName("head")[0];
+  const script = document.createElement("script");
+  script.type = "text/javascript";
+  script.async = true;
+  script.src = "https://s1.mediaad.org/serve/pptsaz.ir/loader.js";
+  head.appendChild(script);
+})();
+</script>`;
+
+/** جایگاه تبلیغ مدیاد: جایگزین جایگاه متنی یکتانت (pos-article-text-124202، حذف شد)؛ دو بلوک (بخش) بالاتر از جایگاه تصویری انتهای صفحه. شناسه را تغییر ندهید. */
+export const MEDIAAD_SLOT = `<div id="mediaad-6pnV7"></div>`;
 
 /** جایگاه تبلیغ تصویری یکتانت (انتهای مطلب). فقط در انتهای محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
@@ -495,6 +507,7 @@ ${heroPreload("landing", p.slug)}
 <script type="application/ld+json">${jsonLd(ld)}</script>
 <style>${CSS}${IMG_CSS}</style>
 ${YEKTANET_SCRIPT}
+${MEDIAAD_SCRIPT}
 </head>
 <body>
 <a class="skip" href="#main">رفتن به محتوا</a>
@@ -530,7 +543,7 @@ ${articles.length ? `    <section>
       <h2>مقاله‌های مرتبط در وبلاگ</h2>
       <div class="rel">${articles.map((a) => `<a href="/blog/${a!.slug}">${esc(a!.nav)}<span>${esc(a!.category)}</span></a>`).join("")}</div>
     </section>
-` : ""}    ${YEKTANET_TEXT}
+` : ""}    ${MEDIAAD_SLOT}
     <section>
       <h2>راهنماهای مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/${r.slug}">${esc(r.nav)}<span>${esc(r.title.split("|")[0].trim())}</span></a>`).join("")}</div>
