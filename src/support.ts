@@ -20,6 +20,15 @@ const clean = (s: unknown, max: number) => String(s ?? "").replace(/[\u0000-\u00
 export const supportEnabled = (env: Env) => !!(env.AQAYE_PIN ?? "").trim();
 const isSandbox = (env: Env) => (env.AQAYE_PIN ?? "").trim() === "sandbox";
 
+/** کدهای خطای create/verify آقای پرداخت (مستندات رسمی) */
+const AP_ERR: Record<string, string> = {
+  "-1": "مبلغ خالی است", "-2": "کد پین درگاه خالی است", "-3": "آدرس callback خالی است", "-4": "مبلغ باید عددی باشد",
+  "-5": "مبلغ باید بین ۱٬۰۰۰ تا ۴۰۰٬۰۰۰٬۰۰۰ تومان باشد", "-6": "کد پین درگاه اشتباه است", "-7": "transid خالی است",
+  "-8": "تراکنش وجود ندارد", "-9": "پین با درگاه تراکنش نمی‌خواند", "-10": "مبلغ با تراکنش نمی‌خواند",
+  "-11": "درگاه در انتظار تایید یا غیرفعال است", "-12": "ارسال درخواست برای این پذیرنده ممکن نیست", "-14": "درگاه روی سایت دیگری استفاده می‌شود",
+  "-15": "دامنه‌ی callback با دامنه‌ی تاییدشده‌ی درگاه نمی‌خواند", "-16": "Referrer ارسال نشده است", "-17": "callback_method نامعتبر است",
+};
+
 async function ap(env: Env, path: "create" | "verify", body: Record<string, unknown>): Promise<{ status: string; code: string; transid: string } | null> {
   try {
     const r = await fetch(`${BASE}/api/v2/${path}`, {
@@ -48,8 +57,9 @@ export async function startSupport(env: Env, url: URL, req: Request, b: Record<s
     description: `حمایت پاورپوینت‌ساز — ${coffees} قهوه`,
   });
   if (!r || r.status !== "success" || !TRANSID_RE.test(r.transid)) {
-    console.error("support create failed", r?.status, r?.code);
-    return jres({ error: "ساخت تراکنش ممکن نشد؛ چند لحظه بعد دوباره امتحان کن." }, 502);
+    console.error("support create failed", r?.status, r?.code, isSandbox(env) ? "sandbox" : "live");
+    const why = r?.code ? AP_ERR[r.code] ?? `کد ${r.code}` : "";
+    return jres({ error: `ساخت تراکنش ممکن نشد${why ? ` (${why})` : ""}؛ دوباره امتحان کن.` }, 502);
   }
   const rec: SupRec = { coffees, amount, name, note, state: "pending", t: Date.now() };
   await env.KV.put(`sup:${r.transid}`, JSON.stringify(rec), { expirationTtl: TTL });
