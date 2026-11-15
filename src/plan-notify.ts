@@ -12,6 +12,7 @@ import { BRAND, emailEnabled, sendEmail, siteOf } from "./email";
 import { PLANS } from "./payment";
 import { buyKbFor } from "./deck-service";
 import { toFa } from "./util";
+import { sendWebPush, webPushEnabled } from "./webpush";
 
 const DAY = 86_400_000;
 /** چند روز مانده به پایان پلن یادآوری فرستاده شود */
@@ -148,8 +149,15 @@ async function remindOne(env: Env, uid: string, s: Sub, last: boolean): Promise<
   if (await env.KV.get(key)) return false; // قبلاً فرستاده شده
   const mail = await emailOf(env, uid);
   const tgId = isWebId(uid) ? await getLinkedTg(env, uid) : (Number.isSafeInteger(Number(uid)) && Number(uid) > 0 ? Number(uid) : null);
-  if (!mail && !tgId) { await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); return false; }
+  const pushOn = webPushEnabled(env) && isWebId(uid); // اعلان وب: فقط حساب‌های وب (wps:<حساب>)
+  if (!mail && !tgId && !pushOn) { await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); return false; }
   const jobs: Promise<boolean>[] = [];
+  if (pushOn) {
+    const days = Math.max(1, Math.ceil((s.exp - Date.now()) / DAY));
+    jobs.push(sendWebPush(env, uid, last
+      ? { title: `پلن ${planName(s)} فردا تمام می‌شود`, body: "برای اینکه اعتبار و امکانات پلن قطع نشود، همین حالا تمدیدش کن.", url: "/?buy=1", tag: "plan-expiry" }
+      : { title: `${toFa(String(days))} روز تا پایان پلن ${planName(s)}`, body: "اگر پیش از پایان تمدید کنی، ۳۰ روز به مدت پلن اضافه می‌شود.", url: "/?buy=1", tag: "plan-expiry" }).then((r) => r.ok > 0).catch(() => false));
+  }
   if (mail) {
     const m = expiryEmail(env, mail.name, s, Date.now(), last);
     jobs.push(sendEmail(env, { to: mail.to, ...m, tag: last ? "plan-expiry-1d" : "plan-expiry", idempotencyKey: `plan-exp${last ? 1 : 7}-${uid}-${s.exp}`.slice(0, 256) }));
@@ -162,6 +170,7 @@ async function remindOne(env: Env, uid: string, s: Sub, last: boolean): Promise<
   }
   const ok = (await Promise.all(jobs)).some(Boolean);
   if (ok) await env.KV.put(key, "1", { expirationTtl: 10 * 86_400 }); // اگر هیچ کانالی نرسید، فردا دوباره تلاش می‌شود
+  else if (!mail && !tgId) await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); // فقط اعلان وب بود و دستگاهی نداشت: تلاش مجدد ندارد
   return ok;
 }
 
@@ -244,8 +253,10 @@ export async function notifyPlanCreditsOut(env: Env, uid: Uid): Promise<void> {
     if (await env.KV.get(key)) return;
     const mail = await emailOf(env, uid);
     const tgId = isWebId(uid) ? await getLinkedTg(env, String(uid)) : null; // ربات: همان کانالی که یادآوری پایان پلن هم می‌گیرد
-    if (!mail && !tgId) return;
+    const pushOn = webPushEnabled(env) && isWebId(uid);
+    if (!mail && !tgId && !pushOn) return;
     const jobs: Promise<boolean>[] = [];
+    if (pushOn) jobs.push(sendWebPush(env, String(uid), { title: `اعتبار پلن ${planName(s)} تمام شد`, body: "مدت پلن هنوز باقی است؛ با تمدید، اعتبار و امکانات پلن برمی‌گردد.", url: "/?buy=1", tag: "plan-out" }).then((r) => r.ok > 0).catch(() => false));
     if (mail) jobs.push(sendEmail(env, { to: mail.to, ...creditsOutEmail(env, mail.name, s), tag: "plan-credits-out", idempotencyKey: `plan-out-${uid}-${s.exp}`.slice(0, 256) }));
     if (tgId) {
       jobs.push((async () => {

@@ -195,6 +195,11 @@ export async function webPushPage(env: Env, cursor: string | undefined, limit: n
   return { rows, next: all.length > limit ? page[page.length - 1].k : null };
 }
 /** به دستگاه‌های از‌پیش‌خوانده‌شده‌ی یک حساب می‌فرستد (حداکثر ۳ تازه‌ترین)؛ اشتراک مرده حذف می‌شود. cost = تعداد درخواست‌های بیرونی/نوشتن برای بودجه‌ی Workflow */
+/** دستگاه‌های یک رکورد wps:<حساب> که از پیش (مثلاً با JOIN) خوانده شده؛ نامعتبر ⇒ [] */
+export function parseDevices(raw: string | null | undefined): Device[] {
+  if (!raw) return [];
+  try { const j = JSON.parse(raw); return Array.isArray(j) ? j.filter((d) => d && typeof d.e === "string" && typeof d.p === "string" && typeof d.a === "string") : []; } catch { return []; }
+}
 export async function sendWebPushDevices(env: Env, uid: string, all: Device[], msg: WebPushMsg): Promise<{ ok: number; tried: number; cost: number }> {
   const targets = all.slice(0, 3);
   if (!targets.length) return { ok: 0, tried: 0, cost: 0 };
