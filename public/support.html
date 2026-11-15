@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>یک قهوه مهمان پاورپوینت‌ساز کن</title>
+<style>
+@font-face{font-family:Vazirmatn;font-weight:400;font-display:swap;src:url(/fonts/Vazirmatn-Regular.woff2) format("woff2")}
+@font-face{font-family:Vazirmatn;font-weight:700;font-display:swap;src:url(/fonts/Vazirmatn-Bold.woff2) format("woff2")}
+:root{
+  --bg:#e8eef3; --card:#ffffff; --ink:#14213d; --muted:#51607a; --line:#cdd7e2;
+  --coffee:#6f4a30; --coffee-d:#4a2f1d; --mint:#bfe3d0; --cup:#ffffff; --cup-line:#14213d;
+  --btn-ink:#ffffff; --focus:#1f6feb;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1824; --card:#172335; --ink:#e8eef6; --muted:#9db0c8; --line:#2a3b53;
+    --coffee:#c28a5c; --coffee-d:#e0b48c; --mint:#24473a; --cup:#223049; --cup-line:#e8eef6;
+    --btn-ink:#14100c; --focus:#6ea8ff; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1824; --card:#172335; --ink:#e8eef6; --muted:#9db0c8; --line:#2a3b53;
+  --coffee:#c28a5c; --coffee-d:#e0b48c; --mint:#24473a; --cup:#223049; --cup-line:#e8eef6;
+  --btn-ink:#14100c; --focus:#6ea8ff; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Vazirmatn",Tahoma,"Segoe UI",sans-serif;line-height:1.9;font-size:16px}
+.wrap{max-width:1040px;margin:0 auto;padding:40px 20px 56px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:40px;align-items:center}
+h1{font-size:clamp(26px,4.4vw,42px);line-height:1.5;font-weight:700;margin:0 0 14px;letter-spacing:0}
+.lead{color:var(--muted);margin:0 0 28px;max-width:34em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px}
+label,.lbl{display:block;font-weight:700;font-size:15px;margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.chip{font:inherit;color:var(--ink);background:transparent;border:1.5px solid var(--line);border-radius:999px;padding:6px 18px;cursor:pointer;min-height:44px}
+.chip[aria-checked="true"]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+input,textarea{font:inherit;width:100%;color:var(--ink);background:transparent;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;min-height:44px}
+textarea{resize:vertical;min-height:84px}
+.row{display:grid;grid-template-columns:110px 1fr;gap:12px;margin-bottom:16px}
+.field{margin-bottom:16px}
+:is(button,input,textarea):focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.pay{font:inherit;font-weight:700;font-size:17px;width:100%;min-height:52px;border:0;border-radius:14px;background:var(--coffee);color:var(--btn-ink);cursor:pointer;transition:transform .12s,background .2s}
+.pay:hover{background:var(--coffee-d)}
+.pay:active{transform:scale(.98)}
+.note{color:var(--muted);font-size:13.5px;margin:12px 0 0;min-height:1.9em}
+.stage{display:flex;flex-direction:column;align-items:center;gap:6px}
+.stage svg{width:min(100%,340px);height:auto}
+.count{font-weight:700;font-size:20px;margin:0}
+.fill{transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.steam path{fill:none;stroke:var(--muted);stroke-width:4;stroke-linecap:round;opacity:.55;animation:steam 3.2s ease-in-out infinite}
+.steam path:nth-child(2){animation-delay:.8s}.steam path:nth-child(3){animation-delay:1.6s}
+@keyframes steam{0%,100%{transform:translateY(6px);opacity:0}50%{transform:translateY(-6px);opacity:.55}}
+.uses{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:8px 0 0;padding:0;list-style:none}
+.uses li{border-top:3px solid var(--mint);padding-top:12px;color:var(--muted);font-size:15px}
+.uses b{display:block;color:var(--ink);font-size:16px}
+@media (max-width:760px){
+  .wrap{grid-template-columns:1fr;gap:24px;padding-top:24px}
+  .stage{order:-1}.stage svg{width:200px}
+  .uses{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){.steam path{animation:none;opacity:.4}.fill{transition:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section>
+    <h1>اگر پاورپوینت‌ساز به کارت آمد، یک قهوه مهمانش کن</h1>
+    <p class="lead">پاورپوینت‌ساز را یک نفر می‌نویسد و نگه می‌دارد. هزینه‌ی سرور و هوش مصنوعی هر ماه از حمایت‌هایی مثل همین تامین می‌شود. حمایت اختیاری است و چیزی را برایت باز یا بسته نمی‌کند.</p>
+
+    <div class="card">
+      <div class="lbl" id="cl">چند قهوه؟</div>
+      <div class="chips" role="radiogroup" aria-labelledby="cl" id="chips"></div>
+      <div class="row">
+        <div><label for="n">تعداد دیگر</label><input id="n" type="number" inputmode="numeric" min="1" max="50" value="3"></div>
+        <div><label for="who">اسمت (اختیاری)</label><input id="who" maxlength="40" autocomplete="name"></div>
+      </div>
+      <div class="field">
+        <label for="msg">پیام برای من (اختیاری)</label>
+        <textarea id="msg" maxlength="140"></textarea>
+      </div>
+      <button class="pay" id="pay" type="button"></button>
+      <p class="note" id="st" role="status" aria-live="polite">پرداخت در درگاه امن انجام می‌شود و اطلاعات کارتت پیش ما نمی‌ماند.</p>
+    </div>
+  </section>
+
+  <section class="stage" aria-hidden="true">
+    <svg viewBox="0 0 320 300">
+      <defs><clipPath id="cupIn"><path d="M60 110h170v70a85 85 0 0 1-85 85h0a85 85 0 0 1-85-85z"/></clipPath></defs>
+      <g class="steam"><path d="M110 90c-14-16 14-26 0-44"/><path d="M145 90c-14-16 14-26 0-44"/><path d="M180 90c-14-16 14-26 0-44"/></g>
+      <ellipse cx="145" cy="278" rx="120" ry="14" fill="var(--mint)"/>
+      <path d="M230 135h18a30 30 0 0 1 0 60h-26" fill="none" stroke="var(--cup-line)" stroke-width="7" stroke-linecap="round"/>
+      <path d="M60 110h170v70a85 85 0 0 1-85 85h0a85 85 0 0 1-85-85z" fill="var(--cup)"/>
+      <g clip-path="url(#cupIn)"><rect class="fill" id="lvl" x="50" y="110" width="190" height="170" fill="var(--coffee)" style="transform:translateY(170px)"/></g>
+      <path d="M60 110h170v70a85 85 0 0 1-85 85h0a85 85 0 0 1-85-85z" fill="none" stroke="var(--cup-line)" stroke-width="7" stroke-linejoin="round"/>
+    </svg>
+    <p class="count" id="cc"></p>
+  </section>
+
+  <ul class="uses">
+    <li><b>سرور و ذخیره‌سازی</b>نگه‌داشتن ربات و سایت برای همه، شبانه‌روز.</li>
+    <li><b>هزینه‌ی هوش مصنوعی</b>ساختن متن و اسلاید هر ارائه هزینه دارد.</li>
+    <li><b>امکانات تازه</b>وقتی برای ساختن و رفع ایرادها کنار گذاشته می‌شود.</li>
+  </ul>
+</main>
+
+<script>
+(function(){
+  // قیمت هر قهوه (تومان)؛ باید با PRICE در src/support.ts یکی باشد (سرور مبلغ را خودش حساب می‌کند)
+  var PRICE = 50000;
+  var PRESETS = [1, 3, 5, 10];
+  var n = 3;
+  var $ = function(id){ return document.getElementById(id); };
+  var fa = function(x){ return Number(x).toLocaleString("fa-IR"); };
+  var chips = $("chips"), inp = $("n");
+
+  PRESETS.forEach(function(v){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.setAttribute("role", "radio");
+    b.dataset.v = v; b.textContent = fa(v) + " قهوه";
+    b.onclick = function(){ set(v); };
+    chips.appendChild(b);
+  });
+
+  function set(v){
+    v = Math.max(1, Math.min(50, Math.round(Number(v)) || 1));
+    n = v; inp.value = v;
+    [].forEach.call(chips.children, function(c){ c.setAttribute("aria-checked", String(Number(c.dataset.v) === v)); });
+    var total = v * PRICE;
+    $("pay").textContent = "حمایت با " + fa(total) + " تومان";
+    $("cc").textContent = fa(v) + " قهوه";
+    // سطح قهوه در فنجان: از خالی (۱۷۰) تا نزدیک لبه (۰) با ۶ قهوه پر می‌شود
+    $("lvl").style.transform = "translateY(" + Math.round(170 - 160 * Math.min(v, 6) / 6) + "px)";
+  }
+  inp.addEventListener("input", function(){ if (inp.value !== "") set(inp.value); });
+  inp.addEventListener("blur", function(){ set(inp.value); });
+
+  var busy = false;
+  $("pay").onclick = function(){
+    if (busy) return;
+    var st = $("st"), btn = $("pay");
+    busy = true; btn.disabled = true; st.textContent = "در حال انتقال به درگاه پرداخت…";
+    fetch("/api/support/start", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ coffees: n, name: $("who").value.trim(), note: $("msg").value.trim() }) })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+      .then(function(x){
+        if (x.ok && x.d.url) { location.href = x.d.url; return; }
+        throw new Error(x.d && x.d.error || "خطا");
+      })
+      .catch(function(e){ st.textContent = e.message || "اتصال برقرار نشد؛ دوباره امتحان کن."; busy = false; btn.disabled = false; });
+  };
+  // نتیجه‌ی بازگشت از درگاه
+  var q = new URLSearchParams(location.search), th = q.get("thanks"), pr = q.get("pay");
+  if (th) $("st").textContent = "ممنون! حمایتت (" + fa(Number(th) || 1) + " قهوه) ثبت شد.";
+  else if (pr) $("st").textContent = pr === "cancel" ? "پرداخت انجام نشد. هر وقت خواستی دوباره امتحان کن." : pr === "error" ? "تایید پرداخت با خطای موقت روبه‌رو شد؛ اگر پول کم شده، تا چند ساعت دیگر به حسابت برمی‌گردد یا با پشتیبانی تماس بگیر." : "پرداخت تایید نشد. اگر پول کم شده، با پشتیبانی تماس بگیر.";
+  set(n);
+})();
+</script>
+</body>
+</html>
