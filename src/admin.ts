@@ -231,6 +231,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       [cb("💬 پشتیبانی سایت", "ad:sc:r:0")],
       [cb(`💰 پرداخت‌ها${payIssues ? ` 🚨${fa(payIssues)}` : ""}`, "ad:pm:s:0"), cb("🔻 قیف کاربران", "ad:fn:30"), cb("🎁 دعوت‌ها", "ad:iv:t:0")],
       [cb("📱 اپ اندروید/iOS (نسخه و اعلان)", "ad:ap"), cb("📧 خروجی ایمیل/موبایل", "ad:ex")],
+      [cb("💳 خروجی خریداران پلن", "ad:eb")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
     ],
   };
@@ -1170,6 +1171,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "se": return await prompt({ k: "search" }, "🔎 <b>جستجوی کاربر</b>\nشناسه‌ی عددی، شناسه‌ی w_…، @نام‌کاربری، یا بخشی از نام/ایمیل/موبایل را بفرست.", "ad:h");
       case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.\n\n💡 اگر <code>{invite}</code> را در متن بنویسی، برای هر کاربر جای آن همان پیام /invite او (لینک اختصاصی، شمارنده‌ی دعوت و دکمه‌ی ارسال به دوستان) قرار می‌گیرد.", "ad:h");
       case "ex": await answer("⏳ در حال ساخت فایل‌ها…"); await exportContacts(env, chatId).catch(async (e) => { console.error("exportContacts", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
+      case "eb": await answer("⏳ در حال ساخت فایل…"); await exportBuyers(env, chatId).catch(async (e) => { console.error("exportBuyers", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
       case "ap": return await show(await appScreen(env));
       case "av": {
         const t = c === "all" ? "all" : isStoreId(c) ? c : null;
@@ -1310,6 +1312,50 @@ async function exportContacts(env: Env, chatId: number) {
   await sendMessage(env, chatId,
     `✅ خروجی آماده شد.\n👥 حساب‌های بررسی‌شده: ${fa(total)}\n⛔️ مسدود (حذف شد): ${fa(skippedBan)}\n✉️ ایمیل تاییدنشده (حذف شد): ${fa(unverified)}` + (bad ? `\n⚠️ ایمیل نامعتبر (حذف شد): ${fa(bad)}` : "") +
     (pages >= 40 ? "\n⚠️ سقف ۴۰ هزار حساب رسید؛ ممکن است فهرست ناقص باشد." : ""));
+}
+
+/** خروجی کاربرانی که دست‌کم یک‌بار پلن خریده‌اند: فایل plan-buyers.csv + شمارش کل.
+ *  منابع (هر کاربر یک‌بار شمرده می‌شود): نشانه‌ی دائمی pbuy:<کاربر> (از زمان فعال شدن این قابلیت)، توکن‌های دائمی خرید فروشگاه‌ها (bzp:/mkp:/sbp:)،
+ *  و رکوردهای پرداخت‌شده‌ی pay: (۸۴ روز اخیر؛ برای درگاه دیجی‌پی پیش از این قابلیت فقط همین‌قدر باقی مانده). */
+async function exportBuyers(env: Env, chatId: number) {
+  const d = await db(env);
+  type B = { first: number; plans: Set<string> };
+  const buyers = new Map<string, B>();
+  const add = (uid: unknown, plan: unknown, t: unknown) => {
+    const id = String(uid ?? "").trim(); if (!id) return;
+    const b = buyers.get(id) ?? { first: 0, plans: new Set<string>() };
+    const tt = Number(t) || 0; if (tt && (!b.first || tt < b.first)) b.first = tt;
+    if (plan) b.plans.add(String(plan)); buyers.set(id, b);
+  };
+  type R = { uid: string | null; plan: string | null; t: number | null };
+  const pays = (await d.prepare(
+    "SELECT json_extract(v,'$.uid') uid, json_extract(v,'$.plan') plan, json_extract(v,'$.t') t FROM kv WHERE k >= ?1 AND k < ?2 AND json_extract(v,'$.state')='paid' LIMIT 50000",
+  ).bind("pay:", "pay:" + MAXC).all<R>()).results ?? [];
+  for (const r of pays) add(r.uid, r.plan, r.t);
+  for (const pre of ["bzp:", "mkp:", "sbp:"]) {
+    const rs = (await d.prepare(
+      "SELECT json_extract(v,'$.uid') uid, json_extract(v,'$.plan') plan, json_extract(v,'$.t') t FROM kv WHERE k >= ?1 AND k < ?2 LIMIT 50000",
+    ).bind(pre, pre + MAXC).all<R>()).results ?? [];
+    for (const r of rs) add(r.uid, r.plan, r.t);
+  }
+  const marks = (await d.prepare("SELECT k, json_extract(v,'$.f') t FROM kv WHERE k >= ?1 AND k < ?2 LIMIT 50000").bind("pbuy:", "pbuy:" + MAXC).all<{ k: string; t: number | null }>()).results ?? [];
+  for (const r of marks) add(r.k.slice(5), null, r.t);
+
+  const ids = [...buyers.keys()];
+  const users = new Map<string, WebUser | null>();
+  for (let i = 0; i < ids.length; i += 50) {
+    await Promise.all(ids.slice(i, i + 50).map(async (u) => { users.set(u, WEB_ID.test(u) ? await getUserById(env, u).catch(() => null) : null); }));
+  }
+  const lines = ["user_id,name,email,mobile,first_purchase,plans"];
+  for (const [id, b] of [...buyers].sort((a, c) => (a[1].first || Infinity) - (c[1].first || Infinity))) {
+    const u = users.get(id);
+    lines.push([id, csvCell(u?.name), csvCell(u?.email, true), csvCell(u?.mobile, true), b.first ? tehranDay(b.first) : "", csvCell([...b.plans].map(planLabel).join(" / "))].join(","));
+  }
+  await sendDocument(env, chatId, new TextEncoder().encode("\uFEFF" + lines.join("\n") + "\n"), "plan-buyers.csv",
+    `💳 <b>${fa(buyers.size)}</b> کاربر دست‌کم یک‌بار پلن خریده‌اند`, { mime: "text/csv" });
+  await sendMessage(env, chatId,
+    `✅ خروجی خریداران آماده شد.\n💳 کاربران یکتا: <b>${fa(buyers.size)}</b>\n` +
+    "<i>خریدهای درگاه دیجی‌پی قبل از فعال شدن این قابلیت فقط از ۸۴ روز اخیر شناخته می‌شوند؛ خریدهای فروشگاه‌ها (بازار/مایکت/سیب‌اپ) و هر خرید از این به بعد دائمی ثبت می‌شود.</i>");
 }
 
 /** دکمه‌های تایید/لغو پیام همگانی (فقط مدیر) */

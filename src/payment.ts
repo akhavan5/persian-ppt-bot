@@ -139,6 +139,10 @@ async function noteSale(env: Env, rec: PayRecord, plan: Plan | undefined): Promi
     await env.DB.prepare(
       "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1, '$.a', COALESCE(json_extract(v, '$.a'), 0) + ?3)")
       .bind(`rv:${day}`, JSON.stringify({ n: 1, a: toman }), toman).run();
+    // نشانه‌ی دائمی «این کاربر دست‌کم یک‌بار پلن خریده» (بدون انقضا) برای خروجی «خریداران» پنل مدیر؛ رکوردهای pay: فقط ۸۴ روز می‌مانند
+    await env.DB.prepare(
+      "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1, '$.l', ?3)")
+      .bind(`pbuy:${rec.uid}`, JSON.stringify({ f: rec.t, l: rec.t, n: 1 }), rec.t).run();
   } catch (e) { console.error("noteSale", e); }
 }
 
