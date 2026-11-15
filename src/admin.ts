@@ -231,7 +231,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       [cb("💬 پشتیبانی سایت", "ad:sc:r:0")],
       [cb(`💰 پرداخت‌ها${payIssues ? ` 🚨${fa(payIssues)}` : ""}`, "ad:pm:s:0"), cb("🔻 قیف کاربران", "ad:fn:30"), cb("🎁 دعوت‌ها", "ad:iv:t:0")],
       [cb("📱 اپ اندروید/iOS (نسخه و اعلان)", "ad:ap"), cb("📧 خروجی ایمیل/موبایل", "ad:ex")],
-      [cb("💳 خروجی خریداران پلن", "ad:eb")],
+      [cb("💳 خروجی خریداران پلن", "ad:eb"), cb("📵 خروجی فقط‌شماره‌ها", "ad:eo")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
     ],
   };
@@ -1172,6 +1172,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.\n\n💡 اگر <code>{invite}</code> را در متن بنویسی، برای هر کاربر جای آن همان پیام /invite او (لینک اختصاصی، شمارنده‌ی دعوت و دکمه‌ی ارسال به دوستان) قرار می‌گیرد.", "ad:h");
       case "ex": await answer("⏳ در حال ساخت فایل‌ها…"); await exportContacts(env, chatId).catch(async (e) => { console.error("exportContacts", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
       case "eb": await answer("⏳ در حال ساخت فایل…"); await exportBuyers(env, chatId).catch(async (e) => { console.error("exportBuyers", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
+      case "eo": await answer("⏳ در حال ساخت فایل…"); await exportMobileOnly(env, chatId).catch(async (e) => { console.error("exportMobileOnly", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
       case "ap": return await show(await appScreen(env));
       case "av": {
         const t = c === "all" ? "all" : isStoreId(c) ? c : null;
@@ -1311,6 +1312,42 @@ async function exportContacts(env: Env, chatId: number) {
     `📱 <b>${fa(mobiles.size)}</b> شماره‌ی موبایل (برای پیامک؛ Resend فقط ایمیل می‌فرستد)`, { mime: "text/csv" });
   await sendMessage(env, chatId,
     `✅ خروجی آماده شد.\n👥 حساب‌های بررسی‌شده: ${fa(total)}\n⛔️ مسدود (حذف شد): ${fa(skippedBan)}\n✉️ ایمیل تاییدنشده (حذف شد): ${fa(unverified)}` + (bad ? `\n⚠️ ایمیل نامعتبر (حذف شد): ${fa(bad)}` : "") +
+    (pages >= 40 ? "\n⚠️ سقف ۴۰ هزار حساب رسید؛ ممکن است فهرست ناقص باشد." : ""));
+}
+
+/** خروجی «فقط‌شماره‌ها»: حساب‌هایی که تنها راه ارتباطشان شماره‌ی موبایل است.
+ *  شرط: موبایل معتبر 09XXXXXXXXX دارد، ایمیل ندارد، گوگل وصل نیست و هیچ ربات/پیام‌رسانی (تلگرام، بله، روبیکا، ایتا، سروش‌پلاس: کلید w2tg) به حسابش وصل نیست.
+ *  مسدودها و موبایل‌های تکراری حذف می‌شوند. فایل: mobile-only.csv (UTF-8 با BOM برای اکسل). */
+async function exportMobileOnly(env: Env, chatId: number) {
+  const d = await db(env);
+  const banned = new Set((await rows(env, "SELECT k FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) LIMIT 5000", "ban:", "ban:" + MAXC, nowSec())).map((r) => r.k.slice(4)));
+  const seen = new Map<string, { name: string; created: number; plat: string }>();
+  let last = "wu:", pages = 0, total = 0, skippedBan = 0, bad = 0;
+  for (; pages < 40; pages++) {
+    const r = (await d.prepare(
+      "SELECT k, json_extract(v,'$.mobile') m, json_extract(v,'$.name') n, json_extract(v,'$.created') c, json_extract(v,'$.store') s, json_extract(v,'$.os') o, json_extract(v,'$.app') a FROM kv " +
+      "WHERE k > ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) " +
+      "AND COALESCE(json_extract(v,'$.mobile'),'') != '' AND COALESCE(json_extract(v,'$.email'),'') = '' AND json_extract(v,'$.google') IS NULL " +
+      "AND NOT EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || substr(kv.k, 4) AND (t.exp IS NULL OR t.exp > ?3)) ORDER BY k LIMIT 1000",
+    ).bind(last, "wu:" + MAXC, nowSec()).all<{ k: string; m: string | null; n: string | null; c: number | null; s: string | null; o: string | null; a: number | null }>()).results ?? [];
+    for (const u of r) {
+      total++;
+      if (banned.has(u.k.slice(3))) { skippedBan++; continue; }
+      const mob = String(u.m ?? "").trim();
+      if (!/^09\d{9}$/.test(mob)) { bad++; continue; }
+      if (seen.has(mob)) continue;
+      const plat = u.a ? (u.s ? STORE_LABEL[u.s as keyof typeof STORE_LABEL] ?? u.s : u.o === "ios" ? "iOS" : "اپ اندروید") : "وب";
+      seen.set(mob, { name: (u.n ?? "").trim(), created: Number(u.c) || 0, plat });
+    }
+    last = r.length ? r[r.length - 1].k : last;
+    if (r.length < 1000) break;
+  }
+  const lines = ["mobile,phone_e164,name,signup_date,source"];
+  for (const [m, x] of [...seen].sort((a, b) => a[1].created - b[1].created)) lines.push([m, `+98${m.slice(1)}`, csvCell(x.name), x.created ? tehranDay(x.created) : "", csvCell(x.plat)].join(","));
+  await sendDocument(env, chatId, new TextEncoder().encode("\uFEFF" + lines.join("\n") + "\n"), "mobile-only.csv",
+    `📵 <b>${fa(seen.size)}</b> شماره‌ی بدون ایمیل، گوگل و شبکه‌ی اجتماعی/ربات`, { mime: "text/csv" });
+  await sendMessage(env, chatId,
+    `✅ خروجی فقط‌شماره‌ها آماده شد.\n📱 شماره‌ی یکتا: <b>${fa(seen.size)}</b>\n⛔️ مسدود (حذف شد): ${fa(skippedBan)}` + (bad ? `\n⚠️ موبایل نامعتبر (حذف شد): ${fa(bad)}` : "") +
     (pages >= 40 ? "\n⚠️ سقف ۴۰ هزار حساب رسید؛ ممکن است فهرست ناقص باشد." : ""));
 }
 
