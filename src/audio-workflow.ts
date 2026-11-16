@@ -27,6 +27,7 @@ import { NARRATION_BATCH, makeNarration } from "./narration";
 import { audioSeconds, mergeWav } from "./wav";
 import { mp3Enabled, wavsToMp3 } from "./mp3";
 import { embedAudio, pptxSlideNo, type SlideAudio } from "./pptx-audio";
+import { SubreqMeter, metered } from "./subreq-meter";
 
 export interface AudioParams {
   kind: "slides" | "podcast";
@@ -94,7 +95,12 @@ const mp3Key = (id: string, i: number) => `tmp:aud:${id}:${i}:mp3`;
 // تبدیل MP3 اسلایدها دسته‌دسته و هر دسته در یک گام جدا (سقف CPU هر گام جدا حساب می‌شود؛ ۸ اسلاید در یک گام مشکلی نداشت)
 const MP3_BATCH = 6;
 /** سقف زیردرخواست هر نمونه (۵۰ در پلن رایگان) برای کل نمونه است. همه‌چیز در «یک» نمونه اجرا می‌شود؛ فقط اگر خطای سقف آمد، ادامه‌ی کار (از همان اسلاید/دسته) به نمونه‌ی بعدی سپرده می‌شود. */
-const MAX_HANDOFFS = 12; // محافظ حلقه‌ی بی‌پایان اگر حتی نمونه‌ی تازه هم از همان اول سقف بخورد
+// هزینه‌ی (بدترین حالتِ متعارف) هر واحد کار بر حسب fetch خروجی؛ پیش از شروع هر واحد، اگر جا نبود به نمونه‌ی بعدی سپرده می‌شود
+const COST_NARR = 5;  // پیام وضعیت + LLM (با یک تلاش دوباره)
+const COST_SLIDE = 5; // پیام وضعیت + Gemini (با چند کلید خراب)
+const COST_MP3 = 10;  // نشست مرورگر + REST پشتیبان؛ از راه fetch سراسری رد نمی‌شود پس دستی شارژ می‌شود
+const COST_EMBED = 14; // ارسال فایل + اسلایدهای جداافتاده + پیام وضعیت
+const MAX_HANDOFFS = 20; // (قبلاً ۱۲) // محافظ حلقه‌ی بی‌پایان اگر حتی نمونه‌ی تازه هم از همان اول سقف بخورد
 /** خطای سقف زیردرخواست (از Cloudflare)؛ تلاش مجدد در همان نمونه فایده ندارد و باید کار به نمونه‌ی جدید برود */
 const isSubreq = (e: unknown) => /too many subrequests/i.test(String(e instanceof Error ? e.message : e));
 
@@ -107,8 +113,8 @@ const lerp = (from: number, to: number, k: number, n: number) => from + (to - fr
 
 type Status = (t: string, pct?: number) => Promise<unknown>;
 
-async function guard<T>(fn: () => Promise<T>): Promise<T> {
-  try { return await fn(); } catch (e) {
+async function guard<T>(meter: SubreqMeter, fn: () => Promise<T>): Promise<T> {
+  try { return await metered(meter, fn); } catch (e) {
     if (isSubreq(e)) throw new NonRetryableError(`SUBREQ ${String(e instanceof Error ? e.message : e).slice(0, 160)}`); // تلاش مجدد در همین نمونه بی‌فایده است؛ زنجیره ادامه را به نمونه‌ی جدید می‌دهد
     if ((e instanceof GeminiError || e instanceof LlmError) && e.fatal) throw new NonRetryableError(e.message);
     throw e;
@@ -118,7 +124,15 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
 export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
   constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
 
+  /** شمارنده‌ی fetch این اجرا (با هر اجرای تازه‌ی Workflow صفر می‌شود، درست مثل سقف خود Cloudflare). فقط اسلاید صوتی سقف نرم دارد؛ پادکست مثل قبل تا سقف واقعی می‌رود */
+  private meter = new SubreqMeter();
+
   async run(event: WorkflowEvent<AudioParams>, step: WorkflowStep): Promise<AudioOut> {
+    if (event.payload.kind !== "slides") this.meter.cap = 50;
+    return metered(this.meter, () => this.runInner(event, step));
+  }
+
+  private async runInner(event: WorkflowEvent<AudioParams>, step: WorkflowStep): Promise<AudioOut> {
     const { kind, chatId, statusMessageId: mid, uid, credit } = event.payload;
     const web = event.payload.channel === "web";
     const root = event.payload.rootId ?? event.instanceId; // شناسه‌ی نمونه‌ی اول؛ وضعیت/درصد/نتیجه همیشه زیر همین شناسه نوشته می‌شود
@@ -149,6 +163,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     } catch (e) {
       const reason = String(e instanceof Error ? e.message : e).slice(0, 500);
       console.error("audio workflow failed", reason);
+      this.meter.cap = 50; // ذخیره‌ی کنار گذاشته‌شده برای پیام خطا
       if (web && root !== event.instanceId) await step.do("jobres-fail", () => this.env.KV.put(`jobres:${root}`, JSON.stringify({ state: "error" }), { expirationTtl: 3600 })).catch(() => {});
       // هر کار در گام جدا تا اگر یکی تکرار شد اعتبار دو بار برنگردد
       if (credit) {
@@ -192,8 +207,9 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       const batches = Math.ceil(plan.items.length / NARRATION_BATCH);
       for (let b = st.pos; b < batches; b++) {
         const idxs = plan.items.slice(b * NARRATION_BATCH, (b + 1) * NARRATION_BATCH).map((x) => x.i);
+        if (!this.meter.hasRoom(COST_NARR)) return await this.next(step, root, event.payload, { ...st, pos: b }); // جا نیست؛ پیش از رسیدن به سقف نمونه‌ی بعدی ادامه بدهد
         try {
-          const part = await step.do(`narration-${b}`, LLM_STEP, () => guard(async () => {
+          const part = await step.do(`narration-${b}`, LLM_STEP, () => guard(this.meter, async () => {
             await status("✍️ در حال نوشتن متن گفتاری اسلایدها…", lerp(3, 25, b, batches)); // درصد: ۳ تا ۲۵٪
             const p = await loadPreview(this.env, uid, deckId);
             if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
@@ -213,8 +229,9 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       const lastIdx = plan.items[plan.items.length - 1].i;
       for (let pos = st.pos; pos < plan.items.length; pos++) {
         const it = plan.items[pos];
+        if (!this.meter.hasRoom(COST_SLIDE)) return await this.next(step, root, event.payload, { ...st, pos }); // جا نیست؛ پیش از رسیدن به سقف نمونه‌ی بعدی ادامه بدهد
         try {
-          const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
+          const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(this.meter, async () => {
             // درصد: ساخت صدای اسلایدها ۲۵ تا ۸۸٪ (به نسبت تعداد اسلایدهای دارای متن)
             await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`, lerp(25, 88, pos, plan.items.length));
             // کاربر بدون پلن: جمله‌ی تبلیغ سایت در پایانِ آخرین اسلاید گفته می‌شود
@@ -240,8 +257,10 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     if (st.phase === "mp3") {
       for (let b = st.pos; b < st.made.length; b += MP3_BATCH) {
         const grp = st.made.slice(b, b + MP3_BATCH);
+        if (!this.meter.hasRoom(COST_MP3)) return await this.next(step, root, event.payload, { ...st, pos: b });
+        this.meter.charge(COST_MP3);
         try {
-          const sizes = await step.do(`mp3-${b / MP3_BATCH}`, { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, () => guard(async () => {
+          const sizes = await step.do(`mp3-${b / MP3_BATCH}`, { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, () => guard(this.meter, async () => {
             await status("🔊 تبدیل صدا به MP3…", lerp(88, 93, b, st.made.length));
             const res = await wavsToMp3(this.env, grp.length, async (k) => {
               const buf = await this.env.FILES.get(tmpKey(root, grp[k].i), "arrayBuffer");
@@ -264,6 +283,8 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     }
 
     // ---- جاسازی صدا داخل PPTX و تحویل ----
+    // ارسال فایل را وسطش قطع نکنیم (فایل دوبار فرستاده می‌شد): اگر جا نیست، جاسازی از اول در نمونه‌ی تازه شروع می‌شود
+    if (!this.meter.hasRoom(COST_EMBED)) return await this.next(step, root, event.payload, { ...st, phase: "embed", pos: 0 });
     try {
       return await this.embedSend(event, step, status, web, root, st);
     } catch (e) {
@@ -291,7 +312,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     const { chatId, uid, deckId } = event.payload;
     const { plan, made, failed, mp3Sizes } = st;
     const id = root;
-    const summary = await step.do("embed-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, () => guard(async () => {
+    const summary = await step.do("embed-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, () => guard(this.meter, async () => {
       await status("🔊 جاسازی صدا داخل اسلایدها و ارسال فایل…", 90);
       const f = await loadFileDirect(this.env, uid, deckId);
       if (!f) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
@@ -373,7 +394,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     const { chatId, uid, deckId, model, mark } = event.payload;
     const id = event.instanceId;
 
-    const script = await step.do("script", LLM_STEP, () => guard(async () => {
+    const script = await step.do("script", LLM_STEP, () => guard(this.meter, async () => {
       await status("🎙 ۱/۳ — نوشتن گفت‌وگوی پادکست…", 5); // درصد: نوشتن گفت‌وگو ۵ تا ۲۵٪
       const p = await loadPreview(this.env, uid, deckId);
       if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
@@ -384,7 +405,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     const chunks = chunkTurns(turns);
 
     for (let i = 0; i < chunks.length; i++) {
-      await step.do(`voice-${i}`, TTS_STEP, () => guard(async () => {
+      await step.do(`voice-${i}`, TTS_STEP, () => guard(this.meter, async () => {
         // درصد: ساخت صدا ۲۵ تا ۸۸٪ به نسبت بخش‌ها
         await status(`🎙 ۲/۳ — ساخت صدا… بخش ${toFa(String(i + 1))} از ${toFa(String(chunks.length))}`, lerp(25, 88, i, chunks.length));
         const wav = await ttsDialogue(this.env, chunks[i], { styleA: STYLE_A, styleB: STYLE_B });
