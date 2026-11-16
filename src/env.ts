@@ -11,6 +11,8 @@ export interface Env {
   DB: D1Database;
   /** KV واقعی: فقط برای بایت‌های فایل pptx (یک نوشتن برای هر ارائه، با انقضای خودکار) */
   FILES: KVNamespace;
+  /** KV واقعی بعد از withStore (فقط نمونه‌های دائمی)؛ در wrangler تعریف نمی‌شود */
+  FILES_KV?: KVNamespace;
   /** نمای سازگار با KV روی D1؛ در index.ts و Workflowها با withStore ساخته می‌شود و در wrangler تعریف نمی‌شود */
   KV: Store;
   /** فایل‌های استاتیک نسخه‌ی وب (پوشه‌ی public) */

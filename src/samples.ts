@@ -82,7 +82,7 @@ export async function addSample(env: Env, userId: Uid, srcId: string, asPdf = fa
   const id = prev?.id ?? `sample-${Date.now().toString(36)}-${kind}`;
   if (!prev && list.length >= MAX_SAMPLES) return { ok: false, error: `حداکثر ${toFa(String(MAX_SAMPLES))} نمونه می‌شود؛ اول یکی را با /samples حذف کن.` };
   const entry: SampleEntry = { id, kind, name, title: f.entry.title, slides: kind === "pdf" || kind === "deck" || kind === "audio" ? f.entry.slides : 0, t: prev?.t ?? Date.now(), src };
-  await env.FILES.put(bytesKey(id), data as ArrayBuffer, { metadata: { name, title: entry.title.slice(0, 120), slides: entry.slides, t: entry.t } }); // بدون expirationTtl = دائمی
+  await env.FILES_KV!.put(bytesKey(id), data as ArrayBuffer, { metadata: { name, title: entry.title.slice(0, 120), slides: entry.slides, t: entry.t } }); // بدون expirationTtl = دائمی
   await env.KV.put(LIST_KEY, JSON.stringify(prev ? list.map((x) => (x.id === id ? entry : x)) : [...list, entry]));
   return { ok: true, entry, replaced: !!prev };
 }
@@ -91,7 +91,7 @@ export async function removeSample(env: Env, id: string): Promise<boolean> {
   const list = await listSamples(env);
   if (!list.some((x) => x.id === id)) return false;
   await env.KV.put(LIST_KEY, JSON.stringify(list.filter((x) => x.id !== id)));
-  await env.FILES.delete(bytesKey(id)).catch(() => {});
+  await env.FILES_KV!.delete(bytesKey(id)).catch(() => {});
   return true;
 }
 
@@ -99,6 +99,6 @@ export async function removeSample(env: Env, id: string): Promise<boolean> {
 export async function loadSample(env: Env, id: string): Promise<{ entry: FileEntry; data: ArrayBuffer } | null> {
   const s = await sampleById(env, id);
   if (!s) return null;
-  const data = await env.FILES.get(bytesKey(id), "arrayBuffer");
+  const data = await env.FILES_KV!.get(bytesKey(id), "arrayBuffer");
   return data ? { entry: { id, name: s.name, title: s.title, slides: s.slides, t: s.t }, data } : null;
 }

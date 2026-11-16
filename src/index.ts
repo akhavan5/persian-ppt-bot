@@ -5,7 +5,7 @@ import { splusEnabled, splusSecret, handleSplusUpdate, setupSplus } from "./splu
 import { handleRubikaUpdate, rubikaEnabled, rubikaSecret, setupRubika } from "./rubika";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
-import { withStore } from "./store";
+import { purgeExpired, withStore } from "./store";
 import { remindExpiringPlans } from "./plan-notify";
 import { ACTIVATION_CRON, remindInactiveSignups } from "./activation-reminder";
 import { LIFECYCLE_CRON, runLifecycle } from "./lifecycle";
@@ -82,7 +82,7 @@ export default {
       ctx.waitUntil(sendPlanFeedbackSurveys(withStore(rawEnv)).then((r) => { if (r.sent) console.log("plan feedback surveys", JSON.stringify(r)); }).catch((e) => console.error("plan feedback surveys", String(e).slice(0, 200))));
       return;
     }
-    ctx.waitUntil(withStore(rawEnv).KV.purge().catch((e) => console.error("purge", e)));
+    ctx.waitUntil(purgeExpired(rawEnv).catch((e) => console.error("purge", e)));
     // یادآوری ۷ روز مانده به پایان پلن (ایمیل + ربات تلگرام)؛ برای هر دوره‌ی پلن فقط یک‌بار (نشانگر در KV)
     ctx.waitUntil(remindExpiringPlans(withStore(rawEnv)).then((r) => { if (r.sent) console.log("plan expiry reminders", JSON.stringify(r)); }).catch((e) => console.error("plan reminders", String(e).slice(0, 200))));
     // اعتبار رایگان روزانه + پیام ربات برای کاربران تلگرامِ بدون اعتبار (شناسه‌ی روزانه: اگر cron دوباره اجرا شود کار تکراری ساخته نمی‌شود)

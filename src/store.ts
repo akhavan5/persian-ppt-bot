@@ -4,6 +4,7 @@
  * تفاوت‌ها: همگام‌سازی فوری (سازگاری قوی)، و فقط مقدار متنی/JSON (فایل‌های باینری در KV واقعی می‌مانند، نگاه کنید به files.ts).
  */
 import type { Env } from "./env";
+import { BlobStore } from "./blobstore";
 
 export interface PutOptions { expirationTtl?: number; expiration?: number }
 export interface ListResult { keys: { name: string }[]; list_complete: boolean; cursor?: string }
@@ -70,10 +71,24 @@ export class Store {
 }
 
 const cache = new WeakMap<object, Store>();
+const blobCache = new WeakMap<object, BlobStore>();
 
-/** env.KV را با نسخه‌ی D1 جایگزین می‌کند؛ KV واقعی با نام env.FILES در دسترس می‌ماند. چندبار صدا زدن بی‌خطر است. */
+/**
+ * env.KV را با نسخه‌ی D1 جایگزین می‌کند. env.FILES (بایت‌های فایل) هم به D1 می‌رود تا سهمیه‌ی ۱۰۰۰ نوشتن/حذف در روز و ۱ گیگابایتِ KV رایگان پر نشود.
+ * KV واقعی با نام env.FILES_KV می‌ماند (فقط برای فایل‌های نمونه‌ی دائمی در samples.ts). چندبار صدا زدن بی‌خطر است.
+ */
 export function withStore(env: Env): Env {
   let s = cache.get(env.DB);
   if (!s) cache.set(env.DB, (s = new Store(env.DB)));
-  return { ...env, KV: s };
+  if (env.FILES_KV) return { ...env, KV: s }; // قبلاً ساخته شده
+  let b = blobCache.get(env.DB);
+  if (!b) blobCache.set(env.DB, (b = new BlobStore(env.DB, env.FILES)));
+  return { ...env, KV: s, FILES_KV: env.FILES, FILES: b as unknown as KVNamespace };
+}
+
+/** پاکسازی روزانه‌ی ردیف‌های منقضی‌شده‌ی KV و فایل‌ها در D1 */
+export async function purgeExpired(env: Env): Promise<void> {
+  const e = withStore(env);
+  await e.KV.purge();
+  await (e.FILES as unknown as BlobStore).purge();
 }
