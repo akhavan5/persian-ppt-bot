@@ -14,7 +14,7 @@ object Draft {
             topic = p.getString("topic", "").orEmpty(),
             source = p.getString("source", "").orEmpty(),
             handout = p.getBoolean("handout", false),
-            poster = p.getString("poster", "wide").orEmpty(),
+            poster = p.getString("poster", "").orEmpty(),
             audio = p.getBoolean("audio", false),
             podcast = p.getBoolean("podcast", false),
         )

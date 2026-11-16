@@ -79,7 +79,7 @@ export async function createUser(env: Env, p: { email?: string; mobile?: string;
   if (u.google) await env.KV.put(`wg:${u.google}`, u.id);
   await bumpStat(env, "newusers", p.via === "app" ? (p.appUA ? appPlatform(p.appUA) : "app") : p.pwa ? pwaPlatform(p.pwa) : "web").catch(() => {});
   if (p.via === "app") await bumpStat(env, "newapp").catch(() => {});
-  await grantSignupCredit(env, u.id).catch((e) => console.error("signupCredit", e)); // ۳ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
+  await grantSignupCredit(env, u.id).catch((e) => console.error("signupCredit", e)); // ۲ اعتبار هدیه‌ی ثبت‌نام (فقط یک‌بار)
   if (u.email) await sendWelcomeEmail(env, u).catch((e) => console.error("welcomeEmail", e)); // ایمیل خوش‌آمد (فقط حساب‌های دارای ایمیل؛ بدون RESEND_API_KEY بی‌اثر است)
   return u;
 }

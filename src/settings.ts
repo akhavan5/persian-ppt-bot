@@ -112,7 +112,7 @@ export const setBanned = (env: Env, userId: Uid, on: boolean) =>
 // ---------- اعتبار: اعتبار هدیه/اضافه (ثبت‌نام، دعوت، شارژ دستی) + اعتبار پلن ماهانه ----------
 // هر حساب جدید یک‌بار SIGNUP_CREDITS اعتبار هدیه می‌گیرد؛ علاوه بر آن «اعتبار رایگان روزانه» (DAILY_FREE_CREDITS) هر روز به حسابی که اعتبارش صفر است اضافه می‌شود.
 /** اعتبار هدیه‌ی ثبت‌نام (برای هر حساب جدید وب یا ربات، فقط یک‌بار) */
-export const SIGNUP_CREDITS = 3;
+export const SIGNUP_CREDITS = 2;
 /** اعتبار رایگان روزانه: هر روز (UTC) به حسابی که اعتبار کل‌اش (پلن + هدیه) صفر است ۱ اعتبار اضافه می‌شود؛ ۰ = خاموش */
 export const DAILY_FREE_CREDITS = 1;
 /** پیام تلگرام هنگام افزودن اعتبار رایگان روزانه */
@@ -332,8 +332,8 @@ export async function claimFeedbackReward(env: Env, userId: Uid): Promise<boolea
 /** هر AD_REWARD_EVERY ویدئوی کامل = AD_REWARD_CREDITS اعتبار رایگان. ۰ = خاموش */
 export const AD_REWARD_EVERY = 5;
 export const AD_REWARD_CREDITS = 1;
-/** سقف ویدئوی حساب‌شده در هر روز (≈ ۲ اعتبار در روز) و حداقل فاصله‌ی دو ویدئو؛ چون تایید «ویدئو دیده شد» سمت کلاینت است، این دو سقف سوءاستفاده را محدود می‌کنند. */
-export const AD_REWARD_DAILY_MAX = 10;
+/** سقف ویدئوی حساب‌شده در هر روز (= حداکثر ۱ اعتبار در روز) و حداقل فاصله‌ی دو ویدئو؛ چون تایید «ویدئو دیده شد» سمت کلاینت است، این دو سقف سوءاستفاده را محدود می‌کنند. */
+export const AD_REWARD_DAILY_MAX = AD_REWARD_EVERY * AD_REWARD_CREDITS; // ۵ ویدئو ⇒ حداکثر ۱ اعتبار در روز
 export const AD_REWARD_MIN_GAP_S = 20;
 const adProgKey = (uid: Uid) => `adr:p:${uid}`;
 
