@@ -215,9 +215,16 @@ async function totalsScreen(env: Env): Promise<Screen> {
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${PWA_OTHER}`, "wu:", "wu:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_SPLUS}`, "seen:", "seen:" + MAXC),
   ]);
+  const pc = await profileCompletion(env).catch(() => null);
+  const wk = await platStats(env, daysIntoWeek() - 1, 0); // کاربران جدید از شنبه تا امروز
+  const nu: Record<string, number> = Object.fromEntries(PLATFORMS.map((p) => [p, wk[p].newusers ?? 0]));
   return {
     text:
-      "👥 <b>آمار کل کاربران</b>\n\n" +
+      "👥 <b>آمار کاربران</b>\n\n" +
+      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🟣 <b>${fa(nu.rubika ?? 0)}</b> · 🟠 <b>${fa(nu.eitaa ?? 0)}</b> · 🔵 <b>${fa(nu.splus ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 بازار <b>${fa(nu.bazaar ?? 0)}</b> · 📱 مایکت <b>${fa(nu.myket ?? 0)}</b> · 📱 اپ قدیمی <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · روبیکا · ایتا · سروش‌پلاس · وب · اپ بازار · اپ مایکت · اپ قدیمی)</i>\n` +
+      `🍎 <b>جدید این هفته (iOS و PWA):</b> اپ iOS <b>${fa(nu.ios ?? 0)}</b> · 🍏 PWA آیفون/آیپد <b>${fa(nu.pwa_ios ?? 0)}</b> · 📲 PWA بقیه <b>${fa(nu.pwa ?? 0)}</b>\n` +
+      (pc ? `🎁 <b>تکمیل پروفایل</b> (بعداً موبایل/ایمیل افزوده‌اند): <b>${fa(pc.accounts)}</b> حساب · 📱 موبایل ${fa(pc.mobile)} · ✉️ ایمیل ${fa(pc.email)} · هر دو ${fa(pc.both)}\n` : "") +
+      "\n" +
       `✈️ تلگرام ${fa(tgUsers)} · 🟢 بله ${fa(baleUsers)} · 🟣 روبیکا ${fa(rubikaUsers)} · 🟠 ایتا ${fa(eitaaUsers)} · 🔵 سروش‌پلاس ${fa(splusUsers)} · 🌐 وب ${fa(webUsers)}\n` +
       `📱 اندروید ${fa(appUsers)} (بازار ${fa(bazaarUsers)} · مایکت ${fa(myketUsers)}؛ بقیه از نسخه‌ی قدیمی)\n` +
       `🍎 اپ iOS ${fa(iosUsers)} · 🍏 PWA آیفون/آیپد ${fa(pwaIosUsers)} · 📲 PWA بقیه ${fa(pwaOtherUsers)}\n` +
@@ -233,26 +240,20 @@ async function homeScreen(env: Env): Promise<Screen> {
     statsByDay(env),
     issueCount(env).catch(() => 0),
   ]);
-  const pc = await profileCompletion(env).catch(() => null);
   const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
   const week = await platformReport(env, n, st, true, 7);
-  const wk = await platStats(env, n - 1, 0);
-  const nu: Record<string, number> = Object.fromEntries(PLATFORMS.map((p) => [p, wk[p].newusers ?? 0]));
   const range = `${fmtDay(Date.now() - (n - 1) * 86_400_000)} تا ${fmtDay(Date.now())}`;
   return {
     text:
       "🛠 <b>پنل مدیریت</b>\n\n" +
-      `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🟣 <b>${fa(nu.rubika ?? 0)}</b> · 🟠 <b>${fa(nu.eitaa ?? 0)}</b> · 🔵 <b>${fa(nu.splus ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 بازار <b>${fa(nu.bazaar ?? 0)}</b> · 📱 مایکت <b>${fa(nu.myket ?? 0)}</b> · 📱 اپ قدیمی <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · روبیکا · ایتا · سروش‌پلاس · وب · اپ بازار · اپ مایکت · اپ قدیمی)</i>\n` +
-      `🍎 <b>جدید این هفته (iOS و PWA):</b> اپ iOS <b>${fa(nu.ios ?? 0)}</b> · 🍏 PWA آیفون/آیپد <b>${fa(nu.pwa_ios ?? 0)}</b> · 📲 PWA بقیه <b>${fa(nu.pwa ?? 0)}</b>\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
-      (pc ? `🎁 <b>تکمیل پروفایل</b> (بعداً موبایل/ایمیل افزوده‌اند): <b>${fa(pc.accounts)}</b> حساب · 📱 موبایل ${fa(pc.mobile)} · ✉️ ایمیل ${fa(pc.email)} · هر دو ${fa(pc.both)}\n` : "") +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
       `\n📅 <b>گزارش هفتگی</b> (شنبه تا امروز، ${range})\n${week}\n` +
       "<i>▶️ شروع‌شده · ✅ موفق · ❌ ناموفق · 🆕 کاربر جدید · ▲▼ نسبت به همین روزهای هفته‌ی قبل. هفته از شنبه شروع می‌شود.</i>\n\n" +
       "<i>یک بخش را انتخاب کن. برای مدیریت یک کاربر، شناسه یا نامش را در «جستجو» بنویس.</i>",
     kb: [
       [cb("📊 آمار پلتفرم‌ها", "ad:st:7"), cb("👥 کاربران", "ad:us:t:0")],
-      [cb("👥 آمار کل کاربران", "ad:tt")],
+      [cb("👥 آمار کاربران", "ad:tt")],
       [cb("🔎 جستجوی کاربر", "ad:se"), cb("🗂 ارائه‌های اخیر", "ad:dk")],
       [cb("📣 پیام همگانی", "ad:bc"), cb("👑 پلن‌های فعال", "ad:sb:0")],
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
