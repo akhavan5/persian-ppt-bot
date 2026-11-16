@@ -197,16 +197,14 @@ async function profileCompletion(env: Env): Promise<{ accounts: number; mobile: 
   return { accounts: Number(r?.a ?? 0), mobile: Number(r?.m ?? 0), email: Number(r?.e ?? 0), both: Number(r?.b ?? 0) };
 }
 
-async function homeScreen(env: Env): Promise<Screen> {
-  const [tgUsers, baleUsers, webUsers, appUsers, subs, banned, st, payIssues, rubikaUsers, eitaaUsers, bazaarUsers, myketUsers, chatUsers, iosUsers, pwaIosUsers, pwaOtherUsers, splusUsers] = await Promise.all([
+/** کل کاربران هر پلتفرم: ۱۳ شمارش با json_extract روی همه‌ی ردیف‌های seen:/wu: (هر بار ~۲٫۵ هزار ردیف × ۱۳)؛ سنگین‌ترین بخش صفحه‌ی اصلی بود
+ *  و به صفحه‌ی جدا (دکمه‌ی «👥 آمار کل کاربران») رفت تا فقط وقتی لازم است خوانده شود. */
+async function totalsScreen(env: Env): Promise<Screen> {
+  const [tgUsers, baleUsers, webUsers, appUsers, rubikaUsers, eitaaUsers, bazaarUsers, myketUsers, chatUsers, iosUsers, pwaIosUsers, pwaOtherUsers, splusUsers] = await Promise.all([
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_TG}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_BALE}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${WEB_ONLY} AND ${WEB_NOT_APP}`, "wu:", "wu:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_ANDROID}`, "wu:", "wu:" + MAXC),
-    activeSubCount(env),
-    count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "ban:", "ban:" + MAXC),
-    statsByDay(env),
-    issueCount(env).catch(() => 0),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_RUBIKA}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_EITAA}`, "seen:", "seen:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${APP_BAZAAR}`, "wu:", "wu:" + MAXC),
@@ -216,6 +214,24 @@ async function homeScreen(env: Env): Promise<Screen> {
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${PWA_IOS}`, "wu:", "wu:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${PWA_OTHER}`, "wu:", "wu:" + MAXC),
     count(env, `SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2 AND ${SEEN_SPLUS}`, "seen:", "seen:" + MAXC),
+  ]);
+  return {
+    text:
+      "👥 <b>آمار کل کاربران</b>\n\n" +
+      `✈️ تلگرام ${fa(tgUsers)} · 🟢 بله ${fa(baleUsers)} · 🟣 روبیکا ${fa(rubikaUsers)} · 🟠 ایتا ${fa(eitaaUsers)} · 🔵 سروش‌پلاس ${fa(splusUsers)} · 🌐 وب ${fa(webUsers)}\n` +
+      `📱 اندروید ${fa(appUsers)} (بازار ${fa(bazaarUsers)} · مایکت ${fa(myketUsers)}؛ بقیه از نسخه‌ی قدیمی)\n` +
+      `🍎 اپ iOS ${fa(iosUsers)} · 🍏 PWA آیفون/آیپد ${fa(pwaIosUsers)} · 📲 PWA بقیه ${fa(pwaOtherUsers)}\n` +
+      `💬 کاربرانِ دارای گفتگو: <b>${fa(chatUsers)}</b>`,
+    kb: [[cb("🔄 تازه‌سازی", "ad:tt"), ...backHome]],
+  };
+}
+
+async function homeScreen(env: Env): Promise<Screen> {
+  const [subs, banned, st, payIssues] = await Promise.all([
+    activeSubCount(env),
+    count(env, "SELECT COUNT(*) c FROM kv WHERE k >= ?1 AND k < ?2", "ban:", "ban:" + MAXC),
+    statsByDay(env),
+    issueCount(env).catch(() => 0),
   ]);
   const pc = await profileCompletion(env).catch(() => null);
   const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
@@ -228,10 +244,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       "🛠 <b>پنل مدیریت</b>\n\n" +
       `🆕 <b>کاربران جدید این هفته:</b> ✈️ <b>${fa(nu.tg ?? 0)}</b> · 🟢 <b>${fa(nu.bale ?? 0)}</b> · 🟣 <b>${fa(nu.rubika ?? 0)}</b> · 🟠 <b>${fa(nu.eitaa ?? 0)}</b> · 🔵 <b>${fa(nu.splus ?? 0)}</b> · 🌐 <b>${fa(nu.web ?? 0)}</b> · 📱 بازار <b>${fa(nu.bazaar ?? 0)}</b> · 📱 مایکت <b>${fa(nu.myket ?? 0)}</b> · 📱 اپ قدیمی <b>${fa(nu.app ?? 0)}</b>  <i>(تلگرام · بله · روبیکا · ایتا · سروش‌پلاس · وب · اپ بازار · اپ مایکت · اپ قدیمی)</i>\n` +
       `🍎 <b>جدید این هفته (iOS و PWA):</b> اپ iOS <b>${fa(nu.ios ?? 0)}</b> · 🍏 PWA آیفون/آیپد <b>${fa(nu.pwa_ios ?? 0)}</b> · 📲 PWA بقیه <b>${fa(nu.pwa ?? 0)}</b>\n` +
-      `👥 کل کاربران: ✈️ ${fa(tgUsers)} · 🟢 ${fa(baleUsers)} · 🟣 ${fa(rubikaUsers)} · 🟠 ${fa(eitaaUsers)} · 🔵 ${fa(splusUsers)} · 🌐 ${fa(webUsers)} · 📱 اندروید ${fa(appUsers)} (بازار ${fa(bazaarUsers)} · مایکت ${fa(myketUsers)}؛ بقیه از نسخه‌ی قدیمی)\n` +
-      `🍎 اپ iOS ${fa(iosUsers)} · 🍏 PWA آیفون/آیپد ${fa(pwaIosUsers)} · 📲 PWA بقیه ${fa(pwaOtherUsers)}\n` +
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
-      `👥 کاربرانِ دارای گفتگو: <b>${fa(chatUsers)}</b>\n` +
       (pc ? `🎁 <b>تکمیل پروفایل</b> (بعداً موبایل/ایمیل افزوده‌اند): <b>${fa(pc.accounts)}</b> حساب · 📱 موبایل ${fa(pc.mobile)} · ✉️ ایمیل ${fa(pc.email)} · هر دو ${fa(pc.both)}\n` : "") +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
       `\n📅 <b>گزارش هفتگی</b> (شنبه تا امروز، ${range})\n${week}\n` +
@@ -239,6 +252,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       "<i>یک بخش را انتخاب کن. برای مدیریت یک کاربر، شناسه یا نامش را در «جستجو» بنویس.</i>",
     kb: [
       [cb("📊 آمار پلتفرم‌ها", "ad:st:7"), cb("👥 کاربران", "ad:us:t:0")],
+      [cb("👥 آمار کل کاربران", "ad:tt")],
       [cb("🔎 جستجوی کاربر", "ad:se"), cb("🗂 ارائه‌های اخیر", "ad:dk")],
       [cb("📣 پیام همگانی", "ad:bc"), cb("👑 پلن‌های فعال", "ad:sb:0")],
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
@@ -1186,6 +1200,7 @@ export async function handlePanelCallback(env: Env, cq: any) {
     switch (a) {
       case "h": return await show(await homeScreen(env));
       case "x": await answer(); return await tg(env, "deleteMessage", { chat_id: chatId, message_id: mid }).catch(() => {});
+      case "tt": return await show(await totalsScreen(env));
       case "st": return await show(await statsScreen(env, [1, 7, 30].includes(Number(b)) ? Number(b) : 7));
       case "us": return await show(await usersScreen(env, b === "w" || b === "b" || b === "r" || b === "e" || b === "s" || b === "a" || b === "i" || b === "p" ? b : "t", Math.max(0, Math.min(2000, Number(c) || 0))));
       case "sc": return await show(await supportScreen(env, b === "n" ? "n" : "r", Math.max(0, Math.min(2000, Number(c) || 0))));
