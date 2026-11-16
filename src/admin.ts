@@ -166,20 +166,17 @@ const sumDaysOf = (st: Record<string, PlatCounts>, from: number, to: number): Pl
   for (let i = from; i <= to; i++) for (const [n, v] of Object.entries(st[dayStr(i)] ?? {})) t[n] = (t[n] ?? 0) + v;
   return t;
 };
-/** ▲/▼ نسبت به هفته‌ی قبل؛ وقتی هفته‌ی قبل صفر بوده فقط «جدید» */
-const trend = (now: number, prev: number) =>
-  prev > 0 ? (now === prev ? "" : ` ${now > prev ? "▲" : "▼"}${fa(Math.round((Math.abs(now - prev) / prev) * 100))}٪`) : now > 0 ? " 🆕" : "";
 
 /** یک خط آمار برای یک پلتفرم (یا جمع کل) در بازه‌ی انتخابی */
-const platLine = (label: string, c: PlatCounts, prev?: PlatCounts) =>
-  `${label}: ▶️ ${fa(c.started ?? 0)} · ✅ <b>${fa(c.ok ?? 0)}</b>${prev ? trend(c.ok ?? 0, prev.ok ?? 0) : ""} · ❌ ${fa(c.fail ?? 0)} · 🆕 ${fa(c.newusers ?? 0)}`;
+const platLine = (label: string, c: PlatCounts) =>
+  `${label}: ▶️ ${fa(c.started ?? 0)} · ✅ <b>${fa(c.ok ?? 0)}</b> · ❌ ${fa(c.fail ?? 0)} · 🆕 ${fa(c.newusers ?? 0)}`;
 
-/** بلوک گزارش پلتفرمی برای بازه‌ی days روز اخیر: هر پلتفرم یک خط + جمع کل؛ prev = بازه‌ی قبلی هم‌اندازه برای روند */
-async function platformReport(env: Env, days: number, st: Record<string, Record<string, number>>, withTrend: boolean, shift = days): Promise<string> {
-  const [cur, prev] = await Promise.all([platStats(env, days - 1, 0), withTrend ? platStats(env, shift + days - 1, shift) : Promise.resolve(null)]);
-  const total = sumDaysOf(st, 0, days - 1), totalPrev = withTrend ? sumDaysOf(st, shift, shift + days - 1) : undefined;
-  const lines = PLATFORMS.map((p) => platLine(PLAT_LABEL[p], cur[p], prev?.[p]));
-  lines.push(platLine("📊 <b>جمع کل</b>", total, totalPrev));
+/** بلوک گزارش پلتفرمی برای بازه‌ی days روز اخیر: هر پلتفرم یک خط + جمع کل؛ */
+async function platformReport(env: Env, days: number, st: Record<string, Record<string, number>>): Promise<string> {
+  const cur = await platStats(env, days - 1, 0);
+  const total = sumDaysOf(st, 0, days - 1);
+  const lines = PLATFORMS.map((p) => platLine(PLAT_LABEL[p], cur[p]));
+  lines.push(platLine("📊 <b>جمع کل</b>", total));
   // سهمی از جمع کل که پلتفرمش ثبت نشده (قبل از اضافه شدن این گزارش)
   const attributed = (n: string) => PLATFORMS.reduce((a, p) => a + (cur[p][n] ?? 0), 0);
   const rest = ["started", "ok", "fail", "newusers"].reduce((a, n) => a + Math.max(0, (total[n] ?? 0) - attributed(n)), 0);
@@ -240,8 +237,8 @@ async function homeScreen(env: Env): Promise<Screen> {
     statsByDay(env),
     issueCount(env).catch(() => 0),
   ]);
-  const n = daysIntoWeek(); // شنبه تا امروز؛ مقایسه با همین تعداد روز از هفته‌ی قبل
-  const week = await platformReport(env, n, st, true, 7);
+  const n = daysIntoWeek(); // شنبه تا امروز
+  const week = await platformReport(env, n, st);
   const range = `${fmtDay(Date.now() - (n - 1) * 86_400_000)} تا ${fmtDay(Date.now())}`;
   return {
     text:
@@ -249,7 +246,7 @@ async function homeScreen(env: Env): Promise<Screen> {
       `👑 پلن فعال: <b>${fa(subs)}</b> · ⛔️ مسدود: <b>${fa(banned)}</b>\n` +
       (payIssues ? `🚨 <b>${fa(payIssues)} پرداخت موفق از درگاه، تاییدنشده</b> ← «💰 پرداخت‌ها»\n` : "") +
       `\n📅 <b>گزارش هفتگی</b> (شنبه تا امروز، ${range})\n${week}\n` +
-      "<i>▶️ شروع‌شده · ✅ موفق · ❌ ناموفق · 🆕 کاربر جدید · ▲▼ نسبت به همین روزهای هفته‌ی قبل. هفته از شنبه شروع می‌شود.</i>\n\n" +
+      "<i>▶️ شروع‌شده · ✅ موفق · ❌ ناموفق · 🆕 کاربر جدید. هفته از شنبه شروع می‌شود.</i>\n\n" +
       "<i>یک بخش را انتخاب کن. برای مدیریت یک کاربر، شناسه یا نامش را در «جستجو» بنویس.</i>",
     kb: [
       [cb("📊 آمار پلتفرم‌ها", "ad:st:7"), cb("👥 کاربران", "ad:us:t:0")],
@@ -304,7 +301,7 @@ async function statsScreen(env: Env, days: number): Promise<Screen> {
   const ok = sum("ok"), fail = sum("fail");
   const rate = ok + fail > 0 ? Math.round((ok / (ok + fail)) * 100) : null;
   const label = days === 1 ? "امروز" : `${fa(days)} روز اخیر`;
-  const byPlat = await platformReport(env, days, st, days > 1);
+  const byPlat = await platformReport(env, days, st);
 
   // ریز روزانه‌ی ۷ روز اخیر (همیشه)، به همراه نمودار متنی تعداد ارائه‌های موفق
   const last7 = Array.from({ length: 7 }, (_, i) => dayStr(i));
