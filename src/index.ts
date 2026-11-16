@@ -4,6 +4,7 @@ import { baleEnabled, baleSecret, handleBaleUpdate, setupBale } from "./bale";
 import { splusEnabled, splusSecret, handleSplusUpdate, setupSplus } from "./splus";
 import { handleRubikaUpdate, rubikaEnabled, rubikaSecret, setupRubika } from "./rubika";
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
+import { isBaleId } from "./bale-format";
 import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
 import { purgeExpired, withStore } from "./store";
 import { remindExpiringPlans } from "./plan-notify";
@@ -204,6 +205,7 @@ export default {
       await tg(env, "setChatMenuButton", { menu_button: { type: "web_app", text: "\u200Eساخت ارائه", web_app: { url: `${miniappUrl(env)}/app` } } }).catch((e) => console.error("menu button", e));
       // منوی کامل‌تر فقط برای چت خود مدیرها
       for (const id of adminIds(env)) {
+        if (isBaleId(id)) continue; // بله scope را پشتیبانی نمی‌کند (منوی مدیر در بله از /bale-setup و فهرست عمومی می‌آید)
         await tg(env, "setMyCommands", { commands: ADMIN_COMMANDS, scope: { type: "chat", chat_id: Number(id) } }).catch((e) => console.error("admin commands", e));
       }
       const info = await tg(env, "getWebhookInfo");

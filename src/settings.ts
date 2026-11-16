@@ -96,7 +96,11 @@ export const planLink = (userId: Uid, name: string, price: number) =>
   contactUrl(userId, `سلام، می‌خواهم پلن ${name} (${price} هزار تومان در ماه) پاورپوینت‌ساز را بخرم.\nشناسه‌ی من: ${userId}`);
 // ---------- مجوز، مدیر و مسدودسازی ----------
 const idList = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
-export const adminIds = (env: Env) => idList(env.ADMIN_IDS);
+/** مدیرها: ADMIN_IDS (تلگرام، یا شناسه‌ی جابه‌جاشده‌ی بله) + BALE_ADMIN_IDS (شناسه‌ی عددیِ خام کاربر در بله؛ خودکار با BALE_ID_BASE جمع می‌شود) */
+export const adminIds = (env: Env): string[] => {
+  const bale = idList(env.BALE_ADMIN_IDS).filter((x) => /^\d{1,13}$/.test(x)).map((x) => String(BALE_ID_BASE + Number(x)));
+  return [...new Set([...idList(env.ADMIN_IDS), ...bale])];
+};
 export const isAdmin = (env: Env, userId: Uid) => adminIds(env).includes(String(userId));
 
 export function isAllowed(env: Env, userId: Uid): boolean {

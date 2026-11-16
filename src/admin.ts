@@ -6,7 +6,7 @@ import type { Env } from "./env";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { audioSeconds, isAudioName } from "./wav";
 import {
-  PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
+  PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, adminIds, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
   setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, statDay, type Platform, type Uid,
 } from "./settings";
 import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
@@ -967,7 +967,7 @@ async function systemScreen(env: Env): Promise<Screen> {
   const hookErr = info?.last_error_message
     ? `\n⚠️ آخرین خطای وب‌هوک: <code>${esc(String(info.last_error_message).slice(0, 120))}</code>${info.last_error_date ? ` (${fmtTime(info.last_error_date * 1000)})` : ""}`
     : "";
-  const admins = (env.ADMIN_IDS ?? "").split(",").map((x) => x.trim()).filter(Boolean).length;
+  const admins = adminIds(env).length;
   const restricted = (env.ALLOWED_USER_IDS ?? "").split(",").map((x) => x.trim()).filter(Boolean).length;
   return {
     text:
@@ -1058,6 +1058,10 @@ async function previewBroadcast(env: Env, chatId: number, body: string) {
 }
 
 const toMarkup = (s: Screen) => ({ reply_markup: { inline_keyboard: s.kb } });
+/** در بله، baleWording هر «تلگرام» را «بله» می‌کند؛ در پنل مدیریت (برچسب تب‌ها و آمار پلتفرم‌ها) این واژه باید بماند ← یک نیم‌فاصله وسطش می‌گذاریم */
+const keepTg = (t: string) => t.replace(/تلگرام/g, "تل\u200Cگرام");
+const forChat = (chatId: number, s: Screen): Screen =>
+  isBaleId(chatId) ? { text: keepTg(s.text), kb: s.kb.map((r) => r.map((b) => ({ ...b, text: keepTg(b.text) }))) } : s;
 /** سقف پیام تلگرام ۴۰۹۶ نویسه است و متن بلندتر با «message is too long» رد می‌شود (دکمه‌ی پنل بی‌پاسخ می‌ماند).
  *  برش در مرز خط انجام می‌شود تا تگ HTML نیمه‌باز نماند (در همه‌ی صفحه‌ها هر خط تگ‌هایش را خودش می‌بندد). */
 const fit = (t: string, max = 3900): string => {
@@ -1066,11 +1070,11 @@ const fit = (t: string, max = 3900): string => {
   const nl = cut.lastIndexOf("\n");
   return (nl > max / 2 ? cut.slice(0, nl) : cut.slice(0, cut.lastIndexOf(" "))) + "\n…";
 };
-const sendScreen = (env: Env, chatId: number, s: Screen) => sendMessage(env, chatId, fit(s.text), toMarkup(s));
+const sendScreen = (env: Env, chatId: number, s0: Screen) => { const s = forChat(chatId, s0); return sendMessage(env, chatId, fit(s.text), toMarkup(s)); };
 
 // ---------- دستورهای متنی ----------
 export async function handleAdmin(env: Env, chatId: number, cmd: string, _args: string[], _raw = "", adminId = chatId) {
-  if (isBaleId(adminId) || isRubikaId(adminId) || isEitaaId(adminId) || isSplusId(adminId)) return; // پنل مدیریت فقط در تلگرام است
+  if (isRubikaId(adminId) || isEitaaId(adminId) || isSplusId(adminId)) return; // پنل مدیریت فقط در تلگرام و بله است
   await clearInput(env, adminId).catch(() => {});
   if (cmd === "/cancel") return sendMessage(env, chatId, "✅ لغو شد.");
   if (cmd === "/samples") return sendSamples(env, chatId);
@@ -1080,7 +1084,7 @@ export async function handleAdmin(env: Env, chatId: number, cmd: string, _args: 
 // ---------- ورودی متنی منتظر ----------
 /** اگر مدیر قبلاً از پنل چیزی خواسته (جستجو، مقدار، متن)، این پیامش همان ورودی است. true = مصرف شد */
 export async function handleAdminInput(env: Env, chatId: number, adminId: number, text: string): Promise<boolean> {
-  if (isBaleId(adminId) || isRubikaId(adminId) || isEitaaId(adminId) || isSplusId(adminId)) return false; // پنل مدیریت فقط در تلگرام است
+  if (isRubikaId(adminId) || isEitaaId(adminId) || isSplusId(adminId)) return false; // پنل مدیریت فقط در تلگرام و بله است
   const p = json<Pending>(await env.KV.get(inKey(adminId)));
   if (!p) return false;
   await clearInput(env, adminId);
@@ -1182,10 +1186,10 @@ export async function handlePanelCallback(env: Env, cq: any) {
   const chatId: number = cq.message.chat.id, mid: number = cq.message.message_id, adminId: number = cq.from.id;
   const answer = (text?: string, alert = false) =>
     tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
-  if (!isAdmin(env, adminId) || isBaleId(adminId) || isRubikaId(adminId) || isEitaaId(adminId) || isSplusId(adminId)) return await answer(); // پنل مدیریت فقط در تلگرام است
+  if (!isAdmin(env, adminId) || isRubikaId(adminId) || isEitaaId(adminId) || isSplusId(adminId)) return await answer(); // پنل مدیریت فقط در تلگرام و بله است
 
   const [, a, b, c] = String(cq.data ?? "").split(":");
-  const show = async (s: Screen) => { await answer(); await editMessage(env, chatId, mid, fit(s.text), toMarkup(s)); };
+  const show = async (s0: Screen) => { const s = forChat(chatId, s0); await answer(); await editMessage(env, chatId, mid, fit(s.text), toMarkup(s)); };
   const prompt = async (p: Pending, text: string, back: string) => {
     await setInput(env, adminId, p);
     await show({ text: `${text}\n\n<i>همین حالا پیامت را بفرست (۱۰ دقیقه اعتبار دارد) یا /cancel.</i>`, kb: [[cb("❌ انصراف", back)]] });

@@ -126,6 +126,8 @@ export interface Env {
   ALLOWED_USER_IDS?: string;
   /** اختیاری: شناسه عددی مدیرها، با کاما. مدیرها اعتبار نامحدود دارند و به دستورهای /admin دسترسی دارند */
   ADMIN_IDS?: string;
+  /** اختیاری: شناسه‌ی عددی مدیرها در بله (همان عددی که بله به ربات می‌دهد، بدون جمع با BALE_ID_BASE)، با کاما؛ پنل /admin در بله هم برایشان باز می‌شود */
+  BALE_ADMIN_IDS?: string;
   /** ورود با گوگل (اختیاری): بدون این دو مقدار، دکمه‌ی گوگل نمایش داده نمی‌شود */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
