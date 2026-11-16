@@ -19,7 +19,7 @@ import { withStore } from "./store";
 import { refundCredit, type CreditSource } from "./settings";
 import { fileNameWithSite, miniappUrl, siteHost } from "./deck-service";
 import { toFa } from "./util";
-import { unmarkExtra } from "./extras";
+import { confirmExtra, unmarkExtra } from "./extras";
 import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript } from "./podcast";
@@ -71,6 +71,9 @@ const OUTRO_SLIDES = "اگه از این اسلاید خوشتون اومد، ب
 const OUTRO_PODCAST = "اگه از این پادکست خوشتون اومد، به سایت ما سر بزنید: پی پی تی ساز، دات آی آر.";
 
 const tmpKey = (id: string, i: number) => `tmp:aud:${id}:${i}`;
+const mp3Key = (id: string, i: number) => `tmp:aud:${id}:${i}:mp3`;
+// تبدیل MP3 اسلایدها دسته‌دسته و هر دسته در یک گام جدا (سقف CPU هر گام جدا حساب می‌شود؛ ۸ اسلاید در یک گام مشکلی نداشت)
+const MP3_BATCH = 6;
 
 /** درصد پیشرفت (۰ تا ۱۰۰ و صحیح)؛ اپ اندروید و سایت همین عدد را در نوار و اعلان نشان می‌دهند */
 const clampPct = (p: number) => Math.max(0, Math.min(100, Math.round(p)));
@@ -103,6 +106,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       : editMessage(this.env, chatId, mid, pct === undefined ? t : `${t}\n${pctBar(pct)}`)).catch(() => {});
     try {
       const out = kind === "podcast" ? await this.podcast(event, step, status, web) : await this.slides(event, step, status, web);
+      if (credit) await step.do("confirm-mark", () => confirmExtra(this.env, uid, event.payload.deckId, kind === "podcast" ? "podcast" : "audio")).catch(() => {}); // ساخته شد ⇒ نشانگر ۲۶ ساعته
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ. خطایش نباید به «برگشت اعتبار» برسد (فایل ذخیره شده)
       if (web && event.payload.notify && out.ids.length) {
         await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
@@ -188,16 +192,42 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     }
     if (!made.length) await step.do("fail", async () => { throw new NonRetryableError("هیچ صدایی ساخته نشد (کلیدها یا سهمیه را بررسی کن)"); });
 
+    // MP3 دسته‌ای: دسته‌ای که شکست بخورد (یا CPU/مرورگر کم بیاورد) فقط همان دسته با WAV می‌ماند
+    const mp3Sizes: Record<number, number> = {};
+    if (mp3Enabled(this.env)) {
+      for (let b = 0; b < made.length; b += MP3_BATCH) {
+        const grp = made.slice(b, b + MP3_BATCH);
+        try {
+          const sizes = await step.do(`mp3-${b / MP3_BATCH}`, { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, async () => {
+            await status("🔊 تبدیل صدا به MP3…", lerp(88, 93, b, made.length));
+            const res = await wavsToMp3(this.env, grp.length, async (k) => {
+              const buf = await this.env.FILES.get(tmpKey(id, grp[k].i), "arrayBuffer");
+              return buf ? new Uint8Array(buf) : null;
+            });
+            const out: number[] = [];
+            for (let k = 0; k < grp.length; k++) {
+              const m = res[k];
+              if (m) { await this.env.FILES.put(mp3Key(id, grp[k].i), m, { expirationTtl: 3600 }); out.push(m.length); } else out.push(0);
+            }
+            return out;
+          });
+          grp.forEach((m, k) => { if (sizes[k] > 0) mp3Sizes[m.i] = sizes[k]; });
+        } catch (e) {
+          console.error("mp3 batch failed", b, String(e).slice(0, 200)); // این دسته با WAV می‌ماند
+        }
+      }
+    }
+
     const summary = await step.do("embed-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
       await status("🔊 جاسازی صدا داخل اسلایدها و ارسال فایل…", 90);
       const f = await loadFileDirect(this.env, uid, deckId);
       if (!f) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
-      // MP3 با مرورگر کلودفلر: حجم حدود یک‌دهم می‌شود (اسلایدهای بیشتری داخل فایل جا می‌شوند)؛ اسلایدی که تبدیل نشد با همان WAV می‌ماند
-      if (mp3Enabled(this.env)) await status("🔊 تبدیل صدا به MP3…", 92);
-      const mp3s = await wavsToMp3(this.env, made.length, async (k) => {
-        const b = await this.env.FILES.get(tmpKey(id, made[k].i), "arrayBuffer");
-        return b ? new Uint8Array(b) : null;
-      });
+      // MP3ها در گام‌های بالا ساخته شده‌اند؛ اسلایدی که تبدیل نشد با همان WAV می‌ماند
+      const mp3s: (Uint8Array | null)[] = [];
+      for (const m of made) {
+        const b = mp3Sizes[m.i] ? await this.env.FILES.get(mp3Key(id, m.i), "arrayBuffer") : null;
+        mp3s.push(b ? new Uint8Array(b) : null);
+      }
       let budget = (web ? WEB_FILE_LIMIT : EMBED_BUDGET) - f.data.byteLength;
       const items: SlideAudio[] = [];
       const saved: string[] = []; // وب: شناسه‌ی فایل‌های ذخیره‌شده
@@ -250,7 +280,10 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: audioSeconds(audio) });
         await saveFile(this.env, uid, `${id}-s${m.i + 1}`, audio, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0).catch((e) => console.error("slide audio save (bot)", String(e).slice(0, 200)));
       }
-      for (const m of made) await this.env.FILES.delete(tmpKey(id, m.i)).catch(() => {});
+      for (const m of made) {
+        await this.env.FILES.delete(tmpKey(id, m.i)).catch(() => {});
+        await this.env.FILES.delete(mp3Key(id, m.i)).catch(() => {});
+      }
       return { inFile: inFile.length, apart: apart.map((m) => toFa(String(m.i + 1))), saved };
     });
     await step.do("finish", async () => {
