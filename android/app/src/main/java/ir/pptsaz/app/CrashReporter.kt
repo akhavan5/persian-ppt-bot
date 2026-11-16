@@ -18,6 +18,7 @@ object CrashReporter {
     fun install(app: Application) {
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            if (isBazaarUpdaterGlitch(e)) return@setDefaultUncaughtExceptionHandler // باگ داخلی BazaarUpdater (unbind دوباره‌ی سرویس)؛ اپ نباید به‌خاطرش بسته شود
             try {
                 val sw = StringWriter()
                 e.printStackTrace(PrintWriter(sw))
@@ -35,6 +36,11 @@ object CrashReporter {
             prev?.uncaughtException(t, e)
         }
     }
+
+    /** IllegalArgumentException «Service not registered» که از داخل کتابخانه‌ی BazaarUpdater روی thread خودش پرتاب می‌شود (SDK یک اتصال را دوبار unbind می‌کند). */
+    private fun isBazaarUpdaterGlitch(e: Throwable): Boolean =
+        e is IllegalArgumentException && e.message?.contains("Service not registered") == true &&
+            e.stackTrace.any { it.className.startsWith("com.farsitel.bazaar.updater") }
 
     /** اگر گزارش کرشِ ارسال‌نشده‌ای هست می‌فرستد؛ در صورت خطای شبکه فایل می‌ماند تا دفعه‌ی بعد. */
     suspend fun sendPending(app: Application) {
