@@ -203,6 +203,40 @@ const tooBigForTelegram = (env: Env, size: number): Extracted => {
     : fail(`حجم فایل حداکثر ۲۰ مگابایت در تلگرام (و ۲۴ مگابایت در نسخه‌ی وب ${site}) می‌تواند باشد.`);
 };
 
+/** خطای موقت (timeout، قطعی شبکه، 429 و 5xx) ← ارزش تلاش دوباره دارد؛ بقیه (مثل 400/404) دائمی‌اند */
+const isTransient = (status?: number) => (status === undefined ? true : status === 429 || status >= 500);
+
+/** مهلت هر تلاش بر اساس حجم فایل: حداقل ۳۰ ثانیه، حداکثر ۸۰ ثانیه */
+const attemptTimeoutMs = (size?: number) => Math.min(80_000, 30_000 + Math.ceil((size ?? 0) / (1024 * 1024)) * 4_000);
+
+const DOWNLOAD_ATTEMPTS = 3;
+
+/**
+ * getFile + دانلود فایل با تلاش مجدد؛ timeout یا قطعی گذرای تلگرام دیگر مستقیم به کاربر خطا نمی‌دهد.
+ * (extractTelegramFile خطا را برمی‌گرداند، نه پرتاب می‌کند؛ پس retry خودِ step.do در Workflow هیچ‌وقت فعال نمی‌شد.)
+ */
+async function downloadWithRetry(env: Env, ref: TgFileRef): Promise<{ ok: true; bytes: ArrayBuffer } | { ok: false; error: string }> {
+  const generic = "دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.";
+  let lastMsg = "";
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+    let status: number | undefined;
+    try {
+      const info = await tg<{ file_path?: string; file_size?: number }>(env, "getFile", { file_id: ref.fileId });
+      if (!info.file_path) return { ok: false, error: generic };
+      if ((info.file_size ?? 0) > TG_MAX_FILE) return tooBigForTelegram(env, info.file_size ?? 0) as { ok: false; error: string };
+      const r = await fetch(fileUrl(env, info.file_path), { signal: AbortSignal.timeout(attemptTimeoutMs(info.file_size ?? ref.size)) }); // تلگرام یا بله (از پرچم env.PLATFORM)
+      if (!r.ok) { status = r.status; throw new Error(`HTTP ${r.status}`); }
+      return { ok: true, bytes: await r.arrayBuffer() };
+    } catch (e) {
+      lastMsg = e instanceof Error ? e.message : String(e);
+      console.error(`telegram file download (attempt ${attempt}/${DOWNLOAD_ATTEMPTS})`, lastMsg);
+      if (!isTransient(status) || attempt === DOWNLOAD_ATTEMPTS) break;
+      await new Promise((res) => setTimeout(res, 1_500 * attempt)); // ۱٫۵ و ۳ ثانیه
+    }
+  }
+  return { ok: false, error: generic };
+}
+
 /** دانلود از تلگرام و استخراج متن؛ خطاها پیام فارسی آماده برای کاربر هستند */
 export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: string | number): Promise<Extracted> {
   const ext = extOf(ref.name, ref.mime);
@@ -210,18 +244,9 @@ export async function extractTelegramFile(env: Env, ref: TgFileRef, userId: stri
   if (AUDIO_EXT.has(ext) && !deepgramEnabled(env)) return fail("ورودی صوتی فعال نیست؛ موضوع را به‌صورت متن بفرست.");
   if ((ref.size ?? 0) > TG_MAX_FILE) return tooBigForTelegram(env, ref.size ?? 0);
 
-  let bytes: ArrayBuffer;
-  try {
-    const info = await tg<{ file_path?: string; file_size?: number }>(env, "getFile", { file_id: ref.fileId });
-    if (!info.file_path) return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
-    if ((info.file_size ?? 0) > TG_MAX_FILE) return tooBigForTelegram(env, info.file_size ?? 0);
-    const r = await fetch(fileUrl(env, info.file_path), { signal: AbortSignal.timeout(60_000) }); // تلگرام یا بله (از پرچم env.PLATFORM)
-    if (!r.ok) return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
-    bytes = await r.arrayBuffer();
-  } catch (e) {
-    console.error("telegram file download", e instanceof Error ? e.message : e);
-    return fail("دریافت فایل از تلگرام ممکن نشد؛ دوباره بفرست.");
-  }
+  const dl = await downloadWithRetry(env, ref);
+  if (!dl.ok) return dl;
+  const bytes = dl.bytes;
   return extractFileBytes(env, bytes, ref.name, ref.mime, userId);
 }
 
