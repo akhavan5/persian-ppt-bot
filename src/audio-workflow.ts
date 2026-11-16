@@ -19,7 +19,7 @@ import { withStore } from "./store";
 import { refundCredit, type CreditSource } from "./settings";
 import { fileNameWithSite, miniappUrl, siteHost } from "./deck-service";
 import { toFa } from "./util";
-import { confirmExtra, unmarkExtra } from "./extras";
+import { unmarkExtra } from "./extras";
 import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript } from "./podcast";
@@ -106,7 +106,6 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       : editMessage(this.env, chatId, mid, pct === undefined ? t : `${t}\n${pctBar(pct)}`)).catch(() => {});
     try {
       const out = kind === "podcast" ? await this.podcast(event, step, status, web) : await this.slides(event, step, status, web);
-      if (credit) await step.do("confirm-mark", () => confirmExtra(this.env, uid, event.payload.deckId, kind === "podcast" ? "podcast" : "audio")).catch(() => {}); // ساخته شد ⇒ نشانگر ۲۶ ساعته
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ. خطایش نباید به «برگشت اعتبار» برسد (فایل ذخیره شده)
       if (web && event.payload.notify && out.ids.length) {
         await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
