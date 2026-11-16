@@ -660,12 +660,23 @@ async function audioJobStatus(env: Env, id: string): Promise<Response> {
   const inst = await env.AUDIO_WORKFLOW?.get(id).catch(() => null);
   if (!inst) return err("پیدا نشد", 404);
   const st = await inst.status();
-  if (st.status === "complete") {
+  const failMsg = `ساخت ${podcast ? "پادکست" : "اسلاید صوتی"} ناموفق بود؛ اعتبارش برگردانده شد.`;
+  // اسلاید صوتیِ زنجیره‌ای: نمونه‌ی اول «complete» می‌شود ولی کار در نمونه‌های بعدی ادامه دارد؛ نتیجه‌ی نهایی را آخرین نمونه در KV «jobres:<id>» می‌گذارد
+  const chained = st.status === "complete" && !!(st.output as { chain?: string } | null)?.chain;
+  if (st.status === "complete" && !chained) {
     const o = (st.output ?? {}) as { ids?: string[]; note?: string };
     return json({ state: "done", ids: Array.isArray(o.ids) ? o.ids : [], note: o.note ?? "" });
   }
-  if (st.status === "errored" || st.status === "terminated") {
-    return json({ state: "error", message: `ساخت ${podcast ? "پادکست" : "اسلاید صوتی"} ناموفق بود؛ اعتبارش برگردانده شد.` });
+  if (st.status === "errored" || st.status === "terminated") return json({ state: "error", message: failMsg });
+  if (chained) {
+    const res = await env.KV.get(`jobres:${id}`);
+    if (res) {
+      try {
+        const r = JSON.parse(res) as { state?: string; ids?: string[]; note?: string };
+        if (r.state === "done") return json({ state: "done", ids: Array.isArray(r.ids) ? r.ids : [], note: r.note ?? "" });
+        if (r.state === "error") return json({ state: "error", message: failMsg });
+      } catch { /* خراب بود: مثل «هنوز در حال کار» */ }
+    }
   }
   const message = (await env.KV.get(`job:${id}`)) ?? (podcast ? "🎙 پادکست در صف است…" : "🔊 اسلاید صوتی در صف است…");
   // درصد پیشرفت (۰ تا ۱۰۰) که AudioWorkflow جدا از متن می‌نویسد؛ هنوز ننوشته باشد (در صف) ⇒ فیلد نمی‌آید و کلاینت نوار نامعین نشان می‌دهد

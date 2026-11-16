@@ -155,6 +155,8 @@ async function generate(env: Env, body: Record<string, unknown>): Promise<Uint8A
       statuses.push(res.status);
       errors.push(`${m}#${i + 1}: ${v.why}`);
       console.error("gemini key skipped", m, `#${i + 1}`, v.why.slice(0, 160));
+      // سقف زیردرخواست Worker پر شده: بقیه‌ی کلیدها/مدل‌ها هم همین خطا را می‌گیرند و کلیدهای سالم بی‌دلیل «کولدان» می‌شوند؛ فوراً بالا می‌رود تا AudioWorkflow کار را به نمونه‌ی جدید بسپارد
+      if (res.status === 0 && /too many subrequests/i.test(res.text)) throw new GeminiError(`Too many subrequests by single Worker invocation (${m}#${i + 1})`);
       if (v.cooldown > 0) await env.KV.put(CD_PREFIX + prints[i], "1", { expirationTtl: v.cooldown }).catch(() => {});
       if (overloaded >= 2 && overloaded === failures) break; // دو کلید پشت‌سرهم ۵۰۳ ⇒ خود مدل شلوغ است؛ بقیه‌ی کلیدها را روی این مدل هدر نده
     }

@@ -44,10 +44,29 @@ export interface AudioParams {
   mark?: boolean;
   /** اعتبار این کار (همراه ارائه)؛ اگر کار کاملاً شکست بخورد برگردانده می‌شود. خالی = کار دستی مدیر */
   credit?: { source: CreditSource; day: string };
+  /** زنجیره‌ی اسلاید صوتی: شناسه‌ی نمونه‌ی اول (همان jobId که سایت/اپ می‌پرسد)؛ نمونه‌های بعدی با شناسه‌ی «<root>-g<n>» ساخته می‌شوند */
+  rootId?: string;
+  /** زنجیره‌ی اسلاید صوتی: حالت کار که از نمونه‌ی قبلی به بعدی می‌رسد (خالی = نمونه‌ی اول) */
+  st?: SlidesState;
+}
+
+/** حالت زنجیره‌ی اسلاید صوتی. هر نمونه (instance) فقط تا سقف زیردرخواست خودش کار می‌کند و بقیه را به نمونه‌ی بعدی می‌سپارد (مثل broadcast.ts) */
+export interface SlidesState {
+  phase: "narr" | "tts" | "mp3" | "embed";
+  /** شماره‌ی نمونه‌ی بعدی (برای شناسه‌ی ثابت: تلاش مجدد، نمونه‌ی تکراری نمی‌سازد) */
+  seq: number;
+  /** اسلایدهای دارای متن: مرحله‌های بعدی نیازی به خواندن دوباره‌ی پیش‌نمایش ندارند */
+  plan: { title: string; total: number; items: { i: number; no: number; title: string; text: string }[] };
+  spoken: Record<number, string>;
+  made: { i: number; no: number; title: string; bytes: number }[];
+  failed: string[];
+  mp3Sizes: Record<number, number>;
+  /** narr: شماره‌ی دسته‌ی بعدی؛ tts: جایگاه اسلاید بعدی در plan.items؛ mp3: جایگاه بعدی در made */
+  pos: number;
 }
 
 /** خروجی نمونه (کانال وب): شناسه‌ی فایل‌های ذخیره‌شده به ترتیب + توضیح کوتاه برای اسلایدهای ناموفق/جدا */
-export interface AudioOut { kind: "slides" | "podcast"; title: string; ids: string[]; note: string }
+export interface AudioOut { kind: "slides" | "podcast"; title: string; ids: string[]; note: string; /** پر باشد = کار به نمونه‌های بعدی سپرده شد و نتیجه‌ی نهایی در KV «jobres:<root>» می‌آید (web.ts) */ chain?: string }
 
 /** صدا گران است: خطای هر گام تا ۴ بار با فاصله‌ی افزایشی تکرار می‌شود (سقف دقیقه‌ای کلیدها) */
 const TTS_STEP = { retries: { limit: 4, delay: "30 seconds", backoff: "exponential" }, timeout: "6 minutes" } as const;
@@ -74,6 +93,10 @@ const tmpKey = (id: string, i: number) => `tmp:aud:${id}:${i}`;
 const mp3Key = (id: string, i: number) => `tmp:aud:${id}:${i}:mp3`;
 // تبدیل MP3 اسلایدها دسته‌دسته و هر دسته در یک گام جدا (سقف CPU هر گام جدا حساب می‌شود؛ ۸ اسلاید در یک گام مشکلی نداشت)
 const MP3_BATCH = 6;
+/** سقف زیردرخواست هر نمونه (۵۰ در پلن رایگان) برای کل نمونه است. همه‌چیز در «یک» نمونه اجرا می‌شود؛ فقط اگر خطای سقف آمد، ادامه‌ی کار (از همان اسلاید/دسته) به نمونه‌ی بعدی سپرده می‌شود. */
+const MAX_HANDOFFS = 12; // محافظ حلقه‌ی بی‌پایان اگر حتی نمونه‌ی تازه هم از همان اول سقف بخورد
+/** خطای سقف زیردرخواست (از Cloudflare)؛ تلاش مجدد در همان نمونه فایده ندارد و باید کار به نمونه‌ی جدید برود */
+const isSubreq = (e: unknown) => /too many subrequests/i.test(String(e instanceof Error ? e.message : e));
 
 /** درصد پیشرفت (۰ تا ۱۰۰ و صحیح)؛ اپ اندروید و سایت همین عدد را در نوار و اعلان نشان می‌دهند */
 const clampPct = (p: number) => Math.max(0, Math.min(100, Math.round(p)));
@@ -86,6 +109,7 @@ type Status = (t: string, pct?: number) => Promise<unknown>;
 
 async function guard<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn(); } catch (e) {
+    if (isSubreq(e)) throw new NonRetryableError(`SUBREQ ${String(e instanceof Error ? e.message : e).slice(0, 160)}`); // تلاش مجدد در همین نمونه بی‌فایده است؛ زنجیره ادامه را به نمونه‌ی جدید می‌دهد
     if ((e instanceof GeminiError || e instanceof LlmError) && e.fatal) throw new NonRetryableError(e.message);
     throw e;
   }
@@ -97,15 +121,21 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
   async run(event: WorkflowEvent<AudioParams>, step: WorkflowStep): Promise<AudioOut> {
     const { kind, chatId, statusMessageId: mid, uid, credit } = event.payload;
     const web = event.payload.channel === "web";
+    const root = event.payload.rootId ?? event.instanceId; // شناسه‌ی نمونه‌ی اول؛ وضعیت/درصد/نتیجه همیشه زیر همین شناسه نوشته می‌شود
     // تلگرام: ویرایش پیام وضعیت (با نوار درصد)؛ وب و اپ: متن پیشرفت در KV (job:<شناسه>) و درصد عددی جدا (jobp:<شناسه>)؛ GET /api/jobs/<شناسه> هر دو را برمی‌گرداند
     const status = (t: string, pct?: number) => (web
       ? Promise.all([
-        this.env.KV.put(`job:${event.instanceId}`, t, { expirationTtl: 3600 }),
-        pct === undefined ? Promise.resolve() : this.env.KV.put(`jobp:${event.instanceId}`, String(clampPct(pct)), { expirationTtl: 3600 }),
+        this.env.KV.put(`job:${root}`, t, { expirationTtl: 3600 }),
+        pct === undefined ? Promise.resolve() : this.env.KV.put(`jobp:${root}`, String(clampPct(pct)), { expirationTtl: 3600 }),
       ])
       : editMessage(this.env, chatId, mid, pct === undefined ? t : `${t}\n${pctBar(pct)}`)).catch(() => {});
     try {
-      const out = kind === "podcast" ? await this.podcast(event, step, status, web) : await this.slides(event, step, status, web);
+      const out = kind === "podcast" ? await this.podcast(event, step, status, web) : await this.slides(event, step, status, web, root);
+      // وب + زنجیره: نمونه‌ی اول فقط «در حال کار» را نشان می‌دهد؛ نتیجه‌ی نهایی را آخرین نمونه در KV می‌گذارد و web.ts می‌خواند
+      if (web && root !== event.instanceId && !out.chain) {
+        await step.do("jobres", { retries: { limit: 3, delay: "2 seconds" }, timeout: "30 seconds" }, () =>
+          this.env.KV.put(`jobres:${root}`, JSON.stringify({ state: "done", ids: out.ids, note: out.note }), { expirationTtl: 3600 }));
+      }
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ. خطایش نباید به «برگشت اعتبار» برسد (فایل ذخیره شده)
       if (web && event.payload.notify && out.ids.length) {
         await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
@@ -119,6 +149,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
     } catch (e) {
       const reason = String(e instanceof Error ? e.message : e).slice(0, 500);
       console.error("audio workflow failed", reason);
+      if (web && root !== event.instanceId) await step.do("jobres-fail", () => this.env.KV.put(`jobres:${root}`, JSON.stringify({ state: "error" }), { expirationTtl: 3600 })).catch(() => {});
       // هر کار در گام جدا تا اگر یکی تکرار شد اعتبار دو بار برنگردد
       if (credit) {
         await step.do("refund", () => refundCredit(this.env, uid, credit.source, credit.day)).catch((re) => console.error("refund audio", re));
@@ -133,95 +164,138 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
   }
 
   // ---------- اسلاید صوتی (صدا داخل خود اسلاید) ----------
-  private async slides(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: Status, web: boolean): Promise<AudioOut> {
-    const { chatId, uid, deckId, mark } = event.payload;
-    const id = event.instanceId;
-    const plan = await step.do("load-deck", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
-      await status("🔊 آماده‌سازی اسلایدها…", 2);
-      const p = await loadPreview(this.env, uid, deckId);
-      if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-      // صدا باید داخل همان فایل PPTX برود؛ پیش از خرج‌کردن سهمیه‌ی TTS مطمئن می‌شویم فایل هنوز هست
-      if (!(await loadFileDirect(this.env, uid, deckId))) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
-      const items = p.deck.slides.map((s, i) => ({ i, no: pptxSlideNo(p.template, i), title: s.title, text: narrationFor(s) })).filter((x) => x.text);
-      if (!items.length) throw new NonRetryableError("هیچ اسلایدی متن قابل‌خواندن ندارد");
-      return { title: p.deck.title, total: p.deck.slides.length, items };
-    });
+  // معمولاً همه‌چیز در یک نمونه انجام می‌شود. اگر خطای سقف زیردرخواست آمد، حالت کار (مرحله + جایگاه) به نمونه‌ی بعدی «<root>-g<n>» سپرده می‌شود و از همان‌جا ادامه می‌دهد.
+  private async slides(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: Status, web: boolean, root: string): Promise<AudioOut> {
+    const { uid, deckId } = event.payload;
+    let st0 = event.payload.st;
 
-    // متن گفتاریِ مناسبِ صدا برای اسلایدها (دسته‌های ۸تایی)؛ اگر LLM جواب نداد همان متن قبلی (یادداشت/نکته‌ها) خوانده می‌شود
-    const spoken: Record<number, string> = {};
-    const batches = Math.ceil(plan.items.length / NARRATION_BATCH);
-    for (let k = 0; k < plan.items.length; k += NARRATION_BATCH) {
-      const idxs = plan.items.slice(k, k + NARRATION_BATCH).map((x) => x.i);
-      try {
-        const part = await step.do(`narration-${k / NARRATION_BATCH}`, LLM_STEP, () => guard(async () => {
-          // درصد: نوشتن متن گفتاری ۳ تا ۲۵٪
-          await status("✍️ در حال نوشتن متن گفتاری اسلایدها…", lerp(3, 25, k / NARRATION_BATCH, batches));
-          const p = await loadPreview(this.env, uid, deckId);
-          if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-          return makeNarration(this.env, p.deck, idxs, { model: event.payload.model });
-        }));
-        Object.assign(spoken, part);
-      } catch (e) {
-        console.error("narration failed", idxs[0], String(e).slice(0, 300));
-      }
+    // ---- بارگذاری و برنامه (فقط در نمونه‌ی اول؛ بعد همان‌جا ادامه می‌دهد) ----
+    if (!st0) {
+      const plan = await step.do("load-deck", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+        await status("🔊 آماده‌سازی اسلایدها…", 2);
+        const p = await loadPreview(this.env, uid, deckId);
+        if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
+        // صدا باید داخل همان فایل PPTX برود؛ پیش از خرج‌کردن سهمیه‌ی TTS مطمئن می‌شویم فایل هنوز هست
+        if (!(await loadFileDirect(this.env, uid, deckId))) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
+        const items = p.deck.slides.map((s, i) => ({ i, no: pptxSlideNo(p.template, i), title: s.title, text: narrationFor(s) })).filter((x) => x.text);
+        if (!items.length) throw new NonRetryableError("هیچ اسلایدی متن قابل‌خواندن ندارد");
+        return { title: p.deck.title, total: p.deck.slides.length, items };
+      });
+      st0 = { phase: "narr", seq: 1, plan, spoken: {}, made: [], failed: [], mp3Sizes: {}, pos: 0 };
     }
 
-    // هر اسلاید در گام جدا ساخته و موقت در KV نگه داشته می‌شود (بایت‌های صدا از گام‌ها برنمی‌گردند)
-    const failed: string[] = [];
-    const lastIdx = plan.items[plan.items.length - 1].i;
-    const made: { i: number; no: number; title: string; bytes: number }[] = [];
-    for (let pos = 0; pos < plan.items.length; pos++) {
-      const it = plan.items[pos];
-      try {
-        const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
-          // درصد: ساخت صدای اسلایدها ۲۵ تا ۸۸٪ (به نسبت تعداد اسلایدهای دارای متن)
-          await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`, lerp(25, 88, pos, plan.items.length));
-          // کاربر بدون پلن: جمله‌ی تبلیغ سایت در پایانِ آخرین اسلاید گفته می‌شود
-          const body = spoken[it.i] ?? it.text;
-          const text = mark && it.i === lastIdx ? `${body} ${OUTRO_SLIDES}` : body;
-          const wav = await ttsSpeak(this.env, splitSpeech(text, 1200), { style: speechStyle(this.env) });
-          await this.env.FILES.put(tmpKey(id, it.i), wav, { expirationTtl: 3600 }); // فقط تا لحظه‌ی جاسازی؛ یک ساعته پاک می‌شود
-          return wav.length;
-        }));
-        made.push({ i: it.i, no: it.no, title: it.title, bytes });
-      } catch (e) {
-        failed.push(`${toFa(String(it.i + 1))}`);
-        console.error("slide audio failed", it.i, String(e).slice(0, 300));
-      }
-    }
-    if (!made.length) await step.do("fail", async () => { throw new NonRetryableError("هیچ صدایی ساخته نشد (کلیدها یا سهمیه را بررسی کن)"); });
+    const st: SlidesState = { ...st0, spoken: { ...st0.spoken }, made: [...st0.made], failed: [...st0.failed], mp3Sizes: { ...st0.mp3Sizes } };
+    const { plan } = st;
 
-    // MP3 دسته‌ای: دسته‌ای که شکست بخورد (یا CPU/مرورگر کم بیاورد) فقط همان دسته با WAV می‌ماند
-    const mp3Sizes: Record<number, number> = {};
-    if (mp3Enabled(this.env)) {
-      for (let b = 0; b < made.length; b += MP3_BATCH) {
-        const grp = made.slice(b, b + MP3_BATCH);
+    // ---- متن گفتاری (دسته‌های ۸تایی) ----
+    if (st.phase === "narr") {
+      const batches = Math.ceil(plan.items.length / NARRATION_BATCH);
+      for (let b = st.pos; b < batches; b++) {
+        const idxs = plan.items.slice(b * NARRATION_BATCH, (b + 1) * NARRATION_BATCH).map((x) => x.i);
         try {
-          const sizes = await step.do(`mp3-${b / MP3_BATCH}`, { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, async () => {
-            await status("🔊 تبدیل صدا به MP3…", lerp(88, 93, b, made.length));
+          const part = await step.do(`narration-${b}`, LLM_STEP, () => guard(async () => {
+            await status("✍️ در حال نوشتن متن گفتاری اسلایدها…", lerp(3, 25, b, batches)); // درصد: ۳ تا ۲۵٪
+            const p = await loadPreview(this.env, uid, deckId);
+            if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
+            return makeNarration(this.env, p.deck, idxs, { model: event.payload.model });
+          }));
+          Object.assign(st.spoken, part);
+        } catch (e) {
+          if (isSubreq(e)) return await this.next(step, root, event.payload, { ...st, pos: b }); // سقف پر شد؛ همین دسته را نمونه‌ی بعدی می‌سازد
+          console.error("narration failed", idxs[0], String(e).slice(0, 300)); // متن قبلی (یادداشت/نکته‌ها) خوانده می‌شود
+        }
+      }
+      st.phase = "tts"; st.pos = 0;
+    }
+
+    // ---- ساخت صدای هر اسلاید ----
+    if (st.phase === "tts") {
+      const lastIdx = plan.items[plan.items.length - 1].i;
+      for (let pos = st.pos; pos < plan.items.length; pos++) {
+        const it = plan.items[pos];
+        try {
+          const bytes = await step.do(`slide-${it.i}`, TTS_STEP, () => guard(async () => {
+            // درصد: ساخت صدای اسلایدها ۲۵ تا ۸۸٪ (به نسبت تعداد اسلایدهای دارای متن)
+            await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`, lerp(25, 88, pos, plan.items.length));
+            // کاربر بدون پلن: جمله‌ی تبلیغ سایت در پایانِ آخرین اسلاید گفته می‌شود
+            const body = st.spoken[it.i] ?? it.text;
+            const text = event.payload.mark && it.i === lastIdx ? `${body} ${OUTRO_SLIDES}` : body;
+            const wav = await ttsSpeak(this.env, splitSpeech(text, 1200), { style: speechStyle(this.env) });
+            await this.env.FILES.put(tmpKey(root, it.i), wav, { expirationTtl: 3600 }); // فقط تا لحظه‌ی جاسازی؛ یک ساعته پاک می‌شود
+            return wav.length;
+          }));
+          st.made.push({ i: it.i, no: it.no, title: it.title, bytes });
+        } catch (e) {
+          // سقف همین نمونه پر شد: این اسلاید ناموفق حساب نمی‌شود؛ نمونه‌ی بعدی از همین اسلاید ادامه می‌دهد
+          if (isSubreq(e)) return await this.next(step, root, event.payload, { ...st, pos });
+          st.failed.push(toFa(String(it.i + 1)));
+          console.error("slide audio failed", it.i, String(e).slice(0, 300));
+        }
+      }
+      if (!st.made.length) await step.do("fail", async () => { throw new NonRetryableError("هیچ صدایی ساخته نشد (کلیدها یا سهمیه را بررسی کن)"); });
+      st.phase = mp3Enabled(this.env) ? "mp3" : "embed"; st.pos = 0;
+    }
+
+    // ---- MP3 دسته‌ای: دسته‌ای که شکست بخورد فقط همان دسته با WAV می‌ماند ----
+    if (st.phase === "mp3") {
+      for (let b = st.pos; b < st.made.length; b += MP3_BATCH) {
+        const grp = st.made.slice(b, b + MP3_BATCH);
+        try {
+          const sizes = await step.do(`mp3-${b / MP3_BATCH}`, { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, () => guard(async () => {
+            await status("🔊 تبدیل صدا به MP3…", lerp(88, 93, b, st.made.length));
             const res = await wavsToMp3(this.env, grp.length, async (k) => {
-              const buf = await this.env.FILES.get(tmpKey(id, grp[k].i), "arrayBuffer");
+              const buf = await this.env.FILES.get(tmpKey(root, grp[k].i), "arrayBuffer");
               return buf ? new Uint8Array(buf) : null;
             });
             const out: number[] = [];
             for (let k = 0; k < grp.length; k++) {
               const m = res[k];
-              if (m) { await this.env.FILES.put(mp3Key(id, grp[k].i), m, { expirationTtl: 3600 }); out.push(m.length); } else out.push(0);
+              if (m) { await this.env.FILES.put(mp3Key(root, grp[k].i), m, { expirationTtl: 3600 }); out.push(m.length); } else out.push(0);
             }
             return out;
-          });
-          grp.forEach((m, k) => { if (sizes[k] > 0) mp3Sizes[m.i] = sizes[k]; });
+          }));
+          grp.forEach((m, k) => { if (sizes[k] > 0) st.mp3Sizes[m.i] = sizes[k]; });
         } catch (e) {
+          if (isSubreq(e)) return await this.next(step, root, event.payload, { ...st, pos: b });
           console.error("mp3 batch failed", b, String(e).slice(0, 200)); // این دسته با WAV می‌ماند
         }
       }
+      st.phase = "embed"; st.pos = 0;
     }
 
-    const summary = await step.do("embed-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
+    // ---- جاسازی صدا داخل PPTX و تحویل ----
+    try {
+      return await this.embedSend(event, step, status, web, root, st);
+    } catch (e) {
+      if (isSubreq(e)) return await this.next(step, root, event.payload, { ...st, phase: "embed", pos: 0 }); // جاسازی در نمونه‌ی تازه از اول
+      throw e;
+    }
+  }
+
+  /** فقط وقتی خطای سقف زیردرخواست آمد: ادامه‌ی کار را در نمونه‌ی جدید شروع می‌کند و همین نمونه را «در حال زنجیره» تمام می‌کند */
+  private async next(step: WorkflowStep, root: string, params: AudioParams, st: SlidesState): Promise<AudioOut> {
+    if (st.seq > MAX_HANDOFFS) throw new NonRetryableError("سقف زیردرخواست حتی در نمونه‌های تازه پر شد؛ دوباره امتحان کن");
+    await this.handoff(step, root, params, st);
+    return { kind: "slides", title: st.plan.title, ids: [], note: "", chain: root };
+  }
+
+  /** ساخت نمونه‌ی بعدیِ زنجیره (شناسه‌ی ثابت ⇒ تلاش مجدد نمونه‌ی تکراری نمی‌سازد). شکست این گام کل کار را شکست می‌دهد (اعتبار برمی‌گردد) */
+  private async handoff(step: WorkflowStep, root: string, params: AudioParams, st: SlidesState) {
+    await step.do(`next-${st.seq}`, { retries: { limit: 3, delay: "5 seconds" }, timeout: "1 minute" }, async () => {
+      try { await this.env.AUDIO_WORKFLOW!.create({ id: `${root}-g${st.seq}`, params: { ...params, rootId: root, st: { ...st, seq: st.seq + 1 } } }); }
+      catch (e) { if (!/already|exist|duplicate/i.test(String(e))) throw e; }
+    });
+  }
+
+  private async embedSend(event: WorkflowEvent<AudioParams>, step: WorkflowStep, status: Status, web: boolean, root: string, st: SlidesState): Promise<AudioOut> {
+    const { chatId, uid, deckId } = event.payload;
+    const { plan, made, failed, mp3Sizes } = st;
+    const id = root;
+    const summary = await step.do("embed-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, () => guard(async () => {
       await status("🔊 جاسازی صدا داخل اسلایدها و ارسال فایل…", 90);
       const f = await loadFileDirect(this.env, uid, deckId);
       if (!f) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
-      // MP3ها در گام‌های بالا ساخته شده‌اند؛ اسلایدی که تبدیل نشد با همان WAV می‌ماند
+      // MP3ها در مرحله‌ی قبل ساخته شده‌اند؛ اسلایدی که تبدیل نشد با همان WAV می‌ماند
       const mp3s: (Uint8Array | null)[] = [];
       for (const m of made) {
         const b = mp3Sizes[m.i] ? await this.env.FILES.get(mp3Key(id, m.i), "arrayBuffer") : null;
@@ -279,12 +353,9 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: audioSeconds(audio) });
         await saveFile(this.env, uid, `${id}-s${m.i + 1}`, audio, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0).catch((e) => console.error("slide audio save (bot)", String(e).slice(0, 200)));
       }
-      for (const m of made) {
-        await this.env.FILES.delete(tmpKey(id, m.i)).catch(() => {});
-        await this.env.FILES.delete(mp3Key(id, m.i)).catch(() => {});
-      }
+      // فایل‌های موقت دیگر یکی‌یکی پاک نمی‌شوند (هر حذف یک زیردرخواست است)؛ همه یک ساعته با expirationTtl خودشان پاک می‌شوند
       return { inFile: inFile.length, apart: apart.map((m) => toFa(String(m.i + 1))), saved };
-    });
+    }));
     await step.do("finish", async () => {
       if (web) return;
       await status(`✅ اسلاید صوتی آماده شد: صدا داخل ${toFa(String(summary.inFile))} اسلاید گذاشته شد${summary.apart.length ? `\n📎 اسلاید ${summary.apart.join("، ")} به‌خاطر حجم جدا فرستاده شد` : ""}${failed.length ? `\n⚠️ ناموفق: اسلاید ${failed.join("، ")}${event.payload.credit ? "" : " (دوباره دکمه را بزن)"}` : ""}`);
