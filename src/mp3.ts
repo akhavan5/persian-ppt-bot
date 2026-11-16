@@ -144,7 +144,9 @@ export async function wavsToMp3(env: Env, count: number, load: (k: number) => Pr
         const wav = await load(k);
         if (wav) res[k] = await encodeRemote(env, lib, wav, kbps);
       } catch (e) {
-        console.error("mp3 remote", k, String(e instanceof Error ? e.message : e).slice(0, 300));
+        const msg = String(e instanceof Error ? e.message : e);
+        if (/too many subrequests/i.test(msg)) break; // سقف زیردرخواست پر است؛ بقیه‌ی تکه‌ها هم همین‌طور رد می‌شوند (فراخواننده به نمونه‌ی بعد می‌دهد)، لاگ نمی‌خواهد
+        console.error("mp3 remote", k, msg.slice(0, 300));
       }
     }
   } else if (!bindingOk) {
