@@ -1,7 +1,8 @@
 /**
  * تبدیل WAV به MP3 با مرورگر کلودفلر (Browser Rendering) + lamejs (public/lame.min.js).
  * Worker پیاده‌سازی بومی MP3 ندارد؛ پس PCM داخل یک صفحه‌ی خالی در مرورگر بدون‌سر ریخته، همان‌جا با lamejs فشرده و MP3 برگردانده می‌شود.
- * کل کار بهترین‌تلاش است: اگر BROWSER نبود، سقف مرورگر (پلن رایگان ۱۰ دقیقه در روز) پر شد یا هر خطای دیگری آمد، برای آن فایل null برمی‌گردد
+ * اگر binding نبود/کار نکرد (یا BROWSER_MODE=api)، همین کار با حساب‌های پشتیبان BROWSER_ACCOUNTS از راه REST (/content + addScriptTag) انجام می‌شود (encodeRemote در پایین).
+ * کل کار بهترین‌تلاش است: اگر مرورگری نبود، سقف مرورگر (پلن رایگان ۱۰ دقیقه در روز) پر شد یا هر خطای دیگری آمد، برای آن فایل null برمی‌گردد
  * و فراخوان‌کننده همان WAV را تحویل می‌دهد؛ یعنی هیچ‌وقت ساخت پادکست/اسلاید صوتی به‌خاطر MP3 شکست نمی‌خورد.
  * یک نشست مرورگر برای همه‌ی فایل‌های یک فراخوانی؛ هر بار فقط یک WAV در حافظه‌ی Worker است (load به‌صورت تنبل صدا زده می‌شود).
  *
@@ -9,12 +10,16 @@
  */
 import type { Env } from "./env";
 import { launchWithRetry } from "./pdf";
+import { hasBrowser, hasRemoteBrowser, remoteMp3, useBindingForRender } from "./browser-api";
 import { parseWav } from "./wav";
 
 const KBPS_OK = [32, 40, 48, 56, 64, 80, 96, 112, 128, 160]; // مشترک بین MPEG-1 و MPEG-2 Layer III
 export const mp3Kbps = (env: Env): number => { const n = Number(env.MP3_KBPS); return KBPS_OK.includes(n) ? n : 64; };
-/** MP3 فقط با binding مرورگر ممکن است (حساب‌های پشتیبان REST فقط PDF و تصویر می‌سازند) */
-export const mp3Enabled = (env: Env): boolean => !!env.BROWSER && String(env.AUDIO_FORMAT ?? "").trim().toLowerCase() !== "wav";
+/** MP3 با binding مرورگر یا (از راه REST و /content) با حساب‌های پشتیبانِ BROWSER_ACCOUNTS ممکن است */
+export const mp3Enabled = (env: Env): boolean => hasBrowser(env) && String(env.AUDIO_FORMAT ?? "").trim().toLowerCase() !== "wav";
+
+/** تعداد فریم MP3 (هرکدام ۱۱۵۲ نمونه) در هر درخواست REST: ≈ ۱۰۰ ثانیه‌ی ۲۴کیلوهرتز تک‌کاناله (≈ ۴٫۸ مگابایت PCM، ≈ ۶٫۴ مگابایت base64). مضرب فریم تا فقط انتهای فایل پد شود. */
+const REMOTE_FRAMES = 2080;
 
 const RAW_CHUNK = 1_500_000; // بایت در هر رفت‌وبرگشت به صفحه (≈ ۲ مگابایت base64)
 
@@ -102,27 +107,66 @@ async function encodeOne(page: Page, id: string, wav: Uint8Array, kbps: number):
 export async function wavsToMp3(env: Env, count: number, load: (k: number) => Promise<Uint8Array | null>): Promise<(Uint8Array | null)[]> {
   const res: (Uint8Array | null)[] = Array.from({ length: count }, () => null);
   if (!count || !mp3Enabled(env)) return res;
-  let browser: Awaited<ReturnType<typeof launchWithRetry>> | null = null;
-  try {
-    const lib = await lameSource(env);
-    browser = await launchWithRetry(env);
-    const page = await browser.newPage();
-    await page.setContent(PAGE_HTML, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    await page.addScriptTag({ content: lib });
-    if ((await page.evaluate("typeof lamejs !== 'undefined' && window.__ready === true")) !== true) throw new Error("lamejs not loaded in page");
-    const kbps = mp3Kbps(env);
+  const kbps = mp3Kbps(env);
+  let lib: string;
+  try { lib = await lameSource(env); } catch (e) { console.error("mp3 lame", String(e instanceof Error ? e.message : e).slice(0, 300)); return res; }
+
+  // ۱) binding (مگر BROWSER_MODE=api و حساب پشتیبان داشته باشیم)؛ اگر نشد یا فایلی null ماند ⇒ ۲) حساب‌های پشتیبان
+  let bindingOk = false;
+  if (useBindingForRender(env)) {
+    let browser: Awaited<ReturnType<typeof launchWithRetry>> | null = null;
+    try {
+      browser = await launchWithRetry(env, hasRemoteBrowser(env));
+      const page = await browser.newPage();
+      await page.setContent(PAGE_HTML, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await page.addScriptTag({ content: lib });
+      if ((await page.evaluate("typeof lamejs !== 'undefined' && window.__ready === true")) !== true) throw new Error("lamejs not loaded in page");
+      bindingOk = true;
+      for (let k = 0; k < count; k++) {
+        try {
+          const wav = await load(k);
+          if (wav) res[k] = await encodeOne(page, `j${k}`, wav, kbps);
+        } catch (e) {
+          console.error("mp3 encode", k, String(e instanceof Error ? e.message : e).slice(0, 300)); // این فایل WAV می‌ماند (یا با حساب پشتیبان تلاش می‌شود)
+        }
+      }
+    } catch (e) {
+      console.error("mp3 browser", String(e instanceof Error ? e.message : e).slice(0, 300));
+    } finally {
+      if (browser) await browser.close().catch(() => {});
+    }
+  }
+
+  if (hasRemoteBrowser(env)) {
     for (let k = 0; k < count; k++) {
+      if (res[k]) continue;
       try {
         const wav = await load(k);
-        if (wav) res[k] = await encodeOne(page, `j${k}`, wav, kbps);
+        if (wav) res[k] = await encodeRemote(env, lib, wav, kbps);
       } catch (e) {
-        console.error("mp3 encode", k, String(e instanceof Error ? e.message : e).slice(0, 300)); // این فایل WAV می‌ماند؛ بقیه ادامه می‌یابند
+        console.error("mp3 remote", k, String(e instanceof Error ? e.message : e).slice(0, 300));
       }
     }
-  } catch (e) {
-    console.error("mp3 browser", String(e instanceof Error ? e.message : e).slice(0, 300));
-  } finally {
-    if (browser) await browser.close().catch(() => {});
+  } else if (!bindingOk) {
+    console.error("mp3: no browser available");
   }
   return res;
+}
+
+/** یک WAV ← MP3 با REST؛ PCM تکه‌تکه (هر تکه یک درخواست) و MP3 تکه‌ها پشت‌سرهم چسبانده می‌شود. هر تکه ناموفق ⇒ null (WAV تحویل می‌شود). */
+async function encodeRemote(env: Env, lib: string, wav: Uint8Array, kbps: number): Promise<Uint8Array | null> {
+  const { fmt, data } = parseWav(wav);
+  if (fmt.bits !== 16 || (fmt.channels !== 1 && fmt.channels !== 2) || data.length < 2) return null;
+  const step = REMOTE_FRAMES * 1152 * 2 * fmt.channels; // بایت‌های یک تکه (۱۶ بیت)
+  const parts: Uint8Array[] = [];
+  for (let o = 0; o < data.length; o += step) {
+    const out = await remoteMp3(env, lib, data.subarray(o, o + step), { sampleRate: fmt.sampleRate, channels: fmt.channels, kbps });
+    if (!out) return null;
+    parts.push(out);
+  }
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const all = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { all.set(p, off); off += p.length; }
+  return all;
 }
