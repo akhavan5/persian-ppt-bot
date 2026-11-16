@@ -74,7 +74,7 @@ interface Note {
   attach?: { filename: string; content: string }[];
 }
 
-const GONE_RE = /bot was blocked by the user|user is deactivated|chat not found|bot can't initiate/i;
+const GONE_RE = /bot was blocked by the user|user is deactivated|chat not found|bot can't initiate|Rubika \w+: INVALID_ACCESS/i;
 const BLK_TTL = 90 * 86_400;
 
 const botReady = (env: Env, id: number): boolean =>
