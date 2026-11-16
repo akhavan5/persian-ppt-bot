@@ -64,6 +64,8 @@ async function oneRound(accts: BrowserAccount[], endpoint: string, body: Record<
         break; // ۴۲۹/۵xx/۴۰۱/۴۰۳ ⇒ حساب بعدی
       } catch (e) {
         if (e instanceof Error && e.message.startsWith("browser api 400")) throw e;
+        // سقف زیردرخواست (سقف نرم subreq-meter): بقیه‌ی حساب‌ها و دورهای تلاش هم همین‌جا رد می‌شوند؛ بی‌صدا و فوری بالا بدهیم تا زنجیره‌ی صوتی به نمونه‌ی بعد برود
+        if (/too many subrequests/i.test(String(e instanceof Error ? e.message : e))) throw e;
         last = `${a.id.slice(0, 6)}… ${String(e instanceof Error ? e.message : e).slice(0, 200)}`;
         console.error("browser api", endpoint, last);
         retryable = true; // خطای شبکه/تایم‌اوت
