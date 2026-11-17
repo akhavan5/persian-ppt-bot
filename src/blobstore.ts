@@ -45,7 +45,9 @@ function initDb(db: D1Database): Promise<unknown> {
 
 export class BlobStore {
   /** dbs: به ترتیب اولویت نوشتن (اولی اول پر می‌شود)؛ legacy: KV واقعی فقط برای فایل‌های پیش از مهاجرت */
-  constructor(private dbs: D1Database[], private legacy?: KVNamespace) {}
+  /** dbs: دیتابیس‌های نوشتن به ترتیب اولویت. drain: فقط‌خواندنی/پاکسازی (فایل‌های قدیمیِ DB اصلی که تا انقضا خوانده می‌شوند ولی فایل جدید در آن نوشته نمی‌شود) */
+  private all: D1Database[];
+  constructor(private dbs: D1Database[], private legacy?: KVNamespace, drain: D1Database[] = []) { this.all = [...dbs, ...drain.filter((d) => !dbs.includes(d))]; }
 
   async put(key: string, value: ArrayBuffer | Uint8Array | string, o: PutOpts = {}): Promise<void> {
     const bytes = typeof value === "string" ? new TextEncoder().encode(value)
@@ -131,7 +133,7 @@ export class BlobStore {
   /** متادیتا را هم‌زمان از همه‌ی دیتابیس‌ها می‌پرسد (یک رفت‌وبرگشت، نه یکی‌یکی)؛ بعد فقط تکه‌ها را از دیتابیسی که فایل دارد می‌خواند.
    *  با ۶ دیتابیس، فایلی که در آخری است دیگر ۵ پرس‌وجوی پشت‌سرهم‌ی بی‌نتیجه نمی‌خورد. */
   private async read(key: string): Promise<{ data: ArrayBuffer; meta: unknown } | null> {
-    const found = await Promise.all(this.dbs.map(async (db) => {
+    const found = await Promise.all(this.all.map(async (db) => {
       try { return { db, m: await this.metaOne(db, key) }; }
       catch (e) { console.error("blob meta failed on a shard", String(e).slice(0, 200)); return { db, m: null }; } // یک دیتابیس خراب بقیه را از کار نیندازد
     }));
@@ -161,7 +163,7 @@ export class BlobStore {
 
   /** از همه‌ی دیتابیس‌ها پاک می‌شود (فایل ممکن است در هرکدام باشد) */
   async delete(key: string): Promise<void> {
-    const rs = await Promise.allSettled(this.dbs.map(async (db) => { await initDb(db); await this.cleanupOne(db, key); }));
+    const rs = await Promise.allSettled(this.all.map(async (db) => { await initDb(db); await this.cleanupOne(db, key); }));
     if (rs.length && rs.every((r) => r.status === "rejected")) throw (rs[0] as PromiseRejectedResult).reason;
   }
 
@@ -169,7 +171,7 @@ export class BlobStore {
    *  بازه‌ی k >= prefix و k < prefix+U+10FFFF از ایندکس کلید اصلی استفاده می‌کند (LIKE نمی‌کند). */
   async deletePrefix(prefix: string): Promise<void> {
     const hi = prefix + "\u{10FFFF}";
-    const rs = await Promise.allSettled(this.dbs.map(async (db) => {
+    const rs = await Promise.allSettled(this.all.map(async (db) => {
       await initDb(db);
       await db.batch([
         db.prepare("DELETE FROM blob_chunk64 WHERE k >= ?1 AND k < ?2").bind(prefix, hi),
@@ -184,7 +186,7 @@ export class BlobStore {
   async purge(): Promise<number> {
     const now = nowSec();
     let total = 0;
-    for (const db of this.dbs) {
+    for (const db of this.all) {
       try {
         await initDb(db);
         await db.prepare("DELETE FROM blob_chunk WHERE k IN (SELECT k FROM blob_meta WHERE exp IS NOT NULL AND exp <= ?1)").bind(now).run();

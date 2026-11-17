@@ -84,11 +84,12 @@ export class Store {
 const cache = new WeakMap<object, Store>();
 const blobCache = new WeakMap<object, BlobStore>();
 
-/** دیتابیس‌های فایل به ترتیب نوشتن: اول DB2…DB10 (اگر تعریف شده باشند) و در آخر DB اصلی.
- *  دلیل: DB اصلی داده‌های حیاتی و کوچک (کاربران، اعتبار، نشست) را نگه می‌دارد و نباید با فایل‌های حجیم پر شود. */
-function blobShards(env: Env): D1Database[] {
+/** دیتابیس‌های «نوشتن» فایل: فقط DB2…DB10 (اگر تعریف شده باشند). DB اصلی داده‌های حیاتی و کوچک (کاربران، اعتبار، نشست) را نگه می‌دارد و دیگر فایل جدید نمی‌گیرد؛
+ *  اگر همه‌ی دیتابیس‌های فایل پر باشند فقط ذخیره‌ی فایل شکست می‌خورد، نه کل ربات. فقط وقتی هیچ DB2…DB10 تعریف نشده، DB اصلی جای آن‌ها را می‌گیرد.
+ *  DB اصلی همچنان در خواندن/حذف/purge هست تا فایل‌های قدیمیِ آن (تا ۲۴ ساعت) خوانده و پاک شوند. */
+function blobShards(env: Env): { write: D1Database[]; drain: D1Database[] } {
   const extra = [env.DB2, env.DB3, env.DB4, env.DB5, env.DB6, env.DB7, env.DB8, env.DB9, env.DB10].filter((d): d is D1Database => !!d);
-  return [...extra, env.DB];
+  return extra.length ? { write: extra, drain: [env.DB] } : { write: [env.DB], drain: [] };
 }
 
 /**
@@ -98,7 +99,7 @@ function blobShards(env: Env): D1Database[] {
  */
 export function withStore(env: Env): Env {
   let b = blobCache.get(env.DB);
-  if (!b) blobCache.set(env.DB, (b = new BlobStore(blobShards(env), env.FILES_KV ?? env.FILES)));
+  if (!b) { const sh = blobShards(env); blobCache.set(env.DB, (b = new BlobStore(sh.write, env.FILES_KV ?? env.FILES, sh.drain))); }
   let s = cache.get(env.DB);
   if (!s) { const blobs = b; cache.set(env.DB, (s = new Store(env.DB, () => blobs.purge()))); }
   if (env.FILES_KV) return { ...env, KV: s }; // قبلاً ساخته شده
