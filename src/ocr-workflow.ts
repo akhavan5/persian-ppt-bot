@@ -1,6 +1,7 @@
 /** خواندن فایل تلگرام (PDF/عکس، شامل OCR چندصفحه‌ای) در Workflow؛ ctx.waitUntil بعد از پاسخ به وب‌هوک فقط ~۳۰ ثانیه فرصت دارد و OCR از آن بیشتر طول می‌کشد. */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "./env";
+import { alertAdmins } from "./admin-alert";
 import type { Uid } from "./settings";
 import { extractTelegramFile, type TgFileRef } from "./tg-file";
 import { finishFileUpload } from "./bot";
@@ -24,6 +25,7 @@ export class OcrWorkflow extends WorkflowEntrypoint<Env, OcrParams> {
     } catch (e) {
       console.error("ocr workflow", e instanceof Error ? e.message.slice(0, 300) : e);
       await editMessage(this.env, chatId, waitId, "⚠️ خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن.").catch(() => {});
+      await step.do("alert-admin", () => alertAdmins(this.env, "خواندن فایل (OCR)", { user: userId, reason: e })).catch(() => {});
     }
   }
   /** آلبوم: چند ثانیه صبر برای رسیدن همه‌ی عکس‌ها ← خواندن به‌ترتیب ← متن‌ها پشت هم ← یک کارت. هر فایل یک شمارش از سقف OCR مصرف می‌کند. */

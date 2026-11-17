@@ -6,6 +6,7 @@
  */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "./env";
+import { alertAdmins } from "./admin-alert";
 import { extractFileBytes } from "./tg-file";
 import { withStore } from "./store";
 
@@ -33,6 +34,7 @@ export class WebOcrWorkflow extends WorkflowEntrypoint<Env, WebOcrParams> {
     } catch (e) {
       console.error("web ocr workflow", e instanceof Error ? e.message.slice(0, 300) : e);
       out = { ok: false, error: "خواندن فایل ناموفق بود؛ چند لحظه بعد دوباره امتحان کن." };
+      await step.do("alert-admin", () => alertAdmins(this.env, "خواندن فایل (OCR وب)", { user: userId, detail: name, reason: e })).catch(() => {});
     }
     await step.do("cleanup", async () => { await this.env.FILES.delete(key).catch(() => {}); });
     return out;

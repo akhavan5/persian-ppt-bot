@@ -10,6 +10,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import type { Env } from "./env";
+import { alertAdmins } from "./admin-alert";
 import type { Uid } from "./settings";
 import { LlmError } from "./llm";
 import { loadFileDirect, loadPreview, saveFile } from "./files";
@@ -174,6 +175,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       await step.do("notify-failure", async () => {
         await status(`❌ ساخت ${kind === "podcast" ? "پادکست" : "اسلاید صوتی"} ناموفق بود${credit && credit.source !== "none" ? "؛ اعتبارش برگردانده شد" : ""}.\n<code>${esc(reason)}</code>`);
       }).catch(() => {});
+      await step.do("alert-admin", () => alertAdmins(this.env, kind === "podcast" ? "ساخت پادکست" : "ساخت اسلاید صوتی", { user: uid as string | number, reason })).catch(() => {});
       throw e;
     }
   }

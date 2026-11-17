@@ -16,6 +16,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { NonRetryableError } from "cloudflare:workflows";
 import JSZip from "jszip";
 import type { Env } from "./env";
+import { alertAdmins } from "./admin-alert";
 import type { Deck } from "./types";
 import { withStore } from "./store";
 import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
@@ -246,6 +247,7 @@ export class GammaWorkflow extends WorkflowEntrypoint<Env, GammaParams> {
       await step.do("refund", () => refundCredit(this.env, uid, credit.source, credit.day)).catch((re) => console.error("refund gamma", re));
       await step.do("unmark", () => unmarkExtra(this.env, uid, deckId, kind)).catch(() => {}); // تا دکمه دوباره دیده شود
       await step.do("notify-failure", ONE, () => status(`❌ ساخت ${name} ناموفق بود${credit.source !== "none" ? "؛ اعتبارش برگردانده شد" : ""}:\n${esc(reason)}`)).catch(() => {});
+      await step.do("alert-admin", ONE, () => alertAdmins(this.env, `ساخت ${name}`, { user: uid as string | number, reason })).catch(() => {});
       throw e;
     }
   }

@@ -8,6 +8,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import type { Env } from "./env";
+import { alertAdmins } from "./admin-alert";
 import type { Deck } from "./types";
 import { LlmError } from "./llm";
 import { refundCredit, getSettings, type CreditSource, type Uid } from "./settings";
@@ -123,6 +124,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
       await step.do("notify-failure", async () => {
         await status(`❌ ساخت ${name} ناموفق بود${credit.source !== "none" ? "؛ اعتبارش برگردانده شد" : ""}. کمی بعد دوباره امتحان کن.`);
       }).catch(() => {});
+      await step.do("alert-admin", () => alertAdmins(this.env, `ساخت ${name}`, { user: uid as string | number, reason })).catch(() => {});
       throw e;
     }
   }

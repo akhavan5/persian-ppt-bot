@@ -1,6 +1,7 @@
 /** ارسال پیام همگانی با Workflow: دسته‌های ۲۰تایی تا از سقف درخواست‌های هر گام و سرعت تلگرام رد نشود. */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { Env } from "./env";
+import { alertAdmins } from "./admin-alert";
 import { esc, sendMessage } from "./telegram";
 import { INVITE_TOKEN, botUsername, inviteBody, inviteLinkFor, inviteMarkup, invitePlatform } from "./invite-msg";
 import { toFa } from "./util";
@@ -141,6 +142,16 @@ export class BroadcastWorkflow extends WorkflowEntrypoint<Env, BroadcastParams> 
   constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
 
   async run(event: WorkflowEvent<BroadcastParams>, step: WorkflowStep) {
+    try {
+      return await this.runInner(event, step);
+    } catch (e) {
+      console.error("broadcast workflow failed", String(e).slice(0, 300));
+      await step.do("alert-admin", () => alertAdmins(this.env, "ارسال همگانی/اعلان", { reason: e })).catch(() => {});
+      throw e;
+    }
+  }
+
+  private async runInner(event: WorkflowEvent<BroadcastParams>, step: WorkflowStep) {
     const { adminChatId, text, audience, daily, appPush, appSegment, webPush } = event.payload;
     const root = event.payload.rootId ?? event.instanceId;
     const P = event.payload;
