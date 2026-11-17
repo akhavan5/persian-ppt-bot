@@ -18,7 +18,7 @@ import JSZip from "jszip";
 import type { Env } from "./env";
 import type { Deck } from "./types";
 import { withStore } from "./store";
-import { editMessage, esc, sendDocument, sendPhoto } from "./telegram";
+import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
 import { refundCredit, type CreditSource, type Uid } from "./settings";
 import { loadPreview } from "./files";
 import { unmarkExtra } from "./extras";
@@ -170,6 +170,16 @@ export class GammaWorkflow extends WorkflowEntrypoint<Env, GammaParams> {
         if (i % 3 === 2) await step.do(`prog-${i}`, ONE, () => status(`🎨 در حال ساخت ${spec.name}…${cur.percent !== undefined ? ` (${Math.round(cur.percent)}٪)` : ""}`));
       }
       if (!st || st.state !== "completed") throw new NonRetryableError("Gamma بیش از ۱۰ دقیقه طول کشید؛ بعداً در حساب Gamma بررسی کن.");
+
+      // وب‌پیج: خروجی فایل ندارد؛ فقط لینک (view) فرستاده می‌شود
+      if (spec.linkOnly) {
+        const link = st.gammaUrl;
+        if (!link) throw new NonRetryableError("لینک صفحه‌ی Gamma آماده نشد");
+        await step.do("deliver-link", SEND, () => sendMessage(this.env, chatId, `🌍 <b>${esc(written.title.slice(0, 200))}</b>\n${esc(spec.name)} Gamma\n${esc(link)}`));
+        await step.do("finish", ONE, () => status(`✅ ${name} آماده شد (لینک بالا را ببین).` + (st!.credits !== undefined ? `\n💳 کردیت مصرف‌شده‌ی Gamma: ${st!.credits}` : ""))).catch(() => {});
+        if (credit.source === "plan") await step.do("plan-credits-out", ONE, () => notifyPlanCreditsOut(this.env, uid)).catch((e) => console.error("plan-credits-out", String(e).slice(0, 200)));
+        return { files: 0, gammaUrl: link };
+      }
 
       // ۴) اگر ساخت export همراه نداشت، جدا بخواه
       const done = st; // نسخه‌ی غیر-null برای closureها

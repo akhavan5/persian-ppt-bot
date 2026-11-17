@@ -210,7 +210,7 @@ export async function uploadFile(env: Env, data: Uint8Array, filename: string, m
 
 // ---------- خروجی‌های Gamma زیر ارائه (کاروسل، پست، استوری، بنر، تصویر بازاریابی، اینفوگرافیک، اسلاید تک‌کارتی، سند) ----------
 /** شناسه‌ی هر خروجی؛ هم نوع «همراه» (extras.ts) و هم بخش پایانی شناسه‌ی کار است */
-export type GammaKind = "gpost" | "gcarousel" | "gstory" | "gbanner" | "gimage" | "ginfo" | "gslide" | "gdoc" | "gchart" | "gdiagram" | "gtrans" | "gpicture";
+export type GammaKind = "gpost" | "gcarousel" | "gstory" | "gbanner" | "gimage" | "ginfo" | "gslide" | "gdoc" | "gchart" | "gdiagram" | "gtrans" | "gpicture" | "gweb" | "gtimeline" | "gtable";
 
 /** قیمت هر خروجی برای کاربر: ۱ اعتبار (مثل جزوه و پادکست) */
 export const GAMMA_CREDIT_COST = 1;
@@ -244,6 +244,8 @@ export interface GammaKindSpec {
   instructions?: string;
   /** زبان خروجی (پیش‌فرض fa) */
   language?: string;
+  /** فقط لینک: format=webpage خروجی فایل ندارد (exportAs و dimensions برای وب‌پیج پذیرفته نمی‌شود) و لینک عمومی (view) تحویل داده می‌شود */
+  linkOnly?: boolean;
   /** "image" = تصویر تکی از POST /images (نه /generations): createImage ← getImage */
   engine?: "image";
   /** اندازه‌ی تصویر وقتی engine="image" */
@@ -309,6 +311,22 @@ GAMMA_SPECS.push(
     instructions: "Write this content in clear, natural English, staying faithful to the source meaning.",
     file: { ext: "pdf", mime: "application/pdf" },
   },
+  // وب‌پیج: لینک Gamma (بدون فایل)
+  {
+    kind: "gweb", code: "gw", name: "صفحه‌ی وب", button: "🌍 صفحه‌ی وب", format: "webpage", dimensions: "fluid", cards: { min: 1, max: 1 }, exportAs: "pdf", linkOnly: true,
+    brief: "ONE web page.",
+  },
+  // تایم‌لاین و جدول: مثل نمودار فقط با دستور متنی (پارامتر اختصاصی ندارند)
+  {
+    kind: "gtimeline", code: "gk", name: "تایم‌لاین", button: "🕒 تایم‌لاین", format: "presentation", dimensions: "16x9", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE card built around a timeline.",
+    instructions: "Present the source as one clear timeline or step-by-step sequence with short labels.",
+  },
+  {
+    kind: "gtable", code: "gj", name: "جدول مقایسه", button: "📋 جدول مقایسه", format: "presentation", dimensions: "16x9", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE card built around a table.",
+    instructions: "Present the source as one clear comparison table (rows and columns) with concise cells.",
+  },
   // تصویر تکی: POST /images (مستقل از ارائه/کارت)
   {
     kind: "gpicture", code: "gi", name: "تصویر هنری", button: "🎨 تصویر هنری", format: "social", dimensions: "1x1", cards: { min: 1, max: 1 }, exportAs: "png",
@@ -332,10 +350,10 @@ export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: st
     textMode: "generate",
     format: spec.format,
     numCards: spec.cards.max,
-    cardOptions: { dimensions: spec.dimensions },
+    ...(spec.linkOnly ? {} : { cardOptions: { dimensions: spec.dimensions } }),
     textOptions: { language: spec.language ?? "fa" },
     imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL },
-    exportAs: spec.exportAs,
+    ...(spec.linkOnly ? { sharingOptions: { externalAccess: "view" } } : { exportAs: spec.exportAs }),
     additionalInstructions: [spec.instructions, GUARD_RULES].filter(Boolean).join(" "),
     ...(title ? { title: title.slice(0, 200) } : {}),
   };
