@@ -222,6 +222,7 @@ export const GAMMA_CREDIT_COST = 1;
  *    و نوشتن متن و طراحی کامل با خودِ Gamma است (textMode=generate)؛
  *  • تعداد کارت با numCards ثابت می‌شود و برای همه‌ی خروجی‌ها کوچک‌ترین تعداد، یعنی ۱ کارت است.
  */
+/** مدل تصویر ارزان برای همه‌ی خروجی‌های کارتی؛ فقط «تصویر هنری» (POST /images) مدل و سبک را خودِ Gamma انتخاب می‌کند */
 export const GAMMA_CHEAPEST_IMAGE_MODEL = "flux-1-quick";
 
 export interface GammaKindSpec {
@@ -319,8 +320,6 @@ export const gammaSpec = (kind: string): GammaKindSpec | undefined => GAMMA_SPEC
 export const isGammaKind = (k: unknown): k is GammaKind => GAMMA_SPECS.some((s) => s.kind === k);
 
 /** تنها یک محافظ: وفاداری به واقعیت‌های منبع؛ بقیه‌ی طراحی و نوشتن (از جمله متن داخل تصویر) با خلاقیت خودِ Gamma است */
-/** همه‌ی خروجی‌های فارسی: متن کارت به فارسی نوشته شود (هم‌راستا با textOptions.language="fa") */
-const PERSIAN_RULE = "Any text should be in natural, fluent Persian (Farsi), right-to-left, with correct half-spaces (نیم‌فاصله).";
 const GUARD_RULES = "Use only facts from the source; do not invent statistics, names or quotes.";
 
 /**
@@ -334,10 +333,10 @@ export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: st
     format: spec.format,
     numCards: spec.cards.max,
     cardOptions: { dimensions: spec.dimensions },
-    textOptions: { language: spec.language ?? "fa", amount: "brief" },
-    imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL, style: "flat minimal illustration" },
+    textOptions: { language: spec.language ?? "fa" },
+    imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL },
     exportAs: spec.exportAs,
-    additionalInstructions: [(spec.language ?? "fa") === "fa" ? PERSIAN_RULE : "", spec.instructions, GUARD_RULES].filter(Boolean).join(" "),
+    additionalInstructions: [spec.instructions, GUARD_RULES].filter(Boolean).join(" "),
     ...(title ? { title: title.slice(0, 200) } : {}),
   };
   return createGeneration(env, input);
@@ -345,8 +344,8 @@ export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: st
 
 // ---------- تصویر تکی (POST /images) ----------
 /** ساخت یک تصویر مستقل؛ prompt حداکثر ۵۰۰۰ نویسه. type: abstract | illustration | photo | scene */
-export async function createImage(env: Env, prompt: string, sizePreset: GammaImageSize = "social-square", type: "abstract" | "illustration" | "photo" | "scene" = "illustration"): Promise<{ imageGenerationId: string }> {
-  const r = await call<any>(env, "POST", "/images", { body: { prompt: prompt.slice(0, 5000), type, sizePreset } });
+export async function createImage(env: Env, prompt: string, sizePreset: GammaImageSize = "social-square", type?: "abstract" | "illustration" | "photo" | "scene"): Promise<{ imageGenerationId: string }> {
+  const r = await call<any>(env, "POST", "/images", { body: { prompt: prompt.slice(0, 5000), sizePreset, ...(type ? { type } : {}) } });
   const id = r?.imageGenerationId ?? r?.id;
   if (!id) throw new GammaError("پاسخ ساخت تصویر Gamma شناسه ندارد", 502, "bad_response", undefined, r);
   return { imageGenerationId: String(id) };
