@@ -68,7 +68,7 @@ async function blockedIds(env: Env): Promise<Set<number>> {
   return out;
 }
 /** خطای تلگرام یعنی گیرنده دیگر قابل دسترس نیست (ربات را بلاک کرده، حسابش حذف شده یا گفتگو وجود ندارد) */
-const isGone = (e: unknown) => /bot was blocked by the user|user is deactivated|chat not found|bot can't initiate|Rubika \w+: INVALID_ACCESS/i.test(String(e));
+const isGone = (e: unknown) => /bot was blocked by the user|user is deactivated|chat not found|bot can't initiate|Rubika \w+: INVALID_ACCESS|Eitaa sendMessage: not allow write access/i.test(String(e));
 
 const MAXC = "\u{10FFFF}";
 /** شناسه‌ی تلگرام کاربرانی که پروفایلشان (tg2w:) پلن فعال با اعتبار باقی‌مانده دارد.

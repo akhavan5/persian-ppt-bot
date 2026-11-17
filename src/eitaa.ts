@@ -38,10 +38,12 @@ export async function eitaaSendMessage(env: Env, chatId: number, html: string, m
     body: JSON.stringify({ token: env.EITAA_APP_TOKEN, chat_id: fromEitaaId(chatId), text }),
     signal: AbortSignal.timeout(20_000),
   });
-  const j = (await res.json().catch(() => null)) as { ok?: boolean; result?: string; description?: string; message?: string } | null;
+  const j = (await res.json().catch(() => null)) as { ok?: boolean; result?: { message?: string } | string; description?: string; message?: string } | null;
   if (!j?.ok) {
     console.error("eitaa api error", res.status, JSON.stringify(j).slice(0, 300));
-    throw new Error(`Eitaa sendMessage: ${j?.description ?? j?.message ?? res.status}`);
+    // ایتا خطا را داخل result.message می‌گذارد (HTTP همیشه ۲۰۰)؛ بدون آن متن خطا «200» می‌شد و GONE_RE نمی‌توانست تشخیصش بدهد
+    const rm = typeof j?.result === "object" ? j.result?.message : undefined;
+    throw new Error(`Eitaa sendMessage: ${j?.description ?? j?.message ?? rm ?? res.status}`);
   }
 }
 
