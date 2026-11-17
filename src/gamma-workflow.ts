@@ -16,12 +16,12 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { NonRetryableError } from "cloudflare:workflows";
 import JSZip from "jszip";
 import type { Env } from "./env";
+import type { Deck } from "./types";
 import { withStore } from "./store";
 import { editMessage, esc, sendDocument, sendPhoto } from "./telegram";
 import { refundCredit, type CreditSource, type Uid } from "./settings";
 import { loadPreview } from "./files";
 import { unmarkExtra } from "./extras";
-import { deckSourceText } from "./extra-workflow";
 import { notifyPlanCreditsOut } from "./plan-notify";
 import { GammaError, createGammaExtra, downloadExport, exportGamma, getExport, getGeneration, gammaSpec, type GammaKind } from "./gamma";
 
@@ -45,6 +45,22 @@ const MAX_POLLS = 80; // ≈ ۱۰ تا ۱۱ دقیقه
 const MAX_EXPORT_POLLS = 15;
 const MAX_FILES_SENT = 12;
 const PHOTO_LIMIT = 10 * 1024 * 1024; // سقف sendPhoto تلگرام
+
+// ---------- ۱) متن منبع جمع‌وجور ----------
+const SOURCE_CAP = 3500;
+
+/** خلاصه‌ی ارائه برای Gamma: عنوان + عنوان هر اسلاید با حداکثر ۲ نکته‌ی اول (برای خروجی ۱ کارتی ورودی بلند فقط نویز است)؛ همه‌ی اسلایدها پوشش داده می‌شود نه ابتدای متن */
+export function compactSource(deck: Deck): string {
+  type Slide = Deck["slides"][number];
+  const points = (s: Slide): string[] =>
+    [...(s.bullets ?? []), ...(s.columns ?? []).flatMap((c) => c.bullets ?? []), ...(s.items ?? []).map((x) => `${x.heading}: ${x.text}`), ...(s.steps ?? []).map((x) => `${x.label}: ${x.text}`), s.subtitle ?? ""]
+      .map((x) => x.trim()).filter(Boolean);
+  const lines = deck.slides.filter((s) => s.title).map((s) => {
+    const p = points(s).slice(0, 2).map((x) => x.slice(0, 140));
+    return `- ${s.title}${p.length ? `: ${p.join(" / ")}` : ""}`;
+  });
+  return [`عنوان ارائه: ${deck.title}`, ...lines].join("\n").slice(0, SOURCE_CAP);
+}
 
 // ---------- خطاها ----------
 const errText = (e: unknown) => {
@@ -76,7 +92,7 @@ export class GammaWorkflow extends WorkflowEntrypoint<Env, GammaParams> {
         await status(`📄 آماده‌سازی ${spec.name}…`);
         const p = await loadPreview(this.env, uid, deckId);
         if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-        return { title: p.deck.title, source: deckSourceText(p.deck) };
+        return { title: p.deck.title, source: compactSource(p.deck) };
       });
       if (!written.source.trim()) throw new NonRetryableError("متن ارائه خالی است");
 

@@ -283,8 +283,8 @@ export const GAMMA_KINDS: GammaKind[] = GAMMA_SPECS.map((s) => s.kind);
 export const gammaSpec = (kind: string): GammaKindSpec | undefined => GAMMA_SPECS.find((s) => s.kind === kind);
 export const isGammaKind = (k: unknown): k is GammaKind => GAMMA_SPECS.some((s) => s.kind === k);
 
-/** راهنمای ظاهر و زبان برای Gamma (additionalInstructions)؛ نوشتن متن و طراحی کامل با خودِ Gamma است */
-const LOOK_RULES = "Write all text in natural, fluent Persian (Farsi), right-to-left, with correct half-spaces (نیم‌فاصله). Use only facts that appear in the source material; never invent statistics, names, quotes or sources. Clean, modern, high-contrast layout, generous spacing, short punchy text. Images must be simple illustrations without any letters, words or numbers inside them.";
+/** تنها دو محافظ لازم؛ بقیه‌ی طراحی و نوشتن با خلاقیت خودِ Gamma است: وفاداری به واقعیت‌های منبع، و تصویر بدون حروف (حروف فارسیِ تصویرهای AI خراب می‌شود) */
+const GUARD_RULES = "Use only facts from the source; do not invent statistics, names or quotes. Images must not contain any letters, words or numbers.";
 
 /**
  * ساخت یک خروجی Gamma با ارزان‌ترین تنظیمات (Classic).
@@ -292,7 +292,7 @@ const LOOK_RULES = "Write all text in natural, fluent Persian (Farsi), right-to-
  */
 export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: string, title?: string): Promise<{ generationId: string; warnings?: unknown[] }> {
   const input: GammaGenerateInput = {
-    inputText: source.trim().slice(0, 14000),
+    inputText: source.trim().slice(0, 4000),
     textMode: "generate",
     format: spec.format,
     numCards: spec.cards.max,
@@ -300,7 +300,7 @@ export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: st
     textOptions: { language: "fa", amount: "brief" },
     imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL, style: "flat minimal illustration, no text" },
     exportAs: spec.exportAs,
-    additionalInstructions: `Deliverable: ${spec.brief}\n${LOOK_RULES}`,
+    additionalInstructions: GUARD_RULES,
     ...(title ? { title: title.slice(0, 200) } : {}),
   };
   return createGeneration(env, input);
