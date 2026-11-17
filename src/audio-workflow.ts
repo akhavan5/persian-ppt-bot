@@ -423,9 +423,11 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       }));
     }
 
-    const saved = await step.do("merge-send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
-      await status("🎙 ۳/۳ — چسباندن و ارسال…", 90);
-      const ids: string[] = []; // وب: شناسه‌ی فایل‌های ذخیره‌شده
+    // چسباندن + MP3 (سنگین‌ترین بخش CPU: خواندن WAVها از D1، چسباندن، رفت‌وبرگشت PCM با مرورگر) در گام جدا از ارسال/ذخیره؛ CPU هر گام جدا حساب می‌شود.
+    // خروجی نهایی (معمولاً یک MP3 چند مگابایتی) موقت در D1 می‌ماند و گام بعد از همان‌جا می‌فرستد.
+    const finalKey = (g: number) => `${tmpPrefix(id)}final:${g}`;
+    const outs = await step.do("merge-mp3", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
+      await status("🎙 ۳/۳ — چسباندن و تبدیل به MP3…", 90);
       const wavs: Uint8Array[] = [];
       for (let i = 0; i < chunks.length; i++) {
         const b = await this.env.FILES.get(tmpKey(id, i), "arrayBuffer");
@@ -451,11 +453,22 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         }
         files = groups.map((g) => ({ bytes: mergeWav(g, 450), ext: "wav" as const }));
       }
+      for (let g = 0; g < files.length; g++) await this.env.FILES.put(finalKey(g), files[g].bytes, { expirationTtl: 3600 });
+      return files.map((f) => ({ ext: f.ext, size: f.bytes.length }));
+    });
+
+    const saved = await step.do("send", { retries: { limit: 1, delay: "10 seconds" }, timeout: "6 minutes" }, async () => {
       await status("🎙 ۳/۳ — ذخیره و ارسال فایل…", 96);
-      for (let g = 0; g < files.length; g++) {
-        const merged = files[g].bytes;
-        const part = files.length > 1 ? ` (قسمت ${toFa(String(g + 1))})` : "";
-        const pname = fileNameWithSite(this.env, script.title, files[g].ext, `پادکست${files.length > 1 ? ` ${g + 1}` : ""}`, 40);
+      const ids: string[] = []; // وب: شناسه‌ی فایل‌های ذخیره‌شده
+      const readFinal = async (g: number) => {
+        const b = await this.env.FILES.get(finalKey(g), "arrayBuffer");
+        if (!b) throw new Error(`final audio ${g} missing`);
+        return new Uint8Array(b);
+      };
+      for (let g = 0; g < outs.length; g++) {
+        const merged = await readFinal(g);
+        const part = outs.length > 1 ? ` (قسمت ${toFa(String(g + 1))})` : "";
+        const pname = fileNameWithSite(this.env, script.title, outs[g].ext, `پادکست${outs.length > 1 ? ` ${g + 1}` : ""}`, 40);
         if (web) {
           // وب: فایل در KV می‌ماند و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام شکست می‌خورد (تلاش مجدد/برگشت اعتبار)
           const fid = g === 0 ? id : `${id}-${g + 1}`;
