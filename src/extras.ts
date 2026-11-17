@@ -195,9 +195,8 @@ export async function startExtra(env: Env, uid: Uid, deckId: string, kind: Extra
     if (!web) statusId = (await sendMessage(env, d.chatId!, queued)).message_id;
     const mark = quota.source !== "plan"; // مثل ارائه: کاربر دارای پلن بدون واترمارک
     if (isGammaKind(kind)) {
-      // متن کارت‌ها را «مدل انتخابی کاربر» از روی متن همین ارائه می‌نویسد؛ ساخت و poll و ارسال در GammaWorkflow
-      const model = (await getSettings(env, uid).catch(() => null))?.model;
-      await env.GAMMA_WORKFLOW!.create({ id: jobId, params: { kind, chatId: d.chatId!, statusMessageId: statusId, uid, deckId, ...(model ? { model } : {}), credit } });
+      // متن ارائه مستقیم به Gamma داده می‌شود (بدون مدل هوش مصنوعی)؛ ساخت و poll و ارسال در GammaWorkflow
+      await env.GAMMA_WORKFLOW!.create({ id: jobId, params: { kind, chatId: d.chatId!, statusMessageId: statusId, uid, deckId, credit } });
     } else if (kind === "audio" || kind === "podcast") {
       const model = (await getSettings(env, uid).catch(() => null))?.model;
       await env.AUDIO_WORKFLOW!.create({

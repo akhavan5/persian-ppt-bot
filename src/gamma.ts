@@ -216,8 +216,9 @@ export const GAMMA_CREDIT_COST = 1;
 /**
  * کمترین هزینه‌ی ممکن در Gamma (Classic: هزینه = تعداد کارت × ۱ تا ۳ + تعداد تصویر × قیمت مدل تصویر):
  *  • مدل تصویر ارزان‌ترین مدل (۲ کردیت برای هر تصویر)، نه انتخاب خودکار Gamma که ممکن است مدل گران بردارد؛
- *  • متن را خودمان با «مدل انتخابی کاربر» می‌نویسیم و با textMode=preserve می‌دهیم تا Gamma متن اضافه تولید نکند؛
- *  • تعداد کارت = تعداد بخش‌های همان متن (cardSplit=inputTextBreaks) و برای هر خروجی کوچک‌ترین تعداد معنادار.
+ *  • هیچ مدل هوش مصنوعی دیگری در کار نیست: فقط «متن منبع» (محتوای ارائه) و دستور طراحی به Gamma داده می‌شود
+ *    و نوشتن متن و طراحی کامل با خودِ Gamma است (textMode=generate)؛
+ *  • تعداد کارت با numCards ثابت می‌شود و برای همه‌ی خروجی‌ها کوچک‌ترین تعداد، یعنی ۱ کارت است.
  */
 export const GAMMA_CHEAPEST_IMAGE_MODEL = "flux-1-quick";
 
@@ -231,10 +232,10 @@ export interface GammaKindSpec {
   format: GammaFormat;
   /** باید با format سازگار باشد: social ← 1x1 | 4x5 | 9x16، presentation ← 16x9، document ← a4 | pageless */
   dimensions: GammaDimensions;
-  /** تعداد کارت‌هایی که مدل می‌نویسد (min…max)؛ همین تعداد هزینه‌ی کارت‌ها را تعیین می‌کند */
+  /** تعداد کارت‌هایی که Gamma می‌سازد (min…max)؛ مقدار max به‌عنوان numCards فرستاده می‌شود و هزینه‌ی کارت‌ها را تعیین می‌کند */
   cards: { min: number; max: number };
   exportAs: GammaExport;
-  /** شرح طراحی برای مدل نویسنده (انگلیسی؛ خروجی فارسی است) */
+  /** شرح خروجی برای Gamma (additionalInstructions؛ انگلیسی، خروجی فارسی است) */
   brief: string;
   /** پسوند و نوع فایل تحویلی وقتی خروجی یک فایل است (pptx/pdf) */
   file?: { ext: "pptx" | "pdf"; mime: string };
@@ -248,12 +249,12 @@ export const GAMMA_SPECS: GammaKindSpec[] = [
     brief: "ONE square Instagram post card: a short bold headline (max 8 words), one supporting line (max 18 words) and one tiny call-to-action line. Scroll-stopping, minimal, lots of white space.",
   },
   {
-    kind: "gcarousel", code: "gc", name: "کاروسل", button: "🎠 کاروسل", format: "social", dimensions: "4x5", cards: { min: 5, max: 5 }, exportAs: "png",
-    brief: "An Instagram CAROUSEL of exactly 5 cards. Card 1 is the cover with a hooking title. Cards 2-4 each carry ONE idea: a short heading (max 6 words) and at most 2 short bullets or sentences. Card 5 is a call to action (save, share, follow).",
+    kind: "gcarousel", code: "gc", name: "کاروسل", button: "🎠 کاروسل", format: "social", dimensions: "4x5", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE single Instagram carousel card (4:5) that summarises the whole topic: a hooking title (max 8 words), then 3 short key points (max 8 words each) and a tiny call-to-action line (save, share, follow).",
   },
   {
-    kind: "gstory", code: "gs", name: "استوری", button: "📱 استوری", format: "social", dimensions: "9x16", cards: { min: 3, max: 3 }, exportAs: "png",
-    brief: "An Instagram STORY of exactly 3 vertical frames: (1) a hook question or bold claim, (2) the key answer or fact with one number or keyword highlighted, (3) a call to action. Very little text per frame (max 15 words), big type.",
+    kind: "gstory", code: "gs", name: "استوری", button: "📱 استوری", format: "social", dimensions: "9x16", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE single vertical Instagram STORY frame (9:16): a hook question or bold claim, the key answer or fact with one number or keyword highlighted, and a tiny call to action. Very little text (max 20 words in total), big type.",
   },
   {
     kind: "gbanner", code: "gb", name: "بنر", button: "🏷 بنر", format: "presentation", dimensions: "16x9", cards: { min: 1, max: 1 }, exportAs: "png",
@@ -273,8 +274,8 @@ export const GAMMA_SPECS: GammaKindSpec[] = [
     file: { ext: "pptx", mime: PPTX_MIME },
   },
   {
-    kind: "gdoc", code: "gd", name: "سند", button: "📄 سند", format: "document", dimensions: "a4", cards: { min: 3, max: 4 }, exportAs: "pdf",
-    brief: "A short Gamma DOCUMENT of 3 to 4 A4 pages (cards): page 1 title and summary, then 2-3 pages with headings and concise paragraphs or bullets (about 90-130 Persian words per page), ending with key takeaways.",
+    kind: "gdoc", code: "gd", name: "سند", button: "📄 سند", format: "document", dimensions: "a4", cards: { min: 1, max: 1 }, exportAs: "pdf",
+    brief: "ONE single A4 page DOCUMENT (one card): a title, a two-line summary, then 3-4 short headed sections with concise paragraphs or bullets (about 120-160 Persian words in total) and a one-line takeaway.",
     file: { ext: "pdf", mime: "application/pdf" },
   },
 ];
@@ -282,24 +283,24 @@ export const GAMMA_KINDS: GammaKind[] = GAMMA_SPECS.map((s) => s.kind);
 export const gammaSpec = (kind: string): GammaKindSpec | undefined => GAMMA_SPECS.find((s) => s.kind === kind);
 export const isGammaKind = (k: unknown): k is GammaKind => GAMMA_SPECS.some((s) => s.kind === k);
 
-/** جداکننده‌ی کارت‌ها در متن ورودی (با cardSplit=inputTextBreaks هر بخش یک کارت می‌شود) */
-export const CARD_BREAK = "\n---\n";
+/** راهنمای ظاهر و زبان برای Gamma (additionalInstructions)؛ نوشتن متن و طراحی کامل با خودِ Gamma است */
+const LOOK_RULES = "Write all text in natural, fluent Persian (Farsi), right-to-left, with correct half-spaces (نیم‌فاصله). Use only facts that appear in the source material; never invent statistics, names, quotes or sources. Clean, modern, high-contrast layout, generous spacing, short punchy text. Images must be simple illustrations without any letters, words or numbers inside them.";
 
-/** راهنمای ظاهر برای Gamma (additionalInstructions)؛ متن اصلی از قبل نوشته و با preserve ثابت است */
-const LOOK_RULES = "All text is Persian (Farsi), right-to-left, keep it exactly as given; do not translate or add text. Clean, modern, high-contrast layout, one idea per card, generous spacing. Images must be simple illustrations without any letters, words or numbers inside them.";
-
-/** ساخت یک خروجی Gamma با ارزان‌ترین تنظیمات (Classic). cards = متن هر کارت که از قبل نوشته شده است. */
-export async function createGammaExtra(env: Env, spec: GammaKindSpec, cards: string[], title?: string): Promise<{ generationId: string; warnings?: unknown[] }> {
+/**
+ * ساخت یک خروجی Gamma با ارزان‌ترین تنظیمات (Classic).
+ * source = متن منبع (محتوای ارائه) که همین‌طور به Gamma داده می‌شود؛ هیچ مدل دیگری بین راه نیست.
+ */
+export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: string, title?: string): Promise<{ generationId: string; warnings?: unknown[] }> {
   const input: GammaGenerateInput = {
-    inputText: cards.map((c) => c.trim()).filter(Boolean).join(CARD_BREAK),
-    textMode: "preserve",
-    cardSplit: "inputTextBreaks",
+    inputText: source.trim().slice(0, 14000),
+    textMode: "generate",
     format: spec.format,
+    numCards: spec.cards.max,
     cardOptions: { dimensions: spec.dimensions },
     textOptions: { language: "fa", amount: "brief" },
     imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL, style: "flat minimal illustration, no text" },
     exportAs: spec.exportAs,
-    additionalInstructions: LOOK_RULES,
+    additionalInstructions: `Deliverable: ${spec.brief}\n${LOOK_RULES}`,
     ...(title ? { title: title.slice(0, 200) } : {}),
   };
   return createGeneration(env, input);
