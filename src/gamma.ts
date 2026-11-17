@@ -20,6 +20,8 @@ const TIMEOUT_MS = 30_000;
 
 export type GammaFormat = "presentation" | "document" | "social" | "webpage";
 export type GammaExport = "pdf" | "pptx" | "png";
+/** مقادیر مستندشده‌ی sizePreset در POST /images */
+export type GammaImageSize = "banner" | "slide" | "social-portrait" | "social-square" | "story";
 /** مقادیر مستندشده‌ی cardOptions.dimensions (Classic). برای کاروسل اینستاگرام: 4x5 یا 1x1 یا 9x16 */
 export type GammaDimensions = "16x9" | "1x1" | "4x3" | "4x5" | "9x16" | "a4" | "fluid" | "letter" | "pageless";
 
@@ -208,7 +210,7 @@ export async function uploadFile(env: Env, data: Uint8Array, filename: string, m
 
 // ---------- خروجی‌های Gamma زیر ارائه (کاروسل، پست، استوری، بنر، تصویر بازاریابی، اینفوگرافیک، اسلاید تک‌کارتی، سند) ----------
 /** شناسه‌ی هر خروجی؛ هم نوع «همراه» (extras.ts) و هم بخش پایانی شناسه‌ی کار است */
-export type GammaKind = "gpost" | "gcarousel" | "gstory" | "gbanner" | "gimage" | "ginfo" | "gslide" | "gdoc";
+export type GammaKind = "gpost" | "gcarousel" | "gstory" | "gbanner" | "gimage" | "ginfo" | "gslide" | "gdoc" | "gchart" | "gdiagram" | "gtrans" | "gpicture";
 
 /** قیمت هر خروجی برای کاربر: ۱ اعتبار (مثل جزوه و پادکست) */
 export const GAMMA_CREDIT_COST = 1;
@@ -237,6 +239,14 @@ export interface GammaKindSpec {
   exportAs: GammaExport;
   /** شرح خروجی برای Gamma (additionalInstructions؛ انگلیسی، خروجی فارسی است) */
   brief: string;
+  /** دستور کوتاه اختیاری برای Gamma (additionalInstructions)؛ نبودنش یعنی طراحی کامل با خلاقیت خودِ Gamma */
+  instructions?: string;
+  /** زبان خروجی (پیش‌فرض fa) */
+  language?: string;
+  /** "image" = تصویر تکی از POST /images (نه /generations): createImage ← getImage */
+  engine?: "image";
+  /** اندازه‌ی تصویر وقتی engine="image" */
+  imageSize?: GammaImageSize;
   /** پسوند و نوع فایل تحویلی وقتی خروجی یک فایل است (pptx/pdf) */
   file?: { ext: "pptx" | "pdf"; mime: string };
 }
@@ -279,6 +289,31 @@ export const GAMMA_SPECS: GammaKindSpec[] = [
     file: { ext: "pdf", mime: "application/pdf" },
   },
 ];
+GAMMA_SPECS.push(
+  // Smart Charts / Smart Diagrams: در API پارامتر اختصاصی ندارند؛ فقط با دستور متنی (additionalInstructions) هدایت می‌شوند
+  {
+    kind: "gchart", code: "gt", name: "نمودار هوشمند", button: "📈 نمودار هوشمند", format: "presentation", dimensions: "16x9", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE card built around a chart.",
+    instructions: "Turn the key numbers in the source into one clear chart (bar for comparisons, line for trends, pie for proportions). Use only numbers that appear in the source; if it has no real numbers, make a simple visual overview instead of inventing data.",
+  },
+  {
+    kind: "gdiagram", code: "gr", name: "دیاگرام هوشمند", button: "🧩 دیاگرام هوشمند", format: "presentation", dimensions: "16x9", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE card built around a diagram.",
+    instructions: "Turn the source into one clear diagram (process flow, timeline, cycle, hierarchy or comparison, whichever fits best) with short labels.",
+  },
+  // ترجمه: API endpoint ترجمه‌ی جدا ندارد؛ زبان خروجی با textOptions.language تعیین می‌شود (متن یک‌صفحه‌ای به انگلیسی)
+  {
+    kind: "gtrans", code: "gx", name: "نسخه‌ی انگلیسی", button: "🌐 نسخه‌ی انگلیسی", format: "document", dimensions: "a4", cards: { min: 1, max: 1 }, exportAs: "pdf", language: "en",
+    brief: "ONE A4 page in English.",
+    instructions: "Write this content in clear, natural English, staying faithful to the source meaning.",
+    file: { ext: "pdf", mime: "application/pdf" },
+  },
+  // تصویر تکی: POST /images (مستقل از ارائه/کارت)
+  {
+    kind: "gpicture", code: "gi", name: "تصویر هنری", button: "🎨 تصویر هنری", format: "social", dimensions: "1x1", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE standalone image.", engine: "image", imageSize: "social-square",
+  },
+);
 export const GAMMA_KINDS: GammaKind[] = GAMMA_SPECS.map((s) => s.kind);
 export const gammaSpec = (kind: string): GammaKindSpec | undefined => GAMMA_SPECS.find((s) => s.kind === kind);
 export const isGammaKind = (k: unknown): k is GammaKind => GAMMA_SPECS.some((s) => s.kind === k);
@@ -297,11 +332,30 @@ export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: st
     format: spec.format,
     numCards: spec.cards.max,
     cardOptions: { dimensions: spec.dimensions },
-    textOptions: { language: "fa", amount: "brief" },
+    textOptions: { language: spec.language ?? "fa", amount: "brief" },
     imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL, style: "flat minimal illustration, no text" },
     exportAs: spec.exportAs,
-    additionalInstructions: GUARD_RULES,
+    additionalInstructions: [spec.instructions, GUARD_RULES].filter(Boolean).join(" "),
     ...(title ? { title: title.slice(0, 200) } : {}),
   };
   return createGeneration(env, input);
+}
+
+// ---------- تصویر تکی (POST /images) ----------
+/** ساخت یک تصویر مستقل؛ prompt حداکثر ۵۰۰۰ نویسه. type: abstract | illustration | photo | scene */
+export async function createImage(env: Env, prompt: string, sizePreset: GammaImageSize = "social-square", type: "abstract" | "illustration" | "photo" | "scene" = "illustration"): Promise<{ imageGenerationId: string }> {
+  const r = await call<any>(env, "POST", "/images", { body: { prompt: prompt.slice(0, 5000), type, sizePreset } });
+  const id = r?.imageGenerationId ?? r?.id;
+  if (!id) throw new GammaError("پاسخ ساخت تصویر Gamma شناسه ندارد", 502, "bad_response", undefined, r);
+  return { imageGenerationId: String(id) };
+}
+/** وضعیت تصویر: pending | completed | failed؛ url و mimeType وقتی تمام شد */
+export async function getImage(env: Env, id: string): Promise<{ state: GammaStatus["state"]; url?: string; mimeType?: string; credits?: number; error?: string }> {
+  const r = await call<any>(env, "GET", `/images/${encodeURIComponent(id)}`);
+  const state = r?.status === "completed" ? "completed" : r?.status === "failed" ? "failed" : "pending";
+  return {
+    state, url: r?.image?.url, mimeType: r?.image?.mimeType,
+    credits: typeof r?.credits?.deducted === "number" ? r.credits.deducted : undefined,
+    error: state === "failed" ? (r?.error?.message ?? "ساخت تصویر ناموفق بود") : undefined,
+  };
 }

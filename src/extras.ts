@@ -114,7 +114,7 @@ export function extraButtons(env: Env, id: string, hide: Set<ExtraKind>, admin =
   const rows = [show(["a", "c"]), show(["h"]), show(["pw", "pt"])].filter((r) => r.length);
   if (admin) {
     const g = GAMMA_SPECS.map((s) => s.code);
-    const grows = [g.slice(0, 2), g.slice(2, 4), g.slice(4, 6), g.slice(6, 8)].map(show).filter((r) => r.length);
+    const grows = Array.from({ length: Math.ceil(g.length / 2) }, (_, i) => g.slice(i * 2, i * 2 + 2)).map(show).filter((r) => r.length);
     // «n:gm» = عنوان بخش (بی‌اثر)؛ ربات بعد از ساخته‌شدن همه‌ی خروجی‌ها آن را برمی‌دارد
     if (grows.length) rows.push([{ text: `✨ خروجی‌های Gamma (هرکدام ${toFa(String(GAMMA_CREDIT_COST))} اعتبار)`, callback_data: GAMMA_HEADER }], ...grows);
   }

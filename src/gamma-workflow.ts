@@ -23,7 +23,7 @@ import { refundCredit, type CreditSource, type Uid } from "./settings";
 import { loadPreview } from "./files";
 import { unmarkExtra } from "./extras";
 import { notifyPlanCreditsOut } from "./plan-notify";
-import { GammaError, createGammaExtra, downloadExport, exportGamma, getExport, getGeneration, gammaSpec, type GammaKind } from "./gamma";
+import { GammaError, createGammaExtra, createImage, downloadExport, exportGamma, getExport, getGeneration, getImage, gammaSpec, type GammaKind, type GammaKindSpec } from "./gamma";
 
 export interface GammaParams {
   kind: GammaKind;
@@ -62,6 +62,12 @@ export function compactSource(deck: Deck): string {
   return [`عنوان ارائه: ${deck.title}`, ...lines].join("\n").slice(0, SOURCE_CAP);
 }
 
+/** پرامپت تصویر بدون مدل: فقط از عنوان ارائه و عنوان چند اسلاید اول ساخته می‌شود */
+export function imagePrompt(deck: Deck): string {
+  const topics = deck.slides.map((s) => s.title).filter(Boolean).slice(1, 5).join("، ");
+  return `A clean, modern, eye-catching illustration that visually represents the topic "${deck.title}".${topics ? ` Related ideas: ${topics}.` : ""} No letters, words or numbers anywhere in the image.`.slice(0, 1500);
+}
+
 // ---------- خطاها ----------
 const errText = (e: unknown) => {
   if (e instanceof GammaError) {
@@ -80,6 +86,45 @@ const isPdf = (b: Uint8Array) => b.length > 4 && b[0] === 0x25 && b[1] === 0x50 
 export class GammaWorkflow extends WorkflowEntrypoint<Env, GammaParams> {
   constructor(ctx: ExecutionContext, env: Env) { super(ctx, withStore(env)); }
 
+  /** تصویر تکی از POST /images؛ ساخت تکرار نمی‌شود (هزینه‌ی Gamma)، شکست را run() با برگشت اعتبار می‌گیرد */
+  private async runImage(step: WorkflowStep, spec: GammaKindSpec, written: { title: string; prompt: string }, p: GammaParams, status: (t: string) => Promise<unknown>): Promise<{ files: number }> {
+    const { chatId, uid, credit } = p;
+    await step.do("status-create", ONE, () => status(`🎨 ساخت ${spec.name} در Gamma…\nمعمولاً کمتر از ۲ دقیقه طول می‌کشد.`));
+    const gen = await step.do("create-image", ONE, async () => {
+      try { return { id: (await createImage(this.env, written.prompt, spec.imageSize ?? "social-square")).imageGenerationId }; }
+      catch (e) { throw new NonRetryableError(errText(e)); }
+    });
+    type Im = { state: string; url?: string; mimeType?: string; credits?: number; error?: string };
+    let im: Im | null = null;
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await step.sleep(`img-wait-${i}`, "5 seconds");
+      const cur: Im = await step.do(`img-poll-${i}`, POLL, async () => {
+        try { return await getImage(this.env, gen.id); }
+        catch (e) { if (e instanceof GammaError && !e.retryable) throw new NonRetryableError(errText(e)); throw e; }
+      });
+      im = cur;
+      if (cur.state === "completed") break;
+      if (cur.state === "failed") throw new NonRetryableError(`Gamma: ${cur.error ?? "ساخت تصویر ناموفق بود"}`);
+    }
+    if (!im || im.state !== "completed" || !im.url) throw new NonRetryableError("تصویر Gamma آماده نشد");
+    const done = im;
+    const url = done.url!;
+    await step.do("deliver-image", SEND, async () => {
+      let data: Uint8Array;
+      try { data = await downloadExport(url); } catch (e) { throw new NonRetryableError(errText(e)); }
+      const mime = done.mimeType && /^image\//.test(done.mimeType) ? done.mimeType : isPng(data) ? "image/png" : "image/jpeg";
+      const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+      const fname = `gamma-picture.${ext}`;
+      const cap = `🎨 <b>${esc(written.title.slice(0, 200))}</b>\n${esc(spec.name)} Gamma`;
+      const photoOk = data.byteLength <= PHOTO_LIMIT && (await sendPhoto(this.env, chatId, data, fname, cap, mime).then(() => true, (e) => { console.error("gamma sendPhoto", String(e).slice(0, 200)); return false; }));
+      if (!photoOk) await sendDocument(this.env, chatId, data, fname, cap, { mime });
+      return 1;
+    });
+    await step.do("finish", ONE, () => status(`✅ ${spec.name} Gamma آماده شد (بالا را ببین).` + (done.credits !== undefined ? `\n💳 کردیت مصرف‌شده‌ی Gamma: ${done.credits}` : ""))).catch(() => {});
+    if (credit.source === "plan") await step.do("plan-credits-out", ONE, () => notifyPlanCreditsOut(this.env, uid)).catch((e) => console.error("plan-credits-out", String(e).slice(0, 200)));
+    return { files: 1 };
+  }
+
   async run(event: WorkflowEvent<GammaParams>, step: WorkflowStep): Promise<{ files: number; gammaUrl?: string }> {
     const { kind, chatId, statusMessageId: mid, uid, deckId, credit } = event.payload;
     const spec = gammaSpec(kind);
@@ -92,9 +137,11 @@ export class GammaWorkflow extends WorkflowEntrypoint<Env, GammaParams> {
         await status(`📄 آماده‌سازی ${spec.name}…`);
         const p = await loadPreview(this.env, uid, deckId);
         if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-        return { title: p.deck.title, source: compactSource(p.deck) };
+        return { title: p.deck.title, source: compactSource(p.deck), prompt: imagePrompt(p.deck) };
       });
       if (!written.source.trim()) throw new NonRetryableError("متن ارائه خالی است");
+
+      if (spec.engine === "image") return await this.runImage(step, spec, written, event.payload, status);
 
       // ۲) ساخت (بدون تکرار: تکرار = کردیت Gamma دوباره)
       await step.do("status-create", ONE, () => status(`🎨 ساخت ${spec.name} در Gamma…\nمعمولاً ۱ تا ۳ دقیقه طول می‌کشد.`));
