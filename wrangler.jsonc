@@ -51,7 +51,7 @@
     { "name": "persian-ppt-audio", "binding": "AUDIO_WORKFLOW", "class_name": "AudioWorkflow" },
     // پوستر و جزوه‌ی Word که بعد از ساخت ارائه با دکمه‌ی زیر ارائه (تلگرام، سایت، Mini App) خواسته می‌شوند
     { "name": "persian-ppt-extra", "binding": "EXTRA_WORKFLOW", "class_name": "ExtraWorkflow" },
-    // کاروسل Gamma (فقط مدیر، دستور /gamma؛ نیاز به secret با نام GAMMA_API_KEY)
+    // خروجی‌های Gamma زیر ارائه: پست، کاروسل، استوری، بنر، تصویر بازاریابی، اینفوگرافیک، اسلاید تک‌کارتی، سند (فعلاً فقط مدیر در تلگرام؛ نیاز به secret با نام GAMMA_API_KEY)
     { "name": "persian-ppt-gamma", "binding": "GAMMA_WORKFLOW", "class_name": "GammaWorkflow" }
   ]
 }

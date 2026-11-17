@@ -7,6 +7,7 @@
  *   Classic: POST /generations (+ from-template) ← GET /generations/{id}. کنترل کامل: ابعاد کارت، زبان، تصویر، قالب.
  *   Agent (Gamma 5): POST /agent/generations ← GET /agent/generations/{id}. ورودی ساده‌تر (prompt)، بدون textOptions/cardOptions/imageOptions.
  * - export: خودِ ساخت با exportAs یا بعداً با POST /gammas/{id}/export ← GET /exports/{id} (pdf | pptx | png؛ PNG چندکارتی = zip).
+ * - کاربرد فعلی پروژه: ۸ خروجی «همراه ارائه» فقط برای مدیر در تلگرام (GAMMA_SPECS پایین فایل؛ دکمه‌های زیر ارائه، extras.ts)؛ دستور /gamma حذف شده است.
  * - فهرست‌ها: /me (کردیت)، /themes، /folders، /templates/search، /gammas/search؛ آپلود: POST /uploads.
  *
  * شکل پاسخ‌های /me، /themes، /folders، /exports و جستجوها در مستندات کامل نبود؛ پس پاسخ‌ها عمداً سست‌تایپ (any) و با چند نام فیلد جایگزین خوانده می‌شوند.
@@ -41,6 +42,8 @@ export interface GammaGenerateInput {
   textOptions?: GammaTextOptions;
   imageOptions?: GammaImageOptions;
   cardOptions?: GammaCardOptions;
+  /** راهنمای کلی ظاهر و زبان (حداکثر ۵۰۰۰ نویسه) */
+  additionalInstructions?: string;
 }
 
 export interface GammaAgentInput {
@@ -203,39 +206,101 @@ export async function uploadFile(env: Env, data: Uint8Array, filename: string, m
   return r;
 }
 
-// ---------- کاروسل (کاربرد فعلی پروژه) ----------
-export interface CarouselOptions {
-  /** تعداد کارت‌ها (پیش‌فرض ۷؛ پلن رایگان Gamma تا ۱۰) */
-  numCards?: number;
-  /** ۴:۵ (پیش‌فرض، مناسب اینستاگرام) | ۱:۱ | ۹:۱۶ */
-  dimensions?: Extract<GammaDimensions, "4x5" | "1x1" | "9x16">;
-  /** کد زبان خروجی؛ پیش‌فرض fa */
-  language?: string;
-  themeId?: string;
-  /** aiGenerated (پیش‌فرض) | noImages | pexels | webFreeToUseCommercially … */
-  imageSource?: string;
-  exportAs?: GammaExport;
+// ---------- خروجی‌های Gamma زیر ارائه (کاروسل، پست، استوری، بنر، تصویر بازاریابی، اینفوگرافیک، اسلاید تک‌کارتی، سند) ----------
+/** شناسه‌ی هر خروجی؛ هم نوع «همراه» (extras.ts) و هم بخش پایانی شناسه‌ی کار است */
+export type GammaKind = "gpost" | "gcarousel" | "gstory" | "gbanner" | "gimage" | "ginfo" | "gslide" | "gdoc";
+
+/** قیمت هر خروجی برای کاربر: ۱ اعتبار (مثل جزوه و پادکست) */
+export const GAMMA_CREDIT_COST = 1;
+
+/**
+ * کمترین هزینه‌ی ممکن در Gamma (Classic: هزینه = تعداد کارت × ۱ تا ۳ + تعداد تصویر × قیمت مدل تصویر):
+ *  • مدل تصویر ارزان‌ترین مدل (۲ کردیت برای هر تصویر)، نه انتخاب خودکار Gamma که ممکن است مدل گران بردارد؛
+ *  • متن را خودمان با «مدل انتخابی کاربر» می‌نویسیم و با textMode=preserve می‌دهیم تا Gamma متن اضافه تولید نکند؛
+ *  • تعداد کارت = تعداد بخش‌های همان متن (cardSplit=inputTextBreaks) و برای هر خروجی کوچک‌ترین تعداد معنادار.
+ */
+export const GAMMA_CHEAPEST_IMAGE_MODEL = "flux-1-quick";
+
+export interface GammaKindSpec {
+  kind: GammaKind;
+  /** کد کوتاه دکمه‌ی تلگرام: ex:<کد>:<شناسه‌ی ارائه> (همه با «g» شروع می‌شوند تا از کدهای قدیمی جدا بمانند) */
+  code: string;
+  /** نام فارسی (در پیام‌ها) و متن دکمه */
+  name: string;
+  button: string;
+  format: GammaFormat;
+  /** باید با format سازگار باشد: social ← 1x1 | 4x5 | 9x16، presentation ← 16x9، document ← a4 | pageless */
+  dimensions: GammaDimensions;
+  /** تعداد کارت‌هایی که مدل می‌نویسد (min…max)؛ همین تعداد هزینه‌ی کارت‌ها را تعیین می‌کند */
+  cards: { min: number; max: number };
+  exportAs: GammaExport;
+  /** شرح طراحی برای مدل نویسنده (انگلیسی؛ خروجی فارسی است) */
+  brief: string;
+  /** پسوند و نوع فایل تحویلی وقتی خروجی یک فایل است (pptx/pdf) */
+  file?: { ext: "pptx" | "pdf"; mime: string };
 }
 
-/** دستورالعمل زبان و ظاهر کنار موضوع؛ چون Classic فیلد additionalInstructions مستند ندارد، داخل inputText می‌آید */
-const FA_RULES = [
-  "این یک پست کاروسل (چندکارتی) برای اینستاگرام است.",
-  "همه‌ی متن‌ها را به فارسی روان و راست‌به‌چپ بنویس. هر کارت یک پیام کوتاه با تیتر درشت و حداکثر ۲ تا ۳ جمله یا نقطه.",
-  "کارت اول جلد و تیتر جذاب باشد و کارت آخر دعوت به اقدام (ذخیره، اشتراک‌گذاری، دنبال‌کردن).",
-].join(" ");
+const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
-/** ساخت کاروسل با Classic (format=social). برای Persian متن را داخل ورودی هم راهنمایی می‌کند. */
-export async function createCarousel(env: Env, topic: string, o: CarouselOptions = {}): Promise<{ generationId: string; warnings?: unknown[] }> {
+export const GAMMA_SPECS: GammaKindSpec[] = [
+  {
+    kind: "gpost", code: "gp", name: "پست", button: "📸 پست", format: "social", dimensions: "1x1", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE square Instagram post card: a short bold headline (max 8 words), one supporting line (max 18 words) and one tiny call-to-action line. Scroll-stopping, minimal, lots of white space.",
+  },
+  {
+    kind: "gcarousel", code: "gc", name: "کاروسل", button: "🎠 کاروسل", format: "social", dimensions: "4x5", cards: { min: 5, max: 5 }, exportAs: "png",
+    brief: "An Instagram CAROUSEL of exactly 5 cards. Card 1 is the cover with a hooking title. Cards 2-4 each carry ONE idea: a short heading (max 6 words) and at most 2 short bullets or sentences. Card 5 is a call to action (save, share, follow).",
+  },
+  {
+    kind: "gstory", code: "gs", name: "استوری", button: "📱 استوری", format: "social", dimensions: "9x16", cards: { min: 3, max: 3 }, exportAs: "png",
+    brief: "An Instagram STORY of exactly 3 vertical frames: (1) a hook question or bold claim, (2) the key answer or fact with one number or keyword highlighted, (3) a call to action. Very little text per frame (max 15 words), big type.",
+  },
+  {
+    kind: "gbanner", code: "gb", name: "بنر", button: "🏷 بنر", format: "presentation", dimensions: "16x9", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE wide web BANNER (16:9): a strong headline (max 7 words), a one-line subheadline (max 12 words) and a short button-style call to action (2-3 words). Nothing else.",
+  },
+  {
+    kind: "gimage", code: "gm", name: "تصویر بازاریابی", button: "🎯 تصویر بازاریابی", format: "social", dimensions: "1x1", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE square MARKETING image (ad creative): the single most persuasive benefit as a big headline (max 6 words), a one-line proof or hook (max 12 words) and a call to action (2-3 words). Visual-first: describe in the headline's neighbourhood a strong, concrete product/scene feel; promotional tone, no clutter.",
+  },
+  {
+    kind: "ginfo", code: "gn", name: "اینفوگرافیک", button: "📊 اینفوگرافیک", format: "document", dimensions: "pageless", cards: { min: 1, max: 1 }, exportAs: "png",
+    brief: "ONE tall single-page INFOGRAPHIC: a title, then 4-6 compact sections in a logical flow (what it is → how it works → key numbers → tips/mistakes → quick summary). Use short phrases, numbered steps, comparisons or key figures; only real figures that appear in the source.",
+  },
+  {
+    kind: "gslide", code: "gl", name: "اسلاید تک‌کارتی", button: "🖥 اسلاید تکی", format: "presentation", dimensions: "16x9", cards: { min: 1, max: 1 }, exportAs: "pptx",
+    brief: "ONE single presentation slide (16:9) that summarises the whole topic: a clear title, then 3-4 short key points (max 10 words each) or a small 3-step process.",
+    file: { ext: "pptx", mime: PPTX_MIME },
+  },
+  {
+    kind: "gdoc", code: "gd", name: "سند", button: "📄 سند", format: "document", dimensions: "a4", cards: { min: 3, max: 4 }, exportAs: "pdf",
+    brief: "A short Gamma DOCUMENT of 3 to 4 A4 pages (cards): page 1 title and summary, then 2-3 pages with headings and concise paragraphs or bullets (about 90-130 Persian words per page), ending with key takeaways.",
+    file: { ext: "pdf", mime: "application/pdf" },
+  },
+];
+export const GAMMA_KINDS: GammaKind[] = GAMMA_SPECS.map((s) => s.kind);
+export const gammaSpec = (kind: string): GammaKindSpec | undefined => GAMMA_SPECS.find((s) => s.kind === kind);
+export const isGammaKind = (k: unknown): k is GammaKind => GAMMA_SPECS.some((s) => s.kind === k);
+
+/** جداکننده‌ی کارت‌ها در متن ورودی (با cardSplit=inputTextBreaks هر بخش یک کارت می‌شود) */
+export const CARD_BREAK = "\n---\n";
+
+/** راهنمای ظاهر برای Gamma (additionalInstructions)؛ متن اصلی از قبل نوشته و با preserve ثابت است */
+const LOOK_RULES = "All text is Persian (Farsi), right-to-left, keep it exactly as given; do not translate or add text. Clean, modern, high-contrast layout, one idea per card, generous spacing. Images must be simple illustrations without any letters, words or numbers inside them.";
+
+/** ساخت یک خروجی Gamma با ارزان‌ترین تنظیمات (Classic). cards = متن هر کارت که از قبل نوشته شده است. */
+export async function createGammaExtra(env: Env, spec: GammaKindSpec, cards: string[], title?: string): Promise<{ generationId: string; warnings?: unknown[] }> {
   const input: GammaGenerateInput = {
-    inputText: `${topic.trim()}\n\n${FA_RULES}`,
-    textMode: "generate",
-    format: "social",
-    numCards: Math.min(Math.max(Math.floor(o.numCards ?? 7), 1), 100),
-    cardOptions: { dimensions: o.dimensions ?? "4x5" },
-    textOptions: { language: o.language ?? "fa" },
-    imageOptions: { source: o.imageSource ?? "aiGenerated" },
-    exportAs: o.exportAs ?? "png",
-    ...(o.themeId ? { themeId: o.themeId } : {}),
+    inputText: cards.map((c) => c.trim()).filter(Boolean).join(CARD_BREAK),
+    textMode: "preserve",
+    cardSplit: "inputTextBreaks",
+    format: spec.format,
+    cardOptions: { dimensions: spec.dimensions },
+    textOptions: { language: "fa", amount: "brief" },
+    imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL, style: "flat minimal illustration, no text" },
+    exportAs: spec.exportAs,
+    additionalInstructions: LOOK_RULES,
+    ...(title ? { title: title.slice(0, 200) } : {}),
   };
   return createGeneration(env, input);
 }

@@ -10,11 +10,10 @@ import {
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminSampleCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
 import { listFiles, loadFile } from "./files";
 import { SAMPLE_BADGE, isSampleId, listSamples, sampleById, sampleCaption, sampleLabel, sampleMime } from "./samples";
-import { extraButtons, extraOfCode, extrasHint, isButtonOf, isMainDeck, madeExtras, startExtra, type ExtraKind } from "./extras";
+import { ALL_EXTRA_KINDS, GAMMA_HEADER, extraButtons, extraOfCode, extrasHint, isButtonOf, isGammaAdmin, isMainDeck, madeExtras, startExtra, type ExtraKind } from "./extras";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { hitLimit } from "./auth";
 import { appPushCommand } from "./push";
-import { gammaCommand } from "./gamma-workflow";
 import { appVerCommand } from "./app-version";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { audioSeconds, isAudioName } from "./wav";
@@ -369,7 +368,7 @@ async function startExtraButton(env: Env, cq: any, uid: Uid, tgId: number, chatI
     tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...(text ? { text: text.slice(0, 200), show_alert: alert } : {}) }).catch(() => {});
   if (!/^[\w-]{1,100}$/.test(id)) return await answer();
   if (!isMainDeck(id, "x.pptx")) return await answer("همراه‌ها فقط از روی خودِ ارائه ساخته می‌شوند.", true);
-  const r = await startExtra(env, uid, id, kind, { channel: "telegram", chatId, layout });
+  const r = await startExtra(env, uid, id, kind, { channel: "telegram", chatId, layout, admin: isGammaAdmin(env, tgId) }); // خروجی‌های Gamma فقط برای مدیر در تلگرام
   if (!r.ok) {
     await answer(r.error, true);
     // اعتبار تمام: دکمه‌های خرید پلن هم نشان داده می‌شود
@@ -378,9 +377,11 @@ async function startExtraButton(env: Env, cq: any, uid: Uid, tgId: number, chatI
   }
   await answer("⏳ شروع شد؛ ۱ اعتبار کم شد. فایل در همین چت می‌آید.");
   // دکمه‌ی همین همراه (و برای پوستر هر دو چیدمان) از زیر پیام برداشته می‌شود؛ وقتی دکمه‌ای نماند جمله‌ی راهنمای کپشن هم برداشته می‌شود
-  const rows = ((cq.message?.reply_markup?.inline_keyboard ?? []) as { text: string; callback_data?: string }[][])
+  let rows = ((cq.message?.reply_markup?.inline_keyboard ?? []) as { text: string; callback_data?: string }[][])
     .map((row) => row.filter((x) => !isButtonOf(x.callback_data, kind))).filter((row) => row.length);
-  const left = rows.some((row) => row.some((x) => /^(ex|au|pc):/.test(x.callback_data ?? "")));
+  // وقتی همه‌ی دکمه‌های Gamma ساخته شدند، عنوان «خروجی‌های Gamma» هم برداشته می‌شود
+  if (!rows.some((row) => row.some((x) => /^ex:g[a-z]:/.test(x.callback_data ?? "")))) rows = rows.filter((row) => !row.some((x) => x.callback_data === GAMMA_HEADER));
+  const left = rows.some((row) => row.some((x) => /^(ex:(?!g[a-z]:)|au:|pc:)/.test(x.callback_data ?? ""))); // فقط دکمه‌های همراه‌های عمومی؛ Gamma جمله‌ی راهنمای کپشن را نگه نمی‌دارد
   const caption: string | undefined = cq.message?.caption;
   const hint = extrasHint([[{ text: "", callback_data: "" }]]).trim();
   if (!left && caption && caption.endsWith(hint)) {
@@ -471,7 +472,8 @@ async function handleCallback(env: Env, cq: any) {
       return await sendAudio(env, chatId, wav, f.entry.name, `${/-podcast(-\d+)?$/.test(a) ? "🎙" : "🔊"} <b>${esc(f.entry.title)}</b>`, { title: f.entry.title, ...(/-podcast(-\d+)?$/.test(a) ? { performer: siteHost(env) } : {}), duration: audioSeconds(wav) });
     }
     const isDeck = isMainDeck(a, f.entry.name); // اسلاید صوتی هم .pptx است ولی ارائه‌ی اصلی نیست: دکمه‌ی همراه نمی‌گیرد
-    const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a).catch(() => new Set<ExtraKind>(["poster", "handout", "audio", "podcast"]))) : [];
+    const gAdmin = isGammaAdmin(env, userId); // مدیر در تلگرام: دکمه‌های Gamma (ساخته‌نشده‌ها) هم می‌آید
+    const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a, undefined, gAdmin ? ALL_EXTRA_KINDS : undefined).catch(() => new Set<ExtraKind>(ALL_EXTRA_KINDS)), gAdmin) : [];
     return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>${extrasHint(xrows)}`,
       /\.(png|jpe?g)$/i.test(f.entry.name) ? { mime: /\.png$/i.test(f.entry.name) ? "image/png" : "image/jpeg" }
         : /\.docx$/i.test(f.entry.name) ? { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
@@ -685,7 +687,6 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   const admin = isAdmin(env, userId);
   if (admin && (cmd === "/apppush" || cmd === "/apppush_send")) return await appPushCommand(env, chatId, text); // اعلان به اپ اندروید (FCM)
-  if (admin && cmd === "/gamma") return await gammaCommand(env, chatId, text); // کاروسل با Gamma (فقط مدیر)
   if (admin && cmd === "/appver") return await appVerCommand(env, chatId, text); // نسخه‌ی اپ اندروید: آخرین / حداقل مجاز
   // شناسه‌ی اصلی: اگر تلگرام به حساب سایت وصل باشد شناسه‌ی حساب سایت (اعتبار/پلن/تنظیمات/فایل مشترک)؛ وگرنه خود شناسه‌ی تلگرام
   let uid = await resolveUid(env, userId);

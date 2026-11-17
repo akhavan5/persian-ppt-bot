@@ -35,7 +35,7 @@ export interface Env {
   AUDIO_WORKFLOW?: Workflow<AudioParams>;
   /** پوستر و جزوه‌ی Word که بعد از ساخت ارائه با دکمه‌ی زیر ارائه خواسته می‌شوند (Workflow «persian-ppt-extra»)؛ بدون آن این دو دکمه نمایش داده نمی‌شوند */
   EXTRA_WORKFLOW?: Workflow<ExtraParams>;
-  /** کاروسل Gamma (فقط مدیر، دستور /gamma؛ Workflow «persian-ppt-gamma»)؛ بدون آن دستور پیام «تعریف نشده» می‌دهد */
+  /** خروجی‌های Gamma زیر ارائه (پست، کاروسل، استوری، بنر، تصویر بازاریابی، اینفوگرافیک، اسلاید تک‌کارتی، سند؛ فعلاً فقط مدیر در تلگرام؛ Workflow «persian-ppt-gamma»)؛ بدون آن دکمه‌های Gamma نمایش داده نمی‌شوند */
   GAMMA_WORKFLOW?: Workflow<GammaParams>;
   /** کلید API رسمی Gamma (Gamma ← Settings ← API Keys)؛ به‌صورت secret بگذارید. کردیت از حساب صاحب کلید کم می‌شود. بدون آن Gamma خاموش است */
   GAMMA_API_KEY?: string;

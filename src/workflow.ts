@@ -12,7 +12,7 @@ import { toFa } from "./util";
 import { adminIds, botPlatform, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
 import { BUY_SITE_NOTE, buyKbFor, fileNameWithSite, miniappUrl } from "./deck-service";
 import { getLinkedTg } from "./link";
-import { deckKeyboard, extraButtons, extrasHint, markExtra, type ExtraKind } from "./extras";
+import { deckKeyboard, extraButtons, extrasHint, isGammaAdmin, markExtra, type ExtraKind } from "./extras";
 import { logDeck, saveFile, savePreview } from "./files";
 import { fontCaption } from "./themes";
 import { generateImage } from "./images";
@@ -124,7 +124,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             const hide = new Set<ExtraKind>([poster ? "poster" : null, handout ? "handout" : null, audio ? "audio" : null, podcast ? "podcast" : null].filter((k): k is ExtraKind => !!k));
             await sendDocument(this.env, chatId, bytes, filename,
               `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}${extrasHint(extraButtons(this.env, event.instanceId, hide))}`,
-              { reply_markup: deckKeyboard(this.env, event.instanceId, hide) }); // نظر کاربر فقط برای مدیر فرستاده می‌شود (ذخیره نمی‌شود)
+              { reply_markup: deckKeyboard(this.env, event.instanceId, hide, { admin: isGammaAdmin(this.env, event.payload.tgId ?? chatId) }) }); // مدیر در تلگرام: دکمه‌های Gamma هم // نظر کاربر فقط برای مدیر فرستاده می‌شود (ذخیره نمی‌شود)
             // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
             await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
               .catch((err) => console.error("saveFile", err));

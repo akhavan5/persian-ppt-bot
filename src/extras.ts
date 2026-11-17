@@ -15,14 +15,33 @@ import { listFiles, loadPreview, type FileEntry } from "./files";
 import { audioEnabled, posterEnabled } from "./deck-service";
 import { hasBrowser } from "./browser-api";
 import { editMessage, sendMessage } from "./telegram";
+import { GAMMA_CREDIT_COST, GAMMA_KINDS, GAMMA_SPECS, gammaEnabled, gammaSpec, isGammaKind, type GammaKind } from "./gamma";
+import { toFa } from "./util";
+import { isAdmin } from "./settings";
+import { isBaleId } from "./bale-format";
+import { isRubikaId } from "./rubika-format";
+import { isEitaaId } from "./eitaa-format";
+import { isSplusId } from "./splus-format";
 
-export type ExtraKind = "poster" | "handout" | "audio" | "podcast";
-export const EXTRA_KINDS: ExtraKind[] = ["audio", "podcast", "handout", "poster"];
+export type BaseExtraKind = "poster" | "handout" | "audio" | "podcast";
+/** همراه‌های ارائه: چهار همراه‌ی همه‌ی کاربران + خروجی‌های Gamma (فقط مدیر در تلگرام) */
+export type ExtraKind = BaseExtraKind | GammaKind;
+/** همراه‌های عمومی؛ وب و Mini App فقط همین‌ها را می‌شناسند (خروجی‌های Gamma اینجا نیستند) */
+export const EXTRA_KINDS: BaseExtraKind[] = ["audio", "podcast", "handout", "poster"];
+/** همه‌ی همراه‌ها (برای نشانگرها و دکمه‌های مدیر) */
+export const ALL_EXTRA_KINDS: ExtraKind[] = [...EXTRA_KINDS, ...GAMMA_KINDS];
+export { isGammaKind };
+/** خروجی‌های Gamma فعلاً فقط برای مدیرِ تلگرام‌اند (نه بله/روبیکا/ایتا/سروش‌پلاس، نه وب) */
+export const isGammaAdmin = (env: Env, tgId: unknown): boolean =>
+  tgId !== undefined && tgId !== null && isAdmin(env, tgId as number) && !isBaleId(tgId) && !isRubikaId(tgId) && !isEitaaId(tgId) && !isSplusId(tgId);
 /** نوع فایل صوتی از روی شناسه: اسلاید صوتی (…-audio و …-audio-sN) یا پادکست (…-podcast) */
 export const audioKind = (id: string): "slides" | "podcast" | undefined => (/-audio(-s\d+)?$/.test(id) ? "slides" : /-podcast(-\d+)?$/.test(id) ? "podcast" : undefined);
 /** فقط «ارائه‌ی اصلی» (نه پوستر/جزوه/اسلاید صوتی/پادکست): دکمه‌ی PDF و دکمه‌های ساخت همراه فقط برای این است */
 export const isMainDeck = (id: string, name: string) => !/\.(png|jpe?g|docx|wav|mp3)$/i.test(name) && !audioKind(id) && !/-(poster|handout)$/.test(id);
-export const EXTRA_NAME: Record<ExtraKind, string> = { poster: "پوستر", handout: "جزوه", audio: "اسلاید صوتی", podcast: "پادکست" };
+export const EXTRA_NAME: Record<ExtraKind, string> = {
+  poster: "پوستر", handout: "جزوه", audio: "اسلاید صوتی", podcast: "پادکست",
+  ...(Object.fromEntries(GAMMA_SPECS.map((g) => [g.kind, `${g.name} Gamma`])) as Record<GammaKind, string>),
+};
 
 /** کد کوتاه دکمه‌ی تلگرام (ex:<کد>:<شناسه‌ی ارائه>)؛ پوستر برای هر چیدمان یک کد دارد */
 const CODES: Record<string, { kind: ExtraKind; layout?: "wide" | "tall"; text: string }> = {
@@ -31,6 +50,7 @@ const CODES: Record<string, { kind: ExtraKind; layout?: "wide" | "tall"; text: s
   h: { kind: "handout", text: "📝 جزوه (Word)" },
   pw: { kind: "poster", layout: "wide", text: "🖼 پوستر افقی" },
   pt: { kind: "poster", layout: "tall", text: "🖼 پوستر عمودی" },
+  ...Object.fromEntries(GAMMA_SPECS.map((g) => [g.code, { kind: g.kind, text: g.button }])),
 };
 export const extraOfCode = (code: string) => CODES[code];
 /** آیا callback_data این دکمه مال همین نوع همراه است؟ (شامل دکمه‌های قدیمی au:/pc: که فقط مدیر داشت) */
@@ -44,7 +64,8 @@ export const isButtonOf = (data: string | undefined, kind: ExtraKind): boolean =
 
 /** کدام همراه‌ها روی این سرویس روشن‌اند (وابسته به Browser Rendering، Workflowها و کلید Gemini) */
 export const extraEnabled = (env: Env, kind: ExtraKind): boolean =>
-  kind === "poster" ? posterEnabled(env) && !!env.EXTRA_WORKFLOW
+  isGammaKind(kind) ? gammaEnabled(env) && !!env.GAMMA_WORKFLOW
+    : kind === "poster" ? posterEnabled(env) && !!env.EXTRA_WORKFLOW
     : kind === "handout" ? !!env.EXTRA_WORKFLOW
     : audioEnabled(env);
 
@@ -59,9 +80,9 @@ export const unmarkExtra = (env: Env, uid: Uid, deckId: string, kind: ExtraKind)
 
 /** همراه‌هایی که برای این ارائه ساخته شده یا در حال ساخت‌اند. files = فهرست فایل‌های کاربر (اگر پیش‌تر خوانده شده)؛
  *  فایل‌های ساخته‌شده‌ی پیش از این قابلیت (بدون نشانگر) هم از روی شناسه‌شان شناخته می‌شوند. */
-export async function madeExtras(env: Env, uid: Uid, deckId: string, files?: FileEntry[]): Promise<Set<ExtraKind>> {
+export async function madeExtras(env: Env, uid: Uid, deckId: string, files?: FileEntry[], kinds: ExtraKind[] = EXTRA_KINDS): Promise<Set<ExtraKind>> {
   const [marks, list] = await Promise.all([
-    Promise.all(EXTRA_KINDS.map(async (k) => ((await env.KV.get(markKey(uid, deckId, k)).catch(() => null)) !== null ? k : null))),
+    Promise.all(kinds.map(async (k) => ((await env.KV.get(markKey(uid, deckId, k)).catch(() => null)) !== null ? k : null))),
     files ? Promise.resolve(files) : listFiles(env, uid).catch((): FileEntry[] => []),
   ]);
   const made = new Set<ExtraKind>(marks.filter((k): k is ExtraKind => !!k));
@@ -83,19 +104,30 @@ export async function missingExtras(env: Env, uid: Uid, deckId: string, files?: 
 
 // ---------- دکمه‌های زیر ارائه در تلگرام ----------
 type Btn = { text: string; callback_data: string };
-/** دکمه‌های همراه‌های روشن که در hide نیستند؛ دو‌تا در هر ردیف (پوستر افقی/عمودی کنار هم) */
-export function extraButtons(env: Env, id: string, hide: Set<ExtraKind>): Btn[][] {
+/** عنوان بخش Gamma زیر ارائه؛ «n:» دکمه‌ی بی‌اثر است (bot.ts) */
+export const GAMMA_HEADER = "n:gm";
+/** دکمه‌های همراه‌های روشن که در hide نیستند؛ دو‌تا در هر ردیف (پوستر افقی/عمودی کنار هم).
+ *  admin=true (مدیر در تلگرام): زیر آن‌ها ردیف «خروجی‌های Gamma» هم می‌آید (هرکدام ۱ اعتبار؛ فقط آن‌هایی که برای این ارائه ساخته نشده‌اند) */
+export function extraButtons(env: Env, id: string, hide: Set<ExtraKind>, admin = false): Btn[][] {
   const show = (codes: string[]) => codes.filter((c) => extraEnabled(env, CODES[c].kind) && !hide.has(CODES[c].kind))
     .map((c): Btn => ({ text: CODES[c].text, callback_data: `ex:${c}:${id}` }));
-  return [show(["a", "c"]), show(["h"]), show(["pw", "pt"])].filter((r) => r.length);
+  const rows = [show(["a", "c"]), show(["h"]), show(["pw", "pt"])].filter((r) => r.length);
+  if (admin) {
+    const g = GAMMA_SPECS.map((s) => s.code);
+    const grows = [g.slice(0, 2), g.slice(2, 4), g.slice(4, 6), g.slice(6, 8)].map(show).filter((r) => r.length);
+    // «n:gm» = عنوان بخش (بی‌اثر)؛ ربات بعد از ساخته‌شدن همه‌ی خروجی‌ها آن را برمی‌دارد
+    if (grows.length) rows.push([{ text: `✨ خروجی‌های Gamma (هرکدام ${toFa(String(GAMMA_CREDIT_COST))} اعتبار)`, callback_data: GAMMA_HEADER }], ...grows);
+  }
+  return rows;
 }
+
 /** جمله‌ی راهنمای کپشن ارائه (قیمت هر دکمه را پیش از زدن می‌گوید)؛ بدون دکمه = "" */
 export const extrasHint = (rows: Btn[][]) => rows.length ? "\n\n➕ پوستر، جزوه، اسلاید صوتی و پادکست را هم می‌توانی با دکمه‌های زیر بسازی (هرکدام ۱ اعتبار)." : "";
 /** کیبورد کامل زیر فایل ارائه: PDF + همراه‌ها + ارسال نظر */
-export function deckKeyboard(env: Env, id: string, hide: Set<ExtraKind>, o: { feedback?: boolean; pdf?: boolean } = {}) {
+export function deckKeyboard(env: Env, id: string, hide: Set<ExtraKind>, o: { feedback?: boolean; pdf?: boolean; /** مدیر در تلگرام: دکمه‌های Gamma هم */ admin?: boolean } = {}) {
   const rows: Btn[][] = [];
   if (o.pdf !== false && hasBrowser(env)) rows.push([{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${id}` }]);
-  rows.push(...extraButtons(env, id, hide));
+  rows.push(...extraButtons(env, id, hide, !!o.admin));
   if (o.feedback !== false) rows.push([{ text: "💬 ارسال نظر", callback_data: "fb:s" }]);
   return { inline_keyboard: rows };
 }
@@ -109,6 +141,8 @@ export interface ExtraStart {
   notify?: boolean;
   /** فقط پوستر */
   layout?: "wide" | "tall";
+  /** مدیر در تلگرام (isGammaAdmin)؛ خروجی‌های Gamma بدون آن رد می‌شوند */
+  admin?: boolean;
 }
 export type ExtraStarted = { ok: true; jobId: string } | { ok: false; error: string; status: number; noCredit?: boolean };
 const fail = (error: string, status: number, noCredit?: boolean): ExtraStarted => ({ ok: false, error, status, ...(noCredit ? { noCredit } : {}) });
@@ -124,6 +158,8 @@ export async function startExtra(env: Env, uid: Uid, deckId: string, kind: Extra
   if (!extraEnabled(env, kind)) return fail(`ساخت ${name} فعلاً روی این سرویس فعال نیست.`, 503);
   const web = d.channel === "web";
   if (!web && !d.chatId) return fail("چت مقصد مشخص نیست.", 400);
+  // خروجی‌های Gamma: فعلاً فقط مدیر و فقط تلگرام
+  if (isGammaKind(kind) && (web || !d.admin)) return fail(`ساخت ${name} فعلاً فقط برای مدیر در تلگرام فعال است.`, 403);
 
   // مالکیت: متن ارائه با کلید کاربر خوانده می‌شود، پس ارائه‌ی دیگران پیدا نمی‌شود
   if (!(await loadPreview(env, uid, deckId).catch(() => null))) return fail("⌛️ متن این ارائه منقضی شده است (ارائه‌ها ۲۴ ساعت نگه داشته می‌شوند).", 410);
@@ -149,14 +185,20 @@ export async function startExtra(env: Env, uid: Uid, deckId: string, kind: Extra
   // پیشوند = شناسه‌ی کاربر (مالکیتِ GET /api/jobs/<شناسه> از همین پیشوند بررسی می‌شود؛ ارائه‌ی ساخته‌شده در تلگرام شناسه‌اش با شناسه‌ی کاربر شروع نمی‌شود)
   const jobId = `${uid}-x${Math.random().toString(36).replace(/[^a-z0-9]/g, "").slice(2, 8).padEnd(6, "x")}-${kind}`;
   if (jobId.length > 100) { await undo(); return fail("ارائه پیدا نشد.", 404); }
-  const queued = kind === "podcast" ? "🎙 پادکست در صف است… (چند دقیقه طول می‌کشد)"
+  const gs = gammaSpec(kind);
+  const queued = gs ? `🎨 ${gs.name} Gamma در صف است… (معمولاً ۱ تا ۳ دقیقه)`
+    : kind === "podcast" ? "🎙 پادکست در صف است… (چند دقیقه طول می‌کشد)"
     : kind === "audio" ? "🔊 اسلاید صوتی در صف است… (صدای هر اسلاید داخل خود فایل پاورپوینت گذاشته می‌شود)"
     : kind === "handout" ? "📝 جزوه‌ی Word در صف است… (چند دقیقه طول می‌کشد)" : "🖼 پوستر در صف است… (چند دقیقه طول می‌کشد)";
   let statusId = 0;
   try {
     if (!web) statusId = (await sendMessage(env, d.chatId!, queued)).message_id;
     const mark = quota.source !== "plan"; // مثل ارائه: کاربر دارای پلن بدون واترمارک
-    if (kind === "audio" || kind === "podcast") {
+    if (isGammaKind(kind)) {
+      // متن کارت‌ها را «مدل انتخابی کاربر» از روی متن همین ارائه می‌نویسد؛ ساخت و poll و ارسال در GammaWorkflow
+      const model = (await getSettings(env, uid).catch(() => null))?.model;
+      await env.GAMMA_WORKFLOW!.create({ id: jobId, params: { kind, chatId: d.chatId!, statusMessageId: statusId, uid, deckId, ...(model ? { model } : {}), credit } });
+    } else if (kind === "audio" || kind === "podcast") {
       const model = (await getSettings(env, uid).catch(() => null))?.model;
       await env.AUDIO_WORKFLOW!.create({
         id: jobId,
