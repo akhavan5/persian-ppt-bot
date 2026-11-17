@@ -10,6 +10,16 @@ import type { GammaParams } from "./gamma-workflow";
 export interface Env {
   /** پایگاه داده‌ی D1: همه‌ی داده‌های کوچک (کاربران، نشست‌ها، اعتبار، آمار، قفل‌ها) اینجا ذخیره می‌شود */
   DB: D1Database;
+  /** D1های اضافه (سرریز) برای بایت‌های فایل‌ها: وقتی یکی پر شد (۵۰۰ مگابایت) نوشتن به بعدی می‌رود. همه اختیاری‌اند و در wrangler.jsonc تعریف می‌شوند (حداکثر تا DB10؛ پلن رایگان ۱۰ دیتابیس اجازه می‌دهد). داده‌ی کوچک (کاربران، اعتبار، نشست‌ها) فقط در DB اصلی می‌ماند */
+  DB2?: D1Database;
+  DB3?: D1Database;
+  DB4?: D1Database;
+  DB5?: D1Database;
+  DB6?: D1Database;
+  DB7?: D1Database;
+  DB8?: D1Database;
+  DB9?: D1Database;
+  DB10?: D1Database;
   /** KV واقعی: فقط برای بایت‌های فایل pptx (یک نوشتن برای هر ارائه، با انقضای خودکار) */
   FILES: KVNamespace;
   /** KV واقعی بعد از withStore (فقط نمونه‌های دائمی)؛ در wrangler تعریف نمی‌شود */

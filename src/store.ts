@@ -13,7 +13,8 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 
 export class Store {
   private initP: Promise<unknown> | null = null;
-  constructor(private db: D1Database) {}
+  /** onFull: وقتی نوشتن به‌خاطر پر بودن دیتابیس شکست خورد، یک‌بار فایل‌های منقضی‌شده پاک می‌شوند تا جا باز شود */
+  constructor(private db: D1Database, private onFull?: () => Promise<unknown>) {}
 
   // جدول در اولین استفاده ساخته می‌شود (بدون نیاز به migration دستی). WITHOUT ROWID = هر نوشتن فقط یک ردیف حساب می‌شود.
   private init(): Promise<unknown> {
@@ -38,10 +39,20 @@ export class Store {
   async put(key: string, value: string, o: PutOptions = {}): Promise<void> {
     await this.init();
     const exp = o.expiration ?? (o.expirationTtl ? nowSec() + Math.floor(o.expirationTtl) : null);
-    await this.db
+    const run = () => this.db
       .prepare("INSERT INTO kv (k, v, exp) VALUES (?1, ?2, ?3) ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp")
       .bind(key, String(value), exp)
       .run();
+    try {
+      await run();
+    } catch (e) {
+      // دیتابیس پر است: ردیف‌های منقضی‌شده‌ی kv و فایل‌ها را پاک کن و یک‌بار دوباره تلاش کن
+      if (!/SQLITE_FULL|disk is full|exceeded.*(size|storage)|maximum.*(size|storage)|storage limit/i.test(String((e as any)?.message ?? e))) throw e;
+      console.error("D1 full; purging expired rows then retrying", String(e).slice(0, 200));
+      await this.purge().catch(() => {});
+      await this.onFull?.().catch(() => {});
+      await run();
+    }
   }
 
   async delete(key: string): Promise<void> {
@@ -73,16 +84,24 @@ export class Store {
 const cache = new WeakMap<object, Store>();
 const blobCache = new WeakMap<object, BlobStore>();
 
+/** دیتابیس‌های فایل به ترتیب نوشتن: اول DB2…DB10 (اگر تعریف شده باشند) و در آخر DB اصلی.
+ *  دلیل: DB اصلی داده‌های حیاتی و کوچک (کاربران، اعتبار، نشست) را نگه می‌دارد و نباید با فایل‌های حجیم پر شود. */
+function blobShards(env: Env): D1Database[] {
+  const extra = [env.DB2, env.DB3, env.DB4, env.DB5, env.DB6, env.DB7, env.DB8, env.DB9, env.DB10].filter((d): d is D1Database => !!d);
+  return [...extra, env.DB];
+}
+
 /**
  * env.KV را با نسخه‌ی D1 جایگزین می‌کند. env.FILES (بایت‌های فایل) هم به D1 می‌رود تا سهمیه‌ی ۱۰۰۰ نوشتن/حذف در روز و ۱ گیگابایتِ KV رایگان پر نشود.
+ * فایل‌ها روی چند D1 پخش می‌شوند (blobShards)؛ وقتی یکی پر شد، به بعدی می‌روند.
  * KV واقعی با نام env.FILES_KV می‌ماند (فقط برای فایل‌های نمونه‌ی دائمی در samples.ts). چندبار صدا زدن بی‌خطر است.
  */
 export function withStore(env: Env): Env {
-  let s = cache.get(env.DB);
-  if (!s) cache.set(env.DB, (s = new Store(env.DB)));
-  if (env.FILES_KV) return { ...env, KV: s }; // قبلاً ساخته شده
   let b = blobCache.get(env.DB);
-  if (!b) blobCache.set(env.DB, (b = new BlobStore(env.DB, env.FILES)));
+  if (!b) blobCache.set(env.DB, (b = new BlobStore(blobShards(env), env.FILES_KV ?? env.FILES)));
+  let s = cache.get(env.DB);
+  if (!s) { const blobs = b; cache.set(env.DB, (s = new Store(env.DB, () => blobs.purge()))); }
+  if (env.FILES_KV) return { ...env, KV: s }; // قبلاً ساخته شده
   return { ...env, KV: s, FILES_KV: env.FILES, FILES: b as unknown as KVNamespace };
 }
 

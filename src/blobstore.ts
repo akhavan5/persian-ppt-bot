@@ -3,6 +3,7 @@
  * چرا: KV رایگان فقط ۱٬۰۰۰ نوشتن/حذف در روز و ۱ گیگابایت فضا دارد؛ D1 رایگان ۱۰۰ هزار نوشتن در روز و ۵ گیگابایت.
  * فایل‌ها به تکه‌های ۵۱۲ کیلوبایتی شکسته می‌شوند (سقف هر ردیف D1 دو مگابایت است).
  * API عمداً مثل KV است (put/get/getWithMetadata/delete با TTL) تا بقیه‌ی کد بدون تغییر کار کند.
+ * چنددیتابیسی: فایل‌ها روی چند D1 پخش می‌شوند (DB2…DB10 و در آخر DB اصلی). وقتی یکی پر شد (خطای SQLITE_FULL / سقف ۵۰۰ مگابایت)، همان نوشتن روی بعدی انجام می‌شود و دیتابیس پر برای ۱۰ دقیقه کنار گذاشته می‌شود. خواندن به ترتیب همه‌ی دیتابیس‌ها را می‌گردد.
  * اول متادیتا خوانده می‌شود و فقط وقتی همه‌ی تکه‌ها نوشته شد متادیتا درج می‌شود؛ پس خواننده هرگز فایل نیمه‌کاره نمی‌بیند.
  */
 const CHUNK = 512 * 1024;
@@ -14,61 +15,100 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 
 interface PutOpts { expirationTtl?: number; expiration?: number; metadata?: unknown }
 
-export class BlobStore {
-  private initP: Promise<unknown> | null = null;
-  /** KV واقعی: فقط برای خواندن فایل‌هایی که پیش از مهاجرت در آن ساخته شده‌اند (تا ۲۴ ساعت بعد از دیپلوی) */
-  constructor(private db: D1Database, private legacy?: KVNamespace) {}
+// تشخیص «دیتابیس پر شده» از پیام خطای D1
+const isFullErr = (e: unknown) => /SQLITE_FULL|database or disk is full|disk is full|exceeded.*(size|storage)|maximum.*(size|storage)|storage limit/i.test(String((e as any)?.message ?? e));
+// دیتابیس‌هایی که اخیراً پر بوده‌اند (مشترک بین درخواست‌های همین isolate)
+const blockedUntil = new WeakMap<D1Database, number>();
+const isBlocked = (d: D1Database) => (blockedUntil.get(d) ?? 0) > Date.now();
+const BLOCK_MS = 10 * 60 * 1000;
+// ساخت جدول‌ها برای هر دیتابیس فقط یک بار
+const initCache = new WeakMap<D1Database, Promise<unknown>>();
 
-  private init(): Promise<unknown> {
-    return (this.initP ??= this.db
+function initDb(db: D1Database): Promise<unknown> {
+  let p = initCache.get(db);
+  if (!p) {
+    p = db
       .batch([
-        this.db.prepare("CREATE TABLE IF NOT EXISTS blob_meta (k TEXT PRIMARY KEY, n INTEGER NOT NULL, size INTEGER NOT NULL, meta TEXT, exp INTEGER) WITHOUT ROWID"),
-        this.db.prepare("CREATE TABLE IF NOT EXISTS blob_chunk (k TEXT NOT NULL, i INTEGER NOT NULL, d BLOB NOT NULL, PRIMARY KEY (k, i)) WITHOUT ROWID"),
-        this.db.prepare("CREATE TABLE IF NOT EXISTS blob_chunk64 (k TEXT NOT NULL, i INTEGER NOT NULL, d TEXT NOT NULL, PRIMARY KEY (k, i)) WITHOUT ROWID"),
-        this.db.prepare("CREATE INDEX IF NOT EXISTS blob_meta_exp ON blob_meta (exp)"),
+        db.prepare("CREATE TABLE IF NOT EXISTS blob_meta (k TEXT PRIMARY KEY, n INTEGER NOT NULL, size INTEGER NOT NULL, meta TEXT, exp INTEGER) WITHOUT ROWID"),
+        db.prepare("CREATE TABLE IF NOT EXISTS blob_chunk (k TEXT NOT NULL, i INTEGER NOT NULL, d BLOB NOT NULL, PRIMARY KEY (k, i)) WITHOUT ROWID"),
+        db.prepare("CREATE TABLE IF NOT EXISTS blob_chunk64 (k TEXT NOT NULL, i INTEGER NOT NULL, d TEXT NOT NULL, PRIMARY KEY (k, i)) WITHOUT ROWID"),
+        db.prepare("CREATE INDEX IF NOT EXISTS blob_meta_exp ON blob_meta (exp)"),
       ])
-      .catch((e) => { this.initP = null; throw e; }));
+      .catch((e) => { initCache.delete(db); throw e; });
+    initCache.set(db, p);
   }
+  return p;
+}
+
+export class BlobStore {
+  /** dbs: به ترتیب اولویت نوشتن (اولی اول پر می‌شود)؛ legacy: KV واقعی فقط برای فایل‌های پیش از مهاجرت */
+  constructor(private dbs: D1Database[], private legacy?: KVNamespace) {}
 
   async put(key: string, value: ArrayBuffer | Uint8Array | string, o: PutOpts = {}): Promise<void> {
-    await this.init();
     const bytes = typeof value === "string" ? new TextEncoder().encode(value)
       : value instanceof Uint8Array ? value : new Uint8Array(value);
     const exp = o.expiration ?? (o.expirationTtl ? nowSec() + Math.floor(o.expirationTtl) : null);
+    // اول دیتابیس‌های غیرپر؛ دیتابیس‌های «اخیراً پر» آخرین چاره‌اند (شاید cron جا باز کرده باشد)
+    const order = [...this.dbs.filter((d) => !isBlocked(d)), ...this.dbs.filter(isBlocked)];
+    let lastErr: unknown = new Error("no D1 database for blobs");
+    for (const db of order) {
+      try {
+        await this.putOne(db, key, bytes, exp, o.metadata);
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (isFullErr(e)) blockedUntil.set(db, Date.now() + BLOCK_MS);
+        console.error("blob put failed on a shard", String(e).slice(0, 200));
+        await this.cleanupOne(db, key).catch(() => {}); // تکه‌های نیمه‌کاره نماند
+      }
+    }
+    throw lastErr;
+  }
+
+  private async putOne(db: D1Database, key: string, bytes: Uint8Array, exp: number | null, metadata: unknown): Promise<void> {
+    await initDb(db);
     // نسخه‌ی قبلی (اگر هست) اول پاک می‌شود تا تکه‌ی اضافه نماند
-    await this.db.batch([
-      this.db.prepare("DELETE FROM blob_meta WHERE k = ?1").bind(key),
-      this.db.prepare("DELETE FROM blob_chunk WHERE k = ?1").bind(key),
-      this.db.prepare("DELETE FROM blob_chunk64 WHERE k = ?1").bind(key),
+    await db.batch([
+      db.prepare("DELETE FROM blob_meta WHERE k = ?1").bind(key),
+      db.prepare("DELETE FROM blob_chunk WHERE k = ?1").bind(key),
+      db.prepare("DELETE FROM blob_chunk64 WHERE k = ?1").bind(key),
     ]);
     const n = Math.max(1, Math.ceil(bytes.byteLength / CHUNK));
     let stmts: D1PreparedStatement[] = [];
     for (let i = 0; i < n; i++) {
       const part = bytes.subarray(i * CHUNK, (i + 1) * CHUNK);
-      stmts.push(this.db.prepare("INSERT INTO blob_chunk64 (k, i, d) VALUES (?1, ?2, ?3)").bind(key, i, toB64(part)));
-      if (stmts.length === PER_BATCH) { await this.db.batch(stmts); stmts = []; }
+      stmts.push(db.prepare("INSERT INTO blob_chunk64 (k, i, d) VALUES (?1, ?2, ?3)").bind(key, i, toB64(part)));
+      if (stmts.length === PER_BATCH) { await db.batch(stmts); stmts = []; }
     }
-    if (stmts.length) await this.db.batch(stmts);
-    await this.db
+    if (stmts.length) await db.batch(stmts);
+    await db
       .prepare("INSERT INTO blob_meta (k, n, size, meta, exp) VALUES (?1, ?2, ?3, ?4, ?5)")
-      .bind(key, n, bytes.byteLength, o.metadata === undefined ? null : JSON.stringify(o.metadata), exp)
+      .bind(key, n, bytes.byteLength, metadata === undefined ? null : JSON.stringify(metadata), exp)
       .run();
   }
 
-  private async read(key: string): Promise<{ data: ArrayBuffer; meta: unknown } | null> {
-    await this.init();
-    const m = await this.db.prepare("SELECT n, size, meta, exp FROM blob_meta WHERE k = ?1").bind(key)
+  private cleanupOne(db: D1Database, key: string): Promise<unknown> {
+    return db.batch([
+      db.prepare("DELETE FROM blob_chunk WHERE k = ?1").bind(key),
+      db.prepare("DELETE FROM blob_chunk64 WHERE k = ?1").bind(key),
+      db.prepare("DELETE FROM blob_meta WHERE k = ?1").bind(key),
+    ]);
+  }
+
+  private async readOne(db: D1Database, key: string): Promise<{ data: ArrayBuffer; meta: unknown } | null> {
+    await initDb(db);
+    const m = await db.prepare("SELECT n, size, meta, exp FROM blob_meta WHERE k = ?1").bind(key)
       .first<{ n: number; size: number; meta: string | null; exp: number | null }>();
     if (!m || (m.exp !== null && m.exp <= nowSec())) return null;
     const out = new Uint8Array(m.size);
     let off = 0;
-    const r64 = (await this.db.prepare("SELECT d FROM blob_chunk64 WHERE k = ?1 ORDER BY i").bind(key).all<{ d: string }>()).results;
+    const r64 = (await db.prepare("SELECT d FROM blob_chunk64 WHERE k = ?1 ORDER BY i").bind(key).all<{ d: string }>()).results;
     if (r64.length) {
       if (r64.length !== m.n) return null; // وسط نوشتن/حذف همزمان؛ مثل فایل ناموجود
       for (const r of r64) { const c = fromB64(r.d); out.set(c, off); off += c.byteLength; }
     } else {
       // فایل‌های قدیمی (پیش از این تغییر) در جدول BLOB هستند؛ تا انقضای ۲۴ ساعته خوانده می‌شوند
-      const { results } = await this.db.prepare("SELECT d FROM blob_chunk WHERE k = ?1 ORDER BY i").bind(key).all<{ d: ArrayBuffer | number[] }>();
+      const { results } = await db.prepare("SELECT d FROM blob_chunk WHERE k = ?1 ORDER BY i").bind(key).all<{ d: ArrayBuffer | number[] }>();
       if (results.length !== m.n) return null;
       for (const r of results) {
         const c = r.d instanceof ArrayBuffer ? new Uint8Array(r.d) : Uint8Array.from(r.d as number[]);
@@ -76,6 +116,19 @@ export class BlobStore {
       }
     }
     return { data: out.buffer, meta: m.meta ? JSON.parse(m.meta) : null };
+  }
+
+  /** همه‌ی دیتابیس‌ها را به ترتیب می‌گردد و اولین نسخه‌ی کامل را برمی‌گرداند */
+  private async read(key: string): Promise<{ data: ArrayBuffer; meta: unknown } | null> {
+    for (const db of this.dbs) {
+      try {
+        const r = await this.readOne(db, key);
+        if (r) return r;
+      } catch (e) {
+        console.error("blob read failed on a shard", String(e).slice(0, 200)); // یک دیتابیس خراب بقیه را از کار نیندازد
+      }
+    }
+    return null;
   }
 
   async get(key: string, type: "text" | "arrayBuffer" = "text"): Promise<any> {
@@ -90,22 +143,28 @@ export class BlobStore {
     return { value: type === "arrayBuffer" ? r.data : new TextDecoder().decode(r.data), metadata: r.meta as M };
   }
 
+  /** از همه‌ی دیتابیس‌ها پاک می‌شود (فایل ممکن است در هرکدام باشد) */
   async delete(key: string): Promise<void> {
-    await this.init();
-    await this.db.batch([
-      this.db.prepare("DELETE FROM blob_chunk WHERE k = ?1").bind(key),
-      this.db.prepare("DELETE FROM blob_chunk64 WHERE k = ?1").bind(key),
-      this.db.prepare("DELETE FROM blob_meta WHERE k = ?1").bind(key),
-    ]);
+    const rs = await Promise.allSettled(this.dbs.map(async (db) => { await initDb(db); await this.cleanupOne(db, key); }));
+    if (rs.length && rs.every((r) => r.status === "rejected")) throw (rs[0] as PromiseRejectedResult).reason;
   }
 
-  /** حذف فایل‌های منقضی‌شده (روزی یک بار از cron) */
+  /** حذف فایل‌های منقضی‌شده از همه‌ی دیتابیس‌ها (روزی یک بار از cron؛ و هنگام پر بودن دیتابیس اصلی) */
   async purge(): Promise<number> {
-    await this.init();
     const now = nowSec();
-    await this.db.prepare("DELETE FROM blob_chunk WHERE k IN (SELECT k FROM blob_meta WHERE exp IS NOT NULL AND exp <= ?1)").bind(now).run();
-    await this.db.prepare("DELETE FROM blob_chunk64 WHERE k IN (SELECT k FROM blob_meta WHERE exp IS NOT NULL AND exp <= ?1)").bind(now).run();
-    const r = await this.db.prepare("DELETE FROM blob_meta WHERE exp IS NOT NULL AND exp <= ?1").bind(now).run();
-    return r.meta?.changes ?? 0;
+    let total = 0;
+    for (const db of this.dbs) {
+      try {
+        await initDb(db);
+        await db.prepare("DELETE FROM blob_chunk WHERE k IN (SELECT k FROM blob_meta WHERE exp IS NOT NULL AND exp <= ?1)").bind(now).run();
+        await db.prepare("DELETE FROM blob_chunk64 WHERE k IN (SELECT k FROM blob_meta WHERE exp IS NOT NULL AND exp <= ?1)").bind(now).run();
+        const r = await db.prepare("DELETE FROM blob_meta WHERE exp IS NOT NULL AND exp <= ?1").bind(now).run();
+        total += r.meta?.changes ?? 0;
+        blockedUntil.delete(db); // جا باز شد؛ دوباره قابل‌استفاده است
+      } catch (e) {
+        console.error("blob purge failed on a shard", String(e).slice(0, 200));
+      }
+    }
+    return total;
   }
 }
