@@ -1563,8 +1563,11 @@ private fun ContactCard(vm: AppViewModel) {
         ContactRow(AppIcons.Chat, Brush.linearGradient(listOf(Color(0xFF7C3AED), Color(0xFF2563EB))), "گفتگو با دستیار هوشمند", "پاسخ فوری") { vm.openSupport() }
         HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
         ContactRow(AppIcons.Globe, Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF06B6D4))), "وب‌سایت", "pptsaz.ir") { vm.openSite() }
-        HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
-        ContactRow(AppIcons.Send, Brush.linearGradient(listOf(Color(0xFF29B6F6), Color(0xFF0288D1))), "ربات تلگرام", "@pptsaz_bot") { vm.openUrl("https://t.me/pptsaz_bot") }
+        // نسخه‌ی مایکت: آدرس ربات تلگرام نمایش داده نمی‌شود
+        if (BuildConfig.STORE != "myket") {
+            HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
+            ContactRow(AppIcons.Send, Brush.linearGradient(listOf(Color(0xFF29B6F6), Color(0xFF0288D1))), "ربات تلگرام", "@pptsaz_bot") { vm.openUrl("https://t.me/pptsaz_bot") }
+        }
         HorizontalDivider(color = cs.outlineVariant, modifier = Modifier.padding(horizontal = 16.dp))
         ContactRow(AppIcons.Mail, Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFF97316))), "پشتیبانی (ایمیل)", "info@pptsaz.ir") { mail() }
     }
