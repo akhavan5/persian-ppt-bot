@@ -63,12 +63,9 @@ window.__free = (id) => { delete J[id]; return 1; };
 window.__ready = true;
 </script></body></html>`;
 
-const toB64 = (u8: Uint8Array) => {
-  let s = "";
-  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
-  return btoa(s);
-};
-const fromB64 = (b: string) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+// Buffer بومی (nodejs_compat)؛ حلقه‌ی دستی String.fromCharCode/btoa برای ۲۰ مگابایت PCM بیش از ۱ ثانیه CPU می‌خورد
+const toB64 = (u8: Uint8Array) => Buffer.from(u8.buffer, u8.byteOffset, u8.byteLength).toString("base64");
+const fromB64 = (b: string) => new Uint8Array(Buffer.from(b, "base64"));
 
 let LAME: string | null = null;
 /** متن lamejs از فایل‌های استاتیک پروژه (public/lame.min.js)؛ بیرون از شبکه‌ی عمومی (CDN) وابسته نیست */

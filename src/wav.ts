@@ -56,15 +56,14 @@ export function mergeWav(files: Uint8Array[], gapMs = 350): Uint8Array {
   const parsed = files.map(parseWav);
   const f = parsed[0].fmt;
   const align = (f.channels * f.bits) / 8;
-  const gap = new Uint8Array(Math.round((f.sampleRate * gapMs) / 1000) * align);
-  const parts: Uint8Array[] = [];
-  parsed.forEach((p, i) => {
-    if (p.fmt.sampleRate !== f.sampleRate || p.fmt.channels !== f.channels || p.fmt.bits !== f.bits) throw new Error("WAV formats differ");
-    if (i && gapMs > 0) parts.push(gap);
-    parts.push(p.data);
-  });
-  const pcm = concat(parts);
-  return concat([wavHeader(pcm.length, f), pcm]);
+  const gapLen = gapMs > 0 ? Math.round((f.sampleRate * gapMs) / 1000) * align : 0;
+  parsed.forEach((p) => { if (p.fmt.sampleRate !== f.sampleRate || p.fmt.channels !== f.channels || p.fmt.bits !== f.bits) throw new Error("WAV formats differ"); });
+  const pcmLen = parsed.reduce((n, p) => n + p.data.length, 0) + gapLen * (parsed.length - 1);
+  const out = new Uint8Array(44 + pcmLen); // یک بار تخصیص؛ سکوت‌ها صفرند (بدون کپی میانی)
+  out.set(wavHeader(pcmLen, f), 0);
+  let o = 44;
+  parsed.forEach((p, i) => { if (i) o += gapLen; out.set(p.data, o); o += p.data.length; });
+  return out;
 }
 
 /** مدت فایل WAV به ثانیه (برای نمایش پخش‌کننده‌ی تلگرام) */
