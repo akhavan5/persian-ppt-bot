@@ -30,7 +30,11 @@
   // برای دیتابیس بیشتر، همین‌جا خط بعدی را اضافه کنید: { "binding": "DB3", "database_name": "persian-ppt-bot-db-3" } (تا DB10)
   "d1_databases": [
     { "binding": "DB", "database_name": "persian-ppt-bot-db" },
-    { "binding": "DB2", "database_name": "persian-ppt-bot-db-2" }
+    { "binding": "DB2", "database_name": "persian-ppt-bot-db-2" },
+    { "binding": "DB3", "database_name": "persian-ppt-bot-db-3" },
+    { "binding": "DB4", "database_name": "persian-ppt-bot-db-4" },
+    { "binding": "DB5", "database_name": "persian-ppt-bot-db-5" },
+    { "binding": "DB6", "database_name": "persian-ppt-bot-db-6" }
   ],
 
   // KV فقط برای بایت‌های فایل‌های ساخته‌شده (یک نوشتن برای هر ارائه)؛ همان namespace قبلی

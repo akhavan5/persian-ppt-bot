@@ -6,7 +6,7 @@ import { handleRubikaUpdate, rubikaEnabled, rubikaSecret, setupRubika } from "./
 import { ADMIN_COMMANDS, BOT_COMMANDS, tg } from "./telegram";
 import { isBaleId } from "./bale-format";
 import { DAILY_FREE_CREDITS, adminIds, today } from "./settings";
-import { purgeExpired, withStore } from "./store";
+import { purgeBlobs, purgeExpired, withStore } from "./store";
 import { remindExpiringPlans } from "./plan-notify";
 import { ACTIVATION_CRON, remindInactiveSignups } from "./activation-reminder";
 import { LIFECYCLE_CRON, runLifecycle } from "./lifecycle";
@@ -81,6 +81,8 @@ export default {
     }
     // cron ساعتی: نظرسنجی پایان پلن (ایمیل + ربات) برای کاربرانی که پلنشان تمام شده و تمدید نکرده‌اند؛ باید قبل از کارهای روزانه برگردد وگرنه هر ساعت اجرا می‌شوند
     if (c.cron === FEEDBACK_CRON) {
+      // پاکسازی ساعتیِ فایل‌های منقضی‌شده‌ی D1 (WAV موقت، فایل‌های ۲۴ ساعته): فقط روزانه نمی‌شود چون تا ۲۴ ساعت جای دیتابیس‌ها را می‌گیرند
+      ctx.waitUntil(purgeBlobs(rawEnv).catch((e) => console.error("hourly blob purge", String(e).slice(0, 200))));
       ctx.waitUntil(sendPlanFeedbackSurveys(withStore(rawEnv)).then((r) => { if (r.sent) console.log("plan feedback surveys", JSON.stringify(r)); }).catch((e) => console.error("plan feedback surveys", String(e).slice(0, 200))));
       return;
     }

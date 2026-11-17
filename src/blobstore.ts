@@ -4,7 +4,8 @@
  * فایل‌ها به تکه‌های ۵۱۲ کیلوبایتی شکسته می‌شوند (سقف هر ردیف D1 دو مگابایت است).
  * API عمداً مثل KV است (put/get/getWithMetadata/delete با TTL) تا بقیه‌ی کد بدون تغییر کار کند.
  * چنددیتابیسی: فایل‌ها روی چند D1 پخش می‌شوند (DB2…DB10 و در آخر DB اصلی). وقتی یکی پر شد (خطای SQLITE_FULL / سقف ۵۰۰ مگابایت)، همان نوشتن روی بعدی انجام می‌شود و دیتابیس پر برای ۱۰ دقیقه کنار گذاشته می‌شود. خواندن به ترتیب همه‌ی دیتابیس‌ها را می‌گردد.
- * اول متادیتا خوانده می‌شود و فقط وقتی همه‌ی تکه‌ها نوشته شد متادیتا درج می‌شود؛ پس خواننده هرگز فایل نیمه‌کاره نمی‌بیند.
+ * نوشتن: اول ردیف متادیتای «موقت» (انقضای ۱۵ دقیقه) درج می‌شود، بعد تکه‌ها، و در پایان انقضای واقعی جایگزین می‌شود؛ خواننده فایل نیمه‌کاره نمی‌بیند (شمارش تکه‌ها با n نمی‌خواند) و اگر Worker وسط نوشتن بمیرد purge تکه‌ها را هم با ردیف موقت پاک می‌کند (تکه‌ی یتیم نمی‌ماند).
+ * خواندن: متادیتا هم‌زمان از همه‌ی دیتابیس‌ها پرسیده می‌شود. فایل‌های موقت پس از پایان کار با deletePrefix پاک می‌شوند و purge هر ساعت اجرا می‌شود.
  */
 const CHUNK = 512 * 1024;
 // D1 ستون BLOB را به‌صورت آرایه‌ی عدد (JSON) برمی‌گرداند و پارس آن CPU زیادی می‌خورد (۲۰ مگابایت صدا ≈ ۷۰ مگابایت JSON). متن base64 رشته‌ی ساده است و با Buffer بومی در چند میلی‌ثانیه رمزگشایی می‌شود.
@@ -21,6 +22,8 @@ const isFullErr = (e: unknown) => /SQLITE_FULL|database or disk is full|disk is 
 const blockedUntil = new WeakMap<D1Database, number>();
 const isBlocked = (d: D1Database) => (blockedUntil.get(d) ?? 0) > Date.now();
 const BLOCK_MS = 10 * 60 * 1000;
+// انقضای موقتِ فایلی که هنوز در حال نوشتن است (ثانیه)
+const PENDING_TTL = 15 * 60;
 // ساخت جدول‌ها برای هر دیتابیس فقط یک بار
 const initCache = new WeakMap<D1Database, Promise<unknown>>();
 
@@ -67,13 +70,17 @@ export class BlobStore {
 
   private async putOne(db: D1Database, key: string, bytes: Uint8Array, exp: number | null, metadata: unknown): Promise<void> {
     await initDb(db);
-    // نسخه‌ی قبلی (اگر هست) اول پاک می‌شود تا تکه‌ی اضافه نماند
+    const n = Math.max(1, Math.ceil(bytes.byteLength / CHUNK));
+    const metaJson = metadata === undefined ? null : JSON.stringify(metadata);
+    // نسخه‌ی قبلی (اگر هست) اول پاک می‌شود و بلافاصله «ردیف موقت» درج می‌شود؛ ردیف موقت انقضای کوتاه (۱۵ دقیقه) دارد.
+    // اگر Worker وسط نوشتن بمیرد (سقف CPU/زمان)، purge ردیف موقت و تکه‌های نیمه‌کاره‌اش را با هم پاک می‌کند؛ پس تکه‌ی یتیم (بی‌متادیتا) هرگز در دیتابیس نمی‌ماند.
+    // خواننده هم فایل نیمه‌کاره نمی‌بیند: تا همه‌ی n تکه ننوشته شده، شمارش تکه‌ها با n نمی‌خواند و خواندن «ناموجود» برمی‌گردد.
     await db.batch([
       db.prepare("DELETE FROM blob_meta WHERE k = ?1").bind(key),
       db.prepare("DELETE FROM blob_chunk WHERE k = ?1").bind(key),
       db.prepare("DELETE FROM blob_chunk64 WHERE k = ?1").bind(key),
+      db.prepare("INSERT INTO blob_meta (k, n, size, meta, exp) VALUES (?1, ?2, ?3, ?4, ?5)").bind(key, n, bytes.byteLength, metaJson, nowSec() + PENDING_TTL),
     ]);
-    const n = Math.max(1, Math.ceil(bytes.byteLength / CHUNK));
     let stmts: D1PreparedStatement[] = [];
     for (let i = 0; i < n; i++) {
       const part = bytes.subarray(i * CHUNK, (i + 1) * CHUNK);
@@ -81,10 +88,8 @@ export class BlobStore {
       if (stmts.length === PER_BATCH) { await db.batch(stmts); stmts = []; }
     }
     if (stmts.length) await db.batch(stmts);
-    await db
-      .prepare("INSERT INTO blob_meta (k, n, size, meta, exp) VALUES (?1, ?2, ?3, ?4, ?5)")
-      .bind(key, n, bytes.byteLength, metadata === undefined ? null : JSON.stringify(metadata), exp)
-      .run();
+    // همه‌ی تکه‌ها نوشته شد: انقضای واقعی (یا بی‌انقضا) جایگزین انقضای موقت می‌شود
+    await db.prepare("UPDATE blob_meta SET exp = ?2 WHERE k = ?1").bind(key, exp).run();
   }
 
   private cleanupOne(db: D1Database, key: string): Promise<unknown> {
@@ -95,11 +100,16 @@ export class BlobStore {
     ]);
   }
 
-  private async readOne(db: D1Database, key: string): Promise<{ data: ArrayBuffer; meta: unknown } | null> {
+  /** متادیتای فایل در یک دیتابیس (null = نیست یا منقضی شده) */
+  private async metaOne(db: D1Database, key: string): Promise<{ n: number; size: number; meta: string | null } | null> {
     await initDb(db);
     const m = await db.prepare("SELECT n, size, meta, exp FROM blob_meta WHERE k = ?1").bind(key)
       .first<{ n: number; size: number; meta: string | null; exp: number | null }>();
     if (!m || (m.exp !== null && m.exp <= nowSec())) return null;
+    return m;
+  }
+
+  private async readOne(db: D1Database, key: string, m: { n: number; size: number; meta: string | null }): Promise<{ data: ArrayBuffer; meta: unknown } | null> {
     const out = new Uint8Array(m.size);
     let off = 0;
     const r64 = (await db.prepare("SELECT d FROM blob_chunk64 WHERE k = ?1 ORDER BY i").bind(key).all<{ d: string }>()).results;
@@ -118,14 +128,20 @@ export class BlobStore {
     return { data: out.buffer, meta: m.meta ? JSON.parse(m.meta) : null };
   }
 
-  /** همه‌ی دیتابیس‌ها را به ترتیب می‌گردد و اولین نسخه‌ی کامل را برمی‌گرداند */
+  /** متادیتا را هم‌زمان از همه‌ی دیتابیس‌ها می‌پرسد (یک رفت‌وبرگشت، نه یکی‌یکی)؛ بعد فقط تکه‌ها را از دیتابیسی که فایل دارد می‌خواند.
+   *  با ۶ دیتابیس، فایلی که در آخری است دیگر ۵ پرس‌وجوی پشت‌سرهم‌ی بی‌نتیجه نمی‌خورد. */
   private async read(key: string): Promise<{ data: ArrayBuffer; meta: unknown } | null> {
-    for (const db of this.dbs) {
+    const found = await Promise.all(this.dbs.map(async (db) => {
+      try { return { db, m: await this.metaOne(db, key) }; }
+      catch (e) { console.error("blob meta failed on a shard", String(e).slice(0, 200)); return { db, m: null }; } // یک دیتابیس خراب بقیه را از کار نیندازد
+    }));
+    for (const { db, m } of found) {
+      if (!m) continue;
       try {
-        const r = await this.readOne(db, key);
+        const r = await this.readOne(db, key, m);
         if (r) return r;
       } catch (e) {
-        console.error("blob read failed on a shard", String(e).slice(0, 200)); // یک دیتابیس خراب بقیه را از کار نیندازد
+        console.error("blob read failed on a shard", String(e).slice(0, 200));
       }
     }
     return null;
@@ -146,6 +162,21 @@ export class BlobStore {
   /** از همه‌ی دیتابیس‌ها پاک می‌شود (فایل ممکن است در هرکدام باشد) */
   async delete(key: string): Promise<void> {
     const rs = await Promise.allSettled(this.dbs.map(async (db) => { await initDb(db); await this.cleanupOne(db, key); }));
+    if (rs.length && rs.every((r) => r.status === "rejected")) throw (rs[0] as PromiseRejectedResult).reason;
+  }
+
+  /** همه‌ی کلیدهایی که با prefix شروع می‌شوند را با یک batch در هر دیتابیس (هم‌زمان) پاک می‌کند؛ برای فایل‌های موقت صدا (tmp:aud:<شناسه>:…) که پس از پایان کار دیگر لازم نیستند.
+   *  بازه‌ی k >= prefix و k < prefix+U+10FFFF از ایندکس کلید اصلی استفاده می‌کند (LIKE نمی‌کند). */
+  async deletePrefix(prefix: string): Promise<void> {
+    const hi = prefix + "\u{10FFFF}";
+    const rs = await Promise.allSettled(this.dbs.map(async (db) => {
+      await initDb(db);
+      await db.batch([
+        db.prepare("DELETE FROM blob_chunk64 WHERE k >= ?1 AND k < ?2").bind(prefix, hi),
+        db.prepare("DELETE FROM blob_chunk WHERE k >= ?1 AND k < ?2").bind(prefix, hi),
+        db.prepare("DELETE FROM blob_meta WHERE k >= ?1 AND k < ?2").bind(prefix, hi),
+      ]);
+    }));
     if (rs.length && rs.every((r) => r.status === "rejected")) throw (rs[0] as PromiseRejectedResult).reason;
   }
 

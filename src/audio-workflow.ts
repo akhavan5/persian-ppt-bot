@@ -17,6 +17,7 @@ import { loadFileDirect, loadPreview, saveFile } from "./files";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage } from "./telegram";
 import { getLinkedTg } from "./link";
 import { withStore } from "./store";
+import type { BlobStore } from "./blobstore";
 import { refundCredit, type CreditSource } from "./settings";
 import { fileNameWithSite, miniappUrl, siteHost } from "./deck-service";
 import { toFa } from "./util";
@@ -93,6 +94,10 @@ const OUTRO_PODCAST = "اگه از این پادکست خوشتون اومد، �
 
 const tmpKey = (id: string, i: number) => `tmp:aud:${id}:${i}`;
 const mp3Key = (id: string, i: number) => `tmp:aud:${id}:${i}:mp3`;
+/** پیشوند همه‌ی فایل‌های موقت یک کار (WAV و MP3 هر اسلاید/تکه). «:» بعد از شناسه نمونه‌های زنجیره (<root>-g1) را قاطی نمی‌کند */
+const tmpPrefix = (id: string) => `tmp:aud:${id}:`;
+/** پاک‌کردن فوری فایل‌های موقت کار با یک batch در هر دیتابیس؛ بهترین‌تلاش است و اگر شکست خورد، انقضای ۱ ساعته + purge ساعتی آن‌ها را پاک می‌کند */
+const dropTmp = (env: Env, id: string) => (env.FILES as unknown as BlobStore).deletePrefix(tmpPrefix(id)).catch((e) => console.error("tmp cleanup", String(e).slice(0, 200)));
 // تبدیل MP3 اسلایدها دسته‌دسته و هر دسته در یک گام جدا (سقف CPU هر گام جدا حساب می‌شود؛ ۸ اسلاید در یک گام مشکلی نداشت)
 const MP3_BATCH = 6;
 /** سقف زیردرخواست هر نمونه (۵۰ در پلن رایگان) برای کل نمونه است. همه‌چیز در «یک» نمونه اجرا می‌شود؛ فقط اگر خطای سقف آمد، ادامه‌ی کار (از همان اسلاید/دسته) به نمونه‌ی بعدی سپرده می‌شود. */
@@ -376,9 +381,11 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: audioSeconds(audio) });
         await saveFile(this.env, uid, `${id}-s${m.i + 1}`, audio, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0).catch((e) => console.error("slide audio save (bot)", String(e).slice(0, 200)));
       }
-      // فایل‌های موقت دیگر یکی‌یکی پاک نمی‌شوند (هر حذف یک زیردرخواست است)؛ همه یک ساعته با expirationTtl خودشان پاک می‌شوند
+      // فایل‌های موقت در گام cleanup-tmp پس از این گام پاک می‌شوند (یک batch برای همه)
       return { inFile: inFile.length, apart: apart.map((m) => toFa(String(m.i + 1))), saved };
     }));
+    // فایل‌های موقت (WAV و MP3 هر اسلاید؛ چند ده مگابایت) دیگر لازم نیستند: همین حالا پاک می‌شوند، نه ۲۴ ساعت بعد در cron
+    await step.do("cleanup-tmp", async () => { await dropTmp(this.env, root); }).catch(() => {});
     await step.do("finish", async () => {
       if (web) return;
       await status(`✅ اسلاید صوتی آماده شد: صدا داخل ${toFa(String(summary.inFile))} اسلاید گذاشته شد${summary.apart.length ? `\n📎 اسلاید ${summary.apart.join("، ")} به‌خاطر حجم جدا فرستاده شد` : ""}${failed.length ? `\n⚠️ ناموفق: اسلاید ${failed.join("، ")}${event.payload.credit ? "" : " (دوباره دکمه را بزن)"}` : ""}`);
@@ -464,9 +471,10 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           await saveFile(this.env, uid, g === 0 ? id : `${id}-${g + 1}`, merged, pname, `${script.title}${part}`.slice(0, 120), 0);
         } catch (e) { console.error("podcast save (bot)", String(e).slice(0, 200)); }
       }
-      for (let i = 0; i < chunks.length; i++) await this.env.FILES.delete(tmpKey(id, i)).catch(() => {});
       return ids;
     });
+    // تکه‌های WAV موقت (چند ده مگابایت) در گام جدا و با یک batch پاک می‌شوند؛ شکستش به نتیجه‌ی کار آسیب نمی‌زند
+    await step.do("cleanup-tmp", async () => { await dropTmp(this.env, id); }).catch(() => {});
     await step.do("finish", async () => { if (!web) await status("✅ پادکست آماده شد؛ فایل صوتی را بالا ببین."); }).catch(() => {}); // خطای پیام پایانی نباید به «برگشت اعتبار» برسد
     return { kind: "podcast", title: script.title, ids: saved, note: "" };
   }

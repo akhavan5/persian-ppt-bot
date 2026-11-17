@@ -111,3 +111,8 @@ export async function purgeExpired(env: Env): Promise<void> {
   await e.KV.purge();
   await (e.FILES as unknown as BlobStore).purge();
 }
+
+/** پاکسازی فقط فایل‌های منقضی‌شده در همه‌ی دیتابیس‌های فایل (هر ساعت)؛ جدول kv دست‌نخورده می‌ماند */
+export async function purgeBlobs(env: Env): Promise<void> {
+  await (withStore(env).FILES as unknown as BlobStore).purge();
+}
