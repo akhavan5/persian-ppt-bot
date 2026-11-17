@@ -5,6 +5,7 @@ import type { OcrParams } from "./ocr-workflow";
 import type { WebOcrParams } from "./web-ocr-workflow";
 import type { AudioParams } from "./audio-workflow";
 import type { ExtraParams } from "./extra-workflow";
+import type { GammaParams } from "./gamma-workflow";
 
 export interface Env {
   /** پایگاه داده‌ی D1: همه‌ی داده‌های کوچک (کاربران، نشست‌ها، اعتبار، آمار، قفل‌ها) اینجا ذخیره می‌شود */
@@ -34,6 +35,12 @@ export interface Env {
   AUDIO_WORKFLOW?: Workflow<AudioParams>;
   /** پوستر و جزوه‌ی Word که بعد از ساخت ارائه با دکمه‌ی زیر ارائه خواسته می‌شوند (Workflow «persian-ppt-extra»)؛ بدون آن این دو دکمه نمایش داده نمی‌شوند */
   EXTRA_WORKFLOW?: Workflow<ExtraParams>;
+  /** کاروسل Gamma (فقط مدیر، دستور /gamma؛ Workflow «persian-ppt-gamma»)؛ بدون آن دستور پیام «تعریف نشده» می‌دهد */
+  GAMMA_WORKFLOW?: Workflow<GammaParams>;
+  /** کلید API رسمی Gamma (Gamma ← Settings ← API Keys)؛ به‌صورت secret بگذارید. کردیت از حساب صاحب کلید کم می‌شود. بدون آن Gamma خاموش است */
+  GAMMA_API_KEY?: string;
+  /** اختیاری: آدرس پایه‌ی API Gamma (پیش‌فرض https://public-api.gamma.app/v1.0) */
+  GAMMA_API_BASE?: string;
   /** کلیدهای Gemini (هر خط یا «;» یا «,» یک کلید). هر کلید ۳ درخواست می‌گیرد و بعد نوبت کلید بعدی است؛ با هر خطا (۴۲۹، ۴۰۱، ۴۰۳، ۴۰۰، ۵xx، تایم‌اوت) همان درخواست با کلید بعدی تکرار می‌شود. به‌صورت secret بگذارید */
   GEMINI_API_KEYS?: string;
   /** اختیاری: تعداد درخواست پشت‌سرهم هر کلید قبل از رفتن به کلید بعدی (پیش‌فرض ۳) */
