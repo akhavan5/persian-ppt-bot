@@ -58,8 +58,8 @@ android {
         applicationId = "ir.pptsaz.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 9
+        versionName = "1.0.8"
         manifestPlaceholders["TapsellMediationAppKey"] = if (tapsellReal) tapsellKeyEnv else tapsellTestKey
         // اعلان FCM: از متغیرهای محیطی (GitHub Secrets) می‌آید؛ خالی = اعلان خاموش. فایل google-services.json لازم نیست.
         for (k in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {

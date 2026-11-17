@@ -37,10 +37,21 @@ object CrashReporter {
         }
     }
 
-    /** IllegalArgumentException «Service not registered» که از داخل کتابخانه‌ی BazaarUpdater روی thread خودش پرتاب می‌شود (SDK یک اتصال را دوبار unbind می‌کند). */
-    private fun isBazaarUpdaterGlitch(e: Throwable): Boolean =
-        e is IllegalArgumentException && e.message?.contains("Service not registered") == true &&
-            e.stackTrace.any { it.className.startsWith("com.farsitel.bazaar.updater") }
+    /** خطاهای داخلی کتابخانه‌ی BazaarUpdater که روی thread خودش (Dispatchers.IO) پرتاب می‌شوند و try/catch ما به آن‌ها نمی‌رسد:
+     *  ۱) IllegalArgumentException «Service not registered» (SDK یک اتصال را دوبار unbind می‌کند)
+     *  ۲) DeadObjectException / RemoteException: پروسه‌ی بازار وسط getRemoteVersionCode مرده (کم‌حافظه، به‌روزرسانی یا بستن بازار)
+     *  فقط وقتی نادیده گرفته می‌شود که در ردپا (یا علت‌های آن) کلاسی از com.farsitel.bazaar.updater باشد؛ کرش‌های خودِ اپ همچنان ثبت می‌شوند. */
+    private fun isBazaarUpdaterGlitch(e: Throwable): Boolean {
+        var c: Throwable? = e
+        var depth = 0
+        while (c != null && depth++ < 6) {
+            val known = (c is IllegalArgumentException && c.message?.contains("Service not registered") == true) ||
+                c is android.os.RemoteException || c is android.os.DeadObjectException
+            if (known && c.stackTrace.any { it.className.startsWith("com.farsitel.bazaar.updater") }) return true
+            c = c.cause
+        }
+        return false
+    }
 
     /** اگر گزارش کرشِ ارسال‌نشده‌ای هست می‌فرستد؛ در صورت خطای شبکه فایل می‌ماند تا دفعه‌ی بعد. */
     suspend fun sendPending(app: Application) {
