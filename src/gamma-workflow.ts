@@ -62,10 +62,10 @@ export function compactSource(deck: Deck): string {
   return [`عنوان ارائه: ${deck.title}`, ...lines].join("\n").slice(0, SOURCE_CAP);
 }
 
-/** پرامپت تصویر بدون مدل: فقط از عنوان ارائه و عنوان چند اسلاید اول ساخته می‌شود */
+/** پرامپت تصویر بدون مدل: فقط موضوع (عنوان ارائه و عنوان چند اسلاید اول)؛ متن داخل تصویر نه اجباری است نه ممنوع، اگر Gamma خواست بنویسد فارسی باشد */
 export function imagePrompt(deck: Deck): string {
   const topics = deck.slides.map((s) => s.title).filter(Boolean).slice(1, 5).join("، ");
-  return `A clean, modern, eye-catching illustration that visually represents the topic "${deck.title}".${topics ? ` Related ideas: ${topics}.` : ""} No letters, words or numbers anywhere in the image.`.slice(0, 1500);
+  return `A clean, modern, eye-catching illustration about the topic "${deck.title}".${topics ? ` Related ideas: ${topics}.` : ""} If any text appears in the image, it should be in Persian (Farsi).`.slice(0, 1500);
 }
 
 // ---------- خطاها ----------

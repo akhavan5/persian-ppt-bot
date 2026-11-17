@@ -318,8 +318,10 @@ export const GAMMA_KINDS: GammaKind[] = GAMMA_SPECS.map((s) => s.kind);
 export const gammaSpec = (kind: string): GammaKindSpec | undefined => GAMMA_SPECS.find((s) => s.kind === kind);
 export const isGammaKind = (k: unknown): k is GammaKind => GAMMA_SPECS.some((s) => s.kind === k);
 
-/** تنها دو محافظ لازم؛ بقیه‌ی طراحی و نوشتن با خلاقیت خودِ Gamma است: وفاداری به واقعیت‌های منبع، و تصویر بدون حروف (حروف فارسیِ تصویرهای AI خراب می‌شود) */
-const GUARD_RULES = "Use only facts from the source; do not invent statistics, names or quotes. Images must not contain any letters, words or numbers.";
+/** تنها یک محافظ: وفاداری به واقعیت‌های منبع؛ بقیه‌ی طراحی و نوشتن (از جمله متن داخل تصویر) با خلاقیت خودِ Gamma است */
+/** همه‌ی خروجی‌های فارسی: متن کارت به فارسی نوشته شود (هم‌راستا با textOptions.language="fa") */
+const PERSIAN_RULE = "Any text should be in natural, fluent Persian (Farsi), right-to-left, with correct half-spaces (نیم‌فاصله).";
+const GUARD_RULES = "Use only facts from the source; do not invent statistics, names or quotes.";
 
 /**
  * ساخت یک خروجی Gamma با ارزان‌ترین تنظیمات (Classic).
@@ -333,9 +335,9 @@ export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: st
     numCards: spec.cards.max,
     cardOptions: { dimensions: spec.dimensions },
     textOptions: { language: spec.language ?? "fa", amount: "brief" },
-    imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL, style: "flat minimal illustration, no text" },
+    imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL, style: "flat minimal illustration" },
     exportAs: spec.exportAs,
-    additionalInstructions: [spec.instructions, GUARD_RULES].filter(Boolean).join(" "),
+    additionalInstructions: [(spec.language ?? "fa") === "fa" ? PERSIAN_RULE : "", spec.instructions, GUARD_RULES].filter(Boolean).join(" "),
     ...(title ? { title: title.slice(0, 200) } : {}),
   };
   return createGeneration(env, input);
