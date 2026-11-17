@@ -650,8 +650,8 @@ async function paymentAttention(env: Env, pays: PayRow[]): Promise<{ kind: AttnK
   const recent = pays.filter((r) => r.state === "paid" && r.plan && r.t > d25).slice(0, 30);
   const subs = await Promise.all(recent.map((r) => env.KV.get(`sub:${r.uid}`).catch(() => "?")));
   recent.forEach((r, i) => { if (subs[i] === null) out.push({ kind: "nosub", r }); });
-  const w: Record<AttnKind, number> = { issue: 0, nosub: 1, failed: 2, stale: 3 };
-  return out.sort((a, b) => w[a.kind] - w[b.kind] || b.r.t - a.r.t);
+  // فقط به ترتیب زمان (جدیدترین اول)؛ نوع مشکل با آیکون هر ردیف و شمارنده‌ی «فوری» در خلاصه مشخص است
+  return out.sort((a, b) => b.r.t - a.r.t);
 }
 
 async function paymentScreen(env: Env, tab: "s" | "l" | "p", page: number): Promise<Screen> {
