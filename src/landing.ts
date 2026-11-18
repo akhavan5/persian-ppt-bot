@@ -72,7 +72,7 @@ export const MEDIAAD_HERO_SLOT = `<div id="mediaad-rm4mJ" ></div>`;
 export const MEDIAAD_CONTENT_SLOT = `<div id="mediaad-X2V5O" ></div>`;
 
 /** جایگاه تبلیغ مدیاد؛ زیر بخش «مقاله‌های مرتبط». شناسه را تغییر ندهید. */
-export const MEDIAAD_RELATED_SLOT = `<div id="mediaad-aV9e9" ></div>`;
+export const MEDIAAD_RELATED_SLOT = `<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:center"><div id="mediaad-lYqYj" style="flex:1 1 300px;min-width:0"></div><div id="mediaad-aV9e9" style="flex:1 1 300px;min-width:0"></div></div>`;
 
 /** جایگاه تبلیغ چسبان مدیاد؛ خودش جای نمایش را پیدا می‌کند، فقط یک‌بار در هر صفحه (قبل از فوتر). شناسه را تغییر ندهید. */
 export const MEDIAAD_STICKY_SLOT = `<div id="mediaad-3e9jx" ></div>`;
