@@ -3,7 +3,7 @@
  * چرا: KV رایگان فقط ۱٬۰۰۰ نوشتن/حذف در روز و ۱ گیگابایت فضا دارد؛ D1 رایگان ۱۰۰ هزار نوشتن در روز و ۵ گیگابایت.
  * فایل‌ها به تکه‌های ۵۱۲ کیلوبایتی شکسته می‌شوند (سقف هر ردیف D1 دو مگابایت است).
  * API عمداً مثل KV است (put/get/getWithMetadata/delete با TTL) تا بقیه‌ی کد بدون تغییر کار کند.
- * چنددیتابیسی: فایل‌ها روی چند D1 پخش می‌شوند (DB2…DB10 و در آخر DB اصلی). وقتی یکی پر شد (خطای SQLITE_FULL / سقف ۵۰۰ مگابایت)، همان نوشتن روی بعدی انجام می‌شود و دیتابیس پر برای ۱۰ دقیقه کنار گذاشته می‌شود. خواندن به ترتیب همه‌ی دیتابیس‌ها را می‌گردد.
+ * چنددیتابیسی: فایل‌ها روی چند D1 پخش می‌شوند (DB2…DB10 و در آخر DB اصلی). وقتی یکی پر شد (خطای SQLITE_FULL / سقف ۵۰۰ مگابایت)، همان نوشتن روی بعدی انجام می‌شود و دیتابیس پر برای ۶ ساعت کنار گذاشته می‌شود. خواندن به ترتیب همه‌ی دیتابیس‌ها را می‌گردد.
  * نوشتن: اول ردیف متادیتای «موقت» (انقضای ۱۵ دقیقه) درج می‌شود، بعد تکه‌ها، و در پایان انقضای واقعی جایگزین می‌شود؛ خواننده فایل نیمه‌کاره نمی‌بیند (شمارش تکه‌ها با n نمی‌خواند) و اگر Worker وسط نوشتن بمیرد purge تکه‌ها را هم با ردیف موقت پاک می‌کند (تکه‌ی یتیم نمی‌ماند).
  * خواندن: متادیتا هم‌زمان از همه‌ی دیتابیس‌ها پرسیده می‌شود. فایل‌های موقت پس از پایان کار با deletePrefix پاک می‌شوند و purge هر ساعت اجرا می‌شود.
  */
@@ -21,7 +21,11 @@ const isFullErr = (e: unknown) => /SQLITE_FULL|database or disk is full|disk is 
 // دیتابیس‌هایی که اخیراً پر بوده‌اند (مشترک بین درخواست‌های همین isolate)
 const blockedUntil = new WeakMap<D1Database, number>();
 const isBlocked = (d: D1Database) => (blockedUntil.get(d) ?? 0) > Date.now();
-const BLOCK_MS = 10 * 60 * 1000;
+const BLOCK_MS = 6 * 60 * 60 * 1000;
+// وضعیت «پر بودن» در KV هم نگه داشته می‌شود تا isolateهای تازه هم بدانند (یک کلید JSON: {اندیس دیتابیس: زمان پایان بلاک})
+const FULL_KEY = "blobfull";
+const FULL_SYNC_MS = 60 * 1000; // هر isolate حداکثر دقیقه‌ای یک بار KV را می‌خواند
+let fullSyncedAt = 0;
 // انقضای موقتِ فایلی که هنوز در حال نوشتن است (ثانیه)
 const PENDING_TTL = 15 * 60;
 // ساخت جدول‌ها برای هر دیتابیس فقط یک بار
@@ -54,6 +58,7 @@ export class BlobStore {
       : value instanceof Uint8Array ? value : new Uint8Array(value);
     const exp = o.expiration ?? (o.expirationTtl ? nowSec() + Math.floor(o.expirationTtl) : null);
     // اول دیتابیس‌های غیرپر؛ دیتابیس‌های «اخیراً پر» آخرین چاره‌اند (شاید cron جا باز کرده باشد)
+    await this.syncFull();
     const order = [...this.dbs.filter((d) => !isBlocked(d)), ...this.dbs.filter(isBlocked)];
     let lastErr: unknown = new Error("no D1 database for blobs");
     for (const db of order) {
@@ -62,12 +67,38 @@ export class BlobStore {
         return;
       } catch (e) {
         lastErr = e;
-        if (isFullErr(e)) blockedUntil.set(db, Date.now() + BLOCK_MS);
+        if (isFullErr(e)) {
+          const until = Date.now() + BLOCK_MS;
+          if (!isBlocked(db)) await this.saveFull(db, until);
+          blockedUntil.set(db, until);
+        }
         console.error("blob put failed on a shard", String(e).slice(0, 200));
         await this.cleanupOne(db, key).catch(() => {}); // تکه‌های نیمه‌کاره نماند
       }
     }
     throw lastErr;
+  }
+
+  /** وضعیت پر بودن را از KV به حافظه‌ی این isolate می‌آورد (خطای KV نباید نوشتن را خراب کند) */
+  private async syncFull(): Promise<void> {
+    if (!this.legacy || Date.now() - fullSyncedAt < FULL_SYNC_MS) return;
+    fullSyncedAt = Date.now();
+    try {
+      const m = await this.legacy.get<Record<string, number>>(FULL_KEY, "json");
+      if (!m) return;
+      this.dbs.forEach((d, i) => { const u = m[String(i)]; if (u && u > Date.now() && !isBlocked(d)) blockedUntil.set(d, u); });
+    } catch (e) { console.error("blob full-state read failed", String(e).slice(0, 120)); }
+  }
+
+  /** پر بودن یک دیتابیس را برای همه‌ی isolateها ثبت می‌کند (فقط وقتی تازه کشف شده؛ حداکثر چند نوشتن KV در ۶ ساعت) */
+  private async saveFull(db: D1Database, until: number): Promise<void> {
+    if (!this.legacy) return;
+    try {
+      const m = (await this.legacy.get<Record<string, number>>(FULL_KEY, "json")) ?? {};
+      for (const k of Object.keys(m)) if (m[k] <= Date.now()) delete m[k];
+      m[String(this.dbs.indexOf(db))] = until;
+      await this.legacy.put(FULL_KEY, JSON.stringify(m), { expirationTtl: Math.ceil(BLOCK_MS / 1000) });
+    } catch (e) { console.error("blob full-state write failed", String(e).slice(0, 120)); }
   }
 
   private async putOne(db: D1Database, key: string, bytes: Uint8Array, exp: number | null, metadata: unknown): Promise<void> {
@@ -198,6 +229,7 @@ export class BlobStore {
         console.error("blob purge failed on a shard", String(e).slice(0, 200));
       }
     }
+    if (this.legacy) { await this.legacy.delete(FULL_KEY).catch(() => {}); fullSyncedAt = 0; } // جا باز شد؛ وضعیت مشترک هم پاک شود
     return total;
   }
 }
