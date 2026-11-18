@@ -50,7 +50,7 @@ export const YEKTANET_SCRIPT = `<script>
         }(window,document,"yektanet");
         </script>`;
 
-/** اسکریپت مدیاد (mediaad)؛ جایگاهش MEDIAAD_SLOT است. */
+/** اسکریپت مدیاد (mediaad). */
 export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 (function () {
   const head = document.getElementsByTagName("head")[0];
@@ -62,10 +62,7 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 })();
 </script>`;
 
-/** جایگاه تبلیغ مدیاد: جایگزین جایگاه متنی یکتانت (pos-article-text-124202، حذف شد)؛ دو بلوک (بخش) بالاتر از جایگاه تصویری انتهای صفحه. شناسه را تغییر ندهید. */
-export const MEDIAAD_SLOT = `<div id="mediaad-6pnV7"></div>`;
-
-/** جایگاه تبلیغ تصویری یکتانت (انتهای مطلب). فقط در انتهای محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
+/** جایگاه تبلیغ تصویری یکتانت (بین بخش مقاله‌های مرتبط و راهنماهای مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
 /** سربرگ‌های امنیتی و کش مشترک پاسخ‌های HTML ساخته‌شده در Worker. stale-while-revalidate: بازدید بعد از انقضا هم فوری جواب می‌گیرد. */
@@ -545,7 +542,7 @@ ${articles.length ? `    <section>
       <h2>مقاله‌های مرتبط در وبلاگ</h2>
       <div class="rel">${articles.map((a) => `<a href="/blog/${a!.slug}">${esc(a!.nav)}<span>${esc(a!.category)}</span></a>`).join("")}</div>
     </section>
-` : ""}    ${MEDIAAD_SLOT}
+` : ""}    ${YEKTANET_SLOT}
     <section>
       <h2>راهنماهای مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/${r.slug}">${esc(r.nav)}<span>${esc(r.title.split("|")[0].trim())}</span></a>`).join("")}</div>
@@ -555,7 +552,6 @@ ${articles.length ? `    <section>
       <p>موضوع را بنویس و ظرف چند دقیقه فایل PPTX فارسی و قابل‌ویرایش را بگیر.</p>
       <a class="btn" href="/#topic">${esc(p.cta)}</a>
     </section>
-    ${YEKTANET_SLOT}
   </article>
 </main>
 ${renderFooter()}
