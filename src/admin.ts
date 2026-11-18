@@ -20,6 +20,7 @@ import { PLANS, activatePlan, payEnabled } from "./payment";
 import { runningJob } from "./deck-service";
 import { hasBrowser } from "./browser-api";
 import { toEn, toFa } from "./util";
+import { XLSX_MIME, buildXlsx, type XCell } from "./xlsx";
 import { AUDIENCES, isAudience, listAudience, type Audience } from "./broadcast";
 import {
   PUSH_BODY_MAX, PUSH_SEGMENTS, PUSH_TITLE_MAX, clearPushDraft, getPushDraft, getPushSegment, isPushSegment, launchAppPush, parsePushDraft, pushDeviceCounts,
@@ -266,7 +267,7 @@ async function homeScreen(env: Env): Promise<Screen> {
 function exportsScreen(): Screen {
   return {
     text:
-      "📤 <b>خروجی‌ها</b>\nهر دکمه یک فایل CSV (UTF-8، بازشدنی در اکسل) به همین چت می‌فرستد.\n\n" +
+      "📤 <b>خروجی‌ها</b>\nهر دکمه یک فایل فایل (Excel یا CSV) به همین چت می‌فرستد.\n\n" +
       "👑 <b>پلن‌داران فعال</b>: همه‌ی کاربرانی که همین حالا پلن فعال دارند، با مشخصات کامل (نام، ایمیل، موبایل، پلتفرم، پلن، اعتبار، انقضا و …)\n" +
       "💳 <b>خریداران پلن</b>: هر کسی که دست‌کم یک‌بار پلن خریده\n" +
       "📧 <b>ایمیل/موبایل</b>: مخاطبان برای کمپین ایمیلی (Resend) و پیامک\n" +
@@ -1507,10 +1508,19 @@ async function exportBuyers(env: Env, chatId: number) {
     "<i>خریدهای درگاه دیجی‌پی قبل از فعال شدن این قابلیت فقط از ۸۴ روز اخیر شناخته می‌شوند؛ خریدهای فروشگاه‌ها (بازار/مایکت/سیب‌اپ) و هر خرید از این به بعد دائمی ثبت می‌شود.</i>");
 }
 
-/** خروجی پلن‌داران فعال (پلنی که نه منقضی شده و نه اعتبارش تمام شده): فایل active-plan-users.csv با مشخصات کامل هر کاربر.
+/** خروجی پلن‌داران فعال (پلنی که نه منقضی شده و نه اعتبارش تمام شده): فایل Excel (.xlsx) راست‌به‌چپ با مشخصات کامل هر کاربر.
  *  ستون‌ها: شناسه، نام، ایمیل، موبایل، پلتفرم، نام‌کاربری تلگرام، شناسه‌ی پیام‌رسانِ وصل‌شده، پلن، اعتبار پلن، اعتبار هدیه، مجموع،
  *  تاریخ انقضا، روزهای باقی‌مانده، اولین خرید، تاریخ ثبت‌نام، وضعیت (مسدود یا نه). */
 const PLAT_PLAIN: Record<string, string> = { tg: "تلگرام", bale: "بله", rubika: "روبیکا", eitaa: "ایتا", splus: "سروش‌پلاس" };
+/** تاریخ شمسی با رقم لاتین (۱۴۰۵/۰۸/۰۲)؛ t = میلی‌ثانیه */
+const jalaliDay = (t: number): string => {
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US-u-ca-persian-nu-latn", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Tehran" })
+      .formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+    return `${p.year}/${p.month}/${p.day}`;
+  } catch { return tehranDay(t); }
+};
+
 async function exportActiveSubs(env: Env, chatId: number) {
   const subs = await rows(env,
     "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND json_extract(v,'$.exp') > ?4 AND json_extract(v,'$.credits') > 0 ORDER BY json_extract(v,'$.exp') ASC LIMIT 5000",
@@ -1521,32 +1531,34 @@ async function exportActiveSubs(env: Env, chatId: number) {
   const first = new Map<string, number>();
   for (const r of await rows(env, "SELECT k, json_extract(v,'$.f') v FROM kv WHERE k >= ?1 AND k < ?2 LIMIT 100000", "pbuy:", "pbuy:" + MAXC)) first.set(r.k.slice(5), Number(r.v) || 0);
 
-  const lines = ["user_id,name,email,mobile,platform,tg_username,linked_messenger_id,plan,plan_credits,bonus_credits,total_credits,expires,days_left,first_purchase,signup_date,banned"];
-  let n = 0;
+  const headers = ["ردیف", "نام", "موبایل", "ایمیل", "پلتفرم", "پلن", "اعتبار پلن", "اعتبار هدیه", "مجموع اعتبار", "تاریخ انقضا", "روز مانده", "اولین خرید", "تاریخ ثبت‌نام", "نام‌کاربری تلگرام", "شناسه‌ی پیام‌رسان", "مسدود", "شناسه‌ی کاربر"];
+  const widths = [6, 22, 15, 28, 13, 9, 10, 10, 11, 13, 9, 13, 13, 20, 16, 8, 24];
+  const data: XCell[][] = [];
   for (let i = 0; i < subs.length; i += 25) {
-    const out = await Promise.all(subs.slice(i, i + 25).map(async (r) => {
+    const out = await Promise.all(subs.slice(i, i + 25).map(async (r): Promise<XCell[] | null> => {
       const uid = r.k.slice(4); const sub = json<{ plan: string; exp: number; credits: number }>(r.v); if (!sub) return null;
       const num = /^\d{1,15}$/.test(uid);
       const w = !num && WEB_ID.test(uid) ? await getUserById(env, uid).catch(() => null) : null;
-      const linked = w ? Number(await env.KV.get(`w2tg:${uid}`).catch(() => null)) || "" : "";
-      const seen = num ? await getUserSeen(env, Number(uid)).catch(() => null) : linked ? await getUserSeen(env, Number(linked)).catch(() => null) : null;
+      const linked = w ? Number(await env.KV.get(`w2tg:${uid}`).catch(() => null)) || 0 : 0;
+      const seen = num ? await getUserSeen(env, Number(uid)).catch(() => null) : linked ? await getUserSeen(env, linked).catch(() => null) : null;
       const plat = w
         ? (w.app ? (w.store ? STORE_LABEL[w.store as keyof typeof STORE_LABEL] ?? w.store : w.os === "ios" ? "iOS" : "اپ اندروید") : "وب")
         : PLAT_PLAIN[botPlatform(Number(uid))] ?? "تلگرام";
-      const pc = sub.credits, bc = bonus.get(uid) ?? 0;
+      const pc = sub.credits, bc = bonus.get(uid) ?? 0, f = first.get(uid) ?? 0;
+      const seenT = seen?.t ? Date.parse(seen.t) : 0;
       return [
-        uid, csvCell(w?.name || seen?.n), csvCell(w?.email, true), csvCell(w?.mobile, true), csvCell(plat),
-        csvCell(seen?.u ? "@" + seen.u.replace(/^@/, "") : "", true), linked, csvCell(planLabel(sub.plan)), pc, bc, pc + bc,
-        tehranDay(sub.exp), Math.max(0, Math.ceil((sub.exp - Date.now()) / 86_400_000)),
-        first.get(uid) ? tehranDay(first.get(uid)!) : "", w?.created ? tehranDay(w.created) : seen?.t && Date.parse(seen.t) ? tehranDay(Date.parse(seen.t)) : "",
-        banned.has(uid) ? "yes" : "",
-      ].join(",");
+        0, w?.name || seen?.n || "", w?.mobile || "", w?.email || "", plat, planLabel(sub.plan), pc, bc, pc + bc,
+        jalaliDay(sub.exp), Math.max(0, Math.ceil((sub.exp - Date.now()) / 86_400_000)),
+        f ? jalaliDay(f) : "", w?.created ? jalaliDay(w.created) : seenT ? jalaliDay(seenT) : "",
+        seen?.u ? "@" + seen.u.replace(/^@/, "") : "", linked || (num ? uid : ""), banned.has(uid) ? "بله" : "", uid,
+      ];
     }));
-    for (const l of out) if (l) { lines.push(l); n++; }
+    for (const row of out) if (row) { row[0] = data.length + 1; data.push(row); }
   }
-  await sendDocument(env, chatId, new TextEncoder().encode("\uFEFF" + lines.join("\n") + "\n"), "active-plan-users.csv",
-    `👑 <b>${fa(n)}</b> کاربر با پلن فعال (نزدیک‌ترین انقضا اول)`, { mime: "text/csv" });
-  await sendMessage(env, chatId, `✅ خروجی پلن‌داران فعال آماده شد.\n👑 تعداد: <b>${fa(n)}</b>` + (subs.length >= 5000 ? "\n⚠️ سقف ۵۰۰۰ ردیف اعمال شد." : ""),
+  const bytes = await buildXlsx("پلن‌داران فعال", headers, data, widths);
+  await sendDocument(env, chatId, bytes, `active-plan-users-${tehranDay(Date.now())}.xlsx`,
+    `👑 <b>${fa(data.length)}</b> کاربر با پلن فعال (نزدیک‌ترین انقضا اول؛ تاریخ‌ها شمسی)`, { mime: XLSX_MIME });
+  await sendMessage(env, chatId, `✅ خروجی پلن‌داران فعال آماده شد.\n👑 تعداد: <b>${fa(data.length)}</b>` + (subs.length >= 5000 ? "\n⚠️ سقف ۵۰۰۰ ردیف اعمال شد." : ""),
     { reply_markup: { inline_keyboard: [[cb("📤 خروجی‌ها", "ad:xo"), ...backHome]] } });
 }
 
