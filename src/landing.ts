@@ -65,8 +65,8 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 /** جایگاه تبلیغ تصویری یکتانت (بین بخش مقاله‌های مرتبط و راهنماهای مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
-/** جایگاه تبلیغ متنی یکتانت؛ بالای بخش «پرسش‌های متداول». شناسه را تغییر ندهید. */
-export const YEKTANET_TEXT_SLOT = `<div id="pos-article-text-124202"></div>`;
+/** جایگاه تبلیغ مدیاد؛ بالای بخش «پرسش‌های متداول». شناسه را تغییر ندهید. */
+export const MEDIAAD_FAQ_SLOT = `<div id="mediaad-aV9e9" ></div>`;
 
 /** جایگاه تبلیغ چسبان مدیاد؛ خودش جای نمایش را پیدا می‌کند، فقط یک‌بار در هر صفحه (قبل از فوتر). شناسه را تغییر ندهید. */
 export const MEDIAAD_STICKY_SLOT = `<div id="mediaad-3e9jx" ></div>`;
@@ -540,7 +540,7 @@ ${p.sections.map((x) => renderSection(x) + (x === stepsSec ? stepsFigure("landin
       <p style="color:var(--muted);font-size:.92rem">روی هر مورد بزن تا در کادر موضوع قرار بگیرد و بتوانی آن را تغییر بدهی.</p>
       <div class="chips">${p.topics.map((t) => `<a rel="nofollow" href="/?topic=${encodeURIComponent(t)}">${esc(t)}</a>`).join("")}</div>
     </section>
-    ${YEKTANET_TEXT_SLOT}
+    ${MEDIAAD_FAQ_SLOT}
     <section>
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}

@@ -2,7 +2,7 @@
 import { PAGES, PAGE_BY_SLUG, type Page } from "./landing-data";
 import { POSTS, POST_BY_SLUG, type BlogSection, type Post } from "./blog-data";
 import { IMG_CSS, heroAlt, heroFigure, heroImages, heroPreload, imageNode, imageTags, pageImagePaths, stepsAlt, stepsFigure, stepsSection } from "./seo-images";
-import { BRAND, CSS, LANDINGS_FOR_POST, YEKTANET_SCRIPT, MEDIAAD_SCRIPT, MEDIAAD_STICKY_SLOT, YEKTANET_SLOT, YEKTANET_TEXT_SLOT, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
+import { BRAND, CSS, LANDINGS_FOR_POST, YEKTANET_SCRIPT, MEDIAAD_SCRIPT, MEDIAAD_STICKY_SLOT, YEKTANET_SLOT, MEDIAAD_FAQ_SLOT, esc, fa, faDate, inline, jsonLd, plain, renderFooter, renderSection, siteNodes } from "./landing";
 
 const BLOG_TITLE = "وبلاگ پاورپوینت‌ساز فارسی | راهنمای ساخت و ارائه‌ی پاورپوینت";
 const BLOG_DESC = "راهنمای ساخت و ارائه‌ی پاورپوینت فارسی: موضوع پاورپوینت جالب برای مدرسه و دانشگاه، فونت فارسی، جدول فارسی در اسلاید، رفع جدا شدن حروف فارسی در پاورپوینت، نمونه‌ی اسلاید به اسلاید، ساختار دفاعیه و پرسش‌های داوران، طراحی راست‌به‌چپ، اینفوگرافیک و جزوه، تبدیل لینک، Excel و عکس به پاورپوینت، پرامپت ساخت پاورپوینت، ساخت پاورپوینت با چت جی پی تی و مقایسه‌ی صادقانه‌ی ابزارها.";
@@ -305,7 +305,7 @@ export function renderPost(p: Post, site: string): string {
     <section>${p.intro.map((t) => `<p>${inline(t)}</p>`).join("")}</section>
     <section class="toc"><h2>فهرست مطالب</h2><ol>${p.sections.map((s, i) => `<li><a href="#s${i + 1}">${esc(s.h2)}</a></li>`).join("")}<li><a href="#faq">پرسش‌های متداول</a></li></ol></section>
 ${p.sections.map((x, i) => renderBlogSection(x, i) + (x === stepsSec ? stepsFigure("blog", p.slug, stepsAltText, `مراحل ${x.h2}`) : "")).join("\n")}
-    ${YEKTANET_TEXT_SLOT}
+    ${MEDIAAD_FAQ_SLOT}
     <section id="faq">
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
