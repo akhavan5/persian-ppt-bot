@@ -10,7 +10,10 @@
      تمام‌صفحه است؛ app.html آن را با window.ppSupport.open() از کارت «پشتیبانی هوشمند» باز می‌کند. */
   var embedded = typeof window.ppSupportAuth === "function";
 
-  var msgs = [], remaining = 10, limit = 10, open = false, busy = false, guest = false, loaded = false;
+  var msgs = [], remaining = 10, limit = 10, open = false, busy = false, guest = false, loaded = false, hc = 0, poll = 0;
+  var SEEN = "ppsc_hc";
+  function seenGet() { try { return Number(localStorage.getItem(SEEN)) || 0; } catch (e) { return 0; } }
+  function seenSet(n) { try { localStorage.setItem(SEEN, String(n)); } catch (e) {} }
   var GREETING = "سلام 👋 من دستیار هوشمند پاورپوینت‌ساز هستم. درباره‌ی قیمت و اعتبار، ساخت ارائه، مشکل‌های فنی یا حتی نکته‌های طراحی و ارائه‌ی سخنرانی بپرس.";
   var CHIPS = ["قیمت پلن‌ها چقدره؟", "اعتبار رایگان چطور می‌گیرم؟", "برای ارائه‌ی ۱۰ دقیقه‌ای چند اسلاید بسازم؟", "خروجی ارائه چه فرمت‌هایی دارد؟"];
   var GUEST_TEXT = "گفتگو با دستیار هوشمند فقط برای کاربران ثبت‌نام‌شده است. وارد حسابت شو یا ثبت‌نام کن (ثبت‌نام رایگان است و ۲ ارائه‌ی هدیه می‌گیری)؛ بعد می‌توانی هر سؤالی داشتی بپرسی.";
@@ -38,6 +41,9 @@
     "#ppsc .pps-m{max-width:86%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}" +
     "#ppsc .pps-m.pps-u{align-self:flex-start;background:linear-gradient(135deg,var(--primary,#2563eb),var(--primary-2,#0891b2));color:#fff;border-end-start-radius:4px;box-shadow:0 2px 8px rgba(37,99,235,.22)}" +
     "#ppsc .pps-m.pps-a{align-self:flex-end;background:var(--card,#fff);border:1px solid var(--line,#e3e9f5);border-end-end-radius:4px;box-shadow:0 1px 4px rgba(15,27,51,.06)}" +
+    "#ppsc .pps-m.pps-h{align-self:flex-end;background:rgba(18,145,91,.08);border:1px solid var(--ok,#12915b)}" +
+    "#ppsc .pps-hl{display:block;margin-bottom:4px;color:var(--ok,#12915b);font-weight:700;font-size:12px}" +
+    "#ppsc .pps-dot{position:absolute;top:-2px;inset-inline-end:-2px;width:14px;height:14px;border-radius:50%;background:#ef4444;border:2px solid #fff}" +
     "#ppsc .pps-m.pps-err{align-self:center;max-width:94%;background:#fdecea;color:#a32a1f;border:0;font-size:13px;text-align:center;box-shadow:none}" +
     "#ppsc .pps-badge{display:block;margin-top:8px;padding-top:7px;border-top:1px dashed var(--line,#e3e9f5);color:var(--ok,#12915b);font-weight:700;font-size:12px}" +
     "#ppsc .pps-typing{align-self:flex-end;display:flex;gap:4px;align-items:center;padding:10px 14px;background:var(--card,#fff);border:1px solid var(--line,#e3e9f5);border-radius:16px;border-end-end-radius:4px}" +
@@ -102,7 +108,9 @@
       list.append(chips);
     }
     msgs.forEach(function (m) {
-      var d = el("div", "pps-m " + (m.r === "u" ? "pps-u" : "pps-a"));
+      var human = m.r === "m" || m.h === 1;
+      var d = el("div", "pps-m " + (m.r === "u" ? "pps-u" : human ? "pps-h" : "pps-a"));
+      if (human) d.append(el("span", "pps-hl", "👨‍💼 پشتیبان انسانی"));
       d.append(document.createTextNode(m.t));
       if (m.f) d.append(el("span", "pps-badge", "✅ ارجاع شد؛ تیم پشتیبانی بررسی می‌کند"));
       list.append(d);
@@ -119,6 +127,11 @@
     if (Array.isArray(d.msgs)) msgs = d.msgs;
     if (typeof d.remaining === "number") remaining = d.remaining;
     if (typeof d.limit === "number") limit = d.limit;
+    if (typeof d.hc === "number") { hc = d.hc; if (open) seenSet(hc); dot(); }
+  }
+  function dot() { // نقطه‌ی قرمز روی دکمه: پاسخ تازه‌ی پشتیبان که هنوز دیده نشده
+    var old = fab.querySelector(".pps-dot"); if (old) old.remove();
+    if (!open && !guest && hc > seenGet()) fab.append(el("i", "pps-dot"));
   }
   function err(t) { var e = el("div", "pps-m pps-err", t); list.append(e); list.scrollTop = list.scrollHeight; }
 
@@ -169,6 +182,8 @@
 
   function setOpen(o) {
     open = o; panel.hidden = !o; fab.setAttribute("aria-expanded", String(o));
+    clearInterval(poll); poll = 0;
+    if (o) { seenSet(hc); dot(); poll = setInterval(function () { if (!busy && !document.hidden) loadHistory(); }, 25000); }
     if (o) { render(); loadHistory(); setTimeout(function () { if (!guest && !ta.disabled) ta.focus(); }, 50); }
     else fab.focus();
   }
@@ -181,7 +196,7 @@
   ta.addEventListener("input", function () { ta.style.height = "40px"; ta.style.height = Math.min(Math.max(ta.scrollHeight, 40), 96) + "px"; });
 
   window.ppSupport = { open: function () { if (!root.isConnected) document.body.appendChild(root); setOpen(true); } };
-  function boot() { document.body.appendChild(root); }
+  function boot() { document.body.appendChild(root); if (!embedded) loadHistory(); }
   var go = function () { (window.requestIdleCallback || function (f) { setTimeout(f, 1500); })(boot); };
   if (document.readyState === "complete") go(); else window.addEventListener("load", go);
 })();

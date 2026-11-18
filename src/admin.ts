@@ -11,7 +11,7 @@ import {
 } from "./settings";
 import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
 import { resolveUid } from "./link";
-import { DAILY_LIMIT, loadSupportConv, supportOverview, supportUsers } from "./support-chat";
+import { ADMIN_REPLY_MAX, DAILY_LIMIT, addAdminReply, loadSupportConv, notifyUserOfReply, supportOverview, supportUsers } from "./support-chat";
 import { getDeckLog, listFiles, loadFile, type DeckLog } from "./files";
 import { SAMPLE_BADGE, addSample, listSamples, removeSample, sampleLabel } from "./samples";
 import { cachedPdf } from "./pdf";
@@ -129,7 +129,7 @@ async function identify(env: Env, id: Uid): Promise<Ident> {
 const cardId = (i: Ident): Uid => i.tgId ?? (i.webId as string);
 
 // ---------- ورودی متنی منتظر (جستجو، اعتبار دلخواه، پیام به کاربر، پیام همگانی) ----------
-type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "ver"; s: StoreId | "all" } | { k: "pushw" } | { k: "wpushw" };
+type Pending = { k: "search" } | { k: "bc" } | { k: "cr"; id: Uid } | { k: "msg"; id: Uid } | { k: "ver"; s: StoreId | "all" } | { k: "pushw" } | { k: "wpushw" } | { k: "sr"; uid: string };
 const inKey = (adminId: number) => `adm:in:${adminId}`;
 const setInput = (env: Env, adminId: number, p: Pending) => env.KV.put(inKey(adminId), JSON.stringify(p), { expirationTtl: 600 });
 const clearInput = (env: Env, adminId: number) => env.KV.delete(inKey(adminId));
@@ -496,7 +496,7 @@ async function supportConvScreen(env: Env, uid: string, page: number): Promise<S
   const back: Btn[] = [cb("🔙 فهرست پشتیبانی", "ad:sc:r:0"), cb("👤 کارت کاربر", `ad:u:${uid}`)];
   if (!conv || !conv.m.length) return { text: `💬 <b>گفتگوی پشتیبانی</b>\n👤 ${who}\n\nگفتگویی ثبت نشده یا منقضی شده است.`, kb: [back, backHome] };
   const blocks = conv.m.map((x) => {
-    const head = x.r === "u" ? "👤 <b>کاربر</b>" : x.f ? "🤖 <b>دستیار</b> 📨 <i>ارجاع‌شده</i>" : "🤖 <b>دستیار</b>";
+    const head = x.r === "u" ? "👤 <b>کاربر</b>" : x.r === "m" ? "👨‍💼 <b>پشتیبان (ادمین)</b>" : x.f ? "🤖 <b>دستیار</b> 📨 <i>ارجاع‌شده</i>" : "🤖 <b>دستیار</b>";
     return `${head} · <i>${fmtTime(x.ts)}</i>\n${esc(x.t.slice(0, 1600))}`;
   });
   const pages: string[][] = [[]];
@@ -514,7 +514,7 @@ async function supportConvScreen(env: Env, uid: string, page: number): Promise<S
       `💬 <b>گفتگوی پشتیبانی</b>\n👤 ${who}\n🆔 <code>${esc(uid)}</code>\n` +
       `✉️ ${fa(conv.m.filter((x) => x.r === "u").length)} پیام کاربر · ${fa(conv.m.length)} پیام کل · صفحه ${fa(p + 1)} از ${fa(pages.length)}\n` +
       `──────────\n${pages[p].join("\n\n")}`,
-    kb: [nav, back, [cb("🔄 تازه‌سازی", `ad:sv:${uid}:${p}`), ...backHome]].filter((r) => r.length),
+    kb: [nav, [cb("✍️ پاسخ در چت", `ad:sr:${uid}`)], back, [cb("🔄 تازه‌سازی", `ad:sv:${uid}:${p}`), ...backHome]].filter((r) => r.length),
   };
 }
 
@@ -1105,6 +1105,15 @@ export async function handleAdminInput(env: Env, chatId: number, adminId: number
     return true;
   }
 
+  if (p.k === "sr") {
+    if (text.length > ADMIN_REPLY_MAX) { await setInput(env, adminId, p); await sendMessage(env, chatId, `پاسخ بلند است (${fa(text.length)} نویسه؛ حداکثر ${fa(ADMIN_REPLY_MAX)}). کوتاه‌تر بفرست، یا /cancel.`); return true; }
+    if (!(await addAdminReply(env, p.uid, text))) { await sendMessage(env, chatId, "⚠️ گفتگوی این کاربر پیدا نشد (ممکن است منقضی شده باشد)."); return true; }
+    const pushed = await notifyUserOfReply(env, p.uid, text);
+    await logAction(env, adminId, `پاسخ در چت پشتیبانی ${p.uid}`);
+    await sendScreen(env, chatId, { text: `✅ پاسخ در چت کاربر ثبت شد و همان‌جا دیده می‌شود.${pushed ? "\n📩 در پیام‌رسانِ وصل‌شده‌ی کاربر هم فرستاده شد." : ""}`, kb: [[cb("💬 گفتگو", `ad:sv:${p.uid}:999`), ...backHome]] });
+    return true;
+  }
+
   if (p.k === "ver") {
     const r = await applyAppVer(env, p.s, toEn(text).trim().toLowerCase().split(/\s+/).filter(Boolean));
     if (!r.ok) { await setInput(env, adminId, p); await sendMessage(env, chatId, `${r.msg}\n\nدوباره بفرست، یا /cancel.`); return true; }
@@ -1307,6 +1316,10 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "nu": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userCard(env, id)));
       case "nd": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userFilesScreen(env, id)));
       case "cr": return await prompt({ k: "cr", id }, `✏️ <b>اعتبار دلخواه</b> برای <code>${id}</code>\nیک عدد بفرست؛ مثلاً <code>25</code> یا <code>-3</code>.`, `ad:u:${id}`);
+      case "sr": {
+        if (!b || !WEB_ID.test(b)) return await answer("شناسه‌ی کاربر نامعتبر است", true);
+        return await prompt({ k: "sr", uid: b }, `✍️ <b>پاسخ در چت پشتیبانی</b> برای <code>${esc(b)}</code>\nمتنی که می‌فرستی مستقیم در چت خود کاربر نمایش داده می‌شود (حداکثر ${fa(ADMIN_REPLY_MAX)} نویسه).`, `ad:sv:${b}:999`);
+      }
       case "m": return await prompt({ k: "msg", id }, `✉️ <b>پیام به کاربر</b> <code>${id}</code>\nمتن پیام را بفرست.`, `ad:u:${id}`);
       case "g": {
         const n = Math.trunc(Number(c));
