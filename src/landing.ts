@@ -65,8 +65,8 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 /** جایگاه تبلیغ تصویری یکتانت (بالای بخش مقاله‌های مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
-/** جایگاه تبلیغ مدیاد؛ بالای بخش «پرسش‌های متداول». شناسه را تغییر ندهید. */
-export const MEDIAAD_FAQ_SLOT = `<div id="mediaad-rm4mJ" ></div>`;
+/** جایگاه تبلیغ مدیاد؛ زیر تصویر اصلی. شناسه را تغییر ندهید. */
+export const MEDIAAD_HERO_SLOT = `<div id="mediaad-rm4mJ" ></div>`;
 
 /** جایگاه تبلیغ مدیاد؛ زیر بخش‌های محتوایی. شناسه را تغییر ندهید. */
 export const MEDIAAD_CONTENT_SLOT = `<div id="mediaad-X2V5O" ></div>`;
@@ -541,6 +541,7 @@ ${MEDIAAD_SCRIPT}
   </div>
   <article>
     ${heroFigure("landing", p.slug, alt, `${p.nav}؛ نمونه‌ی اسلایدهای فارسی راست‌به‌چپ و قابل‌ویرایش که با ${BRAND} ساخته می‌شود`)}
+    ${MEDIAAD_HERO_SLOT}
 ${p.sections.map((x) => renderSection(x) + (x === stepsSec ? stepsFigure("landing", p.slug, stepsAltText, `مراحل ${x.h2}`) : "")).join("\n")}
     ${MEDIAAD_CONTENT_SLOT}
     <section>
@@ -548,7 +549,6 @@ ${p.sections.map((x) => renderSection(x) + (x === stepsSec ? stepsFigure("landin
       <p style="color:var(--muted);font-size:.92rem">روی هر مورد بزن تا در کادر موضوع قرار بگیرد و بتوانی آن را تغییر بدهی.</p>
       <div class="chips">${p.topics.map((t) => `<a rel="nofollow" href="/?topic=${encodeURIComponent(t)}">${esc(t)}</a>`).join("")}</div>
     </section>
-    ${MEDIAAD_FAQ_SLOT}
     <section>
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
