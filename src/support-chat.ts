@@ -9,7 +9,7 @@
  * - جستجوی هوشمند در سایت (Cloudflare AI Search) حذف شد؛ به‌جایش پرامپت قوی‌تر و فهرست زنده‌ی صفحه‌ها و مقاله‌های سایت (از
  *   landing-data / blog-data) به مدل داده می‌شود و مدل برای پرسش‌های عمومی از دانش خودش هم جواب می‌دهد.
  *
- * ذخیره‌سازی: env.KV (نمای D1) با کلید sc:u:<uid> و انقضای ۳۰ روز. هر کاربر یک گفتگوی پیوسته دارد (در همه‌ی دستگاه‌ها یکسان).
+ * ذخیره‌سازی: env.KV (نمای D1) با کلید sc:u:<uid>؛ سابقه‌ی گفتگو فقط ۷ روز نگه داشته می‌شود (پیام‌های قدیمی‌تر از ۷ روز هنگام خواندن/نوشتن حذف می‌شوند و کل گفتگو هم ۷ روز پس از آخرین فعالیت منقضی می‌شود). هر کاربر یک گفتگوی پیوسته دارد (در همه‌ی دستگاه‌ها یکسان).
  *
  * مسیرها (در web.ts):
  *   POST /api/support/send     { text }  ← پیام کاربر؛ جواب دستیار را برمی‌گرداند
@@ -35,7 +35,8 @@ interface Msg { r: "u" | "a" | "m"; t: string; ts: number; f?: 1 }
 interface Conv { uid: string; m: Msg[]; c: number; u: number }
 
 export const DAILY_LIMIT = 10; // سقف پیام کاربر در روز (به وقت ایران)
-const TTL = 30 * 86400; // گفتگو ۳۰ روز نگه داشته می‌شود تا مدیر بتواند مرور کند
+const RETENTION_DAYS = 7; // سابقه‌ی چت بیشتر از ۷ روز نگه داشته نمی‌شود
+const TTL = RETENTION_DAYS * 86400;
 const MAX_TEXT = 600;
 export const SUPPORT_MAX_TEXT = MAX_TEXT;
 
@@ -60,7 +61,12 @@ const json = (data: unknown, status = 200) =>
 const toFa = (n: number | string) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[+d]);
 const clean = (s: string, max: number) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200E\u200F\u202A-\u202E]/g, "").replace(/\s+\n/g, "\n").trim().slice(0, max);
 
-const load = async (env: Env, uid: string) => (await env.KV.get(convKey(uid), "json")) as Conv | null;
+/** پیام‌های قدیمی‌تر از ۷ روز را حذف می‌کند (انقضای KV از آخرین نوشتن حساب می‌شود، پس گفتگوی فعال بدون این هرس سابقه‌ی بلندتری می‌ساخت) */
+const prune = (c: Conv): Conv => { const min = Date.now() - TTL * 1000; c.m = c.m.filter((x) => x.ts >= min); return c; };
+const load = async (env: Env, uid: string) => {
+  const c = (await env.KV.get(convKey(uid), "json")) as Conv | null;
+  return c ? prune(c) : null;
+};
 const save = (env: Env, c: Conv) => env.KV.put(convKey(c.uid), JSON.stringify(c), { expirationTtl: TTL });
 
 
