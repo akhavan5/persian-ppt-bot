@@ -6,7 +6,7 @@ import type { Env } from "./env";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { audioSeconds, isAudioName } from "./wav";
 import {
-  PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, adminIds, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
+  PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, adminIds, botPlatform, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
   setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, statDay, type Platform, type Uid,
 } from "./settings";
 import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
@@ -256,9 +256,26 @@ async function homeScreen(env: Env): Promise<Screen> {
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
       [cb("💬 پشتیبانی سایت", "ad:sc:r:0")],
       [cb(`💰 پرداخت‌ها${payIssues ? ` 🚨${fa(payIssues)}` : ""}`, "ad:pm:s:0"), cb("🔻 قیف کاربران", "ad:fn:30"), cb("🎁 دعوت‌ها", "ad:iv:t:0")],
-      [cb("📱 اپ اندروید/iOS (نسخه و اعلان)", "ad:ap"), cb("📧 خروجی ایمیل/موبایل", "ad:ex")],
-      [cb("💳 خروجی خریداران پلن", "ad:eb"), cb("📵 خروجی فقط‌شماره‌ها", "ad:eo")],
+      [cb("📱 اپ اندروید/iOS (نسخه و اعلان)", "ad:ap"), cb("📤 خروجی‌ها", "ad:xo")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
+    ],
+  };
+}
+
+/** زیرمنوی همه‌ی خروجی‌های فایلی (CSV) پنل */
+function exportsScreen(): Screen {
+  return {
+    text:
+      "📤 <b>خروجی‌ها</b>\nهر دکمه یک فایل CSV (UTF-8، بازشدنی در اکسل) به همین چت می‌فرستد.\n\n" +
+      "👑 <b>پلن‌داران فعال</b>: همه‌ی کاربرانی که همین حالا پلن فعال دارند، با مشخصات کامل (نام، ایمیل، موبایل، پلتفرم، پلن، اعتبار، انقضا و …)\n" +
+      "💳 <b>خریداران پلن</b>: هر کسی که دست‌کم یک‌بار پلن خریده\n" +
+      "📧 <b>ایمیل/موبایل</b>: مخاطبان برای کمپین ایمیلی (Resend) و پیامک\n" +
+      "📵 <b>فقط‌شماره‌ها</b>: حساب‌هایی که تنها راه ارتباطشان موبایل است",
+    kb: [
+      [cb("👑 پلن‌داران فعال (مشخصات کامل)", "ad:ea")],
+      [cb("💳 خریداران پلن", "ad:eb"), cb("📧 ایمیل/موبایل", "ad:ex")],
+      [cb("📵 فقط‌شماره‌ها", "ad:eo")],
+      backHome,
     ],
   };
 }
@@ -1239,6 +1256,8 @@ export async function handlePanelCallback(env: Env, cq: any) {
       }
       case "se": return await prompt({ k: "search" }, "🔎 <b>جستجوی کاربر</b>\nشناسه‌ی عددی، شناسه‌ی w_…، @نام‌کاربری، یا بخشی از نام/ایمیل/موبایل را بفرست.", "ad:h");
       case "bc": return await prompt({ k: "bc" }, "📣 <b>پیام همگانی</b>\nمتن پیام را بفرست؛ بعد پیش‌نمایش می‌بینی و با دکمه تایید می‌کنی.\n\n💡 اگر <code>{invite}</code> را در متن بنویسی، برای هر کاربر جای آن همان پیام /invite او (لینک اختصاصی، شمارنده‌ی دعوت و دکمه‌ی ارسال به دوستان) قرار می‌گیرد.", "ad:h");
+      case "xo": return await show(exportsScreen());
+      case "ea": await answer("⏳ در حال ساخت فایل…"); await exportActiveSubs(env, chatId).catch(async (e) => { console.error("exportActiveSubs", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
       case "ex": await answer("⏳ در حال ساخت فایل‌ها…"); await exportContacts(env, chatId).catch(async (e) => { console.error("exportContacts", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
       case "eb": await answer("⏳ در حال ساخت فایل…"); await exportBuyers(env, chatId).catch(async (e) => { console.error("exportBuyers", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
       case "eo": await answer("⏳ در حال ساخت فایل…"); await exportMobileOnly(env, chatId).catch(async (e) => { console.error("exportMobileOnly", e); await sendMessage(env, chatId, "❌ ساخت خروجی ناموفق بود؛ دوباره امتحان کن."); }); return;
@@ -1486,6 +1505,49 @@ async function exportBuyers(env: Env, chatId: number) {
   await sendMessage(env, chatId,
     `✅ خروجی خریداران آماده شد.\n💳 کاربران یکتا: <b>${fa(buyers.size)}</b>\n` +
     "<i>خریدهای درگاه دیجی‌پی قبل از فعال شدن این قابلیت فقط از ۸۴ روز اخیر شناخته می‌شوند؛ خریدهای فروشگاه‌ها (بازار/مایکت/سیب‌اپ) و هر خرید از این به بعد دائمی ثبت می‌شود.</i>");
+}
+
+/** خروجی پلن‌داران فعال (پلنی که نه منقضی شده و نه اعتبارش تمام شده): فایل active-plan-users.csv با مشخصات کامل هر کاربر.
+ *  ستون‌ها: شناسه، نام، ایمیل، موبایل، پلتفرم، نام‌کاربری تلگرام، شناسه‌ی پیام‌رسانِ وصل‌شده، پلن، اعتبار پلن، اعتبار هدیه، مجموع،
+ *  تاریخ انقضا، روزهای باقی‌مانده، اولین خرید، تاریخ ثبت‌نام، وضعیت (مسدود یا نه). */
+const PLAT_PLAIN: Record<string, string> = { tg: "تلگرام", bale: "بله", rubika: "روبیکا", eitaa: "ایتا", splus: "سروش‌پلاس" };
+async function exportActiveSubs(env: Env, chatId: number) {
+  const subs = await rows(env,
+    "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND json_extract(v,'$.exp') > ?4 AND json_extract(v,'$.credits') > 0 ORDER BY json_extract(v,'$.exp') ASC LIMIT 5000",
+    "sub:", "sub:" + MAXC, nowSec(), Date.now());
+  // نگاشت‌های کل‌گیر با یک پرس‌وجو (به‌جای یک خواندن برای هر کاربر)
+  const bonus = new Map((await rows(env, "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) LIMIT 100000", "bonus:", "bonus:" + MAXC, nowSec())).map((r) => [r.k.slice(6), Math.max(0, Math.floor(Number(r.v) || 0))]));
+  const banned = new Set((await rows(env, "SELECT k, v FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) LIMIT 100000", "ban:", "ban:" + MAXC, nowSec())).map((r) => r.k.slice(4)));
+  const first = new Map<string, number>();
+  for (const r of await rows(env, "SELECT k, json_extract(v,'$.f') v FROM kv WHERE k >= ?1 AND k < ?2 LIMIT 100000", "pbuy:", "pbuy:" + MAXC)) first.set(r.k.slice(5), Number(r.v) || 0);
+
+  const lines = ["user_id,name,email,mobile,platform,tg_username,linked_messenger_id,plan,plan_credits,bonus_credits,total_credits,expires,days_left,first_purchase,signup_date,banned"];
+  let n = 0;
+  for (let i = 0; i < subs.length; i += 25) {
+    const out = await Promise.all(subs.slice(i, i + 25).map(async (r) => {
+      const uid = r.k.slice(4); const sub = json<{ plan: string; exp: number; credits: number }>(r.v); if (!sub) return null;
+      const num = /^\d{1,15}$/.test(uid);
+      const w = !num && WEB_ID.test(uid) ? await getUserById(env, uid).catch(() => null) : null;
+      const linked = w ? Number(await env.KV.get(`w2tg:${uid}`).catch(() => null)) || "" : "";
+      const seen = num ? await getUserSeen(env, Number(uid)).catch(() => null) : linked ? await getUserSeen(env, Number(linked)).catch(() => null) : null;
+      const plat = w
+        ? (w.app ? (w.store ? STORE_LABEL[w.store as keyof typeof STORE_LABEL] ?? w.store : w.os === "ios" ? "iOS" : "اپ اندروید") : "وب")
+        : PLAT_PLAIN[botPlatform(Number(uid))] ?? "تلگرام";
+      const pc = sub.credits, bc = bonus.get(uid) ?? 0;
+      return [
+        uid, csvCell(w?.name || seen?.n), csvCell(w?.email, true), csvCell(w?.mobile, true), csvCell(plat),
+        csvCell(seen?.u ? "@" + seen.u.replace(/^@/, "") : "", true), linked, csvCell(planLabel(sub.plan)), pc, bc, pc + bc,
+        tehranDay(sub.exp), Math.max(0, Math.ceil((sub.exp - Date.now()) / 86_400_000)),
+        first.get(uid) ? tehranDay(first.get(uid)!) : "", w?.created ? tehranDay(w.created) : seen?.t && Date.parse(seen.t) ? tehranDay(Date.parse(seen.t)) : "",
+        banned.has(uid) ? "yes" : "",
+      ].join(",");
+    }));
+    for (const l of out) if (l) { lines.push(l); n++; }
+  }
+  await sendDocument(env, chatId, new TextEncoder().encode("\uFEFF" + lines.join("\n") + "\n"), "active-plan-users.csv",
+    `👑 <b>${fa(n)}</b> کاربر با پلن فعال (نزدیک‌ترین انقضا اول)`, { mime: "text/csv" });
+  await sendMessage(env, chatId, `✅ خروجی پلن‌داران فعال آماده شد.\n👑 تعداد: <b>${fa(n)}</b>` + (subs.length >= 5000 ? "\n⚠️ سقف ۵۰۰۰ ردیف اعمال شد." : ""),
+    { reply_markup: { inline_keyboard: [[cb("📤 خروجی‌ها", "ad:xo"), ...backHome]] } });
 }
 
 /** دکمه‌های تایید/لغو پیام همگانی (فقط مدیر) */
