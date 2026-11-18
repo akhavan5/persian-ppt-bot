@@ -149,14 +149,17 @@ export async function grantSignupCredit(env: Env, userId: Uid): Promise<void> {
 
 // ---------- پلن ماهانه (پلاس / پرو) — فقط وب ----------
 /** plan: شناسه‌ی پلن؛ exp: پایان اعتبار پلن (ms)؛ credits: اعتبار ماهانه‌ی باقی‌مانده (با پایان پلن می‌سوزد) */
-export interface Sub { plan: string; exp: number; credits: number }
+/** paid: مبلغ واقعیِ آخرین خرید به تومان (در لحظه‌ی خرید ثبت می‌شود؛ برای اشتراک‌های قدیمی یا هدیه/دستی نیست) */
+/** bought: اعتبارِ پلنِ همان آخرین خرید (در لحظه‌ی خرید) */
+export interface Sub { plan: string; exp: number; credits: number; paid?: number; bought?: number }
 const subKey = (userId: Uid) => `sub:${userId}`;
 
 /** اشتراک فعال کاربر؛ اگر نداشته باشد یا تمام شده باشد null */
 export async function getSub(env: Env, userId: Uid): Promise<Sub | null> {
   const s = (await env.KV.get(subKey(userId), "json")) as Sub | null;
   if (!s || !Number.isFinite(s.exp) || s.exp <= Date.now()) return null;
-  return { plan: String(s.plan), exp: s.exp, credits: Math.max(0, Math.floor(Number(s.credits) || 0)) };
+  const paid = Math.round(Number(s.paid) || 0), bought = Math.round(Number(s.bought) || 0);
+  return { plan: String(s.plan), exp: s.exp, credits: Math.max(0, Math.floor(Number(s.credits) || 0)), ...(paid > 0 ? { paid } : {}), ...(bought > 0 ? { bought } : {}) };
 }
 /** پلن «فعال» = پلنی که نه منقضی شده و نه اعتبارش تمام شده؛ در غیر این صورت کاربر مثل پلن رایگان رفتار می‌کند. */
 export async function getActiveSub(env: Env, userId: Uid): Promise<Sub | null> {

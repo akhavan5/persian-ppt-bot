@@ -599,13 +599,14 @@ async function referralScreen(env: Env, tab: "t" | "r", page: number): Promise<S
 // ---------- گزارش پرداخت و درآمد ----------
 // رکوردهای pay:<سفارش> (payment.ts): pending ← paid | failed. پرداخت‌های تاییدشده ۸۴ روز، بقیه ۱۴ روز می‌مانند؛ برای تاریخچه‌ی بلندتر
 // فروش هر روز (به وقت ایران) در rv:<روز> = {n, a} هم جمع می‌شود. issue = کاربر از درگاه «موفق» برگشته ولی تایید نشده (پول ممکن است کسر شده باشد).
-interface PayRow { order: string; uid: string; plan: string | null; amount: number; state: string; t: number; ref: string | null; issue: string | null }
+interface PayRow { order: string; uid: string; plan: string | null; amount: number; toman: number; count: number; state: string; t: number; ref: string | null; issue: string | null }
 const money = (n: number) => fa(Math.round(n).toLocaleString("en-US").replace(/,/g, "٬"));
 const pct = (a: number, b: number) => (b > 0 ? `${fa(Math.round((a / b) * 100))}٪` : "—");
 const tehranDay = (t: number) => new Date(t).toLocaleDateString("sv-SE", { timeZone: "Asia/Tehran" });
 const planLabel = (id: string | null) => (id ? (PLANS.find((p) => p.id === id)?.name ?? id) : "بسته‌ی اعتباری");
-/** مبلغ به تومان: از قیمت پلن (هزار تومان)؛ رکورد قدیمیِ بدون پلن از مبلغ ریالی */
-const tomanOf = (r: PayRow) => { const p = PLANS.find((x) => x.id === r.plan); return p ? p.price * 1000 : Math.round(r.amount / 10); };
+/** مبلغ به تومان: همان مبلغی که هنگام خرید ثبت شده (toman؛ رکوردهای قدیمی‌تر: مبلغ ریالی/۱۰)، نه قیمتِ فعلیِ پلن که با تغییر قیمت عوض می‌شود.
+ *  فقط اگر هیچ مبلغی ثبت نبود (amount=0) به قیمت فعلی پلن برمی‌گردد. */
+const tomanOf = (r: PayRow) => (r.toman > 0 ? r.toman : r.amount > 0 ? Math.round(r.amount / 10) : (PLANS.find((x) => x.id === r.plan)?.price ?? 0) * 1000);
 /** ماه شمسی یک روز (YYYY-MM-DD): کلید مرتب‌شدنی + برچسب فارسی */
 function pmonth(day: string): { key: string; label: string } {
   const d = new Date(day + "T12:00:00Z");
@@ -627,10 +628,10 @@ async function issueCount(env: Env): Promise<number> {
 async function loadPayments(env: Env): Promise<PayRow[]> {
   const d = await db(env);
   const rs = (await d.prepare(
-    "SELECT k, json_extract(v,'$.uid') uid, json_extract(v,'$.plan') plan, json_extract(v,'$.amount') amount, json_extract(v,'$.state') state, json_extract(v,'$.t') t, json_extract(v,'$.ref') ref, json_extract(v,'$.issue') issue " +
+    "SELECT k, json_extract(v,'$.uid') uid, json_extract(v,'$.plan') plan, json_extract(v,'$.amount') amount, json_extract(v,'$.toman') toman, json_extract(v,'$.count') cnt, json_extract(v,'$.state') state, json_extract(v,'$.t') t, json_extract(v,'$.ref') ref, json_extract(v,'$.issue') issue " +
     "FROM kv WHERE k >= ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) ORDER BY json_extract(v,'$.t') DESC LIMIT 3000")
-    .bind("pay:", "pay:" + MAXC, nowSec()).all<{ k: string; uid: string; plan: string | null; amount: number; state: string; t: number; ref: string | null; issue: string | null }>()).results ?? [];
-  return rs.map((r) => ({ order: r.k.slice(4), uid: String(r.uid ?? ""), plan: r.plan ?? null, amount: Number(r.amount) || 0, state: String(r.state), t: Number(r.t) || 0, ref: r.ref ?? null, issue: r.issue ?? null }));
+    .bind("pay:", "pay:" + MAXC, nowSec()).all<{ k: string; uid: string; plan: string | null; amount: number; toman: number | null; cnt: number | null; state: string; t: number; ref: string | null; issue: string | null }>()).results ?? [];
+  return rs.map((r) => ({ order: r.k.slice(4), uid: String(r.uid ?? ""), plan: r.plan ?? null, amount: Number(r.amount) || 0, toman: Number(r.toman) || 0, count: Number(r.cnt) || 0, state: String(r.state), t: Number(r.t) || 0, ref: r.ref ?? null, issue: r.issue ?? null }));
 }
 
 /** فروش هر روز (وقت ایران): از رکوردهای pay: و، برای روزهای قدیمی‌تر از ماندگاری آن‌ها، از شمارنده‌ی دائمی rv: */
@@ -1509,7 +1510,7 @@ async function exportBuyers(env: Env, chatId: number) {
 }
 
 /** خروجی پلن‌داران فعال (پلنی که نه منقضی شده و نه اعتبارش تمام شده): فایل Excel (.xlsx) راست‌به‌چپ با مشخصات کامل هر کاربر.
- *  ستون‌ها: شناسه، نام، ایمیل، موبایل، پلتفرم، نام‌کاربری تلگرام، شناسه‌ی پیام‌رسانِ وصل‌شده، پلن، اعتبار پلن، اعتبار هدیه، مجموع،
+ *  ستون‌ها: شناسه، نام، ایمیل، موبایل، پلتفرم، نام‌کاربری تلگرام، شناسه‌ی پیام‌رسانِ وصل‌شده، پلن، مبلغ خرید (تومان؛ مبلغ واقعیِ آخرین خرید)، اعتبار پلن، اعتبار هدیه، مجموع،
  *  تاریخ انقضا، روزهای باقی‌مانده، اولین خرید، تاریخ ثبت‌نام، وضعیت (مسدود یا نه). */
 const PLAT_PLAIN: Record<string, string> = { tg: "تلگرام", bale: "بله", rubika: "روبیکا", eitaa: "ایتا", splus: "سروش‌پلاس" };
 /** تاریخ شمسی با رقم لاتین (۱۴۰۵/۰۸/۰۲)؛ t = میلی‌ثانیه */
@@ -1531,12 +1532,19 @@ async function exportActiveSubs(env: Env, chatId: number) {
   const first = new Map<string, number>();
   for (const r of await rows(env, "SELECT k, json_extract(v,'$.f') v FROM kv WHERE k >= ?1 AND k < ?2 LIMIT 100000", "pbuy:", "pbuy:" + MAXC)) first.set(r.k.slice(5), Number(r.v) || 0);
 
-  const headers = ["ردیف", "نام", "موبایل", "ایمیل", "پلتفرم", "پلن", "اعتبار پلن", "اعتبار هدیه", "مجموع اعتبار", "تاریخ انقضا", "روز مانده", "اولین خرید", "تاریخ ثبت‌نام", "نام‌کاربری تلگرام", "شناسه‌ی پیام‌رسان", "مسدود", "شناسه‌ی کاربر"];
-  const widths = [6, 22, 15, 28, 13, 9, 10, 10, 11, 13, 9, 13, 13, 20, 16, 8, 24];
+  // مبلغ آخرین خرید: اول از خودِ اشتراک (sub.paid که هنگام خرید ثبت می‌شود)؛ برای اشتراک‌های قدیمی از آخرین پرداخت تاییدشده‌ی همان پلن (۸۴ روز اخیر)؛ هدیه/دستی = خالی
+  const lastPaid = new Map<string, { toman: number; credits: number }>();
+  for (const r of await loadPayments(env)) { // از جدید به قدیم
+    if (r.state !== "paid" || !r.plan) continue;
+    const k = `${r.uid}|${r.plan}`; if (!lastPaid.has(k)) lastPaid.set(k, { toman: tomanOf(r), credits: r.count });
+  }
+
+  const headers = ["ردیف", "نام", "موبایل", "ایمیل", "پلتفرم", "پلن", "مبلغ خرید (تومان)", "اعتبار خرید", "اعتبار پلن", "اعتبار هدیه", "مجموع اعتبار", "تاریخ انقضا", "روز مانده", "اولین خرید", "تاریخ ثبت‌نام", "نام‌کاربری تلگرام", "شناسه‌ی پیام‌رسان", "مسدود", "شناسه‌ی کاربر"];
+  const widths = [6, 22, 15, 28, 13, 9, 16, 11, 10, 10, 11, 13, 9, 13, 13, 20, 16, 8, 24];
   const data: XCell[][] = [];
   for (let i = 0; i < subs.length; i += 25) {
     const out = await Promise.all(subs.slice(i, i + 25).map(async (r): Promise<XCell[] | null> => {
-      const uid = r.k.slice(4); const sub = json<{ plan: string; exp: number; credits: number }>(r.v); if (!sub) return null;
+      const uid = r.k.slice(4); const sub = json<{ plan: string; exp: number; credits: number; paid?: number; bought?: number }>(r.v); if (!sub) return null;
       const num = /^\d{1,15}$/.test(uid);
       const w = !num && WEB_ID.test(uid) ? await getUserById(env, uid).catch(() => null) : null;
       const linked = w ? Number(await env.KV.get(`w2tg:${uid}`).catch(() => null)) || 0 : 0;
@@ -1546,8 +1554,10 @@ async function exportActiveSubs(env: Env, chatId: number) {
         : PLAT_PLAIN[botPlatform(Number(uid))] ?? "تلگرام";
       const pc = sub.credits, bc = bonus.get(uid) ?? 0, f = first.get(uid) ?? 0;
       const seenT = seen?.t ? Date.parse(seen.t) : 0;
+      const lp = lastPaid.get(`${uid}|${sub.plan}`);
       return [
-        0, w?.name || seen?.n || "", w?.mobile || "", w?.email || "", plat, planLabel(sub.plan), pc, bc, pc + bc,
+        0, w?.name || seen?.n || "", w?.mobile || "", w?.email || "", plat, planLabel(sub.plan),
+        Number(sub.paid) > 0 ? Math.round(Number(sub.paid)) : lp?.toman || "", Number(sub.bought) > 0 ? Math.round(Number(sub.bought)) : lp?.credits || "", pc, bc, pc + bc,
         jalaliDay(sub.exp), Math.max(0, Math.ceil((sub.exp - Date.now()) / 86_400_000)),
         f ? jalaliDay(f) : "", w?.created ? jalaliDay(w.created) : seenT ? jalaliDay(seenT) : "",
         seen?.u ? "@" + seen.u.replace(/^@/, "") : "", linked || (num ? uid : ""), banned.has(uid) ? "بله" : "", uid,

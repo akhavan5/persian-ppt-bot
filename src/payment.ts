@@ -25,10 +25,15 @@ export const PLANS: Plan[] = [
 /** سورپرایز خرید: بعد از هر خرید موفق پلن (درگاه، بازار، مایکت) یک اعتبار اضافه به حساب کاربر اضافه می‌شود (۷ ← ۸، ۱۵ ← ۱۶).
  *  عمداً در رسید، ایمیل، پیام‌ها و صفحه‌ی نتیجه‌ی پرداخت ذکر نمی‌شود؛ همه‌جا همان plan.credits نمایش داده می‌شود. */
 const PURCHASE_BONUS_CREDITS = 1;
-export function nextSub(cur: Sub | null, p: Plan, bonus = 0): Sub {
+export function nextSub(cur: Sub | null, p: Plan, bonus = 0, paid?: number): Sub {
   // خرید پلنِ دیگر (پلاس ← پرو یا پرو ← پلاس): پلن قبلی منقضی می‌شود و پلنِ جدید مثل کاربر رایگان از همین لحظه شروع می‌شود
   if (cur && cur.plan !== p.id) cur = null;
-  return { plan: p.id, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits + bonus };
+  // paid: مبلغ واقعیِ آخرین خرید (تومان) در لحظه‌ی خرید؛ برای خروجی پلن‌داران (قیمت پلن بعداً عوض می‌شود). تمدید/فعال‌سازی دستی بدون مبلغ، مبلغ قبلیِ همان پلن را نگه می‌دارد.
+  // bought: اعتبارِ پلنِ همان خرید (بدون اعتبار سورپرایز)؛ آن هم با تغییر پلن‌ها عوض می‌شود
+  const isBuy = !!paid && paid > 0;
+  const keep = isBuy ? Math.round(paid!) : cur?.paid;
+  const keepB = isBuy ? p.credits : cur?.bought;
+  return { plan: p.id, exp: (cur ? cur.exp : Date.now()) + p.days * 86_400_000, credits: (cur?.credits ?? 0) + p.credits + bonus, ...(keep ? { paid: keep } : {}), ...(keepB ? { bought: keepB } : {}) };
 }
 export async function activatePlan(env: Env, uid: string, p: Plan) {
   await putSub(env, uid, nextSub(await getActiveSub(env, uid), p));
@@ -59,7 +64,7 @@ const DP_AMOUNT_UNIT: "toman" | "rial" = "rial";
 export const payEnabled = (env: Env) => { const c = cfg(env); return Boolean(c.clientId && c.clientSecret && c.username && c.password); };
 
 /** issue/it: وقتی کاربر از درگاه «موفق» برگشته ولی تایید یا فعال‌سازی کامل نشده (برای هشدار در گزارش پرداخت پنل مدیر؛ وضعیت pending می‌ماند تا تایید دوباره ممکن باشد) */
-interface PayRecord { uid: string; plan?: string; count: number; amount: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string; redirect?: string; issue?: string; it?: number }
+interface PayRecord { uid: string; plan?: string; count: number; amount: number; /** مبلغ واقعی پرداخت به تومان در لحظه‌ی خرید */ toman?: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string; redirect?: string; issue?: string; it?: number }
 const TTL = 60 * 60 * 24 * 14;
 
 const json = (data: unknown, status = 200) =>
@@ -135,7 +140,7 @@ async function flagIssue(env: Env, rec: PayRecord, issue: string, trackingCode: 
 async function noteSale(env: Env, rec: PayRecord, plan: Plan | undefined): Promise<void> {
   try {
     const day = new Date(rec.t).toLocaleDateString("sv-SE", { timeZone: "Asia/Tehran" });
-    const toman = plan ? plan.price * 1000 : Math.round(rec.amount / 10);
+    const toman = rec.toman ?? (rec.amount > 0 ? Math.round(rec.amount / 10) : plan ? plan.price * 1000 : 0); // مبلغ ثبت‌شده‌ی همان خرید، نه قیمت فعلی پلن
     await env.DB.prepare(
       "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = json_set(v, '$.n', COALESCE(json_extract(v, '$.n'), 0) + 1, '$.a', COALESCE(json_extract(v, '$.a'), 0) + ?3)")
       .bind(`rv:${day}`, JSON.stringify({ n: 1, a: toman }), toman).run();
@@ -191,7 +196,7 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
     console.error("digipay ticket failed", JSON.stringify({ s: res?.result?.status, m: res?.result?.message }).slice(0, 300));
     return json({ error: "اتصال به درگاه پرداخت ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن." }, 502);
   }
-  const rec: PayRecord = { uid: user.id, plan: plan.id, count: plan.credits, amount, order, state: "pending", t: Date.now(), redirect };
+  const rec: PayRecord = { uid: user.id, plan: plan.id, count: plan.credits, amount, toman: plan.price * 1000, order, state: "pending", t: Date.now(), redirect };
   await env.KV.put(`pay:${order}`, JSON.stringify(rec), { expirationTtl: TTL });
   return json({ url: `/api/pay/go?t=${encodeURIComponent(order)}` });
 }
@@ -270,13 +275,15 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   // پس نه رفرش/callback تکراری پلن را دوبار فعال می‌کند و نه کرش وسط کار باعث «پول رفته، پلن نیامده» می‌شود.
   const by = crypto.randomUUID(); // نشانه‌ی برنده؛ نوشتن اشتراک فقط وقتی انجام می‌شود که رکورد پرداخت همین نشانه را داشته باشد
   const nowSec = Math.floor(Date.now() / 1000);
+  // مبلغ واقعیِ همین پرداخت (تومان): از خودِ رکورد (رکوردهای قدیمی‌تر: از مبلغ ارسالی به درگاه)، نه از قیمت فعلی پلن که ممکن است عوض شده باشد
+  const paidToman = rec.toman ?? Math.round(rec.amount / (DP_AMOUNT_UNIT === "rial" ? 10 : 1));
   const claim = env.DB.prepare("UPDATE kv SET v=?2, exp=?3 WHERE k=?1 AND json_extract(v,'$.state') != 'paid'")
-    .bind(`pay:${order}`, JSON.stringify({ ...rec, state: "paid", ref: trackingCode, by, issue: undefined, it: undefined }), nowSec + TTL * 6);
+    .bind(`pay:${order}`, JSON.stringify({ ...rec, toman: paidToman, state: "paid", ref: trackingCode, by, issue: undefined, it: undefined }), nowSec + TTL * 6);
   const plan = rec.plan ? PLANS.find((p) => p.id === rec.plan) : undefined;
   let won: boolean;
   let subExpMs: number | undefined;
   if (plan) {
-    const sub = nextSub(await getActiveSub(env, rec.uid), plan, PURCHASE_BONUS_CREDITS);
+    const sub = nextSub(await getActiveSub(env, rec.uid), plan, PURCHASE_BONUS_CREDITS, paidToman);
     subExpMs = sub.exp;
     const subExp = nowSec + Math.max(60, Math.ceil((sub.exp - Date.now()) / 1000) + 86_400); // مثل putSub
     const write = env.DB.prepare(
@@ -291,9 +298,9 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
   }
   if (won) {
     console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode);
-    await noteSale(env, rec, plan);
+    await noteSale(env, { ...rec, toman: paidToman }, plan);
     // رسید خرید به ایمیل حساب و ربات تلگرام (فقط پلن‌ها؛ ایمیل بدون ایمیل ثبت‌شده یا بدون RESEND_API_KEY بی‌اثر است و هرگز پرداخت را خراب نمی‌کند)
-    if (plan) await sendReceipt(env, { uid: rec.uid, planName: plan.name, credits: plan.credits, days: plan.days, toman: plan.price * 1000, order, idem: order, ref: trackingCode, method: "درگاه پرداخت", paidAt: Date.now(), expAt: subExpMs });
+    if (plan) await sendReceipt(env, { uid: rec.uid, planName: plan.name, credits: plan.credits, days: plan.days, toman: paidToman, order, idem: order, ref: trackingCode, method: "درگاه پرداخت", paidAt: Date.now(), expAt: subExpMs });
   }
   return go(okQ);
 }
@@ -390,7 +397,8 @@ async function storeClaim(
   const nowSec = Math.floor(Date.now() / 1000);
   const claim = env.DB.prepare("INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO NOTHING")
     .bind(key, JSON.stringify({ uid: user.id, plan: plan.id, sku: productId, order: orderId, t: Date.now(), by }));
-  const sub = nextSub(await getActiveSub(env, user.id), plan, PURCHASE_BONUS_CREDITS);
+  const paidToman = plan.price * 1000; // قیمتِ پلن در همین لحظه‌ی خرید
+  const sub = nextSub(await getActiveSub(env, user.id), plan, PURCHASE_BONUS_CREDITS, paidToman);
   const subExp = nowSec + Math.max(60, Math.ceil((sub.exp - Date.now()) / 1000) + 86_400); // مثل putSub
   const write = env.DB.prepare(
     "INSERT INTO kv (k, v, exp) SELECT ?1, ?2, ?3 WHERE EXISTS (SELECT 1 FROM kv WHERE k=?4 AND json_extract(v,'$.by')=?5) " +
@@ -400,9 +408,9 @@ async function storeClaim(
   if (!won) return (await seen()) ?? json({ error: "ثبت خرید انجام نشد؛ دوباره امتحان کن." }, 409);
 
   console.log(`${tag} payment ok`, user.id, plan.id);
-  await noteSale(env, { uid: user.id, plan: plan.id, count: plan.credits, amount: plan.price * 10_000, order: key, state: "paid", t: Date.now() }, plan);
+  await noteSale(env, { uid: user.id, plan: plan.id, count: plan.credits, amount: plan.price * 10_000, toman: paidToman, order: key, state: "paid", t: Date.now() }, plan);
   // رسید خرید به ایمیل حساب و ربات تلگرام (هرکدام که موجود باشد)
-  await sendReceipt(env, { uid: user.id, planName: plan.name, credits: plan.credits, days: plan.days, toman: plan.price * 1000, order: orderId, idem: key, method: tag === "myket" ? "مایکت" : tag === "sibapp" ? "سیب‌اپ" : "کافه‌بازار", paidAt: Date.now(), expAt: sub.exp });
+  await sendReceipt(env, { uid: user.id, planName: plan.name, credits: plan.credits, days: plan.days, toman: paidToman, order: orderId, idem: key, method: tag === "myket" ? "مایکت" : tag === "sibapp" ? "سیب‌اپ" : "کافه‌بازار", paidAt: Date.now(), expAt: sub.exp });
   return json({ ok: true, plan: plan.id });
 }
 
@@ -520,7 +528,7 @@ async function trackStore(env: Env, user: WebUser, tag: StoreTag, b: Record<stri
     const plan = PLANS.find((p) => `plan_${p.id}` === productId);
     const d = (await res.clone().json().catch(() => null)) as { error?: string } | null;
     const order = `${tag}${(await sha256hex(token)).slice(0, 24)}`;
-    const base = { uid: user.id, plan: plan?.id, count: plan?.credits ?? 0, amount: plan ? plan.price * 10_000 : 0, order, t: Date.now() };
+    const base = { uid: user.id, plan: plan?.id, count: plan?.credits ?? 0, amount: plan ? plan.price * 10_000 : 0, toman: plan ? plan.price * 1000 : 0, order, t: Date.now() };
     if (res.ok) {
       await putStoreRec(env, order, { ...base, state: "paid" });
     } else {
@@ -609,7 +617,7 @@ export async function payReport(env: Env, user: WebUser | null, req: Request, ip
     const order = `${tag}app${Date.now()}${String(crypto.getRandomValues(new Uint32Array(1))[0] % 10_000).padStart(4, "0")}`;
     console.error(`${STORE_NAME[tag]} app report`, JSON.stringify({ uid: user?.id ?? "-", code, sku, msg, v: s(b?.v, 20) }));
     await putStoreRec(env, order, {
-      uid: user?.id ?? "unknown", plan: plan?.id, count: plan?.credits ?? 0, amount: plan ? plan.price * 10_000 : 0, order,
+      uid: user?.id ?? "unknown", plan: plan?.id, count: plan?.credits ?? 0, amount: plan ? plan.price * 10_000 : 0, toman: plan ? plan.price * 1000 : 0, order,
       state: "failed", issue: `app:${code}${msg ? ":" + msg : ""}`.slice(0, 90), t: Date.now(),
     });
   } catch (e) { console.error("payReport", e); }
