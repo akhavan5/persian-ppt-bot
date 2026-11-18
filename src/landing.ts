@@ -65,8 +65,11 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 /** جایگاه تبلیغ تصویری یکتانت (بین بخش مقاله‌های مرتبط و راهنماهای مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
-/** جایگاه‌های تبلیغ مدیاد (دو بنر کم‌عرض، کنار هم)؛ بالای بخش «پرسش‌های متداول». شناسه را تغییر ندهید. */
-export const MEDIAAD_FAQ_SLOT = `<div id="mediaad-aV9e9" ></div><div id="mediaad-X2V5O" ></div>`;
+/** جایگاه تبلیغ مدیاد؛ بالای بخش «پرسش‌های متداول». شناسه را تغییر ندهید. */
+export const MEDIAAD_FAQ_SLOT = `<div id="mediaad-X2V5O" ></div>`;
+
+/** جایگاه‌های تبلیغ مدیاد (کنار هم)؛ زیر بخش «مقاله‌های مرتبط». شناسه‌ها را تغییر ندهید. */
+export const MEDIAAD_RELATED_SLOT = `<div id="mediaad-aV9e9" ></div><div id="mediaad-rm4mJ" ></div>`;
 
 /** جایگاه تبلیغ چسبان مدیاد؛ خودش جای نمایش را پیدا می‌کند، فقط یک‌بار در هر صفحه (قبل از فوتر). شناسه را تغییر ندهید. */
 export const MEDIAAD_STICKY_SLOT = `<div id="mediaad-3e9jx" ></div>`;
@@ -550,7 +553,8 @@ ${articles.length ? `    <section>
       <h2>مقاله‌های مرتبط در وبلاگ</h2>
       <div class="rel">${articles.map((a) => `<a href="/blog/${a!.slug}">${esc(a!.nav)}<span>${esc(a!.category)}</span></a>`).join("")}</div>
     </section>
-` : ""}    ${YEKTANET_SLOT}
+` : ""}    ${MEDIAAD_RELATED_SLOT}
+    ${YEKTANET_SLOT}
     <section>
       <h2>راهنماهای مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/${r.slug}">${esc(r.nav)}<span>${esc(r.title.split("|")[0].trim())}</span></a>`).join("")}</div>
