@@ -65,6 +65,9 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 /** جایگاه تبلیغ تصویری یکتانت (بین بخش مقاله‌های مرتبط و راهنماهای مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
+/** جایگاه تبلیغ چسبان مدیاد؛ خودش جای نمایش را پیدا می‌کند، فقط یک‌بار در هر صفحه (قبل از فوتر). شناسه را تغییر ندهید. */
+export const MEDIAAD_STICKY_SLOT = `<div id="mediaad-3e9jx" ></div>`;
+
 /** سربرگ‌های امنیتی و کش مشترک پاسخ‌های HTML ساخته‌شده در Worker. stale-while-revalidate: بازدید بعد از انقضا هم فوری جواب می‌گیرد. */
 export const HTML_HEADERS: Record<string, string> = {
   "content-type": "text/html; charset=utf-8", "content-language": "fa",
@@ -554,6 +557,7 @@ ${articles.length ? `    <section>
     </section>
   </article>
 </main>
+${MEDIAAD_STICKY_SLOT}
 ${renderFooter()}
 <script src="/pwa.js" defer></script><script src="/support.js" defer></script>
 </body>
