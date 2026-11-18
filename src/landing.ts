@@ -66,7 +66,7 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
 /** جایگاه تبلیغ مدیاد؛ زیر تصویر اصلی. شناسه را تغییر ندهید. */
-export const MEDIAAD_HERO_SLOT = `<div id="mediaad-rm4mJ" ></div>`;
+export const MEDIAAD_HERO_SLOT = `<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:center"><div id="mediaad-rm4mJ" style="flex:1 1 300px;min-width:0"></div><div id="mediaad-B3z3Z" style="flex:1 1 300px;min-width:0"></div></div>`;
 
 /** جایگاه تبلیغ مدیاد؛ زیر بخش‌های محتوایی. شناسه را تغییر ندهید. */
 export const MEDIAAD_CONTENT_SLOT = `<div id="mediaad-X2V5O" ></div>`;
