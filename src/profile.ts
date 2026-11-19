@@ -39,11 +39,14 @@ export async function sendContactCode(env: Env, who: string, kind: ContactKind, 
 }
 
 /** بررسی کد و ثبت موبایل/ایمیل روی حساب. botId: فقط وقتی درخواست از ربات آمده (برای یکی‌کردن با حساب سایت). */
-export async function attachContact(env: Env, user: WebUser, kind: ContactKind, value: string, code: string, botId?: number): Promise<{ user: WebUser; reward: number; merged?: string } | Err> {
+export async function attachContact(env: Env, user: WebUser, kind: ContactKind, value: string, code: string, botId?: number, trusted = false): Promise<{ user: WebUser; reward: number; merged?: string } | Err> {
   if (user[kind]) return { error: kind === "mobile" ? "برای حساب شما شماره‌ی موبایل ثبت شده است." : "برای حساب شما ایمیل ثبت شده است.", status: 409 };
   // اول کد: تا مالکیت ثابت نشده، وجود یا نبودِ حساب دیگر با این شماره/ایمیل فاش نمی‌شود
-  const bad = await checkOtp(env, value, code);
-  if (bad) return { error: bad, status: 401 };
+  // trusted: شماره را خود ایتا (requestContact با امضای hash) تأیید کرده؛ کد پیامکی لازم نیست
+  if (!trusted) {
+    const bad = await checkOtp(env, value, code);
+    if (bad) return { error: bad, status: 401 };
+  }
 
   const other = kind === "mobile" ? await getUserByMobile(env, value) : await getUserByEmail(env, value);
   if (other && other.id !== user.id) {

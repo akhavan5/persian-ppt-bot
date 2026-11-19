@@ -43,7 +43,7 @@ import { isEitaaId, fromEitaaId } from "./eitaa-format";
 import { isSplusId, fromSplusId } from "./splus-format";
 import { checkPlatformPolicy, notifyBlockedTopic, BLOCKED_MSG } from "./platform-policy";
 import { isRubikaId } from "./rubika-format";
-import { inviteClaim, inviteInfo, miniappBuy, miniappDlLink, miniappDownload, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
+import { inviteClaim, inviteInfo, miniappBuy, miniappDlLink, miniappDownload, miniappContact, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
 import { isAudioName } from "./wav";
 
 const SEC_HEADERS = {
@@ -217,6 +217,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
   if (path === "/api/profile" && method === "PUT") return putProfile(req, env, user);
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
+  if (path === "/api/profile/mobile/eitaa" && method === "POST") return miniappContact(req, env, user);
   if (path === "/api/profile/email" && method === "POST") return linkEmail(req, env, user);
   if (path === "/api/profile/telegram/send" && method === "POST") return tgLinkSend(req, env, user);
   if (path === "/api/profile/telegram/verify" && method === "POST") return tgLinkVerify(req, env, user);

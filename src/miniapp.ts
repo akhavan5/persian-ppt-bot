@@ -20,6 +20,8 @@ import { toBaleId } from "./bale-format";
 import { toSplusId } from "./splus-format";
 import { isEitaaId, toEitaaId, validEitaaRawId } from "./eitaa-format";
 import { eitaaWelcome } from "./eitaa";
+import { attachContact } from "./profile";
+import { normMobile } from "./auth";
 import { claimReferral, referralState } from "./referral";
 import { inviteLinkFor, webInviteLink } from "./invite-msg";
 
@@ -278,6 +280,43 @@ export async function miniappDownload(env: Env, token: string): Promise<Response
     "content-disposition": `attachment; filename="file.${/^[a-z0-9]{1,5}$/.test(ext) ? ext : "bin"}"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`,
     "cache-control": "no-store", "x-content-type-options": "nosniff",
   } });
+}
+
+/** امضای رشته‌ی داده‌ی requestContact ایتا (همان الگوی initData: HMAC با کلید HMAC("WebAppData", توکن برنامه)). پارامترها یا null. */
+async function verifySigned(botToken: string, data: string, now = Date.now()): Promise<URLSearchParams | null> {
+  botToken = (botToken || "").trim();
+  if (!botToken) return null;
+  const p = new URLSearchParams(data);
+  const hash = p.get("hash") ?? "";
+  if (!/^[0-9a-f]{64}$/.test(hash)) return null;
+  p.delete("hash");
+  const check = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join("\n");
+  if (!safeEqual(hex(await hmac(await hmac(enc.encode("WebAppData"), botToken), check)), hash)) return null;
+  const age = now / 1000 - Number(p.get("auth_date"));
+  if (!Number.isFinite(age) || age > 900 || age < -300) return null; // شماره باید تازه (۱۵ دقیقه) باشد
+  return p;
+}
+
+/** POST /api/profile/mobile/eitaa {contact} — شماره‌ی تأییدشده‌ی خود ایتا (requestContact). کاربر باید خودش دکمه‌ی «ثبت شماره» را زده باشد.
+ *  امضا سرور-ساید بررسی می‌شود؛ اگر user_id داخل داده باشد باید با کاربر فعلی یکی باشد. شماره با همان قانون پروفایل (اعتبار هدیه) ثبت می‌شود. */
+export async function miniappContact(req: Request, env: Env, user: WebUser): Promise<Response> {
+  if (!env.EITAA_APP_TOKEN) return err("ثبت شماره از ایتا فعال نیست.", 503);
+  const id = await getLinkedTg(env, user.id);
+  if (!id || !isEitaaId(id)) return err("این روش فقط داخل برنامک ایتا کار می‌کند.", 403);
+  if (await hitLimit(env, `eic:${id}`, 10, 3600)) return err("تعداد تلاش زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
+  const b = (await req.json().catch(() => null)) as { contact?: unknown } | null;
+  const data = typeof b?.contact === "string" ? b.contact : "";
+  if (data.length < 20 || data.length > 4_096) return err("اطلاعات شماره از ایتا نیامد.", 400);
+  const p = await verifySigned(env.EITAA_APP_TOKEN, data);
+  if (!p) return err("اعتبار اطلاعات شماره تأیید نشد؛ دوباره امتحان کن.", 401);
+  let c: { phone_number?: unknown; user_id?: unknown } | null = null;
+  try { c = JSON.parse(p.get("contact") ?? "null"); } catch { /* فرمت دیگر */ }
+  if (c?.user_id != null && toEitaaId(Number(c.user_id)) !== id) return err("این شماره متعلق به حساب فعلی نیست.", 403);
+  const mobile = normMobile(c?.phone_number ?? p.get("phone_number"));
+  if (!mobile) return err("شماره‌ی موبایل ایرانی معتبر نیامد.", 400);
+  const r = await attachContact(env, user, "mobile", mobile, "", undefined, true);
+  if ("error" in r) return err(r.error, r.status);
+  return json({ user: publicUser(r.user), reward: r.reward });
 }
 
 /** POST /api/miniapp/welcome — کلاینت ایتا بعد از موافقت کاربر با requestWriteAccess صدا می‌زند؛ پیام خوش‌آمدگویی (فقط یک بار برای هر کاربر) */
