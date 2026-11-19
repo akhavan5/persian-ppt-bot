@@ -198,6 +198,17 @@ export async function miniappBuy(env: Env, user: WebUser): Promise<Response> {
   return json({ url: await siteLoginUrl(env, tgId ?? undefined, "buy") });
 }
 
+/** POST /api/miniapp/site {id?} ← {url} — لینک ورود یک‌بارمصرف به سایت، مستقیم روی بخش فایل‌ها (و در صورت دادن id، روی همان فایل).
+ *  برای دکمه‌ی «مشاهده در سایت» برنامک ایتا؛ فایل باید مال خود کاربر باشد (وگرنه فقط بخش فایل‌ها باز می‌شود). */
+export async function miniappSite(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
+  let id = typeof body?.id === "string" ? body.id : "";
+  if (id && !/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
+  if (await hitLimit(env, `msite:${user.id}`, 60, 3600)) return err("تعداد درخواست زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
+  if (id && !(await loadFileDirect(env, user.id, id).catch(() => null))) id = ""; // فایل منقضی/ناپیدا: فقط بخش فایل‌ها
+  const tgId = await getLinkedTg(env, user.id);
+  return json({ url: await siteLoginUrl(env, tgId ?? undefined, "files", id || undefined) });
+}
+
 /** سقف روزانه‌ی ساخت PDF؛ همان کلید و سقف ربات (pdf:<کاربر>:<روز>) تا مصرف مرورگر مشترک حساب شود */
 const PDF_DAILY_LIMIT = 8;
 

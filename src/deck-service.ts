@@ -36,11 +36,13 @@ export async function buyKbFor(env: Env, uid: Uid, tgId?: number) {
     [{ text: "💬 پیام به پشتیبانی", url: supportLink(tgId ?? uid) }],
   ] } };
 }
-/** آدرس سایت با ورود خودکار برای این تلگرام؛ به مقصد to می‌رود (buy = پنجره‌ی پلن‌ها) */
-export async function siteLoginUrl(env: Env, tgId: number | undefined, to: "buy" | "home" = "home"): Promise<string> {
+/** آدرس سایت با ورود خودکار برای این تلگرام؛ به مقصد to می‌رود (buy = پنجره‌ی پلن‌ها، files = بخش فایل‌ها و در صورت دادن fileId همان فایل) */
+export async function siteLoginUrl(env: Env, tgId: number | undefined, to: "buy" | "home" | "files" = "home", fileId?: string): Promise<string> {
   const base = siteUrl(env);
+  const f = to === "files" && fileId && /^[\w-]{1,100}$/.test(fileId) ? fileId : "1"; // «1» = فقط بخش فایل‌ها
   const t = tgId === undefined ? null : await createLoginToken(env, tgId).catch(() => null);
-  return t ? `${base}/api/auth/tg?t=${t}&to=${to}` : to === "buy" ? `${base}/?buy=1` : base;
+  return t ? `${base}/api/auth/tg?t=${t}&to=${to}${to === "files" ? `&f=${encodeURIComponent(f)}` : ""}`
+    : to === "buy" ? `${base}/?buy=1` : to === "files" ? `${base}/?files=${encodeURIComponent(f)}` : base;
 }
 
 export const imagesLimitMsg = (max: number) => max <= FREE_MAX_IMAGES

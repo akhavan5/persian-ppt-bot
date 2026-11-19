@@ -206,6 +206,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <button class="btn ghost" id="doneDl" type="button" style="margin-top:8px" hidden>⬇️ دانلود مستقیم (PPTX)</button>
         <button class="btn ghost" id="donePdf" type="button" style="margin-top:8px" hidden>📄 ارسال نسخه‌ی PDF به چت</button>
         <button class="btn ghost" id="donePdfView" type="button" style="margin-top:8px" hidden>👁 مشاهده‌ی PDF</button>
+        <button class="btn ghost" id="doneSite" type="button" style="margin-top:8px" hidden>🌐 مشاهده در سایت</button>
         <button class="btn ghost" id="doneHandout" type="button" style="margin-top:8px" hidden>📝 ارسال جزوه (Word) به چت</button>
         <button class="btn ghost" id="donePoster" type="button" style="margin-top:8px" hidden>🖼 ارسال پوستر به چت</button>
         <button class="btn ghost" id="doneAudio" type="button" style="margin-top:8px" hidden>🔊 ارسال اسلاید صوتی به چت</button>
@@ -1336,6 +1337,7 @@ function showDone(jobId, s, took = 0) {
   const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg"), pdfBtn = $("#donePdf");
   show(pdfBtn, !!cfg.poster); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
   const pdfView = $("#donePdfView"); show(pdfView, IS_EITAA && !!cfg.poster); pdfView.onclick = (e) => viewPdf(jobId, e.currentTarget);
+  const siteBtn = $("#doneSite"); show(siteBtn, IS_EITAA); siteBtn.onclick = (e) => openOnSite(jobId, e.currentTarget);
   show(hBtn, s.handout === "ok" && !!s.handoutId); show(pBtn, s.poster === "ok" && !!s.posterId); show(img, false);
   if (!hBtn.hidden) hBtn.onclick = (e) => sendToChat(s.handoutId, e.currentTarget);
   if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
@@ -1508,6 +1510,16 @@ async function viewPdf(id, btn) {
   });
 }
 
+// مشاهده‌ی فایل در سایت (ایتا): سرور لینک ورود یک‌بارمصرف می‌دهد و در مرورگر بیرونی باز می‌شود؛ سایت مستقیم روی همان فایل می‌رود
+async function openOnSite(id, btn) {
+  return busy(btn, "در حال باز کردن سایت…", async () => {
+    try {
+      const d = await api("/api/miniapp/site", { method: "POST", body: id ? { id } : {} });
+      TG.openLink(d.url); TG.haptic("success");
+    } catch (e) { toast(e.message || "باز کردن سایت ممکن نشد؛ دوباره امتحان کن."); TG.haptic("error"); }
+  });
+}
+
 // ---------- فایل‌ها ----------
 // همراه‌های بعد از ساخت ارائه: زیر هر ارائه دکمه‌ی پوستر، جزوه، اسلاید صوتی و پادکست (هرکدام ۱ اعتبار جدا) فقط وقتی هنوز برای همان ارائه ساخته نشده‌اند
 const EXTRA_BTNS = {
@@ -1583,7 +1595,8 @@ async function loadFiles() {
         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
         !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null,
-        IS_EITAA && !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => viewPdf(f.id, e.currentTarget) }, "👁 مشاهده PDF") : null),
+        IS_EITAA && !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => viewPdf(f.id, e.currentTarget) }, "👁 مشاهده PDF") : null,
+        IS_EITAA && !f.sample ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => openOnSite(f.id, e.currentTarget) }, "🌐 مشاهده در سایت") : null),
       f.extras && f.extras.length
         ? h("div", { class: "fx" },
           h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),

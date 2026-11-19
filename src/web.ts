@@ -43,7 +43,7 @@ import { isEitaaId, fromEitaaId } from "./eitaa-format";
 import { isSplusId, fromSplusId } from "./splus-format";
 import { checkPlatformPolicy, notifyBlockedTopic, BLOCKED_MSG } from "./platform-policy";
 import { isRubikaId } from "./rubika-format";
-import { inviteClaim, inviteInfo, miniappBuy, miniappDlLink, miniappDownload, miniappContact, miniappLogin, miniappPdf, miniappPdfLink, miniappSend, miniappWelcome } from "./miniapp";
+import { inviteClaim, inviteInfo, miniappBuy, miniappSite, miniappDlLink, miniappDownload, miniappContact, miniappLogin, miniappPdf, miniappPdfLink, miniappSend, miniappWelcome } from "./miniapp";
 import { isAudioName } from "./wav";
 
 const SEC_HEADERS = {
@@ -205,6 +205,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
   if (path === "/api/miniapp/dl" && method === "POST") return miniappDlLink(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
+  if (path === "/api/miniapp/site" && method === "POST") return miniappSite(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/welcome" && method === "POST") return miniappWelcome(env, user);
   if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/pdf-dl" && method === "POST") return miniappPdfLink(env, user, await readBody(req, 2_000));
@@ -455,9 +456,10 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
 }
 
 // ---------- ورود خودکار از ربات ----------
-/** GET /api/auth/tg?t=توکن&to=buy|home — توکن فقط داخل چت تلگرامِ خود کاربر آمده؛ مصرف می‌شود، نشست ۳۰ روزه ساخته می‌شود و کاربر به سایت می‌رود */
+/** GET /api/auth/tg?t=توکن&to=buy|home|files[&f=شناسه‌ی فایل] — توکن فقط داخل چت تلگرامِ خود کاربر آمده؛ مصرف می‌شود، نشست ۳۰ روزه ساخته می‌شود و کاربر به سایت می‌رود */
 async function tgLogin(env: Env, req: Request, url: URL): Promise<Response> {
-  const to = url.searchParams.get("to") === "buy" ? "/?buy=1" : "/";
+  const dest = url.searchParams.get("to"), fid = url.searchParams.get("f") ?? "";
+  const to = dest === "buy" ? "/?buy=1" : dest === "files" ? `/?files=${/^[\w-]{1,100}$/.test(fid) ? encodeURIComponent(fid) : "1"}` : "/";
   const noStore = { "cache-control": "no-store", "referrer-policy": "no-referrer" };
   // لینک یک‌بارمصرف است؛ اگر درخواست تکراری برسد (nginx/مرورگر) و کاربر همین حالا وارد شده، خطا نشان نمی‌دهیم
   const fail = async () => {

@@ -1481,10 +1481,17 @@ async function buyPlan(id, btn) {
   if (btn) await busy(btn, "در حال انتقال به درگاه…", go, { keep: true }).catch(() => {}); else await go().catch(() => {});
 }
 // ورود خودکار از دکمه‌های ربات تلگرام: ‎/?buy=1 بعد از ورود، پنجره‌ی پلن‌ها را باز می‌کند
+let pendingFile = null; // شناسه‌ی فایلی که باید بعد از بارگذاری فهرست به آن اسکرول شود
 function handleTgLogin() {
   const q = new URLSearchParams(location.search);
   if (q.get("login") === "expired") { history.replaceState(null, "", "/"); toast("لینک ورود منقضی شده؛ در ربات دوباره دکمه‌ی خرید یا /site را بزن."); return; }
   if (q.get("buy")) { history.replaceState(null, "", "/"); if (me) openBuy(); else openAuth("register", "برای خرید پلن وارد شو یا ثبت‌نام کن."); }
+  // از دکمه‌ی «مشاهده در سایت» برنامک ایتا: /?files=<شناسه‌ی فایل> (یا ۱ = فقط بخش فایل‌ها)
+  if (q.get("files")) {
+    const fid = q.get("files"); history.replaceState(null, "", "/");
+    // renderApp همین حالا loadFiles را شروع کرده؛ بعد از رندر فهرست اسکرول می‌شود
+    if (me) pendingFile = /^[\w-]{1,100}$/.test(fid) ? fid : "1"; else openAuth("login", "برای دیدن فایل‌هایت وارد شو.");
+  }
   // از پیام‌های یادآور (ایمیل/اعلان وب): /?profile=1 بعد از ورود، پروفایل را برای ثبت موبایل/ایمیل باز می‌کند
   if (q.get("profile")) { history.replaceState(null, "", "/"); if (me) openProfile(); else openAuth("login", "برای تکمیل پروفایل و گرفتن اعتبار هدیه وارد شو."); }
   // از ویجت چت پشتیبانی (مهمان): /?login=chat پنجره‌ی ورود را باز می‌کند
@@ -2050,7 +2057,7 @@ async function loadFiles() {
       if (slot.firstChild) { const a = slot.querySelector("audio"); if (a) a.pause(); slot.replaceChildren(); ev.currentTarget.textContent = "▶ پخش"; return; }
       slot.append(podcastPlayer(f.id, f.title, true)); ev.currentTarget.textContent = "✕ بستن پلیر";
     } }, "▶ پخش") : null;
-    return h("div", { class: "file" },
+    return h("div", { class: "file", "data-fid": f.id },
       h("div", {}, h("strong", {}, f.title), h("span", { class: "muted" }, f.sample ? `${f.label} · ` : `${f.poster ? "پوستر" : f.handout ? "جزوه (Word)" : f.audio === "podcast" ? "پادکست" : f.audio === "slides" ? (f.slides ? "اسلاید صوتی · " + fa(f.slides) + " اسلاید" : "صدای یک اسلاید") : fa(f.slides) + " اسلاید"} · تا ${fa(hrs)} ساعت دیگر`, f.sample ? h("span", { class: "sample-badge" }, "نمونه") : null)),
       h("div", { class: "fa" },
         f.handout || f.audio || (f.sample && !f.poster && !f.pdf) ? null : f.poster || f.pdf
@@ -2065,6 +2072,12 @@ async function loadFiles() {
           ...f.extras.flatMap((k) => (EXTRA_BTNS[k] || []).map(([label, layout]) => h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => makeExtra(f, k, layout, ev.currentTarget) }, label))))
         : null);
   }));
+  if (pendingFile) { // آمده‌ایم از «مشاهده در سایت»: به فایل (یا بخش فایل‌ها) برو و چند ثانیه هایلایتش کن
+    const want = pendingFile; pendingFile = null;
+    const el = [...box.querySelectorAll(".file")].find((x) => x.dataset.fid === want) || box;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (el !== box) { el.style.outline = "2px solid var(--primary)"; el.style.borderRadius = "10px"; setTimeout(() => { el.style.outline = ""; }, 4000); }
+  }
 }
 
 boot();
