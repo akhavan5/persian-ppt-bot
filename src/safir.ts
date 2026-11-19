@@ -39,7 +39,8 @@ async function safirSend(env: Env, mobile: string, messageData: Record<string, u
 
 /** پیام خوش‌آمد (قالب تأییدشده) فقط یک بار برای هر شماره، اولین بار که کد در بله به او رسید؛ بعدش دیگر فرستاده نمی‌شود.
  *  خطا یا ناموفق بودنش هیچ اثری روی ورود ندارد (در صورت ناموفق بودن، دفعه‌ی بعد دوباره تلاش می‌شود). */
-async function sendWelcomeOnce(env: Env, mobile: string): Promise<void> {
+export async function sendWelcomeOnce(env: Env, mobile: string): Promise<void> {
+  if (!safirEnabled(env)) return;
   const tpl = (env.SAFIR_WELCOME_TEMPLATE ?? DEFAULT_WELCOME_TEMPLATE).trim();
   if (!tpl || tpl.toLowerCase() === "off") return;
   try {

@@ -21,6 +21,7 @@ import { toSplusId } from "./splus-format";
 import { isEitaaId, toEitaaId, validEitaaRawId } from "./eitaa-format";
 import { eitaaWelcome } from "./eitaa";
 import { attachContact } from "./profile";
+import { sendWelcomeOnce } from "./safir";
 import { normMobile } from "./auth";
 import { claimReferral, referralState } from "./referral";
 import { inviteLinkFor, webInviteLink } from "./invite-msg";
@@ -336,6 +337,8 @@ export async function miniappContact(req: Request, env: Env, user: WebUser): Pro
   }
   const r = await attachContact(env, user, "mobile", mobile, "", undefined, true);
   if ("error" in r) return err(r.error, r.status);
+  // کاربر ایتایی که شماره‌اش را داده کدی نمی‌گیرد؛ پیام خوش‌آمد بله (سفیر، یک‌بار برای هر شماره؛ اگر بله ندارد بی‌صدا رد می‌شود)
+  if (!r.merged) await sendWelcomeOnce(env, mobile).catch(() => {});
   return json({ user: publicUser(r.user), reward: r.reward });
 }
 
