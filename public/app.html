@@ -205,6 +205,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <button class="btn" id="doneSend" type="button">📥 ارسال ارائه (PPTX) به چت</button>
         <button class="btn ghost" id="doneDl" type="button" style="margin-top:8px" hidden>⬇️ دانلود مستقیم (PPTX)</button>
         <button class="btn ghost" id="donePdf" type="button" style="margin-top:8px" hidden>📄 ارسال نسخه‌ی PDF به چت</button>
+        <button class="btn ghost" id="donePdfView" type="button" style="margin-top:8px" hidden>👁 مشاهده‌ی PDF</button>
         <button class="btn ghost" id="doneHandout" type="button" style="margin-top:8px" hidden>📝 ارسال جزوه (Word) به چت</button>
         <button class="btn ghost" id="donePoster" type="button" style="margin-top:8px" hidden>🖼 ارسال پوستر به چت</button>
         <button class="btn ghost" id="doneAudio" type="button" style="margin-top:8px" hidden>🔊 ارسال اسلاید صوتی به چت</button>
@@ -1322,6 +1323,7 @@ function showDone(jobId, s, took = 0) {
   $("#doneSend").onclick = (e) => sendToChat(jobId, e.currentTarget);
   const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg"), pdfBtn = $("#donePdf");
   show(pdfBtn, !!cfg.poster); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
+  const pdfView = $("#donePdfView"); show(pdfView, IS_EITAA && !!cfg.poster); pdfView.onclick = (e) => viewPdf(jobId, e.currentTarget);
   show(hBtn, s.handout === "ok" && !!s.handoutId); show(pBtn, s.poster === "ok" && !!s.posterId); show(img, false);
   if (!hBtn.hidden) hBtn.onclick = (e) => sendToChat(s.handoutId, e.currentTarget);
   if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
@@ -1478,6 +1480,19 @@ async function dlPdf(id, btn) {
   });
 }
 
+// مشاهده‌ی PDF در ایتا: همان لینک ۵ دقیقه‌ای ولی با view:true (inline)؛ در مرورگر بیرونی (openLink) باز و نمایش داده می‌شود. PDF ساخته‌شده ۲۴ ساعت کش است، پس دفعه‌ی بعد ساخته نمی‌شود.
+async function viewPdf(id, btn) {
+  return busy(btn, "در حال آماده‌سازی PDF…", async () => {
+    for (let i = 0; i < 10; i++) {
+      try {
+        const d = await api("/api/miniapp/pdf-dl", { method: "POST", body: { id, view: true } });
+        TG.openLink(location.origin + d.path); TG.haptic("success");
+        return;
+      } catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); TG.haptic("error"); return; } await sleep(3000); }
+    }
+  });
+}
+
 // ---------- فایل‌ها ----------
 // همراه‌های بعد از ساخت ارائه: زیر هر ارائه دکمه‌ی پوستر، جزوه، اسلاید صوتی و پادکست (هرکدام ۱ اعتبار جدا) فقط وقتی هنوز برای همان ارائه ساخته نشده‌اند
 const EXTRA_BTNS = {
@@ -1552,7 +1567,8 @@ async function loadFiles() {
         playBtn,
         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
-        !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
+        !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null,
+        IS_EITAA && !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => viewPdf(f.id, e.currentTarget) }, "👁 مشاهده PDF") : null),
       f.extras && f.extras.length
         ? h("div", { class: "fx" },
           h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),

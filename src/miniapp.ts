@@ -209,7 +209,7 @@ const pdfFailure = (e: unknown): Response => {
     : "ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن.", 502);
 };
 
-/** POST /api/miniapp/pdf-dl {id} ← {path, name} — مخصوص ایتا (فایل به چت نمی‌رود): PDF ساخته (یا از کش خوانده) و لینک ۵ دقیقه‌ای دانلود برگردانده می‌شود.
+/** POST /api/miniapp/pdf-dl {id, view?} ← {path, name} — مخصوص ایتا (فایل به چت نمی‌رود): PDF ساخته (یا از کش خوانده) و لینک ۵ دقیقه‌ای دانلود برگردانده می‌شود.
  *  همان سقف روزانه و کش ۲۴ ساعته‌ی /api/miniapp/pdf؛ دانلود از همان /api/miniapp/dl/<توکن>.pdf انجام می‌شود. */
 export async function miniappPdfLink(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
   const id = typeof body?.id === "string" ? body.id : "";
@@ -227,7 +227,8 @@ export async function miniappPdfLink(env: Env, user: WebUser, body: Record<strin
     }
     if (!title) title = (await listFiles(env, user.id).catch(() => [])).find((x) => x.id === id)?.title ?? "presentation";
     const token = randomToken(24);
-    await env.KV.put(`mdl:${token}`, `${user.id}|${id}|pdf`, { expirationTtl: 300 });
+    const view = body?.view === true; // «مشاهده»: همان PDF با content-disposition inline تا مرورگر خودش نمایش دهد
+    await env.KV.put(`mdl:${token}`, `${user.id}|${id}|${view ? "pdfv" : "pdf"}`, { expirationTtl: 300 });
     return json({ path: `/api/miniapp/dl/${token}.pdf`, name: fileNameWithSite(env, title, "pdf", "", 80) });
   } catch (e) { return pdfFailure(e); }
 }
@@ -301,8 +302,9 @@ export async function miniappDownload(env: Env, rawToken: string): Promise<Respo
   if (!v || i < 1) return err("لینک دانلود منقضی شده است.", 404);
   const uid = v.slice(0, i);
   let id = v.slice(i + 1);
-  const isPdf = id.endsWith("|pdf"); // لینک PDF ایتا (miniappPdfLink): «کاربر|شناسه|pdf»
-  if (isPdf) id = id.slice(0, -4);
+  const inlinePdf = id.endsWith("|pdfv"); // «مشاهده‌ی» PDF در مرورگر (miniappPdfLink با view)
+  const isPdf = inlinePdf || id.endsWith("|pdf"); // لینک PDF ایتا (miniappPdfLink): «کاربر|شناسه|pdf»
+  if (isPdf) id = id.slice(0, inlinePdf ? -5 : -4);
   if (!/^[\w-]{1,100}$/.test(id)) return err("پیدا نشد", 404);
   if (isPdf) {
     const data = await cachedPdf(env, uid, id).catch(() => null);
@@ -310,7 +312,7 @@ export async function miniappDownload(env: Env, rawToken: string): Promise<Respo
     const title = (await listFiles(env, uid).catch(() => [])).find((x) => x.id === id)?.title ?? "presentation";
     return new Response(data, { headers: {
       "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="file.pdf"; filename*=UTF-8''${encodeURIComponent(fileNameWithSite(env, title, "pdf", "", 80))}`,
+      "content-disposition": `${inlinePdf ? "inline" : "attachment"}; filename="file.pdf"; filename*=UTF-8''${encodeURIComponent(fileNameWithSite(env, title, "pdf", "", 80))}`,
       "cache-control": "no-store", "x-content-type-options": "nosniff",
     } });
   }
