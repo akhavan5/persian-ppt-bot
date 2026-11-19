@@ -916,7 +916,7 @@ async function restoreDraft() {
   try {
     const d = JSON.parse(raw);
     if (typeof d.t === "string" && d.t.trim() && !$("#topic").value) $("#topic").value = d.t.slice(0, 600);
-    if ([...$("#slides").options].some((o) => o.value === String(d.s))) $("#slides").value = String(d.s);
+    if ([...$("#slides").options].some((o) => o.value === String(d.s) && !o.dataset.lock)) $("#slides").value = String(d.s);
     if ((d.i === "0" || d.i === "1" || (d.i === "2" && me.premium)) && !(d.i !== "0" && me.maxImages <= 0)) $("#imgs").value = d.i;
     if (typeof d.p === "boolean") $("#pOn").checked = d.p;
     if (d.pc === "wide" || d.pc === "tall") $("#pChoice").value = d.pc;
@@ -926,6 +926,16 @@ async function restoreDraft() {
     show($("#pLay"), !!cfg.poster && $("#pOn").checked);
   } catch {}
 }
+$("#slides").addEventListener("change", (e) => {
+  const o = e.target.selectedOptions[0];
+  if (o && o.dataset.lock) {
+    const ok = [...e.target.options].filter((x) => !x.dataset.lock && Number(x.value) <= me.maxSlides);
+    const cur = Math.min(me.settings.slides, me.maxSlides);
+    e.target.value = String((ok.find((x) => Number(x.value) === cur) || ok[ok.length - 1]).value);
+    toast(`🔒 سقف حساب تو ${fa(me.maxSlides)} اسلاید است؛ برای تعداد بیشتر پلن پلاس/پرو بگیر.`);
+    openPlans();
+  }
+});
 $("#imgs").addEventListener("change", (e) => { if (e.target.value === "2" && !me.premium) { e.target.value = "1"; toast("تصویر «زیاد» فقط برای کاربران دارای پلن پلاس/پرو فعال است."); } });
 for (const id of ["#topic", "#slides", "#imgs", "#pOn", "#pChoice", "#hOn", "#aOn", "#cOn"]) for (const ev of ["input", "change"]) $(id).addEventListener(ev, saveDraft);
 
@@ -938,7 +948,9 @@ function renderMake() {
   const prevS = $("#slides").value, prevI = $("#imgs").value; // انتخاب‌های فعلی فرم (با ذخیره‌ی تنظیمات پاک نشوند)
   const max = me.maxSlides, cur = Math.min(me.settings.slides, max);
   const choices = cfg.slideChoices.filter((n) => n <= max);
-  $("#slides").replaceChildren(...choices.map((n) => h("option", { value: n }, fa(n) + " اسلاید")));
+  // گزینه‌های بالاتر از سقف پلن هم نشان داده می‌شوند ولی با 🔒؛ انتخابشان پیام ارتقا می‌دهد (مثل ربات)
+  const lockedChoices = cfg.slideChoices.filter((n) => n > max);
+  $("#slides").replaceChildren(...choices.map((n) => h("option", { value: n }, fa(n) + " اسلاید")), ...lockedChoices.map((n) => h("option", { value: n, "data-lock": "1" }, "🔒 " + fa(n) + " اسلاید")));
   $("#slides").value = String(choices.includes(cur) ? cur : choices[choices.length - 1]);
   $("#imgs").options[1].textContent = "زیاد" + (me.premium ? "" : " 🔒"); // «زیاد» (نرمال + ۱ تصویر) فقط برای پلن‌دارها
   $("#imgs").value = me.settings.images === false || me.maxImages <= 0 ? "0" : me.settings.imagesMany && me.premium ? "2" : "1";
