@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import { REF_EVERY, REF_MAX, botPlatform, type RefId } from "./settings";
 import { toFa } from "./util";
 import { tg } from "./telegram";
-import { eitaaLink } from "./eitaa";
+import { eitaaLink, withBtn } from "./eitaa";
 
 /** اگر در متن پیام همگانی باشد، برای هر کاربر با بلوک /invite خودش (لینک اختصاصی + شمارنده) جایگزین می‌شود */
 export const INVITE_TOKEN = "{invite}";
@@ -20,7 +20,7 @@ const siteBase = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/
 /** لینک دعوت سایت: صفحه‌ی اصلی با ?ref=<شناسه>؛ سایت و اپ اندروید هر دو همین را می‌فرستند (سایت کد را بعد از ورود ثبت می‌کند) */
 export const webInviteLink = (env: Env, id: RefId) => `${siteBase(env)}/?ref=${encodeURIComponent(String(id))}`;
 /** لینک دعوت برنامک ایتا: لینک مستقیم برنامک با startapp=ref_<شناسه> (Mini App آن را بعد از ورود ثبت می‌کند)؛ بدون EITAA_MINIAPP_LINK خالی */
-export const eitaaInviteLink = (env: Env, id: RefId) => { const l = eitaaLink(env); return l ? `${l}${l.includes("?") ? "&" : "?"}startapp=ref_${id}` : ""; };
+export const eitaaInviteLink = (env: Env, id: RefId) => { const l = eitaaLink(env); return l ? withBtn(`${l}${l.includes("?") ? "&" : "?"}startapp=ref_${id}`, "ساخت ارائه") : ""; };
 
 // نام کاربری هر ربات (getMe) در حافظه‌ی همین نمونه نگه داشته می‌شود؛ ربات‌ها عوض نمی‌شوند و getMe یک درخواست شبکه است
 const botNames = new Map<string, string>();

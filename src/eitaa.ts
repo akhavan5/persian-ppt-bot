@@ -12,6 +12,14 @@ const API = "https://eitaayar.ir/api/app/sendMessage";
 export const eitaaEnabled = (env: Env): boolean => !!env.EITAA_APP_TOKEN;
 export const eitaaLink = (env: Env): string => (env.EITAA_MINIAPP_LINK || "").trim().replace(/\/+$/, "");
 
+/** «دکمه شیشه‌ای» ایتا (مستند): افزودن btn=<متن> به لینک برنامک؛ ایتا زیر پیش‌نمایش لینک یک دکمه‌ی باز کردن نشان می‌دهد.
+ *  فاصله در متن دکمه با «.» نوشته می‌شود (مثل btn=باز.کردن). */
+export function withBtn(link: string, label = "ساخت ارائه"): string {
+  if (!link || /[?&]btn=/.test(link)) return link;
+  const t = label.replace(/[^\p{L}\p{N}\s]/gu, "").trim().replace(/\s+/g, ".").slice(0, 20);
+  return t ? `${link}${link.includes("?") ? "&" : "?"}btn=${encodeURIComponent(t)}` : link;
+}
+
 type Btn = { text?: string; url?: string; web_app?: { url?: string } };
 
 /** دکمه‌های اینلاین تلگرام در ایتا وجود ندارند؛ دکمه‌ی لینک/اپ به یک خط لینک زیر پیام تبدیل می‌شود */
@@ -21,7 +29,7 @@ function buttonLines(env: Env, markup: unknown): string {
   const out: string[] = [];
   for (const row of rows) for (const b of row) {
     const label = String(b.text ?? "").replace(/<[^>]+>/g, "").replace(/[\[\]]/g, "").trim();
-    const url = b.web_app ? eitaaLink(env) : b.url ?? "";
+    const url = b.web_app ? withBtn(eitaaLink(env), label) : b.url ?? "";
     if (label && /^https?:\/\//i.test(url)) out.push(`[${label}](${url})`);
   }
   return out.join("\n");
