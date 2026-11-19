@@ -407,6 +407,8 @@ function makeEitaa(W) {
     via: "eitaa", idBase: EITAA_ID_BASE,
     openTg(path) { t(() => W.openEitaaLink("https://eitaa.com" + path)); },
     openLink(url) { t(() => W.openLink(url, { try_browser: true })); },
+    // اشتراک‌گذاری متن/لینک با کاربران ایتا (مستند «اشتراک‌گذاری متن»): پنجره‌ی انتخاب مخاطب خود ایتا
+    share(link) { t(() => W.openEitaaLink("https://eitaa.com/share/url?" + new URLSearchParams({ url: link, text: TG_SHARE_TEXT }).toString())); },
     // شماره‌ی تأییدشده‌ی خود ایتا (فقط با کلیک کاربر روی «ثبت شماره»)؛ cb(رشته‌ی امضاشده | null)
     requestContact(cb) {
       let done = false;
@@ -1670,7 +1672,7 @@ async function copyText(v) {
   try { const ta = document.createElement("textarea"); ta.value = v; ta.style.cssText = "position:fixed;opacity:0"; document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; } catch { return false; }
 }
 async function shareInvite(link) {
-  if ((/^https:\/\/t\.me\//.test(link) || (IS_BALE && /^https?:\/\/(ble\.ir|web\.bale\.ai)\//.test(link))) && TG.share) return TG.share(link);
+  if ((/^https:\/\/t\.me\//.test(link) || (IS_BALE && /^https?:\/\/(ble\.ir|web\.bale\.ai)\//.test(link)) || (IS_EITAA && /^https?:\/\/([\w-]+\.)?eitaa\.com\//.test(link))) && TG.share) return TG.share(link);
   if (navigator.share) { try { await navigator.share({ title: "پاورپوینت‌ساز فارسی", text: "ساخت پاورپوینت فارسی با هوش مصنوعی 👇", url: link }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
   if (await copyText(link)) toast("لینک دعوت کپی شد؛ برای دوستانت بفرست ✓"); else window.prompt("لینک دعوت را کپی کن:", link);
 }
