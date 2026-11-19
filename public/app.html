@@ -429,7 +429,11 @@ function makeEitaa(W) {
     openLink(url) { t(() => W.openLink(url, { try_browser: true })); },
     // باز کردن داخل خود ایتا (بدون try_browser؛ رفتار پیش‌فرض کلاینت)، مثلاً برای صفحه‌ی برنامک و ثبت نظر
     // openEitaaLink لینک eitaa.com/<نام>_app/main را به‌صورت گفت‌وگو با ربات باز می‌کند (برنامک اجرا نمی‌شود)؛ openLink بدون try_browser آن را مثل لینک مستقیم برنامک در خود ایتا اجرا می‌کند
-    openInApp(url) { t(() => W.openLink(url)); },
+    openInApp(url) {
+      const eitaaUrl = /^https?:\/\/([\w-]+\.)?eitaa\.com\//.test(url);
+      if (eitaaUrl && typeof W.openEitaaLink === "function") { try { W.openEitaaLink(url); return; } catch (e) { console.error("openEitaaLink", e); } } // خطا قورت داده نشود؛ بعدش پشتیبان
+      t(() => W.openLink(url)); // پشتیبان: اگر openEitaaLink نبود یا خطا داد
+    },
     // اشتراک‌گذاری متن/لینک با کاربران ایتا (مستند «اشتراک‌گذاری متن»): پنجره‌ی انتخاب مخاطب خود ایتا
     share(link) { t(() => W.openEitaaLink("https://eitaa.com/share/url?" + new URLSearchParams({ url: link, text: TG_SHARE_TEXT }).toString())); },
     // شماره‌ی تأییدشده‌ی خود ایتا (فقط با کلیک کاربر روی «ثبت شماره»)؛ cb(رشته‌ی امضاشده | null)
