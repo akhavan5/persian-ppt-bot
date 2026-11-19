@@ -236,8 +236,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <div id="fbThanks" hidden><h3 id="fbThanksTxt">🙏 ممنون از نظرت!</h3></div>
           <div id="fbEitaa" hidden>
             <h3>💬 نظرت درباره‌ی برنامک چیست؟</h3>
-            <div class="muted">نظر و امتیازت را همین‌جا در صفحه‌ی برنامک در ایتا ثبت کن؛ داخل خود ایتا باز می‌شود.</div>
-            <button class="btn" id="fbEitaaBtn" type="button" style="margin-top:10px">ثبت نظر در ایتا</button>
+            <div class="muted">اگر از برنامک راضی بودی، لطفاً در صفحه‌ی برنامک‌های ایتا برای ما نظر بده.</div>
           </div>
         </div>
       </div>
@@ -250,8 +249,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
       <div class="card"><h2>فایل‌های ۲۴ ساعت اخیر</h2><div id="extraJobs" aria-live="polite"></div><div id="files"></div>
         <div class="fbBox" id="filesReview" hidden>
           <h3>💬 نظرت درباره‌ی برنامک چیست؟</h3>
-          <div class="muted">نظر و امتیازت را همین‌جا در صفحه‌ی برنامک در ایتا ثبت کن؛ داخل خود ایتا باز می‌شود.</div>
-          <button class="btn" id="filesReviewBtn" type="button" style="margin-top:10px">ثبت نظر در ایتا</button>
+          <div class="muted">اگر از برنامک راضی بودی، لطفاً در صفحه‌ی برنامک‌های ایتا برای ما نظر بده.</div>
         </div></div>
     </section>
 
@@ -858,7 +856,7 @@ async function boot() {
   show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
   show($("#go"), true); // دکمه‌ی داخل صفحه همیشه می‌ماند: اگر کلاینت تلگرام (یا نسخه‌های غیررسمی) رویداد دکمه‌ی اصلی را نرساند، ساخت باز هم کار کند
   show($("#pasteTopic"), TG.canPaste);
-  if (IS_EITAA) { show($("#filesReview"), true); $("#filesReviewBtn").onclick = () => { TG.haptic("select"); TG.openInApp(EITAA_REVIEW_URL); }; eitaaTexts(); TG.askWrite(() => api("/api/miniapp/welcome", { method: "POST" }).catch(() => {})); }
+  if (IS_EITAA) { show($("#filesReview"), true); eitaaTexts(); TG.askWrite(() => api("/api/miniapp/welcome", { method: "POST" }).catch(() => {})); }
   renderAll();
   claimStartRef().then(loadInvite);
   if (!applyStart()) restoreDraft();
@@ -1292,11 +1290,9 @@ async function track(jobId, resumed = false) {
 // ---------- نظر کاربر کنار ارائه (مینی‌اپ تلگرام و برنامک ایتا) ----------
 let fbRating = 0, fbTitle = "";
 function fbPaint() { document.querySelectorAll("#fbStars button").forEach((b) => { const on = Number(b.dataset.v) <= fbRating; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(Number(b.dataset.v) === fbRating)); }); }
-const EITAA_REVIEW_URL = "https://eitaa.com/store_app/see"; // صفحه‌ی برنامک در ایتا؛ کاربر نظرش را همان‌جا ثبت می‌کند
 function fbReset(title) {
   if (IS_EITAA) { // در ایتا فرم نظر خودمان نیست؛ فقط دکمه‌ی باز کردن صفحه‌ی برنامک (داخل ایتا)
     show($("#fbForm"), false); show($("#fbThanks"), false); show($("#fbEitaa"), true);
-    $("#fbEitaaBtn").onclick = () => { TG.haptic("select"); TG.openInApp(EITAA_REVIEW_URL); };
     return;
   }
   fbRating = 0; fbTitle = title || "";
