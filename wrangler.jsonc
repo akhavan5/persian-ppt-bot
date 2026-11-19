@@ -34,7 +34,9 @@
     { "binding": "DB3", "database_name": "persian-ppt-bot-db-3" },
     { "binding": "DB4", "database_name": "persian-ppt-bot-db-4" },
     { "binding": "DB5", "database_name": "persian-ppt-bot-db-5" },
-    { "binding": "DB6", "database_name": "persian-ppt-bot-db-6" }
+    { "binding": "DB6", "database_name": "persian-ppt-bot-db-6" },
+    { "binding": "DB7", "database_name": "persian-ppt-bot-db-7" },
+    { "binding": "DB8", "database_name": "persian-ppt-bot-db-8" }
   ],
 
   // KV فقط برای بایت‌های فایل‌های ساخته‌شده (یک نوشتن برای هر ارائه)؛ همان namespace قبلی

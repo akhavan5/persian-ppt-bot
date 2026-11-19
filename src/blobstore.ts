@@ -7,11 +7,11 @@
  * نوشتن: اول ردیف متادیتای «موقت» (انقضای ۱۵ دقیقه) درج می‌شود، بعد تکه‌ها، و در پایان انقضای واقعی جایگزین می‌شود؛ خواننده فایل نیمه‌کاره نمی‌بیند (شمارش تکه‌ها با n نمی‌خواند) و اگر Worker وسط نوشتن بمیرد purge تکه‌ها را هم با ردیف موقت پاک می‌کند (تکه‌ی یتیم نمی‌ماند).
  * خواندن: متادیتا هم‌زمان از همه‌ی دیتابیس‌ها پرسیده می‌شود. فایل‌های موقت پس از پایان کار با deletePrefix پاک می‌شوند و purge هر ساعت اجرا می‌شود.
  */
-const CHUNK = 512 * 1024;
+const CHUNK = 1024 * 1024; // ۱ مگابایت → base64 ≈ ۱٫۳۳ مگابایت (زیر سقف ۲ مگابایتیِ ردیف)؛ تعداد ردیف‌های نوشته‌شده (و حذف‌شده) نصف می‌شود
 // D1 ستون BLOB را به‌صورت آرایه‌ی عدد (JSON) برمی‌گرداند و پارس آن CPU زیادی می‌خورد (۲۰ مگابایت صدا ≈ ۷۰ مگابایت JSON). متن base64 رشته‌ی ساده است و با Buffer بومی در چند میلی‌ثانیه رمزگشایی می‌شود.
 const toB64 = (u: Uint8Array) => Buffer.from(u.buffer, u.byteOffset, u.byteLength).toString("base64");
 const fromB64 = (s: string) => new Uint8Array(Buffer.from(s, "base64"));
-const PER_BATCH = 4; // حداکثر ~۲ مگابایت در هر batch
+const PER_BATCH = 2; // حداکثر ~۲٫۷ مگابایت در هر batch (مثل قبل: ۴ تکه‌ی ۵۱۲ کیلوبایتی)
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 interface PutOpts { expirationTtl?: number; expiration?: number; metadata?: unknown }
@@ -39,7 +39,8 @@ function initDb(db: D1Database): Promise<unknown> {
         db.prepare("CREATE TABLE IF NOT EXISTS blob_meta (k TEXT PRIMARY KEY, n INTEGER NOT NULL, size INTEGER NOT NULL, meta TEXT, exp INTEGER) WITHOUT ROWID"),
         db.prepare("CREATE TABLE IF NOT EXISTS blob_chunk (k TEXT NOT NULL, i INTEGER NOT NULL, d BLOB NOT NULL, PRIMARY KEY (k, i)) WITHOUT ROWID"),
         db.prepare("CREATE TABLE IF NOT EXISTS blob_chunk64 (k TEXT NOT NULL, i INTEGER NOT NULL, d TEXT NOT NULL, PRIMARY KEY (k, i)) WITHOUT ROWID"),
-        db.prepare("CREATE INDEX IF NOT EXISTS blob_meta_exp ON blob_meta (exp)"),
+        // ایندکس exp حذف شد: هر INSERT/UPDATE روی blob_meta را دو نوشتن می‌کرد (≈۵۷٪ نوشتن‌های D1). جدول متادیتا کوچک است و purge با اسکن کامل ارزان‌تر است.
+        db.prepare("DROP INDEX IF EXISTS blob_meta_exp"),
       ])
       .catch((e) => { initCache.delete(db); throw e; });
     initCache.set(db, p);
