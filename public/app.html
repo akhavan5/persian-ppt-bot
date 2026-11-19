@@ -347,6 +347,7 @@ const show = (el, on) => { el.hidden = !on; };
 const EW = window.Eitaa && window.Eitaa.WebApp;
 const IS_EITAA = !!(EW && EW.initData);
 const EITAA_ID_BASE = 300000000000000; // باید با eitaa-format.ts یکی باشد
+let eWAsking = false, eWLast = 0; // وضعیت پرسش «دسترسی ارسال پیام» ایتا
 function makeEitaa(W) {
   const t = (f) => { try { return f(); } catch { return undefined; } };
   const since = (v) => !!t(() => W.isVersionAtLeast(v));
@@ -445,11 +446,18 @@ function makeEitaa(W) {
         });
       } catch { fin(null); }
     },
-    // دسترسی ارسال پیام (برای اعلان‌ها و پیام خوش‌آمدگویی)؛ فقط یک بار پرسیده می‌شود
+    // دسترسی ارسال پیام (برای اعلان «ارائه آماده شد» و پیام خوش‌آمدگویی).
+    // تا وقتی کاربر اجازه نداده، هر بار که لازم باشد (ورود به برنامک و هر بار زدن دکمه‌ی «بساز») دوباره پرسیده می‌شود؛
+    // فقط وقتی پنجره‌ی قبلی هنوز باز است یا کمتر از ۱۵ ثانیه از پرسش قبلی گذشته، پرسش تکراری نمی‌شود تا کاربر اذیت نشود.
     askWrite(cb) {
-      if (t(() => W.initDataUnsafe.user.allows_write_to_pm) || store.get("eWA")) return;
-      store.set("eWA", "1");
-      t(() => W.requestWriteAccess((ok) => { if (ok && cb) cb(); }));
+      if (t(() => W.initDataUnsafe.user.allows_write_to_pm) || store.get("eWG")) return;
+      const now = Date.now();
+      if (eWAsking || now - eWLast < 15000) return;
+      eWAsking = true; eWLast = now;
+      try {
+        W.requestWriteAccess((ok) => { eWAsking = false; eWLast = Date.now(); if (ok) { store.set("eWG", "1"); if (cb) cb(); } });
+      } catch (e) { eWAsking = false; }
+      setTimeout(() => { eWAsking = false; }, 20000); // اگر کلاینت ایتا callback نداد، قفل برای همیشه نماند
     },
   };
 }
@@ -839,6 +847,8 @@ function eitaaTexts() {
   walk(document.body);
   new MutationObserver((ms) => { for (const m of ms) for (const a of m.addedNodes) { if (a.nodeType === 3) fix(a); else if (a.nodeType === 1) walk(a); } }).observe(document.body, { childList: true, subtree: true });
 }
+// ایتا: درخواست دسترسی ارسال پیام؛ بعد از اجازه‌ی کاربر پیام خوش‌آمدگویی/اعلان‌ها می‌تواند ارسال شود
+function askEitaaWrite() { if (IS_EITAA) TG.askWrite(() => api("/api/miniapp/welcome", { method: "POST" }).catch(() => {})); }
 async function boot() {
   show($("#fail"), false);
   if (!TG.initData) { show($("#boot"), false); show($("#outside"), true); return; }
@@ -856,7 +866,7 @@ async function boot() {
   show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
   show($("#go"), true); // دکمه‌ی داخل صفحه همیشه می‌ماند: اگر کلاینت تلگرام (یا نسخه‌های غیررسمی) رویداد دکمه‌ی اصلی را نرساند، ساخت باز هم کار کند
   show($("#pasteTopic"), TG.canPaste);
-  if (IS_EITAA) { show($("#filesReview"), true); eitaaTexts(); TG.askWrite(() => api("/api/miniapp/welcome", { method: "POST" }).catch(() => {})); }
+  if (IS_EITAA) { show($("#filesReview"), true); eitaaTexts(); askEitaaWrite(); }
   renderAll();
   claimStartRef().then(loadInvite);
   if (!applyStart()) restoreDraft();
@@ -1225,6 +1235,7 @@ $("#go").onclick = async () => {
   if (extracting) return genErr("صبر کن تا خواندن فایل یا لینک تمام شود.");
   if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
   try {
+    askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، همین‌جا دوباره پرسیده می‌شود (ساخت منتظرش نمی‌ماند)
     const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: {
       topic, slides: Number($("#slides").value), images: $("#imgs").value !== "0", imagesMany: $("#imgs").value === "2", via: TG.via,
       ...(srcText ? { source: srcText } : {}),
@@ -1452,6 +1463,7 @@ async function sendToChat(id, btn, kind = "send") {
 
 // دانلود مستقیم با web_app_request_file_download: سرور لینک ۵ دقیقه‌ای می‌دهد (تلگرام هدر Authorization نمی‌فرستد)
 async function dlFile(id, btn) {
+  askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، موقع دانلود هم پرسیده می‌شود
   return busy(btn, "در حال آماده‌سازی…", async () => {
     for (let i = 0; i < 10; i++) {
       try {
@@ -1468,6 +1480,7 @@ async function dlFile(id, btn) {
 
 // PDF در ایتا: سرور PDF را می‌سازد (یا از کش می‌خواند) و لینک ۵ دقیقه‌ای می‌دهد؛ دانلود مثل PPTX با downloadFile
 async function dlPdf(id, btn) {
+  askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، موقع دانلود هم پرسیده می‌شود
   return busy(btn, "در حال ساخت PDF…", async () => {
     for (let i = 0; i < 10; i++) {
       try {
@@ -1483,6 +1496,7 @@ async function dlPdf(id, btn) {
 
 // مشاهده‌ی PDF در ایتا: همان لینک ۵ دقیقه‌ای ولی با view:true (inline)؛ در مرورگر بیرونی (openLink) باز و نمایش داده می‌شود. PDF ساخته‌شده ۲۴ ساعت کش است، پس دفعه‌ی بعد ساخته نمی‌شود.
 async function viewPdf(id, btn) {
+  askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، موقع دانلود هم پرسیده می‌شود
   return busy(btn, "در حال آماده‌سازی PDF…", async () => {
     for (let i = 0; i < 10; i++) {
       try {
