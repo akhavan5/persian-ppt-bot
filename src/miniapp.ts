@@ -309,11 +309,31 @@ export async function miniappContact(req: Request, env: Env, user: WebUser): Pro
   if (data.length < 20 || data.length > 4_096) return err("اطلاعات شماره از ایتا نیامد.", 400);
   const p = await verifySigned(env.EITAA_APP_TOKEN, data);
   if (!p) return err("اعتبار اطلاعات شماره تأیید نشد؛ دوباره امتحان کن.", 401);
-  let c: { phone_number?: unknown; user_id?: unknown } | null = null;
-  try { c = JSON.parse(p.get("contact") ?? "null"); } catch { /* فرمت دیگر */ }
-  if (c?.user_id != null && toEitaaId(Number(c.user_id)) !== id) return err("این شماره متعلق به حساب فعلی نیست.", 403);
-  const mobile = normMobile(c?.phone_number ?? p.get("phone_number"));
-  if (!mobile) return err("شماره‌ی موبایل ایرانی معتبر نیامد.", 400);
+  // فرمت داده‌ی ایتا قطعی نیست (کلید شماره/ساختار JSON): همه‌ی فیلدها را می‌گردیم و اولین مقداری که شماره‌ی ایرانی معتبر باشد برمی‌دارد.
+  const found: { mobile: string | null; uid: unknown } = { mobile: null, uid: undefined };
+  const walk = (v: unknown, key: string, depth = 0): void => {
+    if (depth > 4 || v == null) return;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if ((t.startsWith("{") || t.startsWith("[")) && t.length < 4_000) { try { walk(JSON.parse(t), key, depth + 1); return; } catch { /* متن ساده */ } }
+      if (!found.mobile && /phone|mobile|tel|number|contact/i.test(key) && !/id$/i.test(key)) found.mobile = normMobile(t);
+    } else if (typeof v === "number") {
+      if (/^(user_?id|id)$/i.test(key) && found.uid === undefined) found.uid = v;
+      else if (!found.mobile && /phone|mobile|tel|number/i.test(key)) found.mobile = normMobile(String(v));
+    } else if (typeof v === "object") {
+      for (const [k, x] of Object.entries(v as Record<string, unknown>)) walk(x, k, depth + 1);
+    }
+  };
+  for (const [k, v] of p.entries()) {
+    if (k === "user_id" && /^\d+$/.test(v) && found.uid === undefined) found.uid = Number(v);
+    walk(v, k);
+  }
+  if (found.uid != null && toEitaaId(Number(found.uid)) !== id) return err("این شماره متعلق به حساب فعلی نیست.", 403);
+  const mobile = found.mobile;
+  if (!mobile) {
+    console.error("eitaa contact: شماره پیدا نشد؛ کلیدها:", [...p.keys()].join(","), "| ساختار contact:", String(p.get("contact") ?? "").replace(/\d/g, "9").slice(0, 120));
+    return err("شماره‌ی موبایل ایرانی معتبر نیامد.", 400);
+  }
   const r = await attachContact(env, user, "mobile", mobile, "", undefined, true);
   if ("error" in r) return err(r.error, r.status);
   return json({ user: publicUser(r.user), reward: r.reward });
