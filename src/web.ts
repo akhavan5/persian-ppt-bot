@@ -43,7 +43,7 @@ import { isEitaaId, fromEitaaId } from "./eitaa-format";
 import { isSplusId, fromSplusId } from "./splus-format";
 import { checkPlatformPolicy, notifyBlockedTopic, BLOCKED_MSG } from "./platform-policy";
 import { isRubikaId } from "./rubika-format";
-import { inviteClaim, inviteInfo, miniappBuy, miniappDlLink, miniappDownload, miniappContact, miniappLogin, miniappPdf, miniappSend, miniappWelcome } from "./miniapp";
+import { inviteClaim, inviteInfo, miniappBuy, miniappDlLink, miniappDownload, miniappContact, miniappLogin, miniappPdf, miniappPdfLink, miniappSend, miniappWelcome } from "./miniapp";
 import { isAudioName } from "./wav";
 
 const SEC_HEADERS = {
@@ -207,6 +207,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
   if (path === "/api/miniapp/welcome" && method === "POST") return miniappWelcome(env, user);
   if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000));
+  if (path === "/api/miniapp/pdf-dl" && method === "POST") return miniappPdfLink(env, user, await readBody(req, 2_000));
   // دعوت دوستان برای همه‌ی پلتفرم‌ها (سایت، اپ اندروید، Mini App تلگرام/بله، برنامک ایتا)؛ /api/miniapp/invite برای نسخه‌های قدیمی Mini App می‌ماند
   if ((path === "/api/invite" && (method === "GET" || method === "POST")) || (path === "/api/miniapp/invite" && method === "POST")) return inviteInfo(env, user);
   if (path === "/api/invite/claim" && method === "POST") return inviteClaim(env, user, await readBody(req, 500), clientIp(req));

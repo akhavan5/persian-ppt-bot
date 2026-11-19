@@ -201,6 +201,37 @@ export async function miniappBuy(env: Env, user: WebUser): Promise<Response> {
 /** سقف روزانه‌ی ساخت PDF؛ همان کلید و سقف ربات (pdf:<کاربر>:<روز>) تا مصرف مرورگر مشترک حساب شود */
 const PDF_DAILY_LIMIT = 8;
 
+const pdfFailure = (e: unknown): Response => {
+  const msg = String(e instanceof Error ? e.message : e);
+  console.error("miniapp pdf", msg.slice(0, 400));
+  return err(/time limit/i.test(msg) ? "سقف ساخت PDF برای امروز تمام شده است؛ فردا دوباره امتحان کن. فایل PPTX همیشه در دسترس است."
+    : /429|rate|too many|concurrent/i.test(msg) ? "الان سرویس ساخت PDF شلوغ است؛ حدود یک دقیقه دیگر دوباره امتحان کن."
+    : "ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن.", 502);
+};
+
+/** POST /api/miniapp/pdf-dl {id} ← {path, name} — مخصوص ایتا (فایل به چت نمی‌رود): PDF ساخته (یا از کش خوانده) و لینک ۵ دقیقه‌ای دانلود برگردانده می‌شود.
+ *  همان سقف روزانه و کش ۲۴ ساعته‌ی /api/miniapp/pdf؛ دانلود از همان /api/miniapp/dl/<توکن>.pdf انجام می‌شود. */
+export async function miniappPdfLink(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
+  if (await hitLimit(env, `mdl:${user.id}`, 60, 3600)) return err("تعداد درخواست دانلود زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
+  try {
+    let title = "";
+    if (!(await cachedPdf(env, user.id, id).catch(() => null))) {
+      const day = new Date().toISOString().slice(0, 10);
+      if (await hitLimit(env, `pdf:${user.id}:${day}`, PDF_DAILY_LIMIT, 172_800)) return err("سقف روزانه‌ی ساخت PDF تمام شد؛ فردا دوباره امتحان کن (فایل PPTX همیشه در دسترس است).", 429);
+      const r = await buildDeckPdf(env, user.id, id);
+      if (!r.ok) return err(r.error, 404);
+      title = r.title;
+      if (!(await cachedPdf(env, user.id, id).catch(() => null))) return err("حجم PDF برای دانلود زیاد است؛ فایل PPTX را دانلود کن.", 413); // بیش از سقف کش
+    }
+    if (!title) title = (await listFiles(env, user.id).catch(() => [])).find((x) => x.id === id)?.title ?? "presentation";
+    const token = randomToken(24);
+    await env.KV.put(`mdl:${token}`, `${user.id}|${id}|pdf`, { expirationTtl: 300 });
+    return json({ path: `/api/miniapp/dl/${token}.pdf`, name: fileNameWithSite(env, title, "pdf", "", 80) });
+  } catch (e) { return pdfFailure(e); }
+}
+
 /** POST /api/miniapp/pdf {id} — نسخه‌ی PDF ارائه (مثل دکمه‌ی PDF ربات) ساخته و به چت تلگرام کاربر فرستاده می‌شود */
 export async function miniappPdf(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
   const id = typeof body?.id === "string" ? body.id : "";
@@ -223,13 +254,7 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
     if (!r.ok) return err(r.error, 404);
     await sendDocument(env, tgId, r.data, name(r.title), cap(r.title), { mime: "application/pdf" });
     return json({ ok: true });
-  } catch (e) {
-    const msg = String(e instanceof Error ? e.message : e);
-    console.error("miniapp pdf", msg.slice(0, 400));
-    return err(/time limit/i.test(msg) ? "سقف ساخت PDF برای امروز تمام شده است؛ فردا دوباره امتحان کن. فایل PPTX همیشه در دسترس است."
-      : /429|rate|too many|concurrent/i.test(msg) ? "الان سرویس ساخت PDF شلوغ است؛ حدود یک دقیقه دیگر دوباره امتحان کن."
-      : "ساخت PDF ناموفق بود؛ کمی بعد دوباره امتحان کن.", 502);
-  }
+  } catch (e) { return pdfFailure(e); }
 }
 
 /** GET|POST /api/invite (و POST /api/miniapp/invite برای نسخه‌های قدیمی) — دعوت دوستان برای همه‌ی کلاینت‌ها: سایت، اپ اندروید، Mini App تلگرام/بله و برنامک ایتا.
@@ -274,8 +299,21 @@ export async function miniappDownload(env: Env, rawToken: string): Promise<Respo
   const v = await env.KV.get(`mdl:${token}`);
   const i = v ? v.indexOf("|") : -1;
   if (!v || i < 1) return err("لینک دانلود منقضی شده است.", 404);
-  const uid = v.slice(0, i), id = v.slice(i + 1);
+  const uid = v.slice(0, i);
+  let id = v.slice(i + 1);
+  const isPdf = id.endsWith("|pdf"); // لینک PDF ایتا (miniappPdfLink): «کاربر|شناسه|pdf»
+  if (isPdf) id = id.slice(0, -4);
   if (!/^[\w-]{1,100}$/.test(id)) return err("پیدا نشد", 404);
+  if (isPdf) {
+    const data = await cachedPdf(env, uid, id).catch(() => null);
+    if (!data) return err("فایل پیدا نشد یا منقضی شده است.", 404);
+    const title = (await listFiles(env, uid).catch(() => [])).find((x) => x.id === id)?.title ?? "presentation";
+    return new Response(data, { headers: {
+      "content-type": "application/pdf",
+      "content-disposition": `attachment; filename="file.pdf"; filename*=UTF-8''${encodeURIComponent(fileNameWithSite(env, title, "pdf", "", 80))}`,
+      "cache-control": "no-store", "x-content-type-options": "nosniff",
+    } });
+  }
   const f = await loadFileDirect(env, uid, id);
   if (!f) return err("فایل پیدا نشد یا منقضی شده است.", 404);
   const ext = (f.entry.name.split(".").pop() ?? "").toLowerCase();

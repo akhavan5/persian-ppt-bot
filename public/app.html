@@ -400,10 +400,10 @@ function makeEitaa(W) {
   });
   const cloud = { get: async () => "", set: async () => null }; // CloudStorage در ایتا نیست؛ پیش‌نویس فقط روی همین دستگاه (localStorage) می‌ماند
 
-  // دانلود: اندروید (کیت ۱.۴+) پنجره‌ی دانلود بومی؛ دسکتاپ/وب: لینک ۵ دقیقه‌ای در مرورگر بیرونی (فایل با content-disposition دانلود می‌شود)
+  // دانلود: اگر downloadFile در SDK باشد (مستند ایتا: نسخه/پلتفرم مشخص نکرده) از آن استفاده می‌شود؛ وگرنه لینک ۵ دقیقه‌ای در مرورگر بیرونی (فایل با content-disposition دانلود می‌شود)
   const download = (url, name) => new Promise((res) => {
     try {
-      if (isAndroid && since("1.4") && typeof W.downloadFile === "function") W.downloadFile({ url, file_name: name });
+      if (typeof W.downloadFile === "function") W.downloadFile({ url, file_name: name });
       else W.openLink(url, { try_browser: true });
       res("downloading");
     } catch { res(null); }
@@ -1303,7 +1303,7 @@ function showDone(jobId, s, took = 0) {
   $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = (s.slides ? ` — ${fa(s.slides)} اسلاید` : "") + (took ? ` · ساخته‌شده در ${fmtDur(took)}` : "");
   $("#doneSend").onclick = (e) => sendToChat(jobId, e.currentTarget);
   const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg"), pdfBtn = $("#donePdf");
-  show(pdfBtn, !!cfg.poster && !IS_EITAA); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
+  show(pdfBtn, !!cfg.poster); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
   show(hBtn, s.handout === "ok" && !!s.handoutId); show(pBtn, s.poster === "ok" && !!s.posterId); show(img, false);
   if (!hBtn.hidden) hBtn.onclick = (e) => sendToChat(s.handoutId, e.currentTarget);
   if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
@@ -1420,7 +1420,7 @@ async function posterPreview(id) {
 
 // ارسال فایل توسط ربات به چت؛ ۴۰۴ تازه‌ساخت چند بار دوباره امتحان می‌شود
 async function sendToChat(id, btn, kind = "send") {
-  if (IS_EITAA) return kind === "pdf" ? toast("نسخه‌ی PDF در ایتا فعلاً در دسترس نیست؛ فایل PPTX را دانلود کن.") : dlFile(id, btn); // ایتا فایل به چت نمی‌فرستد
+  if (IS_EITAA) return kind === "pdf" ? dlPdf(id, btn) : dlFile(id, btn); // ایتا فایل به چت نمی‌فرستد؛ هر دو با دانلود
   return busy(btn, kind === "pdf" ? "در حال ساخت PDF…" : "در حال ارسال…", async () => {
     for (let i = 0; i < 10; i++) {
       try { await api("/api/miniapp/" + kind, { method: "POST", body: { id } }); toast("✅ فایل به چت ربات ارسال شد"); TG.haptic("success"); return; }
@@ -1441,6 +1441,21 @@ async function dlFile(id, btn) {
         else toast(IS_EITAA ? "دانلود شروع نشد؛ دوباره امتحان کن." : "دانلود مستقیم ممکن نشد؛ «ارسال به چت» را بزن.");
         return;
       } catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); return; } await sleep(3000); }
+    }
+  });
+}
+
+// PDF در ایتا: سرور PDF را می‌سازد (یا از کش می‌خواند) و لینک ۵ دقیقه‌ای می‌دهد؛ دانلود مثل PPTX با downloadFile
+async function dlPdf(id, btn) {
+  return busy(btn, "در حال ساخت PDF…", async () => {
+    for (let i = 0; i < 10; i++) {
+      try {
+        const d = await api("/api/miniapp/pdf-dl", { method: "POST", body: { id } });
+        const st = await TG.download(location.origin + d.path, d.name);
+        if (st === "downloading") { TG.haptic("success"); toast("⬇️ دانلود شروع شد"); }
+        else toast("دانلود شروع نشد؛ دوباره امتحان کن.");
+        return;
+      } catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); TG.haptic("error"); return; } await sleep(3000); }
     }
   });
 }
@@ -1519,7 +1534,7 @@ async function loadFiles() {
         playBtn,
         h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget) }, "📥 ارسال به چت"),
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
-        !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster && !IS_EITAA ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
+        !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null),
       f.extras && f.extras.length
         ? h("div", { class: "fx" },
           h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),
