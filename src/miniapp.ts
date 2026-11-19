@@ -262,12 +262,15 @@ export async function miniappDlLink(env: Env, user: WebUser, body: Record<string
   if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
   const token = randomToken(24);
   await env.KV.put(`mdl:${token}`, `${user.id}|${id}`, { expirationTtl: 300 });
-  return json({ path: `/api/miniapp/dl/${token}`, name: f.name });
+  // ایتا (downloadFile): پسوند آدرس باید با پسوند file_name یکی باشد؛ پس پسوند فایل به انتهای مسیر اضافه می‌شود (سرور آن را نادیده می‌گیرد)
+  const ext = (f.name.split(".").pop() ?? "").toLowerCase();
+  return json({ path: `/api/miniapp/dl/${token}${/^[a-z0-9]{1,5}$/.test(ext) ? "." + ext : ""}`, name: f.name });
 }
 
-/** GET /api/miniapp/dl/<توکن> — بدون ورود؛ فقط با توکن کوتاه‌مدتِ ساخته‌شده در miniappDlLink */
-export async function miniappDownload(env: Env, token: string): Promise<Response> {
-  if (!/^[\w-]{20,64}$/.test(token)) return err("پیدا نشد", 404);
+/** GET /api/miniapp/dl/<توکن>[.پسوند] — بدون ورود؛ فقط با توکن کوتاه‌مدتِ ساخته‌شده در miniappDlLink */
+export async function miniappDownload(env: Env, rawToken: string): Promise<Response> {
+  const token = /^([\w-]{20,64})(?:\.[a-z0-9]{1,5})?$/i.exec(rawToken)?.[1] ?? ""; // «<توکن>.pptx» (پسوند فقط برای ایتا است)
+  if (!token) return err("پیدا نشد", 404);
   const v = await env.KV.get(`mdl:${token}`);
   const i = v ? v.indexOf("|") : -1;
   if (!v || i < 1) return err("لینک دانلود منقضی شده است.", 404);
