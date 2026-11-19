@@ -266,6 +266,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
       <div class="card" id="pfCard">
         <h2>👤 پروفایل</h2>
         <div id="pfBody"></div>
+        <div id="homeBox" hidden style="margin-top:10px"><button class="btn ghost" id="homeBtn" type="button">📲 افزودن به صفحه‌ی اصلی گوشی</button></div>
       </div>
       <div class="card" id="invCard">
         <h2>🎁 دعوت دوستان</h2>
@@ -383,6 +384,15 @@ function makeEitaa(W) {
   const back = { onPress: null, set(v) { if (backKey === !!v) return; backKey = !!v; t(() => (v ? W.BackButton.show() : W.BackButton.hide())); } };
   t(() => W.BackButton.onClick(() => { if (back.onPress) back.onPress(); }));
 
+  // دکمه‌ی «تنظیمات» منوی سه‌نقطه‌ی ایتا ← میان‌بر خرید/ارتقای پلن (جدول پلن‌ها)
+  t(() => W.SettingsButton.onClick(() => { if (typeof me !== "undefined" && me && typeof openPlans === "function") openPlans(); }));
+  t(() => W.SettingsButton.show());
+
+  // افزودن برنامک به صفحه‌ی اصلی گوشی (اندروید، کیت ۱.۳+)
+  const canHome = isAndroid && since("1.3") && typeof W.addToHomeScreen === "function";
+  const homeStatus = (cb) => { try { W.checkHomeScreenStatus((s) => cb(s)); } catch { cb(null); } };
+  const addHome = () => t(() => W.addToHomeScreen());
+
   let closeKey = null;
   const confirmClose = (v) => { if (closeKey === !!v) return; closeKey = !!v; t(() => (v ? W.enableClosingConfirmation() : W.disableClosingConfirmation())); };
   const haptic = (kind) => t(() => {
@@ -402,7 +412,7 @@ function makeEitaa(W) {
   const canPaste = !!(navigator.clipboard && navigator.clipboard.readText);
   const readClipboard = () => (canPaste ? navigator.clipboard.readText() : Promise.resolve(null)).then((x) => x, () => null);
   return {
-    initData: W.initData, startParam, since, on, main, back, confirmClose, haptic, cloud, download, paint, readClipboard, canPaste,
+    initData: W.initData, startParam, since, on, main, back, confirmClose, haptic, cloud, download, paint, readClipboard, canPaste, canHome, homeStatus, addHome,
     canDownload: false, // «ارسال به چت» در ایتا خودش دانلود است؛ دکمه‌ی دانلودِ جدا لازم نیست
     via: "eitaa", idBase: EITAA_ID_BASE,
     openTg(path) { t(() => W.openEitaaLink("https://eitaa.com" + path)); },
@@ -1574,8 +1584,16 @@ function renderSettings() {
   fill("#model", (cfg.models || []).map((m) => [m.id, m.name + (m.free === false ? " (ویژه)" : "")]), s.model || (cfg.models.find((m) => m.free !== false) || cfg.models[0] || {}).id);
   for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
   $("#notes").checked = s.notes !== false; // پیش‌فرض روشن
-  renderCreditInfo(); renderProfile();
+  renderCreditInfo(); renderProfile(); renderHome();
 }
+// «افزودن به صفحه‌ی اصلی»: فقط ایتا اندروید؛ اگر قبلاً اضافه شده باشد دکمه پنهان می‌شود. پنجره فقط با کلیک کاربر باز می‌شود.
+function renderHome() {
+  const box = $("#homeBox"); if (!box) return;
+  if (!TG.canHome) return show(box, false);
+  show(box, true);
+  TG.homeStatus((s) => show(box, s !== "added"));
+}
+$("#homeBtn").onclick = () => { TG.addHome(); setTimeout(renderHome, 2500); };
 async function save(patch) {
   try { me.settings = (await api("/api/settings", { method: "PUT", body: patch })).settings; renderSettings(); toast("ذخیره شد ✓"); TG.haptic("select"); } // فقط تب تنظیمات دوباره رندر می‌شود؛ انتخاب‌های تب «ساخت» دست نمی‌خورد
   catch (e) { toast(e.message); renderSettings(); }
