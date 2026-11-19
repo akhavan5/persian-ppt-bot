@@ -496,7 +496,6 @@ address{font-style:normal}
           <div class="muted" style="font-size:.88rem">امتیاز بده و اگر خواستی بنویس چه چیزی خوب بود یا بهتر می‌شد؛ تک‌تک نظرها را خودمان می‌خوانیم.</div>
           <div class="fbStars" id="fbStars" role="radiogroup" aria-label="امتیاز از ۱ تا ۵"></div>
           <textarea id="fbText" maxlength="1500" placeholder="نظرت را اینجا بنویس (اختیاری اگر امتیاز دادی)…"></textarea>
-          <p class="fbGift" id="fbGift" hidden>🎁 با ثبت نظرت <b id="fbGiftN">۱</b> اعتبار رایگان هدیه می‌گیری (فقط یک‌بار).</p>
           <div class="msg err" id="fbErr" hidden></div>
           <button class="btn" id="fbSend" type="button" style="margin-top:10px">ارسال نظر</button>
         </div>
@@ -1441,8 +1440,6 @@ function fbReset(title) {
   if (!st.childElementCount) for (let v = 5; v >= 1; v--) { const b = document.createElement("button"); b.type = "button"; b.dataset.v = String(v); b.textContent = "★"; b.setAttribute("role", "radio"); b.setAttribute("aria-label", fa(v) + " از ۵"); b.onclick = () => { fbRating = v; fbPaint(); }; st.appendChild(b); }
   fbPaint();
   $("#fbText").value = ""; $("#fbErr").hidden = true;
-  const gift = !!(me && me.feedback && me.feedback.available);
-  $("#fbGift").hidden = !gift; if (gift) $("#fbGiftN").textContent = fa(me.feedback.credits || 1);
   $("#fbSend").disabled = false; $("#fbSend").textContent = "ارسال نظر";
   $("#fbForm").hidden = false; $("#fbThanks").hidden = true;
 }

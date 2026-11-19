@@ -61,7 +61,6 @@ export function feedbackTelegram(plan: string, exp: number, why: EndReason, canR
     "",
     `${why === "time" ? `مدت پلن ${tgEsc(plan)}ت در ${tgEsc(faDate(exp))} تمام شد` : `اعتبار پلن ${tgEsc(plan)}ت تمام شد`} و حسابت به پلن رایگان برگشت؛ ممنون که همراه ما بودی! 🙏`,
     "از چه چیزی راضی بودی؟ چه چیزی کم بود یا اذیتت کرد؟ و چرا (یا چرا نه) تمدید می‌کنی؟ دکمه‌ی زیر را بزن و در یک پیام بنویس.",
-    ...(canReward ? ["", `🎁 با ثبت نظرت <b>${toFa(String(FEEDBACK_CREDITS))} اعتبار رایگان</b> هدیه می‌گیری.`] : []),
   ].join("\n");
 }
 

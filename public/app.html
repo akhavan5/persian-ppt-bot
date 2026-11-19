@@ -229,7 +229,6 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
             <div class="muted">امتیاز بده و اگر خواستی بنویس چه چیزی خوب بود یا بهتر می‌شد؛ تک‌تک نظرها را خودمان می‌خوانیم.</div>
             <div class="fbStars" id="fbStars" role="radiogroup" aria-label="امتیاز از ۱ تا ۵"></div>
             <textarea id="fbText" maxlength="1500" placeholder="نظرت را اینجا بنویس (اختیاری اگر امتیاز دادی)…"></textarea>
-            <div class="fbGift" id="fbGift" hidden>🎁 با ثبت نظرت <b id="fbGiftN">۱</b> اعتبار رایگان هدیه می‌گیری (فقط یک‌بار).</div>
             <div class="err" id="fbErr" hidden></div>
             <button class="btn" id="fbSend" type="button" style="margin-top:10px">ارسال نظر</button>
           </div>
@@ -1252,6 +1251,7 @@ async function track(jobId, resumed = false) {
   const my = ++tracking;
   jobStep = 0; jobExtra = false; jobT0 = resumed ? 0 : Date.now(); // کار ازسرگرفته‌شده زمان شروع ندارد؛ فقط برای کار همین نشست زمان نشان می‌دهیم
   $("#go").disabled = true; $("#jobText").textContent = "⏳ در صف…"; paintJob(""); view("job"); jobTimer(true);
+  if (!resumed) { try { $("#job").scrollIntoView({ behavior: "smooth", block: "center" }); } catch {} } // ساخت تازه: صفحه به کادر پیشرفت می‌رود
   const took = () => (jobT0 ? Date.now() - jobT0 : 0);
   for (let i = 0; i < 400 && my === tracking; i++) {
     let s;
@@ -1280,8 +1280,6 @@ function fbReset(title) {
   if (!st.childElementCount) for (let v = 5; v >= 1; v--) { const b = document.createElement("button"); b.type = "button"; b.dataset.v = String(v); b.textContent = "★"; b.setAttribute("role", "radio"); b.setAttribute("aria-label", fa(v) + " از ۵"); b.onclick = () => { fbRating = v; fbPaint(); TG.haptic("select"); }; st.appendChild(b); }
   fbPaint();
   $("#fbText").value = ""; show($("#fbErr"), false);
-  const gift = !!(me && me.feedback && me.feedback.available);
-  show($("#fbGift"), gift); if (gift) $("#fbGiftN").textContent = fa(me.feedback.credits || 1);
   const btn = $("#fbSend"); btn.disabled = false; btn.textContent = "ارسال نظر"; btn.onclick = fbSubmit;
   show($("#fbForm"), true); show($("#fbThanks"), false);
 }
