@@ -428,8 +428,8 @@ function makeEitaa(W) {
     openTg(path) { t(() => W.openEitaaLink("https://eitaa.com" + path)); },
     openLink(url) { t(() => W.openLink(url, { try_browser: true })); },
     // باز کردن داخل خود ایتا (بدون try_browser؛ رفتار پیش‌فرض کلاینت)، مثلاً برای صفحه‌ی برنامک و ثبت نظر
-    // لینک‌های eitaa.com با openEitaaLink داخل خود ایتا باز می‌شوند؛ بقیه با openLink (رفتار پیش‌فرض کلاینت)
-    openInApp(url) { t(() => (/^https?:\/\/([\w-]+\.)?eitaa\.com\//.test(url) && typeof W.openEitaaLink === "function" ? W.openEitaaLink(url) : W.openLink(url))); },
+    // openEitaaLink لینک eitaa.com/<نام>_app/main را به‌صورت گفت‌وگو با ربات باز می‌کند (برنامک اجرا نمی‌شود)؛ openLink بدون try_browser آن را مثل لینک مستقیم برنامک در خود ایتا اجرا می‌کند
+    openInApp(url) { t(() => W.openLink(url)); },
     // اشتراک‌گذاری متن/لینک با کاربران ایتا (مستند «اشتراک‌گذاری متن»): پنجره‌ی انتخاب مخاطب خود ایتا
     share(link) { t(() => W.openEitaaLink("https://eitaa.com/share/url?" + new URLSearchParams({ url: link, text: TG_SHARE_TEXT }).toString())); },
     // شماره‌ی تأییدشده‌ی خود ایتا (فقط با کلیک کاربر روی «ثبت شماره»)؛ cb(رشته‌ی امضاشده | null)
@@ -1288,7 +1288,7 @@ async function track(jobId, resumed = false) {
 // ---------- نظر کاربر کنار ارائه (مینی‌اپ تلگرام و برنامک ایتا) ----------
 let fbRating = 0, fbTitle = "";
 function fbPaint() { document.querySelectorAll("#fbStars button").forEach((b) => { const on = Number(b.dataset.v) <= fbRating; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(Number(b.dataset.v) === fbRating)); }); }
-const EITAA_REVIEW_URL = "https://eitaa.com/store_app/main"; // صفحه‌ی برنامک در ایتا؛ کاربر نظرش را همان‌جا ثبت می‌کند
+const EITAA_REVIEW_URL = "https://eitaa.com/store_app/see"; // صفحه‌ی برنامک در ایتا؛ کاربر نظرش را همان‌جا ثبت می‌کند
 function fbReset(title) {
   if (IS_EITAA) { // در ایتا فرم نظر خودمان نیست؛ فقط دکمه‌ی باز کردن صفحه‌ی برنامک (داخل ایتا)
     show($("#fbForm"), false); show($("#fbThanks"), false); show($("#fbEitaa"), true);
