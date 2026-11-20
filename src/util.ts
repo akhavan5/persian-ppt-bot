@@ -19,7 +19,8 @@ const MATH_LEAD = /^(?:[\s.,;:?)\]}%]|[0-9۰-۹]+(?=\s))+/;
 const MATH_TRAIL = /[\s.,;:?(\[{]+$/;
 const SIGNED_NUM = /(?<![A-Za-z0-9۰-۹])[-\u2212+][0-9۰-۹]+(?:[.\u066B][0-9۰-۹]+)?/g;
 const HAS_LETTER = /[A-Za-z\u0370-\u03FF]/;
-const HAS_MATH = /[=+^_\/\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9\u00B1\u00D7\u00F7\u2200-\u22FF]|(?<![A-Za-z])[A-Za-z]\(|\)[A-Za-z]/;
+// علامت‌های < و > (نابرابری، مثل x>-2 و x<3) و منفی چسبیده به حرف (x-2) هم فرمول حساب می‌شوند؛ وگرنه فقط «-۲» جدا می‌شد و x> بیرون از جزیره‌ی چپ‌به‌راست می‌ماند (علامت > برعکس و رقم فارسی)
+const HAS_MATH = /[=+^_\/<>\u0370-\u03FF\u2070-\u209F\u00B2\u00B3\u00B9\u00B1\u00D7\u00F7\u2200-\u22FF]|(?<![A-Za-z])[A-Za-z]\(|\)[A-Za-z]|(?<![A-Za-z])[A-Za-z]\s?[-\u2212]\s?[0-9(]/;
 
 export function faText(s: string, digits: boolean, mode: "isolate" | "embed" = "isolate"): string {
   const [open, close] = mode === "embed" ? ["\u202A", "\u202C"] : ["\u2066", "\u2069"];
