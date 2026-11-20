@@ -65,6 +65,9 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 /** جایگاه تبلیغ تصویری یکتانت (بالای بخش مقاله‌های مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
+/** چهار جایگاه تبلیغ مدیاد که کنار جایگاه یکتانت قرار می‌گیرند. شناسه‌ها را تغییر ندهید. */
+export const MEDIAAD_BESIDE_YEKTANET_SLOTS = `<div id="mediaad-Rly2g" ></div> <div id="mediaad-B3z4d" ></div> <div id="mediaad-9yw2Y" ></div> <div id="mediaad-JR4kY" ></div>`;
+
 /** جایگاه تبلیغ مدیاد؛ زیر تصویر اصلی. شناسه را تغییر ندهید. */
 export const MEDIAAD_HERO_SLOT = `<div id="mediaad-rm4mJ" ></div>`;
 
@@ -554,6 +557,7 @@ ${p.sections.map((x) => renderSection(x) + (x === stepsSec ? stepsFigure("landin
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
     </section>
     ${YEKTANET_SLOT}
+    ${MEDIAAD_BESIDE_YEKTANET_SLOTS}
 ${articles.length ? `    <section>
       <h2>مقاله‌های مرتبط در وبلاگ</h2>
       <div class="rel">${articles.map((a) => `<a href="/blog/${a!.slug}">${esc(a!.nav)}<span>${esc(a!.category)}</span></a>`).join("")}</div>
