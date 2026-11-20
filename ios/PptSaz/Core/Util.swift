@@ -82,6 +82,12 @@ enum Fa {
 
 extension Int {
     var fa: String { Fa.digits(String(self)) }
+    /// با جداکننده‌ی هزارگان (مثلاً ۱٬۱۴۰)
+    var faGrouped: String {
+        let s = String(abs(self)); var out = ""
+        for (i, c) in s.reversed().enumerated() { if i > 0 && i % 3 == 0 { out.append("٬") }; out.append(c) }
+        return Fa.digits((self < 0 ? "-" : "") + String(out.reversed()))
+    }
 }
 
 private func isAsciiDigit(_ c: Character) -> Bool { c >= "0" && c <= "9" }

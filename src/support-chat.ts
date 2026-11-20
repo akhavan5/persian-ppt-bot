@@ -181,7 +181,7 @@ function siteMap(env: Env): string {
 function knowledge(env: Env): string {
   const site = (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
   const plans = PLANS.map((p) =>
-    `- پلن ${p.name}: ${toFa(p.price)} هزار تومان، ${toFa(p.credits)} اعتبار (هر اعتبار = یک ارائه) برای ${toFa(p.days)} روز، تا ${toFa(p.maxSlides)} اسلاید و ${toFa(p.maxImages)} تصویر در هر ارائه، دسترسی به حالت‌های ساخت دانشجویی/کسب‌وکار/معلم/دفاع پایان‌نامه و مدل‌های ویژه، فایل بدون واترمارک`).join("\n");
+    `- پلن ${p.name}: ${toFa(p.price.toLocaleString("en-US")).replace(/,/g, "٬")} هزار تومان، ${toFa(p.credits)} اعتبار (هر اعتبار = یک ارائه) برای ${toFa(p.days)} روز، تا ${toFa(p.maxSlides)} اسلاید و ${toFa(p.maxImages)} تصویر در هر ارائه، دسترسی به حالت‌های ساخت دانشجویی/کسب‌وکار/معلم/دفاع پایان‌نامه و مدل‌های ویژه، فایل بدون واترمارک`).join("\n");
   const themes = Object.values(THEMES).map((t) => t.name).join("، ");
   const tones = Object.values(TONES).join("، ");
   const modes = Object.values(MODES).map((m) => `${m.name} (${m.hint}؛ ${m.minSlides ? `حداقل ${toFa(m.minSlides)} اسلاید و فقط برای دارندگان پلن پلاس/پرو` : "برای همه"})`).join("؛ ");

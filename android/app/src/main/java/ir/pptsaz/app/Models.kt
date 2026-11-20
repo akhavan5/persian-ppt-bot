@@ -220,3 +220,6 @@ fun extractOtp(sms: String): String? = Regex("(?<!\\d)\\d{4,8}(?!\\d)").find(nor
 
 /** ارقام لاتین را برای نمایش فارسی می‌کند. */
 fun Int.fa(): String = toString().map { if (it in '0'..'9') '۰' + (it - '0') else it }.joinToString("")
+
+/** عدد با جداکننده‌ی هزارگان و ارقام فارسی (مثلاً ۱٬۱۴۰). */
+fun Int.faGrouped(): String = toString().reversed().chunked(3).joinToString("٬").reversed().map { if (it in '0'..'9') '۰' + (it - '0') else it }.joinToString("")

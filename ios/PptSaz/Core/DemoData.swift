@@ -62,8 +62,8 @@ enum DemoData {
         s.images = true
         m.settings = s
         m.plans = [
-            PlanInfo(id: "plus", name: "پلاس", price: 590, credits: 5, days: 30, maxSlides: 20, maxImages: 4, url: ""),
-            PlanInfo(id: "pro", name: "پرو", price: 940, credits: 11, days: 30, maxSlides: 35, maxImages: 7, url: "")
+            PlanInfo(id: "plus", name: "پلاس", price: 690, credits: 5, days: 30, maxSlides: 20, maxImages: 4, url: ""),
+            PlanInfo(id: "pro", name: "پرو", price: 1140, credits: 11, days: 30, maxSlides: 35, maxImages: 7, url: "")
         ]
         return m
     }

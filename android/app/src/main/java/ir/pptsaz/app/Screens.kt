@@ -1480,7 +1480,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                                     if (active) Pill("فعال", ex.successBg, ex.success)
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text(p.price.fa(), style = MaterialTheme.typography.headlineSmall, color = cs.primary)
+                                    Text(p.price.faGrouped(), style = MaterialTheme.typography.headlineSmall, color = cs.primary)
                                     Text("هزار تومان", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
                                 }
                             }

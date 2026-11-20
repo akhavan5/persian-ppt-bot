@@ -253,7 +253,7 @@ ORDER BY x.k LIMIT ?3`,
       if (!p) return null;
       plan = p.name; price = p.price; credits = p.credits; slides = p.maxSlides;
     } catch { return null; }
-    const price_fa = toFa(String(price));
+    const price_fa = toFa(price.toLocaleString("en-US")).replace(/,/g, "٬");
     return {
       tag: "payment-recovery",
       tg: [

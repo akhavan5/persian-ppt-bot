@@ -171,7 +171,7 @@ struct AccountView: View {
                                 .clipShape(Capsule())
                         }
                         Spacer()
-                        Text(p.price.fa).font(.title2.bold()).foregroundStyle(Theme.gradient)
+                        Text(p.price.faGrouped).font(.title2.bold()).foregroundStyle(Theme.gradient)
                         Text("هزار تومان / ماه").font(.caption).foregroundColor(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 6) {

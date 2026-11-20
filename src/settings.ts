@@ -94,7 +94,7 @@ export const supportLink = (userId: Uid) =>
 
 /** لینک خرید پلن ماهانه (وقتی درگاه پرداخت فعال نیست) */
 export const planLink = (userId: Uid, name: string, price: number) =>
-  contactUrl(userId, `سلام، می‌خواهم پلن ${name} (${price} هزار تومان در ماه) پاورپوینت‌ساز را بخرم.\nشناسه‌ی من: ${userId}`);
+  contactUrl(userId, `سلام، می‌خواهم پلن ${name} (${price.toLocaleString("en-US")} هزار تومان در ماه) پاورپوینت‌ساز را بخرم.\nشناسه‌ی من: ${userId}`);
 // ---------- مجوز، مدیر و مسدودسازی ----------
 const idList = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
 /** مدیرها: ADMIN_IDS (تلگرام، یا شناسه‌ی جابه‌جاشده‌ی بله) + BALE_ADMIN_IDS (شناسه‌ی خام یا عدد /id در بله؛ اگر خام باشد خودکار با BALE_ID_BASE جمع می‌شود) */
