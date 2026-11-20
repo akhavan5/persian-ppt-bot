@@ -15,6 +15,8 @@ jobs:
       # مقدارهای مجاز: tapsell | adivery | none   (خالی = پیش‌فرض: بازار tapsell، مایکت adivery)
       BAZAAR_ADS: ${{ vars.BAZAAR_ADS }}
       MYKET_ADS: ${{ vars.MYKET_ADS }}
+      # نسخه‌ی SDK تپسل (اختیاری؛ خالی = 1.3.0). مثال: 1.4.0-alpha04
+      TAPSELL_VERSION: ${{ vars.TAPSELL_VERSION }}
     steps:
       - uses: actions/checkout@v4
 
