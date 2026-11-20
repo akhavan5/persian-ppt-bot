@@ -183,7 +183,7 @@
   function setOpen(o) {
     open = o; panel.hidden = !o; fab.setAttribute("aria-expanded", String(o));
     clearInterval(poll); poll = 0;
-    if (o) { seenSet(hc); dot(); poll = setInterval(function () { if (!busy && !document.hidden) loadHistory(); }, 25000); }
+    if (o) { seenSet(hc); dot(); poll = setInterval(function () { if (!busy && !document.hidden) loadHistory(); }, 45000); }
     if (o) { render(); loadHistory(); setTimeout(function () { if (!guest && !ta.disabled) ta.focus(); }, 50); }
     else fab.focus();
   }

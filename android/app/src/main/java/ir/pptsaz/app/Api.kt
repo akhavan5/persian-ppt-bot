@@ -59,6 +59,21 @@ class PrefsCookieJar(context: Context) : CookieJar {
     }
 }
 
+/**
+ * فاصله‌ی پرسش وضعیت کار از سرور (پولینگ تطبیقی).
+ * هر پرسش یک فراخوانی Worker و یک خواندن KV است و پلن رایگان کلودفلر روزانه ۱۰۰ هزار فراخوانی دارد؛
+ * هرچه کار طولانی‌تر شود فاصله بیشتر می‌شود و در قطعی اینترنت (fails >= 3) باز هم بیشتر.
+ */
+fun pollDelayMs(elapsedMs: Long, fails: Int = 0, fastMs: Long = 3000L): Long {
+    val base = when {
+        elapsedMs < 20_000L -> fastMs
+        elapsedMs < 90_000L -> fastMs * 2
+        elapsedMs < 240_000L -> fastMs * 8 / 3
+        else -> fastMs * 4
+    }
+    return if (fails >= 3) maxOf(base, 8000L).coerceAtMost(15_000L) else base
+}
+
 object Api {
     const val BASE = "https://pptsaz.ir"
     // نسخه‌ی اپ، فروشگاه و نسخه‌ی اندروید در User-Agent می‌رود: «PptSazApp/1.0.4 (myket; Android 14)».
@@ -202,8 +217,9 @@ object Api {
         if (direct.isNotEmpty()) return direct
         val id = j.optString("jobId")
         if (id.isEmpty()) throw ApiException("استخراج متن انجام نشد.")
-        repeat(100) {
-            delay(3000)
+        val t0 = System.currentTimeMillis()
+        repeat(60) {
+            delay(pollDelayMs(System.currentTimeMillis() - t0))
             val s = call("GET", "/api/extract/" + Uri.encode(id))
             when (s.optString("state")) {
                 "done" -> return s.optString("text")

@@ -516,7 +516,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     if (fails >= 3) _state.update { it.copy(job = JobState(id, "اتصال قطع شد؛ ساخت ادامه دارد و دوباره تلاش می‌کنیم…", step = step, extra = extra, startedAt = jobT0)) }
                 }
-                delay(if (fails >= 3) 8000 else 3000)
+                delay(pollDelayMs(SystemClock.elapsedRealtime() - startedAt, fails))
             }
         }
     }
@@ -600,7 +600,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     fails++
                     if (SystemClock.elapsedRealtime() - startedAt > MAX_WATCH_MS) { stop(); return@launch }
                 }
-                delay(if (fails >= 3) 8000 else 3000)
+                delay(pollDelayMs(SystemClock.elapsedRealtime() - startedAt, fails))
             }
         }
     }
@@ -697,7 +697,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     fails++
                     if (SystemClock.elapsedRealtime() - startedAt > MAX_WATCH_MS) { finish(); loadFiles(); return@launch }
                 }
-                delay(if (fails >= 3) 8000 else 4000)
+                delay(pollDelayMs(SystemClock.elapsedRealtime() - startedAt, fails, 4000L))
             }
         }
     }

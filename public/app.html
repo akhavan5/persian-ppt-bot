@@ -329,6 +329,9 @@ addEventListener("unhandledrejection", (e) => { const m = document.querySelector
 const $ = (s) => document.querySelector(s);
 const fa = (n) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// پولینگ تطبیقی: هر پرسش وضعیت یک فراخوانی Worker (و یک خواندن KV) است و پلن رایگان روزانه ۱۰۰ هزار دارد.
+// هرچه کار طولانی‌تر شود فاصله بیشتر می‌شود (تا ۴ برابر) و وقتی تب پنهان است ۳ برابر کندتر می‌پرسد.
+const pollSleep = (base, i) => sleep(Math.min(base * (1 + Math.floor((i || 0) / 8) * 0.5), base * 4) * (document.hidden ? 3 : 1));
 const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
@@ -1287,10 +1290,10 @@ async function track(jobId, resumed = false) {
     catch (e) {
       if (e.status === 404) { jobTimer(false); view(null); $("#go").disabled = false; return; }
       if (e.net && my === tracking) $("#jobText").textContent = "⚠️ ارتباط قطع شد؛ ساخت در سرور ادامه دارد و دوباره وصل می‌شویم…";
-      await sleep(4000); continue;
+      await pollSleep(4000, i); continue;
     }
     if (my !== tracking) return;
-    if (s.state === "running") { $("#jobText").textContent = s.message; paintJob(s.message); await sleep(3000); continue; }
+    if (s.state === "running") { $("#jobText").textContent = s.message; paintJob(s.message); await pollSleep(3000, i); continue; }
     const ms = took(); jobTimer(false);
     $("#go").disabled = false; refreshMe(); loadFiles();
     if (s.state === "done") return showDone(jobId, s, ms);
@@ -1427,9 +1430,9 @@ async function pollAudio(my, k) {
   for (let i = 0; i < 240 && my === audioTracking; i++) {
     let r;
     try { r = await api("/api/jobs/" + k.id); }
-    catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
+    catch (e) { if (e.status === 401 || e.status === 404) break; await pollSleep(5000, i); continue; }
     if (my !== audioTracking) return;
-    if (r.state === "running") { $(k.txt).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); setBar($(k.bar), typeof r.progress === "number" ? r.progress : undefined); await sleep(4000); continue; } // درصد را فقط کار صوتی می‌فرستد
+    if (r.state === "running") { $(k.txt).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); setBar($(k.bar), typeof r.progress === "number" ? r.progress : undefined); await pollSleep(4000, i); continue; } // درصد را فقط کار صوتی می‌فرستد
     show($(k.wait), false); loadFiles();
     if (r.state === "done" && r.ids && r.ids.length) {
       const b = $(k.btn); show(b, true); b.onclick = (e) => sendToChat(r.ids[0], e.currentTarget);
@@ -1556,8 +1559,8 @@ async function trackExtra(jobId, kind) {
   for (let i = 0; i < 240; i++) {
     let r;
     try { r = await api("/api/jobs/" + jobId); }
-    catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
-    if (r.state === "running") { setLine(r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""), typeof r.progress === "number" ? r.progress : undefined); await sleep(4000); continue; }
+    catch (e) { if (e.status === 401 || e.status === 404) break; await pollSleep(5000, i); continue; }
+    if (r.state === "running") { setLine(r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""), typeof r.progress === "number" ? r.progress : undefined); await pollSleep(4000, i); continue; }
     if (r.state === "done" && r.ids && r.ids.length) { TG.haptic("success"); toast("✅ آماده شد؛ از فهرست بگیر."); } else { TG.haptic("error"); toast("⚠️ " + (r.message || "ساخت ناموفق بود؛ اعتبارش برگردانده شد.")); }
     endLine(); refreshMe(); loadFiles(); return;
   }

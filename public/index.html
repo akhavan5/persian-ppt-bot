@@ -839,6 +839,9 @@ address{font-style:normal}
 "use strict";
 const $ = (s) => document.querySelector(s);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// پولینگ تطبیقی: هر پرسش وضعیت یک فراخوانی Worker (و یک خواندن KV) است و پلن رایگان روزانه ۱۰۰ هزار دارد.
+// هرچه کار طولانی‌تر شود فاصله بیشتر می‌شود (تا ۴ برابر) و وقتی تب پنهان است ۳ برابر کندتر می‌پرسد.
+const pollSleep = (base, i) => sleep(Math.min(base * (1 + Math.floor((i || 0) / 8) * 0.5), base * 4) * (document.hidden ? 3 : 1));
 const fa = (n) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]);
 const show = (el, on) => { el.hidden = !on; };
 function h(tag, props = {}, ...kids) { // ساخت DOM امن (بدون innerHTML برای متن کاربر/مدل)
@@ -1864,10 +1867,10 @@ async function track(jobId, resumed = false) {
     catch (e) {
       if (e.status === 401) { jobTimer(false); me = null; boot(); return; }
       if (e.status === 404) { jobTimer(false); jobView(null); $("#go").disabled = false; return; }
-      await sleep(4000); continue;
+      await pollSleep(4000, i); continue;
     }
     if (my !== tracking) return;
-    if (s.state === "running") { $("#jobText").textContent = s.message; paintJob(s.message); await sleep(3000); continue; }
+    if (s.state === "running") { $("#jobText").textContent = s.message; paintJob(s.message); await pollSleep(3000, i); continue; }
     const ms = took(); jobTimer(false);
     $("#go").disabled = false; refreshMe();
     if (s.state === "done") {
@@ -1974,9 +1977,9 @@ async function pollAudio(my, k) {
   for (let i = 0; i < 240 && my === audioTracking; i++) {
     let r;
     try { r = await api("/api/jobs/" + k.id); }
-    catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
+    catch (e) { if (e.status === 401 || e.status === 404) break; await pollSleep(5000, i); continue; }
     if (my !== audioTracking) return;
-    if (r.state === "running") { $(k.txt).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); setBar($(k.bar), typeof r.progress === "number" ? r.progress : undefined); await sleep(4000); continue; } // درصد را فقط کار صوتی می‌فرستد
+    if (r.state === "running") { $(k.txt).textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); setBar($(k.bar), typeof r.progress === "number" ? r.progress : undefined); await pollSleep(4000, i); continue; } // درصد را فقط کار صوتی می‌فرستد
     $(k.wait).hidden = true;
     if (r.state === "done" && r.ids && r.ids.length) {
       const b = $(k.btn); b.hidden = false; b.onclick = (ev) => download(r.ids[0], ev.currentTarget);
@@ -2048,8 +2051,8 @@ async function trackExtra(jobId, kind) {
   for (let i = 0; i < 240; i++) {
     let r;
     try { r = await api("/api/jobs/" + jobId); }
-    catch (e) { if (e.status === 401 || e.status === 404) break; await sleep(5000); continue; }
-    if (r.state === "running") { txt.textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); if (bar) setBar(bar, typeof r.progress === "number" ? r.progress : undefined); await sleep(4000); continue; }
+    catch (e) { if (e.status === 401 || e.status === 404) break; await pollSleep(5000, i); continue; }
+    if (r.state === "running") { txt.textContent = r.message + (typeof r.progress === "number" ? " — " + fa(r.progress) + "٪" : ""); if (bar) setBar(bar, typeof r.progress === "number" ? r.progress : undefined); await pollSleep(4000, i); continue; }
     if (r.state === "done" && r.ids && r.ids.length) toast("✅ آماده شد؛ فایل را در فهرست پایین بگیر."); else toast("⚠️ " + (r.message || "ساخت ناموفق بود؛ اعتبارش برگردانده شد."));
     line.remove(); refreshMe(); loadFiles(); return;
   }

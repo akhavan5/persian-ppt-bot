@@ -249,7 +249,7 @@ final class AppModel: ObservableObject {
                 if fails > 30 { return .failed((error as? ApiError)?.message ?? "ارتباط با سرور قطع شد.") }
             }
             if Date().timeIntervalSince(start) > 1800 { return .failed("زمان انتظار برای ساخت تمام شد.") }
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            try? await Task.sleep(nanoseconds: Poll.delayNs(elapsed: Date().timeIntervalSince(start), fails: fails))
         }
         return .cancelled
     }

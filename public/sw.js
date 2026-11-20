@@ -3,7 +3,7 @@
    - فایل‌های استاتیک (فونت، آیکون، jszip): اول کش
    - دریافت فایل/متن/لینک از منوی «اشتراک‌گذاری» گوشی و سیستم (Share Target)
    - /api و تلگرام و درخواست‌های غیر GET (جز Share Target) هرگز کش نمی‌شوند */
-const VERSION = "v3";
+const VERSION = "v4";
 const STATIC = "pptsaz-static-" + VERSION;
 const PAGES = "pptsaz-pages-" + VERSION;
 const SHARE = "pptsaz-share";
@@ -19,6 +19,8 @@ const PRECACHE = [
   "/fonts/Vazirmatn-Bold.woff2",
 ];
 const MAX_PAGES = 30;
+// صفحه‌ی HTML ذخیره‌شده تا ۱۰ دقیقه بدون هیچ درخواستی به Worker نشان داده می‌شود (هر بازدید صفحه = یک فراخوانی از سهمیه‌ی ۱۰۰ هزارتایی روزانه)
+const FRESH_MS = 10 * 60 * 1000;
 const URL_RE = /https?:\/\/[^\s]+/i;
 
 self.addEventListener("install", (e) => {
@@ -32,7 +34,8 @@ self.addEventListener("activate", (e) => {
     (async () => {
       const keep = new Set([STATIC, PAGES, SHARE]);
       for (const k of await caches.keys()) if (k.startsWith("pptsaz-") && !keep.has(k)) await caches.delete(k);
-      if (self.registration.navigationPreload) await self.registration.navigationPreload.enable().catch(() => {});
+      // navigationPreload باید خاموش باشد: وگرنه مرورگر حتی وقتی صفحه از کش داده می‌شود هم یک درخواست اضافه به Worker می‌فرستد
+      if (self.registration.navigationPreload) await self.registration.navigationPreload.disable().catch(() => {});
       await self.clients.claim();
     })()
   );
@@ -133,8 +136,12 @@ self.addEventListener("fetch", (e) => {
     e.respondWith(
       (async () => {
         try {
-          const pre = e.preloadResponse ? await e.preloadResponse : null;
-          const res = pre || (await fetch(req));
+          if (p !== "/app" && p !== "/app.html") {
+            const hit = await caches.match(req, { cacheName: PAGES });
+            const born = hit ? Date.parse(hit.headers.get("date") || "") : 0;
+            if (hit && born && Date.now() - born < FRESH_MS) return hit;
+          }
+          const res = await fetch(req);
           const ct = res.headers.get("content-type") || "";
           if (res.ok && ct.includes("text/html") && p !== "/app" && p !== "/app.html") {
             const copy = res.clone();

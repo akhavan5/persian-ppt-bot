@@ -63,6 +63,19 @@ function fromProxy(req: Request, env: Env): Request {
   return new Request(u.toString(), { method: req.method, headers: h, body: req.body, redirect: "manual" });
 }
 
+// رندر صفحه‌های سئو/وبلاگ و sitemap/feed هر بار از داده‌های چند صد کیلوبایتی HTML می‌سازد (پلن رایگان: ۱۰ms پردازنده برای هر درخواست).
+// خروجی فقط به SITE و محتوای ثابت کد بستگی دارد، پس در حافظه‌ی همان isolate نگه داشته می‌شود؛ با هر دیپلوی خودبه‌خود پاک می‌شود.
+const pageMemo = new Map<string, string>();
+function memo(key: string, build: () => string): string {
+  let v = pageMemo.get(key);
+  if (v === undefined) {
+    if (pageMemo.size > 300) pageMemo.clear();
+    v = build();
+    pageMemo.set(key, v);
+  }
+  return v;
+}
+
 // تاریخ آخرین تغییر محتوای صفحه‌ی اصلی؛ با هر تغییر مهم محتوا به‌روز شود (YYYY-MM-DD)
 const SITEMAP_LASTMOD = "2026-11-08";
 
@@ -237,18 +250,19 @@ export default {
       return new Response(`User-agent: *\nAllow: /\n# یاندکس: پارامتر topic (پیشنهاد موضوع روی صفحه‌ی اصلی) صفحه‌ی تکراری حساب نشود\nClean-param: topic /\n\nSitemap: ${SMAP}/sitemap.xml\n`, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     if (url.pathname === "/sitemap.xml") {
-      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n  <url>\n    <loc>${SMAP}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n${imageTags(SMAP, HOME_IMAGES)}  </url>\n${landingSitemapEntries(SMAP)}${blogSitemapEntries(SMAP)}</urlset>\n`, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      const xml = memo(`S|${SMAP}`, () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n  <url>\n    <loc>${SMAP}/</loc>\n    <lastmod>${SITEMAP_LASTMOD}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n${imageTags(SMAP, HOME_IMAGES)}  </url>\n${landingSitemapEntries(SMAP)}${blogSitemapEntries(SMAP)}</urlset>\n`);
+      return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     // فید RSS وبلاگ
     if (url.pathname === "/feed.xml" && (req.method === "GET" || req.method === "HEAD")) {
-      return new Response(req.method === "HEAD" ? null : blogFeed(SITE), { headers: { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      return new Response(req.method === "HEAD" ? null : memo(`F|${SITE}`, () => blogFeed(SITE)), { headers: { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
     }
     // صفحه‌های سئو (دانشجویی، دفاع پایان‌نامه، معلمان، ...): HTML از landing.ts ساخته می‌شود
     const landing = findLanding(url.pathname);
     if (landing) {
       if (landing.trailingSlash) return Response.redirect(`${SITE}/${landing.page.slug}${url.search}`, 301);
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
-      const html = renderLanding(landing.page, SITE);
+      const html = memo(`L|${SITE}|${landing.page.slug}`, () => renderLanding(landing.page, SITE));
       return new Response(req.method === "HEAD" ? null : html, { headers: HTML_HEADERS });
     }
     // وبلاگ: فهرست /blog و مقاله‌ها /blog/<slug> (HTML از blog.ts ساخته می‌شود)
@@ -256,7 +270,7 @@ export default {
     if (blog) {
       if (blog.kind === "trailing") return Response.redirect(`${SITE}${blog.to}${url.search}`, 301);
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
-      const html = blog.kind === "index" ? renderBlogIndex(SITE) : renderPost(blog.post, SITE);
+      const html = blog.kind === "index" ? memo(`B|${SITE}|index`, () => renderBlogIndex(SITE)) : memo(`B|${SITE}|${blog.post.slug}`, () => renderPost(blog.post, SITE));
       return new Response(req.method === "HEAD" ? null : html, { headers: HTML_HEADERS });
     }
     // صفحه‌ی اصلی: نشانه‌ی __ORIGIN__ (canonical، og:url، داده‌ی ساختاریافته) با دامنه‌ی واقعی جایگزین می‌شود

@@ -1,6 +1,23 @@
 import SwiftUI
 import UIKit
 
+/// فاصله‌ی پرسش وضعیت کار از سرور (پولینگ تطبیقی).
+/// هر پرسش یک فراخوانی Worker و یک خواندن KV است و پلن رایگان کلودفلر روزانه ۱۰۰ هزار فراخوانی دارد؛
+/// هرچه کار طولانی‌تر شود فاصله بیشتر می‌شود و در قطعی اینترنت (fails >= 3) باز هم بیشتر.
+enum Poll {
+    static func delayNs(elapsed: TimeInterval, fails: Int = 0, fast: Double = 3) -> UInt64 {
+        var s: Double
+        switch elapsed {
+        case ..<20: s = fast
+        case ..<90: s = fast * 2
+        case ..<240: s = fast * 8 / 3
+        default: s = fast * 4
+        }
+        if fails >= 3 { s = min(max(s, 8), 15) }
+        return UInt64(s * 1_000_000_000)
+    }
+}
+
 /// پوشش سبک روی JSON خام (مثل org.json در اپ اندروید): هر کلید ناموجود یا نوع نادرست، مقدار خالی می‌دهد و هیچ‌وقت کرش نمی‌کند.
 struct J {
     let v: Any?

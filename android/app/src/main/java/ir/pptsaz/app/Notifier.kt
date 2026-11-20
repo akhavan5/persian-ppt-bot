@@ -377,7 +377,7 @@ class JobWatchWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
                     // قطعی اینترنت: ساخت در سرور ادامه دارد؛ دوباره می‌پرسیم
                 }
             }
-            delay(if (AppForeground.on) POLL_FG_MS else POLL_MS)
+            delay(if (AppForeground.on) POLL_FG_MS else pollDelayMs(System.currentTimeMillis() - t0, 0, POLL_MS))
         }
         Notifier.cancelProgress(ctx, id)
         return Result.success()
@@ -478,7 +478,7 @@ class ExtraWatchWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                     // قطعی اینترنت: ساخت در سرور ادامه دارد؛ دوباره می‌پرسیم
                 }
             }
-            delay(if (AppForeground.on) POLL_FG_MS else POLL_MS)
+            delay(if (AppForeground.on) POLL_FG_MS else pollDelayMs(System.currentTimeMillis() - t0, 0, POLL_MS))
         }
         Notifier.cancelExtraProgress(ctx, jobId)
         return Result.success()

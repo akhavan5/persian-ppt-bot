@@ -220,8 +220,9 @@ final class Api {
         if !direct.isEmpty { return direct }
         let id = j["jobId"].str
         if id.isEmpty { throw ApiError(message: "استخراج متن انجام نشد.") }
-        for _ in 0..<100 {
-            try await Task.sleep(nanoseconds: 3_000_000_000)
+        let t0 = Date()
+        for _ in 0..<60 {
+            try await Task.sleep(nanoseconds: Poll.delayNs(elapsed: Date().timeIntervalSince(t0)))
             let s = try await call("GET", "/api/extract/\(enc(id))")
             switch s["state"].str {
             case "done": return s["text"].str
