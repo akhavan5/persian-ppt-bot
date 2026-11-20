@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
  * برای روشن‌کردن تپسل در یک فروشگاه: متغیر گیت‌هاب BAZAAR_ADS یا MYKET_ADS را روی tapsell بگذارید (جزئیات در android/README.md).
  */
 object TapsellAds {
+    val lastError get() = ""
     val bannerOn get() = false
     val rewardedOn get() = false
     val nativeBannerZone get() = ""

@@ -104,7 +104,7 @@ object Ads {
                             catch (_: Exception) { say("ثبت ویدئو انجام نشد؛ اینترنت را بررسی کنید") }
                             busy = false
                         }
-                    }, onFail = { busy = false; say("فعلاً ویدئویی آماده نیست؛ کمی بعد دوباره امتحان کنید") }, onNoReward = { busy = false })
+                    }, onFail = { busy = false; say("فعلاً ویدئویی آماده نیست؛ کمی بعد دوباره امتحان کنید" + TapsellAds.lastError.let { if (it.isEmpty()) "" else "\n($it)" }) }, onNoReward = { busy = false })
                 }) { Text("دیدن ویدئو") }
             }
         }

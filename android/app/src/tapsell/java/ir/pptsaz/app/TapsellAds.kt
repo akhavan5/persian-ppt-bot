@@ -2,6 +2,9 @@ package ir.pptsaz.app
 
 import android.app.Activity
 import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -44,6 +47,13 @@ object TapsellAds {
     private val loading = HashSet<String>()
     private var rewardedId: String? = null
     private var rewardedLoading = false
+    private var rewardedTries = 0
+    private val main = Handler(Looper.getMainLooper())
+
+    /** آخرین خطای SDK تپسل (برای عیب‌یابی)؛ در پیام «ویدئو آماده نیست» نشان داده می‌شود و در logcat با تگ Tapsell هم هست. */
+    @Volatile var lastError: String = ""
+        private set
+    private fun note(kind: String, message: String) { lastError = "$kind: $message"; Log.w("Tapsell", lastError) }
 
     private val interstitialZones get() = listOf(BuildConfig.TAPSELL_INTERSTITIAL_ZONE, BuildConfig.TAPSELL_INTERSTITIAL_BANNER_ZONE).filter { it.isNotEmpty() }
     val bannerOn get() = BuildConfig.TAPSELL_ENABLED && BuildConfig.TAPSELL_BANNER_ZONE.isNotEmpty()
@@ -64,7 +74,11 @@ object TapsellAds {
                 loadInterstitials()
                 loadRewarded()
             }
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) { note("init", e.toString()) }
+        // SDK تپسل خودش هنگام شروع برنامه (ContentProvider) فعال می‌شود، یعنی معمولاً قبل از ثبت listener بالا؛
+        // پس به callback اتکا نمی‌کنیم و همین‌جا هم درخواست می‌دهیم (اگر زود بود، خطا لاگ می‌شود و دوباره تلاش می‌کنیم).
+        loadInterstitials()
+        loadRewarded()
     }
 
     // ---------------------------------------------------------------- آنی
@@ -77,9 +91,9 @@ object TapsellAds {
         try {
             Tapsell.requestInterstitialAd(zone, a, object : RequestResultListener {
                 override fun onSuccess(adId: String) { interstitial[zone] = adId; loading -= zone }
-                override fun onFailure(message: String) { loading -= zone }
+                override fun onFailure(message: String) { loading -= zone; note("interstitial", message) }
             })
-        } catch (_: Throwable) { loading -= zone }
+        } catch (e: Throwable) { loading -= zone; note("interstitial", e.toString()) }
     }
 
     /** اگر تبلیغ آنی آماده بود نمایش می‌دهد و true برمی‌گرداند؛ وگرنه بارگذاری را شروع می‌کند و false. */
@@ -107,10 +121,16 @@ object TapsellAds {
         rewardedLoading = true
         try {
             Tapsell.requestRewardedAd(BuildConfig.TAPSELL_REWARDED_ZONE, a, object : RequestResultListener {
-                override fun onSuccess(adId: String) { rewardedId = adId; rewardedLoading = false }
-                override fun onFailure(message: String) { rewardedLoading = false }
+                override fun onSuccess(adId: String) { rewardedId = adId; rewardedLoading = false; rewardedTries = 0; lastError = "" }
+                override fun onFailure(message: String) { rewardedLoading = false; note("rewarded", message); retryRewarded() }
             })
-        } catch (_: Throwable) { rewardedLoading = false }
+        } catch (e: Throwable) { rewardedLoading = false; note("rewarded", e.toString()) }
+    }
+
+    /** بارگذاری ناموفق ویدئو جایزه‌ای را هر ۳۰ ثانیه (حداکثر ۵ بار) دوباره امتحان می‌کند. */
+    private fun retryRewarded() {
+        if (rewardedTries++ >= 5) return
+        main.postDelayed({ loadRewarded() }, 30_000L)
     }
 
     fun rewardedReady(): Boolean = rewardedOn && rewardedId != null
@@ -125,7 +145,7 @@ object TapsellAds {
                 override fun onAdClicked() {}
                 override fun onRewarded() { onReward() }
                 override fun onAdClosed(completionState: AdShowCompletionState) { loadRewarded() }
-                override fun onAdFailed(message: String) { loadRewarded(); onFail() }
+                override fun onAdFailed(message: String) { note("rewarded-show", message); loadRewarded(); onFail() }
             })
         } catch (_: Throwable) { loadRewarded(); onFail() }
     }
