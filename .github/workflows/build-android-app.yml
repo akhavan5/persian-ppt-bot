@@ -10,6 +10,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    env:
+      # شبکه‌ی تبلیغاتی هر فروشگاه: GitHub → Settings → Secrets and variables → Actions → تب Variables
+      # مقدارهای مجاز: tapsell | adivery | none   (خالی = پیش‌فرض: بازار tapsell، مایکت adivery)
+      BAZAAR_ADS: ${{ vars.BAZAAR_ADS }}
+      MYKET_ADS: ${{ vars.MYKET_ADS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +39,14 @@ jobs:
           echo "$KS_B64" | base64 -d > android/pptsaz-release.keystore
           keytool -list -keystore android/pptsaz-release.keystore -storepass "$KS_PASS" -alias pptsaz | tail -3
 
+      - name: Show ad networks
+        run: |
+          B="${BAZAAR_ADS:-tapsell}"; M="${MYKET_ADS:-adivery}"
+          echo "Ads: bazaar=$B  myket=$M"
+          echo "### Ad networks" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Bazaar: \`$B\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Myket: \`$M\`" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Unit tests
         run: gradle -p android testBazaarDebugUnitTest --no-daemon --stacktrace
 
@@ -46,15 +59,10 @@ jobs:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID }}
-          # تبلیغات ادیوری: بدون ADIVERY_APP_ID در بیلد release تبلیغ ادیوری کاملاً خاموش است؛ هر جایگاهِ خالی هم همان نوع تبلیغ را خاموش می‌کند
-          ADIVERY_APP_ID: ${{ secrets.ADIVERY_APP_ID }}
-          ADIVERY_BANNER_PLACEMENT: ${{ secrets.ADIVERY_BANNER_PLACEMENT }}
-          ADIVERY_INTERSTITIAL_PLACEMENT: ${{ secrets.ADIVERY_INTERSTITIAL_PLACEMENT }}
-          ADIVERY_NATIVE_PLACEMENT: ${{ secrets.ADIVERY_NATIVE_PLACEMENT }}
-          ADIVERY_REWARDED_PLACEMENT: ${{ secrets.ADIVERY_REWARDED_PLACEMENT }}
-          # تپسل فعلاً خاموش است. برای روشن‌کردن دوباره: متغیر (Variable) مخزن به نام TAPSELL_ENABLED را روی true بگذارید
-          TAPSELL_ENABLED: ${{ vars.TAPSELL_ENABLED }}
-          # تبلیغات تپسل (فقط وقتی TAPSELL_ENABLED=true): بدون TAPSELL_APP_KEY در بیلد release تبلیغ کاملاً خاموش است؛ هر جایگاهِ خالی هم همان نوع تبلیغ را خاموش می‌کند
+          # شناسه‌های تبلیغات (Secrets). هر شبکه فقط وقتی استفاده می‌شود که برای آن فروشگاه انتخاب شده باشد (BAZAAR_ADS / MYKET_ADS بالا).
+          # بدون APP_ID/APP_KEY در release تبلیغ آن شبکه کاملاً خاموش است؛ هر جایگاهِ خالی هم همان نوع تبلیغ را خاموش می‌کند.
+
+          # تپسل
           TAPSELL_APP_KEY: ${{ secrets.TAPSELL_APP_KEY }}
           TAPSELL_BANNER_ZONE: ${{ secrets.TAPSELL_BANNER_ZONE }}
           TAPSELL_INTERSTITIAL_ZONE: ${{ secrets.TAPSELL_INTERSTITIAL_ZONE }}
@@ -62,6 +70,12 @@ jobs:
           TAPSELL_NATIVE_BANNER_ZONE: ${{ secrets.TAPSELL_NATIVE_BANNER_ZONE }}
           TAPSELL_NATIVE_VIDEO_ZONE: ${{ secrets.TAPSELL_NATIVE_VIDEO_ZONE }}
           TAPSELL_REWARDED_ZONE: ${{ secrets.TAPSELL_REWARDED_ZONE }}
+          # ادیوری
+          ADIVERY_APP_ID: ${{ secrets.ADIVERY_APP_ID }}
+          ADIVERY_BANNER_PLACEMENT: ${{ secrets.ADIVERY_BANNER_PLACEMENT }}
+          ADIVERY_INTERSTITIAL_PLACEMENT: ${{ secrets.ADIVERY_INTERSTITIAL_PLACEMENT }}
+          ADIVERY_NATIVE_PLACEMENT: ${{ secrets.ADIVERY_NATIVE_PLACEMENT }}
+          ADIVERY_REWARDED_PLACEMENT: ${{ secrets.ADIVERY_REWARDED_PLACEMENT }}
         run: gradle -p android assembleBazaarRelease assembleMyketRelease bundleBazaarRelease bundleMyketRelease --no-daemon --stacktrace
 
       - name: Verify APKs
