@@ -26,9 +26,21 @@ Secrets: `ANDROID_KEYSTORE_B64` و `ANDROID_KEYSTORE_PASSWORD` (alias کلید: 
 محلی: `gradle -p android testBazaarDebugUnitTest`
 
 
-## تبلیغات (ادیوری + تپسل)
+## تبلیغات (هر فروشگاه یک شبکه)
 
-- **ادیوری روشن است**: بنر، آنی، ویدئو جایزه‌ای و همسان. در release فقط وقتی کار می‌کند که `ADIVERY_APP_ID` (و شناسه‌ی جایگاه‌ها) در GitHub Secrets باشد؛ در debug با شناسه‌های تست ادیوری کار می‌کند.
-  Secrets: `ADIVERY_APP_ID`، `ADIVERY_BANNER_PLACEMENT`، `ADIVERY_INTERSTITIAL_PLACEMENT`، `ADIVERY_REWARDED_PLACEMENT`، `ADIVERY_NATIVE_PLACEMENT`.
-- **تپسل فعلاً خاموش است** (SDK اصلاً در APK نیست). برای روشن‌کردن دوباره: در GitHub → Settings → Variables متغیر `TAPSELL_ENABLED=true` را بگذارید (و `TAPSELL_*` Secrets همچنان لازم‌اند). اگر هر دو روشن باشند، ابتدا تپسل و در صورت آماده‌نبودنش ادیوری استفاده می‌شود.
-- ساختار کد: `Ads.kt` / `AdsNative.kt` نقطه‌ی ورود مشترک؛ `AdiveryAds.kt` ادیوری؛ `src/tapsell/…/TapsellAds.kt` تپسل واقعی؛ `src/tapsellOff/…/TapsellAds.kt` نسخه‌ی خالی هم‌API.
+شبکه‌ی تبلیغاتی هر فروشگاه با **Variable** مخزن گیت‌هاب تعیین می‌شود (GitHub → Settings → Secrets and variables → Actions → تب **Variables**):
+
+| متغیر | پیش‌فرض (اگر خالی باشد) | مقدارهای مجاز |
+|---|---|---|
+| `BAZAAR_ADS` | `tapsell` | `tapsell` · `adivery` · `none` |
+| `MYKET_ADS` | `adivery` | `tapsell` · `adivery` · `none` |
+
+برای عوض‌کردن: مقدار متغیر را عوض کنید و workflow را دوباره Run کنید. `none` تبلیغ آن فروشگاه را کاملاً خاموش می‌کند. مقدار نامعتبر بیلد را با پیام خطای واضح متوقف می‌کند.
+
+**Secrets لازم** (بدون APP_ID/APP_KEY در release تبلیغ آن شبکه خاموش می‌ماند؛ هر جایگاهِ خالی هم فقط همان نوع تبلیغ را خاموش می‌کند):
+- تپسل: `TAPSELL_APP_KEY`، `TAPSELL_BANNER_ZONE`، `TAPSELL_INTERSTITIAL_ZONE`، `TAPSELL_INTERSTITIAL_BANNER_ZONE`، `TAPSELL_NATIVE_BANNER_ZONE`، `TAPSELL_NATIVE_VIDEO_ZONE`، `TAPSELL_REWARDED_ZONE`
+- ادیوری: `ADIVERY_APP_ID`، `ADIVERY_BANNER_PLACEMENT`، `ADIVERY_INTERSTITIAL_PLACEMENT`، `ADIVERY_NATIVE_PLACEMENT`، `ADIVERY_REWARDED_PLACEMENT`
+
+در بیلد debug هر شبکه‌ای با شناسه‌های تست خودش کار می‌کند.
+
+ساختار کد: `Ads.kt` / `AdsNative.kt` نقطه‌ی ورود مشترک؛ `AdiveryAds.kt` ادیوری؛ `src/tapsell/…/TapsellAds.kt` تپسل واقعی؛ `src/tapsellOff/…/TapsellAds.kt` نسخه‌ی خالی هم‌API (برای فروشگاهی که تپسل ندارد؛ SDK تپسل آنجا وارد APK نمی‌شود). انتخاب در `app/build.gradle.kts` (بخش `storeAds` و `androidComponents`) انجام می‌شود.

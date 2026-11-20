@@ -33,8 +33,8 @@ import ir.tapsell.mediation.ad.views.ntv.NativeAdViewContainer
 import java.lang.ref.WeakReference
 
 /**
- * پیاده‌سازی تپسل (Tapsell Mediation). این فایل فقط وقتی کامپایل می‌شود که TAPSELL_ENABLED=true باشد
- * (مسیر src/tapsell)؛ در حالت خاموش به‌جایش src/tapsellOff (نسخه‌ی خالی همین API) کامپایل می‌شود و خود SDK هم وارد اپ نمی‌شود.
+ * پیاده‌سازی تپسل (Tapsell Mediation). این فایل فقط برای فروشگاهی کامپایل می‌شود که شبکه‌ی تبلیغاتش tapsell است
+ * (BAZAAR_ADS / MYKET_ADS؛ مسیر src/tapsell)؛ برای بقیه src/tapsellOff (نسخه‌ی خالی همین API) کامپایل می‌شود و خود SDK هم وارد اپ نمی‌شود.
  * منطق مشترک (کاربر پولی، انتخاب شبکه) در Ads.kt است.
  */
 object TapsellAds {

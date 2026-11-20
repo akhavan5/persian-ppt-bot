@@ -1,3 +1,4 @@
+import com.android.build.api.variant.BuildConfigField
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -11,14 +12,31 @@ val ksFile: String? = System.getenv("KEYSTORE_FILE")
 val ksPass: String? = System.getenv("KS_PASS")
 val hasKeystore = !ksFile.isNullOrEmpty() && !ksPass.isNullOrEmpty()
 
-// تبلیغ تپسل: کلید برنامه و شناسه‌ی جایگاه آنی از متغیر محیطی (GitHub Secrets) می‌آید.
+// ---------------------------------------------------------------- شبکه‌ی تبلیغاتی هر فروشگاه
+// هر فروشگاه دقیقاً یک شبکه‌ی تبلیغاتی دارد که با «متغیر» (Variables) مخزن گیت‌هاب تعیین می‌شود:
+//   BAZAAR_ADS = tapsell | adivery | none   (خالی = tapsell)
+//   MYKET_ADS  = tapsell | adivery | none   (خالی = adivery)
+val adNetworks = listOf("tapsell", "adivery", "none")
+fun adNetworkOf(envName: String, default: String): String {
+    val v = (System.getenv(envName) ?: "").trim().lowercase()
+    if (v.isEmpty()) return default
+    require(v in adNetworks) { "$envName=\"$v\" نامعتبر است؛ فقط یکی از: ${adNetworks.joinToString(" | ")}" }
+    return v
+}
+val storeAds = mapOf(
+    "bazaar" to adNetworkOf("BAZAAR_ADS", "tapsell"),
+    "myket" to adNetworkOf("MYKET_ADS", "adivery"),
+)
+logger.lifecycle("Ads → " + storeAds.entries.joinToString(", ") { "${it.key}=${it.value}" })
+
+// ---------------------------------------------------------------- تپسل
+// کلید برنامه و شناسه‌ی جایگاه‌ها از متغیر محیطی (GitHub Secrets) می‌آید.
 // بدون آن‌ها: بیلد debug با کلیدهای تست تپسل کار می‌کند و در بیلد release تبلیغ کاملاً خاموش می‌ماند (تبلیغ تستی منتشر نشود).
 val tapsellVersion = "1.3.0" // آخرین نسخه‌ی پایدار؛ در صورت نیاز با maven.tapsell.ir تطبیق دهید
 val tapsellKeyEnv = (System.getenv("TAPSELL_APP_KEY") ?: "").trim()
 val tapsellReal = tapsellKeyEnv.isNotEmpty()
 val tapsellTestKey = "76798342-99a7-4a5f-bf5a-60a088d5dcfb"
-// شناسه‌ی جایگاه‌ها از متغیر محیطی؛ هر کدام خالی باشد همان نوع تبلیغ خاموش است.
-// در debug اگر متغیر نبود جایگاه تست تپسل (همه‌ی شبکه‌ها) استفاده می‌شود.
+// هر جایگاهِ خالی همان نوع تبلیغ را خاموش می‌کند. در debug اگر متغیر نبود جایگاه تست تپسل (همه‌ی شبکه‌ها) استفاده می‌شود.
 val tapsellZones = listOf(
     Triple("TAPSELL_INTERSTITIAL_ZONE", "b3972749-f62a-475a-9ff2-cfc9e2a40f87", "آنی ویدئو"),
     Triple("TAPSELL_INTERSTITIAL_BANNER_ZONE", "b3972749-f62a-475a-9ff2-cfc9e2a40f87", "بنر آنی"),
@@ -28,31 +46,22 @@ val tapsellZones = listOf(
     Triple("TAPSELL_REWARDED_ZONE", "1d710cc7-5e96-46ac-a3e9-8463300333e6", "ویدئو جایزه‌ای"),
 )
 
-// ---------------------------------------------------------------- سوئیچ تپسل (فعلاً خاموش)
-// TAPSELL_ENABLED=true در محیط بیلد ⇒ تپسل دوباره روشن می‌شود (کد src/tapsell و وابستگی SDK وارد اپ می‌شوند).
-// پیش‌فرض خاموش: کد خالی src/tapsellOff کامپایل می‌شود و SDK تپسل اصلاً در APK نیست (نه مقداردهی، نه درخواست تبلیغ).
-val tapsellEnabled = (System.getenv("TAPSELL_ENABLED") ?: "").trim().lowercase() in listOf("true", "1", "yes")
-
-// ---------------------------------------------------------------- تبلیغ ادیوری
-// شناسه‌ی برنامه و جایگاه‌ها از متغیر محیطی (GitHub Secrets) می‌آید. بدون ADIVERY_APP_ID: debug با شناسه‌های تست رسمی ادیوری (docs.adivery.com/testing) کار می‌کند
-// و در release تبلیغ ادیوری کاملاً خاموش است. هر جایگاهِ خالی هم همان نوع تبلیغ را خاموش می‌کند.
+// ---------------------------------------------------------------- ادیوری
+// شناسه‌ها از متغیر محیطی (GitHub Secrets) با پیشوند ADIVERY_ می‌آیند. بدون ADIVERY_APP_ID: debug با شناسه‌های تست رسمی ادیوری
+// (docs.adivery.com/testing) کار می‌کند و در release تبلیغ کاملاً خاموش است. هر جایگاهِ خالی هم همان نوع تبلیغ را خاموش می‌کند.
 val adiveryVersion = "4.10.0"
-val adiveryAppEnv = (System.getenv("ADIVERY_APP_ID") ?: "").trim()
-val adiveryReal = adiveryAppEnv.isNotEmpty()
 val adiveryTestApp = "59c36ce3-7125-40a7-bd34-144e6906c796"
 val adiveryPlacements = listOf(
-    Pair("ADIVERY_INTERSTITIAL_PLACEMENT", "38b301f2-5e0c-4776-b671-c6b04a612311"), // آنی
-    Pair("ADIVERY_REWARDED_PLACEMENT", "16414bae-368e-4904-b259-c5b89362206d"),     // ویدئو جایزه‌ای
-    Pair("ADIVERY_BANNER_PLACEMENT", "a355be22-970a-46b8-bc52-f0a59c4ded05"),       // بنر استاندارد
-    Pair("ADIVERY_NATIVE_PLACEMENT", "ff454979-efaa-4ab8-b084-7db19e995d9b"),       // همسان
+    Pair("INTERSTITIAL_PLACEMENT", "38b301f2-5e0c-4776-b671-c6b04a612311"), // آنی
+    Pair("REWARDED_PLACEMENT", "16414bae-368e-4904-b259-c5b89362206d"),     // ویدئو جایزه‌ای
+    Pair("BANNER_PLACEMENT", "a355be22-970a-46b8-bc52-f0a59c4ded05"),       // بنر استاندارد
+    Pair("NATIVE_PLACEMENT", "ff454979-efaa-4ab8-b084-7db19e995d9b"),       // همسان
 )
+fun env(name: String) = (System.getenv(name) ?: "").trim().replace("\"", "")
 
 android {
     namespace = "ir.pptsaz.app"
     compileSdk = 36
-
-    // فقط یکی از این دو پوشه کامپایل می‌شود: پیاده‌ی واقعی تپسل یا نسخه‌ی خالی هم‌API
-    sourceSets.getByName("main").java.srcDir(if (tapsellEnabled) "src/tapsell/java" else "src/tapsellOff/java")
 
     defaultConfig {
         applicationId = "ir.pptsaz.app"
@@ -89,6 +98,11 @@ android {
         }
     }
 
+    // برای هر فروشگاه فقط یکی از این دو پوشه کامپایل می‌شود: پیاده‌ی واقعی تپسل (اگر شبکه‌ی آن فروشگاه tapsell است) یا نسخه‌ی خالی هم‌API
+    for ((store, net) in storeAds) {
+        sourceSets.getByName(store).java.srcDir(if (net == "tapsell") "src/tapsell/java" else "src/tapsellOff/java")
+    }
+
     signingConfigs {
         if (hasKeystore) {
             create("release") {
@@ -102,20 +116,9 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("boolean", "ADS_ENABLED", "true")
-            buildConfigField("boolean", "TAPSELL_ENABLED", tapsellEnabled.toString())
-            for ((k, test, _) in tapsellZones) buildConfigField("String", k, "\"" + ((System.getenv(k) ?: "").trim().ifEmpty { test }) + "\"")
-            buildConfigField("boolean", "ADIVERY_ENABLED", "true")
-            buildConfigField("String", "ADIVERY_APP_ID", "\"" + adiveryAppEnv.ifEmpty { adiveryTestApp } + "\"")
-            for ((k, test) in adiveryPlacements) buildConfigField("String", k, "\"" + ((System.getenv(k) ?: "").trim().ifEmpty { test }) + "\"")
+            // فیلدهای تبلیغات برای هر نسخه در androidComponents.onVariants (پایین‌تر) ساخته می‌شوند
         }
         release {
-            buildConfigField("boolean", "ADS_ENABLED", ((tapsellEnabled && tapsellReal) || adiveryReal).toString())
-            buildConfigField("boolean", "TAPSELL_ENABLED", (tapsellEnabled && tapsellReal).toString())
-            for ((k, _, _) in tapsellZones) buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim() + "\"")
-            buildConfigField("boolean", "ADIVERY_ENABLED", adiveryReal.toString())
-            buildConfigField("String", "ADIVERY_APP_ID", "\"" + adiveryAppEnv + "\"")
-            for ((k, _) in adiveryPlacements) buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim() + "\"")
             // R8: کوچک‌سازی و مبهم‌سازی کد + حذف منابع بلااستفاده (حجم کمتر)
             isMinifyEnabled = true
             isShrinkResources = true
@@ -136,6 +139,42 @@ android {
     // تست‌های واحد روی JVM اجرا می‌شوند؛ کلاس‌های android.* پیاده‌سازی ندارند و به‌جای خطا مقدار پیش‌فرض برمی‌گردانند
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+}
+
+// فیلدهای BuildConfig تبلیغات برای هر نسخه (فروشگاه × debug/release) جدا ساخته می‌شوند تا هر فروشگاه شبکه‌ی خودش را داشته باشد
+androidComponents {
+    onVariants { variant ->
+        val store = variant.flavorName ?: return@onVariants
+        val net = storeAds[store] ?: "none"
+        val debug = variant.buildType == "debug"
+        val fields = variant.buildConfigFields ?: return@onVariants
+        fun str(k: String, v: String) { fields.put(k, BuildConfigField("String", "\"" + v.replace("\"", "") + "\"", null)) }
+        fun bool(k: String, v: Boolean) { fields.put(k, BuildConfigField("boolean", v.toString(), null)) }
+
+        // تپسل: در release فقط با TAPSELL_APP_KEY روشن است؛ در debug با کلیدهای تست
+        val tapsellOn = net == "tapsell" && (debug || tapsellReal)
+        // ادیوری: در release فقط با ADIVERY_APP_ID روشن است؛ در debug با شناسه‌های تست
+        val adApp = if (net == "adivery") env("ADIVERY_APP_ID") else ""
+        val adiveryOn = net == "adivery" && (debug || adApp.isNotEmpty())
+
+        bool("ADS_ENABLED", tapsellOn || adiveryOn)
+        str("ADS_NETWORK", net)
+
+        bool("TAPSELL_ENABLED", tapsellOn)
+        for ((k, test, _) in tapsellZones) {
+            str(k, if (net != "tapsell") "" else env(k).ifEmpty { if (debug) test else "" })
+        }
+
+        bool("ADIVERY_ENABLED", adiveryOn)
+        str("ADIVERY_APP_ID", if (!adiveryOn) "" else adApp.ifEmpty { if (debug) adiveryTestApp else "" })
+        for ((k, test) in adiveryPlacements) {
+            str("ADIVERY_$k", if (!adiveryOn) "" else env("ADIVERY_$k").ifEmpty { if (debug) test else "" })
+        }
+
+        if (net != "none" && !debug && !tapsellOn && !adiveryOn) {
+            logger.warn("⚠ ads: $store=$net ولی شناسه‌ی release ست نشده؛ تبلیغ این نسخه خاموش است (${if (net == "tapsell") "TAPSELL_APP_KEY" else "ADIVERY_APP_ID"})")
+        }
     }
 }
 
@@ -169,14 +208,16 @@ dependencies {
     // ویجت صفحه‌ی اصلی (Jetpack Glance)
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // تبلیغات ادیوری (بنر، آنی، جایزه‌ای، همسان)
+    // تبلیغات ادیوری: بنر، آنی، جایزه‌ای، همسان
     implementation("com.adivery:sdk:$adiveryVersion")
     // شناسه‌ی تبلیغاتی گوگل (GAID) برای هدف‌گیری بهتر؛ ادیوری فقط در صورت وجود این کتابخانه آن را می‌خواند
     implementation("com.google.android.gms:play-services-ads-identifier:18.0.1")
-    // تبلیغات تپسل (Mediation) — فقط با TAPSELL_ENABLED=true وارد اپ می‌شود
-    if (tapsellEnabled) {
-        implementation("ir.tapsell:tapsell:$tapsellVersion")
-        implementation("ir.tapsell.mediation.adapter:legacy:$tapsellVersion")
+    // تبلیغات تپسل (Mediation) — فقط در فروشگاه‌هایی وارد اپ می‌شود که شبکه‌شان tapsell است (BAZAAR_ADS / MYKET_ADS)
+    for ((store, net) in storeAds) {
+        if (net == "tapsell") {
+            "${store}Implementation"("ir.tapsell:tapsell:$tapsellVersion")
+            "${store}Implementation"("ir.tapsell.mediation.adapter:legacy:$tapsellVersion")
+        }
     }
     // پرداخت درون‌برنامه‌ای کافه‌بازار (پولکی)
     "bazaarImplementation"("com.github.cafebazaar.Poolakey:poolakey:2.2.0")

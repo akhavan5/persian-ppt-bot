@@ -5,8 +5,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 /**
- * نسخه‌ی خاموش تپسل (TAPSELL_ENABLED=false): همان API بدون هیچ وابستگی به SDK تپسل.
- * برای روشن‌کردن دوباره: متغیر محیطی TAPSELL_ENABLED=true (جزئیات در android/README.md).
+ * نسخه‌ی خاموش تپسل: همان API بدون هیچ وابستگی به SDK تپسل. برای فروشگاهی کامپایل می‌شود که شبکه‌ی تبلیغاتش tapsell نیست.
+ * برای روشن‌کردن تپسل در یک فروشگاه: متغیر گیت‌هاب BAZAAR_ADS یا MYKET_ADS را روی tapsell بگذارید (جزئیات در android/README.md).
  */
 object TapsellAds {
     val bannerOn get() = false

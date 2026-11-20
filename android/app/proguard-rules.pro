@@ -23,3 +23,7 @@
 # ادیوری (تبلیغات)
 -keep class com.adivery.sdk.** { *; }
 -dontwarn com.adivery.sdk.**
+
+# تپسل (تبلیغات؛ فقط در فروشگاهی که BAZAAR_ADS/MYKET_ADS آن tapsell باشد وارد اپ می‌شود)
+-keep class ir.tapsell.** { *; }
+-dontwarn ir.tapsell.**
