@@ -97,7 +97,7 @@ fun parseConfig(j: JSONObject): Config {
     val tones = j.optJSONObject("tones")
     val toneList = if (tones == null) emptyList() else tones.keys().asSequence().map { Opt(it, tones.optString(it)) }.toList()
     val fonts = j.optJSONArray("fonts")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
-    val slides = j.optJSONArray("slideChoices")?.let { a -> (0 until a.length()).map { a.optInt(it) } } ?: listOf(5, 8, 10)
+    val slides = j.optJSONArray("slideChoices")?.let { a -> (0 until a.length()).map { a.optInt(it) } } ?: listOf(5, 6, 8, 10)
     // لینک به‌روزرسانی: اول لینک مخصوص همین فروشگاه (app.urls.<bazaar|myket>)، وگرنه url عمومی قدیمی
     val appObj = j.optJSONObject("app")
     val storeUrl = appObj?.optJSONObject("urls")?.optString(Store.ID).orEmpty()
@@ -138,7 +138,7 @@ fun parseMe(j: JSONObject): Me? {
         unlimited = cr?.optBoolean("unlimited") ?: false,
         premium = j.optBoolean("premium"),
         credits = cr?.optInt("total") ?: 0,
-        maxSlides = j.optInt("maxSlides", 8),
+        maxSlides = j.optInt("maxSlides", 6),
         maxImages = j.optInt("maxImages", 1),
         planExp = j.optJSONObject("plan")?.optLong("exp") ?: 0L,
         planCredits = cr?.optInt("plan") ?: 0,
@@ -147,7 +147,7 @@ fun parseMe(j: JSONObject): Me? {
         planId = j.optJSONObject("plan")?.str("id")?.ifEmpty { null },
         settings = Settings(
             theme = st.str("theme"), template = st.str("template"), tone = st.str("tone"), font = st.str("font"),
-            slides = st.optInt("slides", 8), model = st.str("model"),
+            slides = st.optInt("slides", 6), model = st.str("model"),
             mode = st.str("mode").ifEmpty { "normal" },
             digits = st.optBoolean("digits"), sources = st.optBoolean("sources"), questions = st.optBoolean("questions"),
             images = st.optBoolean("images", true), imagesMany = st.optBoolean("imagesMany", false), notes = st.optBoolean("notes", true),

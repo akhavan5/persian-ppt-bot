@@ -6,7 +6,7 @@ import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { TEMPLATES, isTemplate } from "./template";
 import {
   DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, botPlatform, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
-  AD_REWARD_CREDITS, AD_REWARD_EVERY, adRewardProgress, claimAdView, CONTACT_REWARD_NOTE, EXTRA_IMAGES_MSG, EXTRA_MODEL_MSG, canUseModel, isAdmin, isAllowed, isBanned, hasPlanAccess, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
+  AD_REWARD_CREDITS, AD_REWARD_EVERY, adRewardProgress, claimAdView, CONTACT_REWARD_NOTE, EXTRA_IMAGES_MSG, EXTRA_MODE_MSG, EXTRA_MODEL_MSG, canUseMode, canUseModel, isAdmin, isAllowed, isBanned, hasPlanAccess, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
 } from "./settings";
 import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
@@ -436,7 +436,10 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
   if (isTemplate(b.template)) s.template = b.template;
   if (typeof b.tone === "string" && b.tone in TONES) s.tone = b.tone;
   if (typeof b.font === "string" && (FONTS as readonly string[]).includes(b.font)) s.font = b.font;
-  if (isMode(b.mode)) s.mode = b.mode;
+  if (isMode(b.mode)) {
+    if (!(await canUseMode(env, user.id, b.mode))) return json({ error: EXTRA_MODE_MSG.replace("🔒 ", ""), needPlan: true }, 403); // حالت‌های دارای حداقل اسلاید فقط برای پلن‌دارها
+    s.mode = b.mode;
+  }
   if (typeof b.slides === "number" && Number.isFinite(b.slides)) {
     const max = await maxSlidesFor(env, user.id);
     if (Math.round(b.slides) > max) return json({ error: slidesLimitMsg(max), needPlan: true }, 403);

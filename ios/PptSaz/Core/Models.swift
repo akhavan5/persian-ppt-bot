@@ -31,7 +31,7 @@ struct Config {
     var themes: [Opt] = []
     var tones: [Opt] = []
     var fonts: [String] = []
-    var slideChoices: [Int] = [5, 8, 10]
+    var slideChoices: [Int] = [5, 6, 8, 10]
     var payEnabled = false
     var sibapp = false
     var otp = true
@@ -52,7 +52,7 @@ struct Settings {
     var template = ""
     var tone = ""
     var font = ""
-    var slides = 8
+    var slides = 6
     var model = ""
     var mode = "normal"
     var digits = false
@@ -89,7 +89,7 @@ struct Me {
     var unlimited = false
     var premium = false
     var credits = 0
-    var maxSlides = 8
+    var maxSlides = 6
     var maxImages = 1
     var planId: String? = nil
     var planExp: Double = 0
@@ -270,7 +270,7 @@ func parseMe(_ j: J) -> Me? {
     m.unlimited = cr["unlimited"].bool
     m.premium = j["premium"].bool
     m.credits = cr["total"].int
-    m.maxSlides = j["maxSlides"].exists ? j["maxSlides"].int : 8
+    m.maxSlides = j["maxSlides"].exists ? j["maxSlides"].int : 6
     m.maxImages = j["maxImages"].exists ? j["maxImages"].int : 1
     m.planExp = j["plan"]["exp"].double
     m.planCredits = cr["plan"].int
@@ -283,7 +283,7 @@ func parseMe(_ j: J) -> Me? {
     s.template = st["template"].str
     s.tone = st["tone"].str
     s.font = st["font"].str
-    s.slides = st["slides"].exists ? st["slides"].int : 8
+    s.slides = st["slides"].exists ? st["slides"].int : 6
     s.model = st["model"].str
     s.mode = st["mode"].str.isEmpty ? "normal" : st["mode"].str
     s.digits = st["digits"].bool

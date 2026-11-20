@@ -21,7 +21,7 @@ struct CreateView: View {
 
     private let samples = ["هوش مصنوعی در آموزش", "برنامه‌ی بازاریابی دیجیتال", "اصول مدیریت زمان", "تغییرات اقلیمی و راه‌حل‌ها", "معرفی استارتاپ"]
 
-    private var maxSlides: Int { m.me?.maxSlides ?? 8 }
+    private var maxSlides: Int { m.me?.maxSlides ?? 6 }
     private var jobRunning: Bool { m.job?.running ?? false }
     private var canGenerate: Bool {
         topic.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 && !busy && !jobRunning
@@ -239,7 +239,7 @@ struct CreateView: View {
     private func applyDefaults() {
         guard !didInit, let me = m.me else { return }
         didInit = true
-        slides = m.cfg.slideChoices.contains(me.settings.slides) && me.settings.slides <= me.maxSlides ? me.settings.slides : (m.cfg.slideChoices.filter { $0 <= me.maxSlides }.last ?? 8)
+        slides = m.cfg.slideChoices.contains(me.settings.slides) && me.settings.slides <= me.maxSlides ? me.settings.slides : (m.cfg.slideChoices.filter { $0 <= me.maxSlides }.last ?? 6)
         images = me.settings.images
         imagesMany = me.settings.imagesMany
         if m.isDemo && m.job == nil { topic = "اصول مدیریت زمان برای دانشجویان" }

@@ -3,7 +3,7 @@ import type { Mode, Settings } from "./types";
 import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
 import { DEFAULT_TEMPLATE, TEMPLATES, isTemplate, type TemplateKey } from "./template";
 import {
-  EXTRA_IMAGES_MSG, EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
+  EXTRA_IMAGES_MSG, EXTRA_MODE_MSG, EXTRA_MODEL_MSG, canUseModel, hasPlanAccess, adminIds, WEB_SLIDE_CHOICES, ABS_MAX_SLIDES, clampSlides, DAILY_FREE_MSG, getActiveSub, getCredit, grantDailyFree, getSettings, isAdmin, isAllowed, isBanned,
   DAILY_FREE_CREDITS, FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, claimFeedbackReward, hasFeedbackReward, FREE_MAX_IMAGES, FREE_MAX_SLIDES, maxImagesFor, maxSlidesFor, saveSettings, supportLink, touchUser, botPlatform, REF_EVERY, REF_MAX, holdReferral, parseRefId, displayName, noteActive, isWebId,
   type Uid,
 } from "./settings";
@@ -74,7 +74,7 @@ const imgLabel = (s: Settings, caps: Caps) => (!wantsImgs(s) ? "خیر" : wantsM
 function mainMenu(env: Env, s: Settings, caps: Caps) {
   const models = modelList(env);
   const model = models.find((m) => m.id === s.model) ?? models[0];
-  const modeBtn: Btn = { text: `${MODES[s.mode].emoji} حالت: ${MODES[s.mode].name}`, callback_data: "t:mode" };
+  const modeBtn: Btn = { text: `${MODES[s.mode].emoji} حالت: ${MODES[s.mode].name}${caps.premium ? "" : " 🔒"}`, callback_data: "t:mode" }; // 🔒 = حالت‌های دیگر فقط برای پلن‌دارها
   const tpl = TEMPLATES[(isTemplate(s.template) ? s.template : DEFAULT_TEMPLATE) as TemplateKey];
   const rows: Btn[][] = [
     [{ text: `${tpl.emoji} قالب: ${tpl.name}`, callback_data: "m:tpl" }],
@@ -206,8 +206,8 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 
 /** فهرست پلن‌ها برای /credit: رایگان + پلاس/پرو با قیمت (هزار تومان)، اعتبار، سقف اسلاید و تصویر؛ پلن فعلی با ✅ */
 function plansText(curId?: string): string {
-  const free = `${!curId ? "✅ " : "▫️ "}<b>رایگان</b> — روزی ${toFa(String(DAILY_FREE_CREDITS))} ارائه • تا ${toFa(String(FREE_MAX_SLIDES))} اسلاید • ${toFa(String(FREE_MAX_IMAGES))} تصویر • با واترمارک`;
-  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — ${toFa(String(p.price))} هزار تومان • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • تا ${toFa(String(p.maxImages))} تصویر • بدون واترمارک`);
+  const free = `${!curId ? "✅ " : "▫️ "}<b>رایگان</b> — روزی ${toFa(String(DAILY_FREE_CREDITS))} ارائه • تا ${toFa(String(FREE_MAX_SLIDES))} اسلاید • ${toFa(String(FREE_MAX_IMAGES))} تصویر • حالت «عادی» • با واترمارک`;
+  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — ${toFa(String(p.price))} هزار تومان • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • تا ${toFa(String(p.maxImages))} تصویر • همه‌ی حالت‌ها • بدون واترمارک`);
   return [free, ...rows].join("\n");
 }
 
@@ -496,7 +496,10 @@ async function handleCallback(env: Env, cq: any) {
       else { s.images = false; s.imagesMany = false; }
     }
     if (a === "digits") s.digits = !s.digits;
-    if (a === "mode") s.mode = nextMode(s.mode);
+    if (a === "mode") {
+      if (!caps.premium) return await alertLimit(EXTRA_MODE_MSG); // حالت‌های دارای حداقل اسلاید فقط برای پلن‌دارها
+      s.mode = nextMode(s.mode);
+    }
     if (a === "sources") s.sources = !s.sources;
     if (a === "questions") s.questions = !s.questions;
     if (a === "notes") s.notes = s.notes === false;
@@ -848,6 +851,7 @@ async function wizardGate(env: Env, chatId: number, uid: Uid, userId: number): P
 async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; caps: Caps }, o: { topic: string; slides?: number; mode?: Mode; source?: string; file?: string; link?: boolean; cardId?: number; orig?: string }) {
   const { s, caps } = g;
   const models = modelList(env);
+  const modeOk = !o.mode || caps.premium || MODES[o.mode].minSlides === 0; // حالتِ نوشته‌شده در متن: دارای حداقل اسلاید فقط برای پلن‌دارها
   const pend: Pending = {
     topic: o.topic, mid: 0,
     ...(o.orig?.trim() ? { orig: o.orig.replace(/\s+/g, " ").trim().slice(0, 300) } : {}),
@@ -861,8 +865,9 @@ async function showWizard(env: Env, chatId: number, uid: Uid, g: { s: Settings; 
     podcast: false, // پادکست: پیش‌فرض خاموش (۱ اعتبار)
     step: "model",
     fixed: o.slides !== undefined, // تعداد اسلاید در متن موضوع آمده؛ دوباره پرسیده نمی‌شود
-    ...(o.mode ? { mode: o.mode } : {}),
+    ...(o.mode && modeOk ? { mode: o.mode } : {}),
     note: o.slides !== undefined && o.slides > caps.maxSlides ? slidesLimitMsg(caps.maxSlides)
+      : o.mode && !modeOk ? EXTRA_MODE_MSG.replace("🔒 ", "") + " این ارائه با حالت «عادی» ساخته می‌شود."
       : o.mode && o.slides !== undefined && o.slides < MODES[o.mode].minSlides ? `حالت ${MODES[o.mode].name} حداقل ${toFa(String(MODES[o.mode].minSlides))} اسلاید می‌سازد؛ تعداد اسلاید به همین مقدار می‌رسد.` : undefined,
     ...(o.source ? { source: o.source, file: o.file, ...(o.link ? { link: true } : {}) } : {}),
   };

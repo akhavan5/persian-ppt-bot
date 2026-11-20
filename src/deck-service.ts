@@ -7,7 +7,7 @@ import type { Env } from "./env";
 import type { DeckParams, Mode, Settings } from "./types";
 import { MODES, isMode } from "./themes";
 import {
-  FREE_MAX_IMAGES, FREE_MAX_SLIDES, acquireLock, botPlatform, bumpStat, clampSlides, getSettings, imageCountFor, hasPlanAccess, isLocked, maxImagesFor, maxSlidesFor,
+  EXTRA_MODE_MSG, FREE_MAX_IMAGES, FREE_MAX_SLIDES, acquireLock, botPlatform, bumpStat, canUseMode, clampSlides, getSettings, imageCountFor, hasPlanAccess, isLocked, maxImagesFor, maxSlidesFor,
   refundCredit, releaseLock, spendCredit, type Platform,
 } from "./settings";
 import { PLANS } from "./payment";
@@ -105,6 +105,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
   const [maxSlides, maxImg] = await Promise.all([maxSlidesFor(env, uid), maxImagesFor(env, uid)]);
   const wantSlides = typeof want.slides === "number" && Number.isFinite(want.slides) ? Math.round(want.slides) : undefined;
   if (wantSlides !== undefined && wantSlides > maxSlides) return deny(slidesLimitMsg(maxSlides), 403, { needPlan: true });
+  if (want.mode && isMode(want.mode) && !(await canUseMode(env, uid, want.mode))) return deny(EXTRA_MODE_MSG.replace("🔒 ", ""), 403, { needPlan: true }); // حالت‌های دارای حداقل اسلاید فقط برای پلن‌دارها
   const wantImgFlag = typeof want.images === "boolean" ? want.images : undefined;
   const wantManyFlag = typeof want.imagesMany === "boolean" ? want.imagesMany : undefined;
 
@@ -149,7 +150,7 @@ export async function beginDeck(env: Env, uid: string | number, topicRaw: string
     settings.slides = wantSlides !== undefined ? clampSlides(wantSlides, maxSlides) : Math.min(settings.slides, maxSlides);
     const useImgs = wantImgFlag ?? settings.images; // پیش‌فرض: بله
     if (want.mode && isMode(want.mode)) settings.mode = want.mode; // حالتِ نوشته‌شده در متن کاربر؛ فقط برای همین ارائه (ذخیره نمی‌شود)
-    settings.slides = Math.max(settings.slides, MODES[settings.mode].minSlides); // ساختار دانشجویی/کسب‌وکار/معلم حداقل ۸ اسلاید می‌خواهد
+    settings.slides = Math.max(settings.slides, MODES[settings.mode].minSlides); // حالت‌های دانشجویی/کسب‌وکار/معلم حداقل ۸ و دفاع پایان‌نامه حداقل ۱۰ اسلاید می‌خواهند (فقط پلن‌دارها؛ سقف رایگان ۶ است)
     const useMany = useImgs && (wantManyFlag ?? settings.imagesMany === true) && (await hasPlanAccess(env, uid)); // «زیاد» فقط برای پلن‌دارها؛ وگرنه نرمال
     const imageCount = useImgs ? imageCountFor(settings.slides, maxImg, useMany) : 0; // تعداد تصویر ضمنی از روی تعداد اسلاید (زیاد = نرمال + ۱)
     settings.images = useImgs;

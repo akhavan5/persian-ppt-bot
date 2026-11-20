@@ -3,8 +3,8 @@ import { isRubikaId } from "./rubika-format";
 import { isEitaaId } from "./eitaa-format";
 import { isSplusId } from "./splus-format";
 import type { Env } from "./env";
-import type { Settings } from "./types";
-import { FONTS, THEMES, TONES, isMode } from "./themes";
+import type { Mode, Settings } from "./types";
+import { FONTS, THEMES, TONES, isMode, isPlanMode } from "./themes";
 import { DEFAULT_TEMPLATE, isTemplate } from "./template";
 import { modelList } from "./llm";
 import { toFa } from "./util";
@@ -14,11 +14,11 @@ import type { AppPlatform, PwaPlatform } from "./app-ua";
 export type Uid = number | string;
 export const isWebId = (id: Uid) => typeof id === "string" && id.startsWith("w_");
 
-export const DEFAULTS: Settings = { theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 8, tone: "formal", digits: true, images: true, imagesMany: false, mode: "normal", sources: false, questions: false, notes: true };
+export const DEFAULTS: Settings = { theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 6, tone: "formal", digits: true, images: true, imagesMany: false, mode: "normal", sources: false, questions: false, notes: true };
 export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 
-// ---------- سقف اسلاید (فقط وب): رایگان ۸، پلاس ۲۰، پرو ۳۵ ----------
-export const FREE_MAX_SLIDES = 8;
+// ---------- سقف اسلاید: رایگان ۶، پلاس ۲۰، پرو ۳۵ ----------
+export const FREE_MAX_SLIDES = 6;
 export const ABS_MAX_SLIDES = 35;
 export const PLAN_MAX_SLIDES: Record<string, number> = { plus: 20, pro: 35 };
 // ---------- سقف تصویر در هر ارائه: رایگان ۱، پلاس ۴، پرو ۷ (سقف پلن = بیشترین تعداد در حالت «زیاد») ----------
@@ -52,6 +52,7 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   s.imagesMany = !!s.imagesMany;
   delete (s as { imageCount?: unknown }).imageCount; // فیلد قدیمی (تعداد تصویر)؛ حالا از روی تعداد اسلاید محاسبه می‌شود
   s.mode = isMode(s.mode) ? s.mode : "normal";
+  if (isPlanMode(s.mode) && !(await hasPlanAccess(env, userId))) s.mode = "normal"; // حالت‌های دارای حداقل اسلاید فقط برای پلن‌دارها؛ بقیه به «عادی» برمی‌گردند
   s.sources = !!s.sources;
   s.questions = !!s.questions;
   s.notes = s.notes !== false; // کاربران قدیمی (بدون این فیلد) هم روشن
@@ -180,7 +181,12 @@ export async function hasPlanAccess(env: Env, userId: Uid): Promise<boolean> {
   return isAdmin(env, userId) || !!(await getActiveSub(env, userId));
 }
 export const EXTRA_IMAGES_MSG = "🔒 تصویر «زیاد» فقط برای کاربران دارای پلن پلاس/پرو فعال است.";
+export const EXTRA_MODE_MSG = "🔒 حالت‌های دانشجویی، کسب‌وکار، معلم و دفاع پایان‌نامه (دارای حداقل اسلاید) فقط برای کاربران دارای پلن پلاس/پرو فعال است.";
 export const EXTRA_MODEL_MSG = "🔒 این مدل فقط برای کاربران دارای پلن پلاس/پرو فعال است.";
+/** حالت‌های دارای حداقل اسلاید (دانشجویی، کسب‌وکار، معلم، دفاع پایان‌نامه) فقط برای مدیر و دارندگان پلن فعال؛ «عادی» برای همه */
+export async function canUseMode(env: Env, userId: Uid, mode: Mode): Promise<boolean> {
+  return !isPlanMode(mode) || (await hasPlanAccess(env, userId));
+}
 /** مدل باید در فهرست باشد؛ مدل‌های ویژه (free نیست) فقط برای مدیر و دارندگان پلن فعال مجازند. */
 export async function canUseModel(env: Env, userId: Uid, modelId: string): Promise<boolean> {
   const m = modelList(env).find((x) => x.id === modelId);
@@ -188,7 +194,7 @@ export async function canUseModel(env: Env, userId: Uid, modelId: string): Promi
   return m.free || (await hasPlanAccess(env, userId));
 }
 
-/** سقف تعداد اسلاید هر ارائه: مدیر ۳۵؛ عضو پلن فعال طبق پلن (پلاس ۲۰، پرو ۳۵)؛ بقیه ۸ */
+/** سقف تعداد اسلاید هر ارائه: مدیر ۳۵؛ عضو پلن فعال طبق پلن (پلاس ۲۰، پرو ۳۵)؛ بقیه ۶ */
 export async function maxSlidesFor(env: Env, userId: Uid): Promise<number> {
   if (isAdmin(env, userId)) return ABS_MAX_SLIDES;
   const sub = await getActiveSub(env, userId);

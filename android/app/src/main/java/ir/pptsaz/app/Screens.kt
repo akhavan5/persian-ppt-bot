@@ -1348,8 +1348,16 @@ fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
             }
 
             SectionTitle("حالت ساخت", Modifier.padding(top = 8.dp))
+            // حالت‌های دارای حداقل اسلاید (همه به‌جز «عادی») فقط برای دارندگان پلن فعال‌اند
             MODES.forEach { (key, name, desc) ->
-                OptionCard(name, desc, s.mode == key, { vm.setSetting("mode", key) })
+                val locked = key != "normal" && !me.premium
+                OptionCard(
+                    if (locked) "$name 🔒" else name, desc, s.mode == key,
+                    {
+                        if (locked) vm.toast("حالت $name (دارای حداقل اسلاید) فقط برای کاربران دارای پلن پلاس/پرو فعال است")
+                        else vm.setSetting("mode", key)
+                    },
+                )
             }
 
             SectionTitle("گزینه‌ها", Modifier.padding(top = 8.dp))

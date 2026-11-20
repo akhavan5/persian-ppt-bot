@@ -14,7 +14,8 @@ export const THEMES: Record<string, Theme> = {
   midnight: { name: "نیمه‌شب", bg: "0F172A", surface: "1E293B", primary: "4F46E5", dark: "0B1120", accent: "22D3EE", text: "F1F5F9", muted: "94A3B8", onPrimary: "FFFFFF" },
 };
 
-/** حالت‌های ساخت. minSlides: حداقل اسلاید لازم برای ساختار کامل آن حالت (۰ = بدون حداقل) */
+/** حالت‌های ساخت. minSlides: حداقل اسلاید لازم برای ساختار کامل آن حالت (۰ = بدون حداقل).
+ *  حالت‌های دارای حداقل (minSlides > 0) فقط برای مدیر و دارندگان پلن فعال‌اند (سقف اسلاید رایگان کمتر از حداقل آن‌هاست)؛ «عادی» برای همه. */
 export const MODES: Record<Mode, { name: string; emoji: string; hint: string; minSlides: number }> = {
   normal: { name: "عادی", emoji: "📄", hint: "ساختار آزاد، متناسب با موضوع", minSlides: 0 },
   student: { name: "دانشجویی", emoji: "🎓", hint: "فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع", minSlides: 8 },
@@ -23,6 +24,8 @@ export const MODES: Record<Mode, { name: string; emoji: string; hint: string; mi
   thesis: { name: "دفاع پایان‌نامه", emoji: "🎓", hint: "مسئله، اهداف، پیشینه، روش، یافته‌ها، نتیجه‌گیری، پیشنهادها و منابع", minSlides: 10 },
 };
 export const isMode = (v: unknown): v is Mode => typeof v === "string" && Object.hasOwn(MODES, v);
+/** حالت مخصوص پلن‌دارها؟ (هر حالتی که حداقل اسلاید دارد) */
+export const isPlanMode = (m: Mode): boolean => MODES[m].minSlides > 0;
 export const nextMode = (m: Mode): Mode => { const k = Object.keys(MODES) as Mode[]; return k[(k.indexOf(m) + 1) % k.length]; };
 
 export const TONES: Record<string, string> = {

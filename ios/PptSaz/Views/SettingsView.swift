@@ -56,13 +56,16 @@ struct SettingsView: View {
 
                     Section {
                         ForEach(modes) { mode in
+                            // حالت‌های دارای حداقل اسلاید (همه به‌جز «عادی») فقط برای دارندگان پلن فعال‌اند
+                            let modeLocked = mode.id != "normal" && !(m.me?.premium ?? false)
                             Button {
+                                if modeLocked { m.upsell = "حالت \(mode.name) (دارای حداقل اسلاید) فقط برای کاربران دارای پلن پلاس یا پرو فعال است."; return }
                                 Haptic.select()
                                 m.setSetting("mode", mode.id)
                             } label: {
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(mode.name).font(.body.weight(.medium)).foregroundColor(.primary)
+                                        Text(modeLocked ? "\(mode.name) 🔒" : mode.name).font(.body.weight(.medium)).foregroundColor(modeLocked ? .secondary : .primary)
                                         Text(mode.hint).font(.caption).foregroundColor(.secondary).multilineTextAlignment(.leading)
                                     }
                                     Spacer()
