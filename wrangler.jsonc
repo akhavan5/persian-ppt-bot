@@ -27,7 +27,7 @@
   // D1: همه‌ی داده‌های کوچک (۱۰۰ هزار نوشتن در روز رایگان). بدون database_id، Wrangler هنگام اولین دیپلوی خودش می‌سازد و وصل می‌کند
   // DB: دیتابیس اصلی (کاربران، اعتبار، نشست‌ها). DB2…DB10: دیتابیس‌های سرریز برای بایت‌های فایل‌ها (pptx، صوت، pdf)؛
   // فایل‌ها اول در DB2 و وقتی پر شد (۵۰۰ مگابایت) در بعدی ذخیره می‌شوند و DB اصلی آخرین چاره است (نگاه کنید به src/store.ts و src/blobstore.ts).
-  // برای دیتابیس بیشتر، همین‌جا خط بعدی را اضافه کنید: { "binding": "DB3", "database_name": "persian-ppt-bot-db-3" } (تا DB10)
+  // برای دیتابیس بیشتر، همین‌جا خط بعدی را اضافه کنید: { "binding": "DB10", "database_name": "persian-ppt-bot-db-10" } (تا DB10)
   "d1_databases": [
     { "binding": "DB", "database_name": "persian-ppt-bot-db" },
     { "binding": "DB2", "database_name": "persian-ppt-bot-db-2" },
@@ -36,7 +36,8 @@
     { "binding": "DB5", "database_name": "persian-ppt-bot-db-5" },
     { "binding": "DB6", "database_name": "persian-ppt-bot-db-6" },
     { "binding": "DB7", "database_name": "persian-ppt-bot-db-7" },
-    { "binding": "DB8", "database_name": "persian-ppt-bot-db-8" }
+    { "binding": "DB8", "database_name": "persian-ppt-bot-db-8" },
+    { "binding": "DB9", "database_name": "persian-ppt-bot-db-9" }
   ],
 
   // KV فقط برای بایت‌های فایل‌های ساخته‌شده (یک نوشتن برای هر ارائه)؛ همان namespace قبلی
