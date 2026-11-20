@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
  */
 object TapsellAds {
     val lastError get() = ""
+    fun diag() = "tapsell off"
     val bannerOn get() = false
     val rewardedOn get() = false
     val nativeBannerZone get() = ""

@@ -48,12 +48,18 @@ object TapsellAds {
     private var rewardedId: String? = null
     private var rewardedLoading = false
     private var rewardedTries = 0
+    private var rewardedReq = 0
+    @Volatile private var initDone = false
     private val main = Handler(Looper.getMainLooper())
 
     /** آخرین خطای SDK تپسل (برای عیب‌یابی)؛ در پیام «ویدئو آماده نیست» نشان داده می‌شود و در logcat با تگ Tapsell هم هست. */
     @Volatile var lastError: String = ""
         private set
     private fun note(kind: String, message: String) { lastError = "$kind: $message"; Log.w("Tapsell", lastError) }
+
+    /** وضعیت لحظه‌ای برای عیب‌یابی (در پیام «ویدئو آماده نیست» نشان داده می‌شود). */
+    fun diag(): String =
+        "init=$initDone loading=$rewardedLoading tries=$rewardedTries zone=${BuildConfig.TAPSELL_REWARDED_ZONE.take(6)} err=${lastError.ifEmpty { "-" }}"
 
     private val interstitialZones get() = listOf(BuildConfig.TAPSELL_INTERSTITIAL_ZONE, BuildConfig.TAPSELL_INTERSTITIAL_BANNER_ZONE).filter { it.isNotEmpty() }
     val bannerOn get() = BuildConfig.TAPSELL_ENABLED && BuildConfig.TAPSELL_BANNER_ZONE.isNotEmpty()
@@ -67,6 +73,7 @@ object TapsellAds {
         act = WeakReference(activity)
         try {
             Tapsell.setInitializationListener {
+                initDone = true
                 try {
                     // مارکت‌های ایرانی (بازار/مایکت) دیالوگ GDPR لازم ندارند؛ رضایت پیش‌فرض ارسال می‌شود.
                     act?.get()?.let { Tapsell.setUserConsent(it, true) }
@@ -119,6 +126,15 @@ object TapsellAds {
         if (!rewardedOn || rewardedLoading || rewardedId != null) return
         val a = act?.get() ?: return
         rewardedLoading = true
+        val req = ++rewardedReq
+        // اگر SDK هیچ‌کدام از onSuccess/onFailure را صدا نزند (مثلاً فعال‌نشدن SDK یا قطع ارتباط)، پرچم برای همیشه «در حال بارگذاری» می‌ماند؛ پس بعد از ۲۰ ثانیه ولش می‌کنیم
+        main.postDelayed({
+            if (rewardedLoading && req == rewardedReq) {
+                rewardedLoading = false
+                note("rewarded", "پاسخی از SDK نیامد (۲۰ ثانیه)")
+                retryRewarded()
+            }
+        }, 20_000L)
         try {
             Tapsell.requestRewardedAd(BuildConfig.TAPSELL_REWARDED_ZONE, a, object : RequestResultListener {
                 override fun onSuccess(adId: String) { rewardedId = adId; rewardedLoading = false; rewardedTries = 0; lastError = "" }
