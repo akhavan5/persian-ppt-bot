@@ -16,7 +16,7 @@ import { loadPreview, saveFile } from "./files";
 import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
 import { getLinkedTg } from "./link";
 import { withStore } from "./store";
-import { fileNameWithSite, miniappUrl } from "./deck-service";
+import { appReadyMarkup, fileNameWithSite } from "./deck-service";
 import { fontCaption } from "./themes";
 import { generateImage } from "./images";
 import { IG_WIDTH, renderInfographicHtml } from "./infographic-html";
@@ -107,7 +107,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
           const tgChat = await getLinkedTg(this.env, String(uid));
           if (!tgChat) return;
           await sendMessage(this.env, tgChat, `✅ ${kind === "poster" ? "🖼 پوستر" : "📝 جزوه"} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
-            { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(this.env)}/app` } }]] } });
+            await appReadyMarkup(this.env, tgChat, out.ids[0]));
         }).catch((ne) => console.error("notify-app", String(ne).slice(0, 200)));
       }
       if (credit.source === "plan") {

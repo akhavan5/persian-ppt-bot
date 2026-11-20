@@ -19,7 +19,7 @@ import { getLinkedTg } from "./link";
 import { withStore } from "./store";
 import type { BlobStore } from "./blobstore";
 import { refundCredit, type CreditSource } from "./settings";
-import { fileNameWithSite, miniappUrl, siteHost } from "./deck-service";
+import { appReadyMarkup, fileNameWithSite, siteHost } from "./deck-service";
 import { toFa } from "./util";
 import { unmarkExtra } from "./extras";
 import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
@@ -162,7 +162,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           const tgChat = await getLinkedTg(this.env, String(uid));
           if (!tgChat) return;
           await sendMessage(this.env, tgChat, `✅ ${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
-            { reply_markup: { inline_keyboard: [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(this.env)}/app` } }]] } });
+            await appReadyMarkup(this.env, tgChat, out.ids[0]));
         }).catch((ne) => console.error("notify-app", String(ne).slice(0, 200)));
       }
       return out;

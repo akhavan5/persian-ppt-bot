@@ -15,6 +15,7 @@ import { toFa } from "./util";
 import { hasBrowser } from "./browser-api";
 import { supportLink, type Uid } from "./settings";
 import { createLoginToken } from "./link";
+import { isEitaaId } from "./eitaa-format";
 import { ttsEnabled } from "./gemini-tts";
 
 export const siteUrl = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
@@ -43,6 +44,17 @@ export async function siteLoginUrl(env: Env, tgId: number | undefined, to: "buy"
   const t = tgId === undefined ? null : await createLoginToken(env, tgId).catch(() => null);
   return t ? `${base}/api/auth/tg?t=${t}&to=${to}${to === "files" ? `&f=${encodeURIComponent(f)}` : ""}`
     : to === "buy" ? `${base}/?buy=1` : to === "files" ? `${base}/?files=${encodeURIComponent(f)}` : base;
+}
+
+/** کیبورد پیام «فایل آماده شد» (Mini App): دکمه‌ی باز کردن اپ؛ برای کاربر ایتا دکمه‌ی «مشاهده در سایت» هم اضافه می‌شود
+ *  (لینک ورود یک‌بارمصرف مستقیم روی همان فایل؛ در ایتا هر دکمه به یک خط لینک زیر پیام تبدیل می‌شود). */
+export async function appReadyMarkup(env: Env, tgChat: number, fileId?: string): Promise<{ reply_markup: { inline_keyboard: unknown[][] } }> {
+  const rows: unknown[][] = [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(env)}/app` } }]];
+  if (isEitaaId(tgChat)) {
+    const url = await siteLoginUrl(env, tgChat, "files", fileId).catch(() => "");
+    if (url) rows.push([{ text: "🌐 مشاهده در سایت", url }]);
+  }
+  return { reply_markup: { inline_keyboard: rows } };
 }
 
 export const imagesLimitMsg = (max: number) => max <= FREE_MAX_IMAGES
