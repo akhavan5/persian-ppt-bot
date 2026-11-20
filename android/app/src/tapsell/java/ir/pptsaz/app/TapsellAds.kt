@@ -59,7 +59,7 @@ object TapsellAds {
 
     /** وضعیت لحظه‌ای برای عیب‌یابی (در پیام «ویدئو آماده نیست» نشان داده می‌شود). */
     fun diag(): String =
-        "init=$initDone loading=$rewardedLoading tries=$rewardedTries zone=${BuildConfig.TAPSELL_REWARDED_ZONE.take(6)} err=${lastError.ifEmpty { "-" }}"
+        "sdk=${BuildConfig.TAPSELL_SDK} key=${BuildConfig.TAPSELL_KEY_INFO} init=$initDone loading=$rewardedLoading tries=$rewardedTries zone=${BuildConfig.TAPSELL_REWARDED_ZONE.take(6)} err=${lastError.ifEmpty { "-" }}"
 
     private val interstitialZones get() = listOf(BuildConfig.TAPSELL_INTERSTITIAL_ZONE, BuildConfig.TAPSELL_INTERSTITIAL_BANNER_ZONE).filter { it.isNotEmpty() }
     val bannerOn get() = BuildConfig.TAPSELL_ENABLED && BuildConfig.TAPSELL_BANNER_ZONE.isNotEmpty()

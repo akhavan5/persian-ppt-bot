@@ -32,7 +32,8 @@ logger.lifecycle("Ads → " + storeAds.entries.joinToString(", ") { "${it.key}=$
 // ---------------------------------------------------------------- تپسل
 // کلید برنامه و شناسه‌ی جایگاه‌ها از متغیر محیطی (GitHub Secrets) می‌آید.
 // بدون آن‌ها: بیلد debug با کلیدهای تست تپسل کار می‌کند و در بیلد release تبلیغ کاملاً خاموش می‌ماند (تبلیغ تستی منتشر نشود).
-val tapsellVersion = "1.3.0" // آخرین نسخه‌ی پایدار؛ در صورت نیاز با maven.tapsell.ir تطبیق دهید
+// نسخه‌ی SDK: پیش‌فرض آخرین پایدار (1.3.0)؛ با متغیر گیت‌هاب TAPSELL_VERSION عوض می‌شود (مثلاً 1.4.0-alpha04 که کلید قدیمی ۲۴ کاراکتری را هم می‌پذیرد)
+val tapsellVersion = (System.getenv("TAPSELL_VERSION") ?: "").trim().ifEmpty { "1.3.0" }
 val tapsellKeyEnv = (System.getenv("TAPSELL_APP_KEY") ?: "").trim()
 val tapsellReal = tapsellKeyEnv.isNotEmpty()
 val tapsellTestKey = "76798342-99a7-4a5f-bf5a-60a088d5dcfb"
@@ -162,6 +163,10 @@ androidComponents {
         str("ADS_NETWORK", net)
 
         bool("TAPSELL_ENABLED", tapsellOn)
+        // فقط برای عیب‌یابی: نسخه‌ی SDK و شکل کلید برنامه (طول و UUID‌بودن؛ خود کلید هرگز در اپ نمی‌آید)
+        val usedKey = if (tapsellReal) tapsellKeyEnv else tapsellTestKey
+        str("TAPSELL_SDK", tapsellVersion)
+        str("TAPSELL_KEY_INFO", "len${usedKey.length}" + if (usedKey.count { it == '-' } == 4) "-uuid" else "-notuuid")
         for ((k, test, _) in tapsellZones) {
             str(k, if (net != "tapsell") "" else env(k).ifEmpty { if (debug) test else "" })
         }

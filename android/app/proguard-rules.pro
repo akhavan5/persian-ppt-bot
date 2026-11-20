@@ -24,6 +24,6 @@
 -keep class com.adivery.sdk.** { *; }
 -dontwarn com.adivery.sdk.**
 
-# تپسل (تبلیغات؛ فقط در فروشگاهی که BAZAAR_ADS/MYKET_ADS آن tapsell باشد وارد اپ می‌شود)
+# تپسل: اگر SDK در release بی‌صدا کار نکند، اولین مظنون R8 است؛ برای اطمینان کلاس‌هایش حفظ می‌شود
 -keep class ir.tapsell.** { *; }
 -dontwarn ir.tapsell.**

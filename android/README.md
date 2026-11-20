@@ -41,6 +41,8 @@ Secrets: `ANDROID_KEYSTORE_B64` و `ANDROID_KEYSTORE_PASSWORD` (alias کلید: 
 - تپسل: `TAPSELL_APP_KEY`، `TAPSELL_BANNER_ZONE`، `TAPSELL_INTERSTITIAL_ZONE`، `TAPSELL_INTERSTITIAL_BANNER_ZONE`، `TAPSELL_NATIVE_BANNER_ZONE`، `TAPSELL_NATIVE_VIDEO_ZONE`، `TAPSELL_REWARDED_ZONE`
 - ادیوری: `ADIVERY_APP_ID`، `ADIVERY_BANNER_PLACEMENT`، `ADIVERY_INTERSTITIAL_PLACEMENT`، `ADIVERY_NATIVE_PLACEMENT`، `ADIVERY_REWARDED_PLACEMENT`
 
+نسخه‌ی SDK تپسل: متغیر اختیاری `TAPSELL_VERSION` (خالی = `1.3.0`).
+
 در بیلد debug هر شبکه‌ای با شناسه‌های تست خودش کار می‌کند.
 
 ساختار کد: `Ads.kt` / `AdsNative.kt` نقطه‌ی ورود مشترک؛ `AdiveryAds.kt` ادیوری؛ `src/tapsell/…/TapsellAds.kt` تپسل واقعی؛ `src/tapsellOff/…/TapsellAds.kt` نسخه‌ی خالی هم‌API (برای فروشگاهی که تپسل ندارد؛ SDK تپسل آنجا وارد APK نمی‌شود). انتخاب در `app/build.gradle.kts` (بخش `storeAds` و `androidComponents`) انجام می‌شود.
