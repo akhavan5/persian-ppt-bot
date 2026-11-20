@@ -497,7 +497,10 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   const b = await readBody(req, 300_000); // متن فایل آپلودی (حداکثر ۱۲۰ هزار نویسه ≈ ۲۴۰ کیلوبایت UTF-8 برای فارسی) هم در بدنه می‌آید
   // سیاست محتوایی پلتفرم (platform-policy.ts): هوش مصنوعی موضوع و متن فایل را برای ایتا بررسی می‌کند؛ قبل از کسر اعتبار و ساخت ارائه
   if (b?.via === "eitaa") {
-    const pol = await checkPlatformPolicy(env, "eitaa", String(b?.topic ?? ""), typeof b?.source === "string" ? b.source : undefined);
+    // با مدلِ انتخابیِ خود کاربر (اگر دیگر به آن دسترسی ندارد، مدل پیش‌فرض)
+    const chosen = (await getSettings(env, user.id).catch(() => null))?.model;
+    const polModel = chosen && (await canUseModel(env, user.id, chosen).catch(() => false)) ? chosen : undefined;
+    const pol = await checkPlatformPolicy(env, "eitaa", String(b?.topic ?? ""), typeof b?.source === "string" ? b.source : undefined, undefined, polModel);
     if (pol.blocked) {
       console.warn("platform-policy blocked", "eitaa", pol.category, pol.by, user.id);
       await notifyBlockedTopic(env, "eitaa", user, String(b?.topic ?? ""), pol, typeof b?.source === "string" && b.source.length > 0); // پیام به مدیرها در تلگرام

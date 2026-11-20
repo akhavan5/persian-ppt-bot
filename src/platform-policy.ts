@@ -2,7 +2,7 @@
  * سیاست محتوایی هر پلتفرم: موضوعاتی که یک پلتفرم اجازه‌ی انتشارشان را نمی‌دهد.
  *
  * فقط روی پلتفرمی اعمال می‌شود که در POLICIES کلید دارد (فعلاً ایتا)؛ بقیه‌ی پلتفرم‌ها بدون تغییر کار می‌کنند.
- * داور اصلی هوش مصنوعی است (askQuick: همان مدل و کلیدهای پروژه، یک فراخوانی کوتاه)؛ ورودی کاربر برایش «داده» است نه دستور.
+ * داور اصلی هوش مصنوعی است (askQuick: با مدل انتخابیِ همان کاربر، یک فراخوانی کوتاه)؛ ورودی کاربر برایش «داده» است نه دستور.
  * اگر مدل در دسترس نبود، تایم‌اوت داد یا خروجی نامعتبر داد، فقط یک فهرست الگوی ثابت و محدود (FALLBACK) اجرا می‌شود.
  *
  * دسته‌ها را در CATEGORIES ویرایش کن؛ پیام کاربر عمداً خنثی است و دسته را نشان نمی‌دهد.
@@ -37,7 +37,7 @@ const POLICIES: Partial<Record<Platform, { name: string; rules: string; categori
 export const BLOCKED_MSG = "این موضوع پشتیبانی نمی‌شود. موضوع دیگری را امتحان کن.";
 
 export interface PolicyResult { blocked: boolean; category: string; by: "ai" | "pattern" | "none" }
-type Ask = (env: Env, system: string, prompt: string, o: { maxTokens?: number; timeoutMs?: number }) => Promise<string>;
+type Ask = (env: Env, system: string, prompt: string, o: { modelId?: string; maxTokens?: number; timeoutMs?: number }) => Promise<string>;
 
 // ---------- داور اصلی: هوش مصنوعی ----------
 
@@ -69,10 +69,10 @@ function excerpt(s: string, max = 4500): string {
   return `${t.slice(0, a)} … ${t.slice(mid, mid + b)} … ${t.slice(t.length - c)}`;
 }
 
-async function askModel(env: Env, plat: Platform, topic: string, source: string, ask: Ask): Promise<PolicyResult | null> {
+async function askModel(env: Env, plat: Platform, topic: string, source: string, ask: Ask, modelId?: string): Promise<PolicyResult | null> {
   const prompt = `TOPIC: <<<${excerpt(topic, 700)}>>>\n` + (source ? `SOURCE EXCERPT: <<<${excerpt(source)}>>>\n` : "") + "Classify now.";
   try {
-    const j = parseJson(await ask(env, systemFor(plat), prompt, { maxTokens: 100, timeoutMs: 12_000 }));
+    const j = parseJson(await ask(env, systemFor(plat), prompt, { modelId, maxTokens: 100, timeoutMs: 12_000 }));
     if (typeof j?.block !== "boolean") return null;
     const cat = String(j.category ?? "").replace(/[^a-z_]/g, "").slice(0, 40) || "none";
     return { blocked: j.block, category: j.block ? cat : "none", by: "ai" };
@@ -120,12 +120,14 @@ function patternCheck(plat: Platform, text: string): string | null {
 
 /**
  * آیا این درخواست برای این پلتفرم ممنوع است؟ پلتفرمِ بدون سیاست ⇒ همیشه مجاز (بدون هیچ فراخوانی).
+ * `modelId`: مدلی که کاربر برای ساخت ارائه انتخاب کرده؛ استعلام با همان مدل انجام می‌شود. اگر آن مدل جواب نداد/تایم‌اوت داد/خروجی نامعتبر داد،
+ * فقط فهرست ثابت (FALLBACK) اجرا می‌شود.
  * `ask` فقط برای تست قابل جایگزینی است.
  */
-export async function checkPlatformPolicy(env: Env, plat: Platform, topic: string, source?: string | null, ask: Ask = askQuick): Promise<PolicyResult> {
+export async function checkPlatformPolicy(env: Env, plat: Platform, topic: string, source?: string | null, ask: Ask = askQuick, modelId?: string): Promise<PolicyResult> {
   if (!POLICIES[plat]) return { blocked: false, category: "none", by: "none" };
   const src = typeof source === "string" ? source.slice(0, 120_000) : "";
-  const viaAi = (ask !== askQuick || hasKey(env)) ? await askModel(env, plat, topic, src, ask) : null;
+  const viaAi = (ask !== askQuick || hasKey(env)) ? await askModel(env, plat, topic, src, ask, modelId) : null;
   if (viaAi) return viaAi;
   const hit = patternCheck(plat, `${topic}\n${src.slice(0, 40_000)}`);
   return hit ? { blocked: true, category: hit, by: "pattern" } : { blocked: false, category: "none", by: "pattern" };
