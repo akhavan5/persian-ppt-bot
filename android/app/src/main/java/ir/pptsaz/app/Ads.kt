@@ -1,6 +1,7 @@
 package ir.pptsaz.app
 
 import android.app.Activity
+import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -43,14 +44,22 @@ object Ads {
         AdiveryAds.start(activity)
     }
 
-    /** بعد از پایان موفق ساخت هر ارائه (از همان ارائه‌ی اول). [paid] = کاربر پلن پولی دارد ⇒ تبلیغ ندارد. اگر تبلیغ هنوز آماده نباشد، همان بار نمایش داده نمی‌شود. */
+    /** بعد از پایان موفق ساخت هر ارائه (از همان ارائه‌ی اول). [paid] = کاربر پلن پولی دارد ⇒ تبلیغ ندارد. اگر تبلیغ هنوز آماده نباشد یا از آخرین نمایش کمتر از ۵ دقیقه گذشته باشد، نمایش داده نمی‌شود. */
     fun onDeckDone(activity: Activity, paid: Boolean) {
         if (!BuildConfig.ADS_ENABLED || paid) return
         try {
-            if (TapsellAds.showInterstitialIfReady(activity)) return
-            AdiveryAds.showInterstitialIfReady()
+            // حداقل فاصله بین دو نمایش آنی؛ زمان آخرین نمایش در گوشی ذخیره می‌شود تا با بستن اپ هم حفظ شود
+            val prefs = activity.getSharedPreferences("ads", Context.MODE_PRIVATE)
+            val now = System.currentTimeMillis()
+            val last = prefs.getLong("interstitial_at", 0L)
+            if (now - last in 0 until INTERSTITIAL_MIN_GAP_MS) return
+            val shown = TapsellAds.showInterstitialIfReady(activity) || AdiveryAds.showInterstitialIfReady()
+            if (shown) prefs.edit().putLong("interstitial_at", now).apply()
         } catch (_: Throwable) {}
     }
+
+    /** حداقل فاصله‌ی زمانی بین دو تبلیغ آنی (۵ دقیقه). */
+    private const val INTERSTITIAL_MIN_GAP_MS = 5 * 60 * 1000L
 
     fun rewardedReady(): Boolean = TapsellAds.rewardedReady() || AdiveryAds.rewardedReady()
 
