@@ -1152,8 +1152,9 @@ fun FilesTab(st: UiState, vm: AppViewModel) {
                             // تبلیغ همسان: بنر بعد از ردیف سوم، ویدئو بعد از ردیف ششم (در فهرست کوتاه‌تر: آخر فهرست)
                             val paid = st.me?.let { it.premium || it.planId != null } == true
                             val n = st.files.size
-                            val bannerAt = minOf(2, n - 1)
-                            val videoAt = if (n > 5) 5 else if (n > 3) n - 1 else -1
+                            // ویدئو همسان بعد از فایل دوم؛ بنر همسان بعد از فایل سوم (با ۱ یا ۲ فایل بعد از فایل اول تا دو تبلیغ زیر هم نیایند)
+                            val videoAt = if (n >= 2) 1 else -1
+                            val bannerAt = if (n >= 3) 2 else 0
                             if (i == bannerAt) AdsNative.Card(AdsNative.bannerZone, paid)
                             if (i == videoAt) AdsNative.Card(AdsNative.videoZone, paid)
                         }
