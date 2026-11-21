@@ -316,6 +316,14 @@ class MainActivity : ComponentActivity() {
                             if (AppForeground.on && me != null) Ads.onDeckDone(this@MainActivity, me.premium || me.planId != null)
                         }
                     }
+                    // بعد از ساخت اکسترا (پوستر، جزوه، صوت، پادکست) هم تبلیغ آنی؛ فاصله‌ی ۵ دقیقه‌ای بین دو تبلیغ آنی (ارائه یا اکسترا) در Ads.onDeckDone مشترک است
+                    LaunchedEffect(st.extraDoneTick) {
+                        if (st.extraDoneTick > 0) {
+                            delay(2500)
+                            val me = st.me
+                            if (AppForeground.on && me != null) Ads.onDeckDone(this@MainActivity, me.premium || me.planId != null)
+                        }
+                    }
                     val snack = remember { SnackbarHostState() }
                     val scope = rememberCoroutineScope()
                     // فایل ذخیره‌شده در حافظه‌ی اختصاصی اپ (اندروید ۷–۹): پرسیدن «باز کردن» یا «ذخیره در گوشی»

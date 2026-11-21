@@ -89,6 +89,8 @@ data class UiState(
     val job: JobState? = null,
     /** همراه‌هایی که بعد از ساخت ارائه با دکمه خواسته شده و در حال ساخت‌اند: کلید «<ارائه>|<نوع>» ← پیام وضعیت (دکمه‌ی همان نوع تا پایان کار نشان داده نمی‌شود) */
     val extraJobs: Map<String, ExtraProg> = emptyMap(),
+    /** با هر اکسترای موفق (پوستر/جزوه/صوت/پادکست) یکی زیاد می‌شود؛ MainActivity با آن تبلیغ آنی را نشان می‌دهد */
+    val extraDoneTick: Int = 0,
     val extractBusy: String? = null,
     val extractedText: String? = null,
     /** متن کوتاهِ پیاده‌شده‌ی یک ویس/فایل صوتی (تا ۶۰۰ نویسه)؛ اگر موضوع خالی باشد همان موضوع می‌شود، وگرنه به منبع اضافه می‌شود */
@@ -667,6 +669,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                     }
                                 }
                                 Reminders.onExtraMade(app)
+                                _state.update { it.copy(extraDoneTick = it.extraDoneTick + 1) }
                                 toast("✅ $name آماده شد؛ در «فایل‌ها» هست.")
                                 if (audible && !AppForeground.on) Notifier.extraDone(app, deckId, kind, title, files = true)
                                 if (LocalFiles.autoSaveExtra(app, title, ids.map { it to kind })) refreshLocal()
