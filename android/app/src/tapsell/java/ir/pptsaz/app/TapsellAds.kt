@@ -60,7 +60,7 @@ object TapsellAds {
     fun diag(): String =
         "sdk=${BuildConfig.TAPSELL_SDK} key=${BuildConfig.TAPSELL_KEY_INFO} init=$initDone loading=$rewardedLoading tries=$rewardedTries zone=${BuildConfig.TAPSELL_REWARDED_ZONE.take(6)} err=${lastError.ifEmpty { "-" }}"
 
-    // ترتیب = اولویت نمایش: اگر هر دو آماده باشند، بنر آنی قبل از ویدئو آنی نشان داده می‌شود
+    // دو جایگاه آنی: بنر آنی و ویدئو آنی؛ هر بار از بین جایگاه‌های آماده یکی به‌صورت تصادفی نمایش داده می‌شود
     private val interstitialZones get() = listOf(BuildConfig.TAPSELL_INTERSTITIAL_BANNER_ZONE, BuildConfig.TAPSELL_INTERSTITIAL_ZONE).filter { it.isNotEmpty() }
     val bannerOn get() = BuildConfig.TAPSELL_ENABLED && BuildConfig.TAPSELL_BANNER_ZONE.isNotEmpty()
     val rewardedOn get() = BuildConfig.TAPSELL_ENABLED && BuildConfig.TAPSELL_REWARDED_ZONE.isNotEmpty()
@@ -108,7 +108,8 @@ object TapsellAds {
     fun showInterstitialIfReady(activity: Activity): Boolean {
         if (!BuildConfig.TAPSELL_ENABLED || interstitialZones.isEmpty()) return false
         return try {
-            val zone = interstitialZones.firstOrNull { interstitial[it] != null }
+            // از بین جایگاه‌های آماده (بنر آنی / ویدئو آنی) یکی تصادفی انتخاب می‌شود؛ اگر فقط یکی آماده باشد همان نمایش داده می‌شود
+            val zone = interstitialZones.filter { interstitial[it] != null }.randomOrNull()
             if (zone == null) { loadInterstitials(); return false }
             val id = interstitial[zone]!!
             interstitial[zone] = null
