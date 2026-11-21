@@ -358,6 +358,13 @@ export async function adRewardProgress(env: Env, uid: Uid): Promise<number> {
 
 export type AdRewardResult = { ok: true; progress: number; granted: number } | { ok: false; error: string; status: number };
 
+/** تعداد ویدئوی باقی‌مانده‌ی امروز (۰ = سقف روزانه تمام شده؛ اپ دکمه را غیرفعال می‌کند تا ویدئوی بی‌جایزه پخش نشود). */
+export async function adRewardLeft(env: Env, uid: Uid): Promise<number> {
+  const db = await rawDb(env);
+  const row = await db.prepare("SELECT v FROM kv WHERE k = ?1").bind(`adr:d:${uid}:${today()}`).first<{ v: string }>();
+  return Math.max(0, AD_REWARD_DAILY_MAX - (Number(row?.v) || 0));
+}
+
 /** ثبت یک ویدئوی جایزه‌ای دیده‌شده. هر EVERY ویدئو ⇒ CREDITS اعتبار هدیه (به اعتبار هدیه‌ی bonus اضافه می‌شود). */
 export async function claimAdView(env: Env, uid: Uid): Promise<AdRewardResult> {
   if (AD_REWARD_EVERY <= 0 || AD_REWARD_CREDITS <= 0) return { ok: false, error: "این قابلیت فعال نیست.", status: 404 };

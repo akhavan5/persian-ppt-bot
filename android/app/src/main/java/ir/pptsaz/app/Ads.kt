@@ -90,17 +90,19 @@ object Ads {
     // ---------------------------------------------------------------- کارت «ویدئو ببین، اعتبار بگیر»
     /** در تب حساب: هر [every] ویدئوی کامل = [credits] اعتبار رایگان. شمارش و اعطای اعتبار سمت سرور است. */
     @Composable
-    fun RewardCard(every: Int, progress: Int, credits: Int, onClaimed: (granted: Int) -> Unit, say: (String) -> Unit) {
+    fun RewardCard(every: Int, progress: Int, credits: Int, left: Int, onClaimed: (granted: Int) -> Unit, say: (String) -> Unit) {
         if (!rewardedOn) return
         val activity = LocalContext.current as? Activity ?: return
         val scope = androidx.compose.runtime.rememberCoroutineScope()
         var shown by remember(progress) { mutableStateOf(progress) }
         var busy by remember { mutableStateOf(false) }
+        // سقف روزانه تمام شده ⇒ ویدئو پخش نمی‌شود (با سرور قدیمی left=99 است و همیشه فعال می‌ماند)
+        var capped by remember(left) { mutableStateOf(left <= 0) }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                 Text("اعتبار رایگان با دیدن ویدئو", style = MaterialTheme.typography.titleMedium)
                 Text("هر ${every.toString().faDigits()} ویدئوی کوتاه = ${credits.toString().faDigits()} اعتبار رایگان. تا اینجا ${shown.toString().faDigits()} از ${every.toString().faDigits()} را دیده‌اید.", style = MaterialTheme.typography.bodyMedium)
-                Button(enabled = !busy, onClick = {
+                Button(enabled = !busy && !capped, onClick = {
                     busy = true
                     showRewarded(activity, onReward = {
                         scope.launch {
@@ -109,12 +111,12 @@ object Ads {
                                 shown = prog
                                 if (granted > 0) say("${granted.toString().faDigits()} اعتبار رایگان گرفتید 🎉")
                                 onClaimed(granted)
-                            } catch (e: ApiException) { say(e.message ?: "ثبت ویدئو انجام نشد") }
+                            } catch (e: ApiException) { if (e.status == 429) capped = true; say(e.message ?: "ثبت ویدئو انجام نشد") }
                             catch (_: Exception) { say("ثبت ویدئو انجام نشد؛ اینترنت را بررسی کنید") }
                             busy = false
                         }
                     }, onFail = { busy = false; say("فعلاً ویدئویی آماده نیست؛ کمی بعد دوباره امتحان کنید") }, onNoReward = { busy = false })
-                }) { Text("دیدن ویدئو") }
+                }) { Text(if (capped) "سقف امروز تمام شد؛ فردا دوباره" else "دیدن ویدئو") }
             }
         }
     }

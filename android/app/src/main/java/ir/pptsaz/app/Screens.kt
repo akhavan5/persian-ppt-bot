@@ -1515,7 +1515,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
 
             InviteCard(st.invite, vm)
 
-            Ads.RewardCard(me.adEvery, me.adProgress, me.adCredits, onClaimed = { if (it > 0) vm.onResume(force = true) }, say = { vm.toast(it) })
+            Ads.RewardCard(me.adEvery, me.adProgress, me.adCredits, me.adLeft, onClaimed = { if (it > 0) vm.onResume(force = true) }, say = { vm.toast(it) })
 
             ContactCard(vm)
 

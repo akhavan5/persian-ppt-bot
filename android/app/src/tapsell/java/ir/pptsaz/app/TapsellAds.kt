@@ -60,7 +60,8 @@ object TapsellAds {
     fun diag(): String =
         "sdk=${BuildConfig.TAPSELL_SDK} key=${BuildConfig.TAPSELL_KEY_INFO} init=$initDone loading=$rewardedLoading tries=$rewardedTries zone=${BuildConfig.TAPSELL_REWARDED_ZONE.take(6)} err=${lastError.ifEmpty { "-" }}"
 
-    private val interstitialZones get() = listOf(BuildConfig.TAPSELL_INTERSTITIAL_ZONE, BuildConfig.TAPSELL_INTERSTITIAL_BANNER_ZONE).filter { it.isNotEmpty() }
+    // ترتیب = اولویت نمایش: اگر هر دو آماده باشند، بنر آنی قبل از ویدئو آنی نشان داده می‌شود
+    private val interstitialZones get() = listOf(BuildConfig.TAPSELL_INTERSTITIAL_BANNER_ZONE, BuildConfig.TAPSELL_INTERSTITIAL_ZONE).filter { it.isNotEmpty() }
     val bannerOn get() = BuildConfig.TAPSELL_ENABLED && BuildConfig.TAPSELL_BANNER_ZONE.isNotEmpty()
     val rewardedOn get() = BuildConfig.TAPSELL_ENABLED && BuildConfig.TAPSELL_REWARDED_ZONE.isNotEmpty()
     val nativeBannerZone get() = BuildConfig.TAPSELL_NATIVE_BANNER_ZONE
@@ -166,33 +167,57 @@ object TapsellAds {
     }
 
     // ---------------------------------------------------------------- بنر استاندارد
+    private class BannerState {
+        @Volatile var alive = true
+        var tries = 0
+        var adId: String? = null
+    }
+
+    private fun loadBanner(st: BannerState, container: BannerContainer, activity: Activity) {
+        if (!st.alive) return
+        try {
+            Tapsell.requestBannerAd(BuildConfig.TAPSELL_BANNER_ZONE, BannerSize.BANNER_320_50, activity, object : RequestResultListener {
+                override fun onSuccess(id: String) {
+                    if (!st.alive) { try { Tapsell.destroyBannerAd(id) } catch (_: Throwable) {}; return }
+                    st.adId = id
+                    st.tries = 0
+                    try {
+                        Tapsell.showBannerAd(id, container, activity, object : AdStateListener.Banner {
+                            override fun onAdImpression() {}
+                            override fun onAdClicked() {}
+                            override fun onAdFailed(message: String) { note("banner-show", message) }
+                        })
+                    } catch (e: Throwable) { note("banner-show", e.toString()) }
+                }
+                override fun onFailure(message: String) { note("banner", message); retryBanner(st, container, activity) }
+            })
+        } catch (e: Throwable) { note("banner", e.toString()); retryBanner(st, container, activity) }
+    }
+
+    /** اگر SDK هنوز فعال نشده یا تبلیغی نبود، بنر هر ۱۵ ثانیه (حداکثر ۶ بار) دوباره درخواست می‌شود. */
+    private fun retryBanner(st: BannerState, container: BannerContainer, activity: Activity) {
+        if (!st.alive || st.tries++ >= 6) return
+        main.postDelayed({ loadBanner(st, container, activity) }, 15_000L)
+    }
+
     @Composable
     fun Banner(modifier: Modifier = Modifier) {
         if (!bannerOn) return
         val ctx = LocalContext.current
         val activity = ctx as? Activity ?: return
-        var adId by remember { mutableStateOf<String?>(null) }
-        DisposableEffect(Unit) { onDispose { try { adId?.let { Tapsell.destroyBannerAd(it) } } catch (_: Throwable) {} } }
+        val st = remember { BannerState() }
+        DisposableEffect(Unit) {
+            onDispose {
+                st.alive = false
+                try { st.adId?.let { Tapsell.destroyBannerAd(it) } } catch (_: Throwable) {}
+            }
+        }
         AndroidView(
             modifier = modifier.fillMaxWidth(),
             factory = { c ->
                 BannerContainer(c).also { container ->
                     container.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                    try {
-                        Tapsell.requestBannerAd(BuildConfig.TAPSELL_BANNER_ZONE, BannerSize.BANNER_320_50, activity, object : RequestResultListener {
-                            override fun onSuccess(id: String) {
-                                adId = id
-                                try {
-                                    Tapsell.showBannerAd(id, container, activity, object : AdStateListener.Banner {
-                                        override fun onAdImpression() {}
-                                        override fun onAdClicked() {}
-                                        override fun onAdFailed(message: String) {}
-                                    })
-                                } catch (_: Throwable) {}
-                            }
-                            override fun onFailure(message: String) {}
-                        })
-                    } catch (_: Throwable) {}
+                    loadBanner(st, container, activity)
                 }
             },
         )

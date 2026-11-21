@@ -6,7 +6,7 @@ import { FONTS, THEMES, TONES, isMode } from "./themes";
 import { TEMPLATES, isTemplate } from "./template";
 import {
   DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, SUPPORT_CONTACT, botPlatform, grantDailyFree, WEB_SLIDE_CHOICES, clampSlides, getActiveSub, getCredit, getSettings,
-  AD_REWARD_CREDITS, AD_REWARD_EVERY, adRewardProgress, claimAdView, CONTACT_REWARD_NOTE, EXTRA_IMAGES_MSG, EXTRA_MODE_MSG, EXTRA_MODEL_MSG, canUseMode, canUseModel, isAdmin, isAllowed, isBanned, hasPlanAccess, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
+  AD_REWARD_CREDITS, AD_REWARD_EVERY, adRewardProgress, adRewardLeft, claimAdView, CONTACT_REWARD_NOTE, EXTRA_IMAGES_MSG, EXTRA_MODE_MSG, EXTRA_MODEL_MSG, canUseMode, canUseModel, isAdmin, isAllowed, isBanned, hasPlanAccess, maxImagesFor, maxSlidesFor, planLink, saveSettings, getDeckCount,
 } from "./settings";
 import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
@@ -412,7 +412,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     // هدیه‌ی تکمیل پروفایل: available=true یعنی با ثبت و تایید یکی از موارد missing (mobile/email) هنوز می‌شود credits اعتبار گرفت؛ note = جمله‌ی کنار هدیه
     contactReward: { ...(await contactRewardInfo(env, user)), note: CONTACT_REWARD_NOTE },
     feedback,
-    adReward: { every: AD_REWARD_EVERY, progress: await adRewardProgress(env, user.id).catch(() => 0), credits: AD_REWARD_CREDITS },
+    adReward: { every: AD_REWARD_EVERY, progress: await adRewardProgress(env, user.id).catch(() => 0), credits: AD_REWARD_CREDITS, left: await adRewardLeft(env, user.id).catch(() => 99) },
     decks, // تعداد ارائه‌های موفق (اپ اندروید برای یادآور فعال‌سازی)
     credit: c.unlimited
       ? { unlimited: true }

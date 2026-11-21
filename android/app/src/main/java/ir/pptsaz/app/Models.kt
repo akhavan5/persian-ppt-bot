@@ -72,6 +72,8 @@ data class Me(
     val adEvery: Int = 5,
     val adProgress: Int = 0,
     val adCredits: Int = 1,
+    /** ویدئوی باقی‌مانده‌ی امروز؛ ۰ = سقف روزانه تمام شده (سرور قدیمی: ۹۹) */
+    val adLeft: Int = 99,
 )
 
 /**
@@ -164,6 +166,7 @@ fun parseMe(j: JSONObject): Me? {
         adEvery = j.optJSONObject("adReward")?.optInt("every", 5) ?: 5,
         adProgress = j.optJSONObject("adReward")?.optInt("progress") ?: 0,
         adCredits = j.optJSONObject("adReward")?.optInt("credits", 1) ?: 1,
+        adLeft = j.optJSONObject("adReward")?.optInt("left", 99) ?: 99,
         giftMissing = j.optJSONObject("contactReward")?.optJSONArray("missing")?.let { a -> (0 until a.length()).map { i -> a.optString(i) } } ?: emptyList(),
     )
 }
