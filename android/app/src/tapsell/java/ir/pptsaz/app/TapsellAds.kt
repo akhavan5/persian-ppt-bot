@@ -4,7 +4,6 @@ import android.app.Activity
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -52,10 +51,10 @@ object TapsellAds {
     @Volatile private var initDone = false
     private val main = Handler(Looper.getMainLooper())
 
-    /** آخرین خطای SDK تپسل (برای عیب‌یابی)؛ در پیام «ویدئو آماده نیست» نشان داده می‌شود و در logcat با تگ Tapsell هم هست. */
+    /** آخرین خطای SDK تپسل (برای عیب‌یابی)؛ فقط در حافظه نگه داشته می‌شود (به کاربر نشان داده نمی‌شود). */
     @Volatile var lastError: String = ""
         private set
-    private fun note(kind: String, message: String) { lastError = "$kind: $message"; Log.w("Tapsell", lastError) }
+    private fun note(kind: String, message: String) { lastError = "$kind: $message" }
 
     /** وضعیت لحظه‌ای برای عیب‌یابی (در پیام «ویدئو آماده نیست» نشان داده می‌شود). */
     fun diag(): String =

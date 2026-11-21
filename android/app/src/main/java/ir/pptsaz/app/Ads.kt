@@ -34,9 +34,6 @@ object Ads {
 
     fun adFree(): Boolean = false
 
-    /** وضعیت تبلیغات برای عیب‌یابی (فقط در پیام خطای ویدئو جایزه‌ای). */
-    fun diag(): String = "net=${BuildConfig.ADS_NETWORK} v=${BuildConfig.VERSION_NAME} tapsellRewarded=${TapsellAds.rewardedOn} adiveryRewarded=${AdiveryAds.rewardedOn} ${TapsellAds.diag()}"
-
     /** در onCreate اکتیویتی صدا زده شود. */
     fun start(activity: Activity) {
         if (!BuildConfig.ADS_ENABLED) return
@@ -116,7 +113,7 @@ object Ads {
                             catch (_: Exception) { say("ثبت ویدئو انجام نشد؛ اینترنت را بررسی کنید") }
                             busy = false
                         }
-                    }, onFail = { busy = false; say("فعلاً ویدئویی آماده نیست؛ کمی بعد دوباره امتحان کنید" + "\n[${diag()}]") }, onNoReward = { busy = false })
+                    }, onFail = { busy = false; say("فعلاً ویدئویی آماده نیست؛ کمی بعد دوباره امتحان کنید") }, onNoReward = { busy = false })
                 }) { Text("دیدن ویدئو") }
             }
         }
