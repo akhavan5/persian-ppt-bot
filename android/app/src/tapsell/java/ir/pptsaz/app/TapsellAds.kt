@@ -70,6 +70,7 @@ object TapsellAds {
 
     fun start(activity: Activity) {
         if (!BuildConfig.TAPSELL_ENABLED) return
+        if (act?.get() !== activity) clearNative()
         act = WeakReference(activity)
         try {
             Tapsell.setInitializationListener {
@@ -224,6 +225,19 @@ object TapsellAds {
     }
 
     // ---------------------------------------------------------------- تبلیغ همسان
+    /**
+     * LazyColumn ردیف را با اسکرول از کامپوزیشن بیرون می‌برد و با برگشتن دوباره می‌سازد؛ بدون کش، هر بار یک درخواست و تبلیغ تازه می‌رفت.
+     * پس ویوی بارگذاری‌شده‌ی هر جایگاه یک‌بار ساخته و نگه داشته می‌شود و فقط دوباره به ردیف وصل می‌شود.
+     */
+    private class NativeSlot(val activity: Activity, val container: NativeAdViewContainer) { var adId: String? = null }
+    private val nativeSlots = HashMap<String, NativeSlot>()
+
+    /** تبلیغ‌های همسان نگه‌داشته‌شده را آزاد می‌کند (با عوض‌شدن اکتیویتی صدا زده می‌شود تا ویوها اکتیویتی قبلی را نگه نداشته باشند). */
+    private fun clearNative() {
+        nativeSlots.values.forEach { slot -> try { slot.adId?.let { Tapsell.destroyNativeAd(it) } } catch (_: Throwable) {} }
+        nativeSlots.clear()
+    }
+
     /** [zone] = جایگاه همسان؛ بنر همسان و ویدئو همسان در داشبورد تپسل دو جایگاه جدا هستند. */
     @Composable
     fun NativeCard(zone: String, modifier: Modifier = Modifier) {
@@ -235,11 +249,15 @@ object TapsellAds {
         val onVariant = cs.onSurfaceVariant.toArgb()
         val primary = cs.primary.toArgb()
         val onPrimary = cs.onPrimary.toArgb()
-        var adId by remember { mutableStateOf<String?>(null) }
-        DisposableEffect(Unit) { onDispose { try { adId?.let { Tapsell.destroyNativeAd(it) } } catch (_: Throwable) {} } }
         AndroidView(
             modifier = modifier.fillMaxWidth(),
             factory = { c ->
+                val cached = nativeSlots[zone]?.takeIf { it.activity === activity }
+                if (cached != null) {
+                    // قبلاً بارگذاری شده: فقط از والد قبلی جدا و دوباره وصل می‌شود (درخواست جدید نمی‌رود)
+                    (cached.container.parent as? ViewGroup)?.removeView(cached.container)
+                    return@AndroidView cached.container
+                }
                 val d = c.resources.displayMetrics.density
                 fun dp(v: Int) = (v * d).toInt()
                 val container = NativeAdViewContainer(c)
@@ -265,23 +283,26 @@ object TapsellAds {
                 val view = NativeAdView.Builder(container)
                     .withLogo(logo).withTitle(title).withSponsored(sponsored)
                     .withDescription(desc).withCtaButton(cta).withMedia(media).build()
+                val slot = NativeSlot(activity, container)
+                nativeSlots[zone] = slot
                 try {
                     Tapsell.requestNativeAd(zone, activity, object : RequestResultListener {
                         override fun onSuccess(id: String) {
-                            adId = id
+                            slot.adId = id
                             try {
                                 Tapsell.showNativeAd(id, view, activity, object : AdStateListener.Native {
                                     override fun onAdImpression() { container.visibility = View.VISIBLE }
                                     override fun onAdClicked() {}
                                     override fun onAdClosed(completionState: AdShowCompletionState) {}
-                                    override fun onAdFailed(message: String) { container.visibility = View.GONE }
+                                    override fun onAdFailed(message: String) { container.visibility = View.GONE; note("native-show", message) }
                                 })
                                 container.visibility = View.VISIBLE
                             } catch (_: Throwable) {}
                         }
-                        override fun onFailure(message: String) {}
+                        // شکست: از کش برداشته می‌شود تا دفعه‌ی بعد که ردیف دیده شد دوباره تلاش شود
+                        override fun onFailure(message: String) { note("native", message); if (nativeSlots[zone] === slot) nativeSlots.remove(zone) }
                     })
-                } catch (_: Throwable) {}
+                } catch (e: Throwable) { note("native", e.toString()); if (nativeSlots[zone] === slot) nativeSlots.remove(zone) }
                 container
             },
         )

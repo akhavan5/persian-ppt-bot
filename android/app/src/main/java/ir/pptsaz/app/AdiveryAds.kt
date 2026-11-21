@@ -125,6 +125,9 @@ object AdiveryAds {
     }
 
     // ---------------------------------------------------------------- تبلیغ همسان
+    /** ویوی همسان بارگذاری‌شده؛ LazyColumn با اسکرول ردیف را می‌سازد و حذف می‌کند و بدون کش هر بار تبلیغ تازه می‌آمد. با عوض‌شدن اکتیویتی دوباره ساخته می‌شود. */
+    private var nativeView: AdiveryNativeAdView? = null
+
     /** کارت همسان لابه‌لای فهرست (AdiveryNativeAdView + res/layout/adivery_native_card.xml)؛ رنگ‌ها از تم اپ و تا آمدن تبلیغ جایی اشغال نمی‌کند. */
     @Composable
     fun NativeCard(modifier: Modifier = Modifier) {
@@ -138,8 +141,15 @@ object AdiveryAds {
         AndroidView(
             modifier = modifier.fillMaxWidth(),
             factory = { c ->
+                val cached = nativeView?.takeIf { it.context === c }
+                if (cached != null) {
+                    // قبلاً بارگذاری شده: فقط از والد قبلی جدا و دوباره وصل می‌شود (درخواست جدید نمی‌رود)
+                    (cached.parent as? ViewGroup)?.removeView(cached)
+                    return@AndroidView cached
+                }
                 val d = c.resources.displayMetrics.density
                 AdiveryNativeAdView(c).also { v ->
+                    nativeView = v
                     v.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                     v.visibility = View.GONE
                     v.background = GradientDrawable().apply { setColor(surface); cornerRadius = 16 * d }
@@ -159,7 +169,8 @@ object AdiveryAds {
                                     v.visibility = View.VISIBLE
                                 } catch (_: Throwable) {}
                             }
-                            override fun onError(reason: String) { v.visibility = View.GONE }
+                            // شکست: از کش برداشته می‌شود تا دفعه‌ی بعد که ردیف دیده شد دوباره تلاش شود
+                            override fun onError(reason: String) { v.visibility = View.GONE; if (nativeView === v) nativeView = null }
                         })
                         v.loadAd()
                     } catch (_: Throwable) {}
