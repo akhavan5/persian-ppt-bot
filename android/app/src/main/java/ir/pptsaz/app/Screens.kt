@@ -529,8 +529,8 @@ fun MainScreen(st: UiState, vm: AppViewModel) {
         bottomBar = {
             if (!wide) {
                 Column {
-                    // بنر استاندارد فقط در تب «تنظیمات» (اندیس ۲) و وسط‌چین؛ برای کاربر پولی یا «۲۴ ساعت بدون تبلیغ» ترسیم نمی‌شود
-                    if (st.tab == 2) {
+                    // بنر استاندارد در همه‌ی تب‌ها و وسط‌چین؛ برای کاربر پولی یا «۲۴ ساعت بدون تبلیغ» ترسیم نمی‌شود (فاصله‌ی خالی هم نمی‌ماند)
+                    if (Ads.bannerOn && !(me.premium || me.planId != null)) {
                         Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
                             Ads.Banner(paid = me.premium || me.planId != null, modifier = Modifier.width(320.dp))
                         }
