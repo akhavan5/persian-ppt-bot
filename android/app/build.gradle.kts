@@ -32,8 +32,8 @@ logger.lifecycle("Ads → " + storeAds.entries.joinToString(", ") { "${it.key}=$
 // ---------------------------------------------------------------- تپسل
 // کلید برنامه و شناسه‌ی جایگاه‌ها از متغیر محیطی (GitHub Secrets) می‌آید.
 // بدون آن‌ها: بیلد debug با کلیدهای تست تپسل کار می‌کند و در بیلد release تبلیغ کاملاً خاموش می‌ماند (تبلیغ تستی منتشر نشود).
-// نسخه‌ی SDK: پیش‌فرض آخرین پایدار (1.3.0)؛ با متغیر گیت‌هاب TAPSELL_VERSION عوض می‌شود (مثلاً 1.4.0-alpha04 که کلید قدیمی ۲۴ کاراکتری را هم می‌پذیرد)
-val tapsellVersion = (System.getenv("TAPSELL_VERSION") ?: "").trim().ifEmpty { "1.3.0" }
+// نسخه‌ی SDK: پیش‌فرض 1.4.0-alpha04 (آخرین نسخه‌ی 1.4؛ از secret-key و کلید قدیمی ۲۴ کاراکتری پشتیبانی می‌کند)؛ با متغیر گیت‌هاب TAPSELL_VERSION عوض می‌شود (مثلاً 1.3.0 برای آخرین پایدار)
+val tapsellVersion = (System.getenv("TAPSELL_VERSION") ?: "").trim().ifEmpty { "1.4.0-alpha04" }
 val tapsellKeyEnv = (System.getenv("TAPSELL_APP_KEY") ?: "").trim()
 val tapsellReal = tapsellKeyEnv.isNotEmpty()
 val tapsellTestKey = "76798342-99a7-4a5f-bf5a-60a088d5dcfb"
@@ -68,8 +68,8 @@ android {
         applicationId = "ir.pptsaz.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.0.8"
+        versionCode = 10
+        versionName = "1.0.9"
         manifestPlaceholders["TapsellMediationAppKey"] = if (tapsellReal) tapsellKeyEnv else tapsellTestKey
         // اعلان FCM: از متغیرهای محیطی (GitHub Secrets) می‌آید؛ خالی = اعلان خاموش. فایل google-services.json لازم نیست.
         for (k in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {
