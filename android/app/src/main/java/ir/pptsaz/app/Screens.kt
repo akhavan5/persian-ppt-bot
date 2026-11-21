@@ -1488,6 +1488,7 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                                 listOf(
                                     p.credits.fa() + " اعتبار", "تا " + p.maxSlides.fa() + " اسلاید",
                                     "تا " + p.maxImages.fa() + " تصویر", p.days.fa() + " روز",
+                                    "بدون تبلیغات و اسپانسری",
                                 ).forEach { feat ->
                                     Row(
                                         Modifier.clip(RoundedCornerShape(10.dp)).background(cs.surfaceVariant).padding(horizontal = 10.dp, vertical = 6.dp),
