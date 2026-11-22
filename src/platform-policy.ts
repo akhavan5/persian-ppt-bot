@@ -17,7 +17,7 @@ import { esc, sendMessage } from "./telegram";
 const CATEGORIES: Record<string, string> = {
   sexuality: "sexual orientation, homosexuality, LGBT topics, gender identity or transition. Block even when the tone is neutral, scientific or educational.",
   explicit_sexual: "pornographic or erotic material, explicit sexual content, promoting sex outside marriage.",
-  drugs_alcohol_gambling: "promoting, selling or teaching how to make/obtain/use alcohol, illegal drugs, gambling or betting. Prevention, addiction recovery, medicine, chemistry and history are allowed.",
+  drugs_alcohol_gambling: "promoting, selling or teaching how to make/obtain/use alcohol, illegal drugs, gambling or betting. Prevention, addiction recovery, medicine, chemistry and history are allowed. Financial-market education and analysis (forex, stocks, bourse, commodities, crypto, technical/fundamental analysis, risk management) is NOT gambling and is allowed; block only real-money gambling, casinos, sports/online betting, lotteries and binary-options-style betting.",
   religion_insult: "insulting or mocking Islam, the Quran, the Prophet, the Imams or other religious sanctities; promoting apostasy; propaganda for banned religious groups or proselytizing for other faiths. A neutral academic or historical overview of religions is allowed.",
   occult: "fortune-telling, sorcery, summoning spirits and similar practices presented as real and effective.",
   violence_extremism: "instructions for violence or terrorism, extremist propaganda, glorifying killing.",
