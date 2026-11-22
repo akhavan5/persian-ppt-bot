@@ -40,8 +40,8 @@ final class ParsingTests: XCTestCase {
          "premium":true,"maxSlides":20,"maxImages":4,
          "plan":{"id":"plus","exp":1800000000000},
          "settings":{"theme":"ocean","slides":10,"mode":"student","images":true},
-         "plans":[{"id":"plus","name":"پلاس","price":690,"credits":5,"days":30,"maxSlides":20,"maxImages":4},
-                  {"id":"pro","name":"پرو","price":1140,"credits":11,"days":30,"maxSlides":35,"maxImages":7}]}
+         "plans":[{"id":"plus","name":"پلاس","price":790,"credits":5,"days":30,"maxSlides":20,"maxImages":4},
+                  {"id":"pro","name":"پرو","price":1340,"credits":11,"days":30,"maxSlides":35,"maxImages":7}]}
         """
         let obj = try JSONSerialization.jsonObject(with: Data(json.utf8))
         let me = try XCTUnwrap(parseMe(J(obj)))
@@ -50,7 +50,7 @@ final class ParsingTests: XCTestCase {
         XCTAssertTrue(me.premium)
         XCTAssertEqual(me.planId, "plus")
         XCTAssertEqual(me.settings.mode, "student")
-        XCTAssertEqual(me.plans.map { $0.price }, [690, 1140])
+        XCTAssertEqual(me.plans.map { $0.price }, [790, 1340])
     }
 
     func testParseMeLoggedOut() throws {
