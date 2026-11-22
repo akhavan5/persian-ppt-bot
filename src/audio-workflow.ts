@@ -378,7 +378,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           continue;
         }
         await sendAudio(this.env, chatId, audio, wname,
-          `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: plan.title, duration: audioSeconds(audio) });
+          `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: siteHost(this.env), duration: audioSeconds(audio) });
         await saveFile(this.env, uid, `${id}-s${m.i + 1}`, audio, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0).catch((e) => console.error("slide audio save (bot)", String(e).slice(0, 200)));
       }
       // فایل‌های موقت در گام cleanup-tmp پس از این گام پاک می‌شوند (یک batch برای همه)

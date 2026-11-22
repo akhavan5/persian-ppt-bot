@@ -15,6 +15,7 @@ import { feedbackInfo, submitFeedback } from "./feedback";
 import { startSupport, supportCallback, supportWall } from "./support";
 import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, sibappEnabled, sibappStart, sibappVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
+import { tagMp3 } from "./id3";
 import { listSamples, sampleLabel } from "./samples";
 import { renderPreview } from "./preview";
 import { buildDeckPdf, cachedPdf } from "./pdf";
@@ -716,7 +717,9 @@ function parseRange(h: string | null, size: number): { start: number; end: numbe
 /** inline=true: نمایش در تگ img (پیش‌نمایش پوستر) یا پخش در تگ audio (پادکست/صدای اسلاید)، با پشتیبانی از Range؛ وگرنه دانلود */
 async function download(env: Env, user: WebUser, id: string, inline = false, range: string | null = null): Promise<Response> {
   if (!/^[\w-]{1,100}$/.test(id)) return err("پیدا نشد", 404);
-  const f = await loadFileDirect(env, user.id, id);
+  const f0 = await loadFileDirect(env, user.id, id);
+  // MP3: برچسب ID3 (عنوان + آدرس سایت به‌عنوان خواننده) تا پخش‌کننده‌ها «Unknown» نشان ندهند
+  const f = f0 && /\.mp3$/i.test(f0.entry.name) ? { ...f0, data: tagMp3(env, f0.data, f0.entry.title || f0.entry.name.replace(/\.mp3$/i, "")).buffer as ArrayBuffer } : f0;
   if (!f) return err("فایل پیدا نشد یا منقضی شده است (فایل‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
   if (/^sample-.*-pdf$/.test(id)) // نمونه‌ی PDF: همان بایت‌های اصلی، بدون تغییر
     return new Response(f.data, { headers: { "content-type": "application/pdf", "content-disposition": `${inline ? "inline" : "attachment"}; filename="sample-${siteHost(env)}.pdf"; filename*=UTF-8''${encodeURIComponent(f.entry.name)}`, ...SEC_HEADERS } });

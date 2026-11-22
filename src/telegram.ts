@@ -3,6 +3,7 @@ import { BALE_API_DEFAULT, baleMarkup, baleText, fromBaleId, hasWebApp, isBaleId
 import { isRubikaId } from "./rubika-format";
 import { rubikaSendFile, rubikaTg } from "./rubika-api";
 import { isEitaaId } from "./eitaa-format";
+import { id3Site, tagMp3 } from "./id3";
 import { eitaaTg } from "./eitaa";
 import { SPLUS_API_DEFAULT, fromSplusId, isSplusId, splusMarkup, splusText } from "./splus-format";
 
@@ -158,6 +159,9 @@ export async function sendAudio(env: Env, chatId: number, data: Uint8Array, file
   const mime = extra.mime ?? (/\.mp3$/i.test(filename) ? "audio/mpeg" : "audio/wav");
   if (isEitaaId(chatId)) throw new Error("Eitaa: ارسال فایل به چت پشتیبانی نمی‌شود");
   const rt = route(env, chatId);
+  // خواننده‌ی پیش‌فرض = آدرس سایت؛ و برای MP3 برچسب ID3 داخل خود فایل (برای ذخیره/ارسال به پخش‌کننده‌های دیگر)
+  extra = { ...extra, performer: extra.performer || id3Site(env).host };
+  if (/\.mp3$/i.test(filename)) data = tagMp3(env, data, extra.title || filename.replace(/\.mp3$/i, ""), extra.performer === id3Site(env).host ? undefined : extra.performer);
   if (rt.rubika) { // روبیکا: «Music» فقط mp3 می‌پذیرد؛ بقیه (مثل WAV) به‌صورت فایل می‌روند
     await rubikaSendFile(env, chatId, data, filename, caption, /\.mp3$/i.test(filename) ? "Music" : "File");
     return;
