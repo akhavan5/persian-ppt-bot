@@ -1018,7 +1018,23 @@ function countdown(btn, secs, label) {
   tick(); btn._t = setInterval(tick, 1000);
 }
 let otpMobile = "", otpKind = "mobile"; // otpMobile: شماره یا ایمیلی که کد برایش فرستاده شده
+// خواندن خودکار کد از پیامک (WebOTP؛ کروم/اندروید). شرط: آخرین خط پیامک «@pptsaz.ir #123456» باشد (دامنه‌ی همین سایت + # + کد).
+// مرورگرهای دیگر (مثلاً سافاری iOS) با autocomplete="one-time-code" کد را بالای کیبورد پیشنهاد می‌دهند.
+let otpAbort = null;
+function stopWebOtp() { try { if (otpAbort) otpAbort.abort(); } catch (e) {} otpAbort = null; }
+function listenWebOtp(input, onCode) {
+  stopWebOtp();
+  if (!("OTPCredential" in window) || !navigator.credentials) return;
+  const ac = new AbortController(); otpAbort = ac;
+  navigator.credentials.get({ otp: { transport: ["sms"] }, signal: ac.signal }).then((c) => {
+    if (ac.signal.aborted || !c || !c.code) return;
+    input.value = c.code; input.dispatchEvent(new Event("input", { bubbles: true }));
+    if (onCode) onCode();
+  }).catch(() => {});
+}
+const submitOtpForm = () => { const f = $("#otpForm"); if (f.requestSubmit) f.requestSubmit(); else $("#authSubmit").click(); };
 function otpReset() {
+  stopWebOtp();
   otpMobile = ""; $("#fCode").value = "";
   show($("#otpStep1"), true); show($("#otpStep2"), false);
   $("#authSubmit").textContent = "ارسال کد"; $("#authSubmit").disabled = false;
@@ -1128,7 +1144,9 @@ $("#otpForm").addEventListener("submit", async (ev) => {
       $("#otpSent").textContent = p.kind === "email" ? `کد ۶ رقمی به ایمیل ${p.id} فرستاده شد؛ پوشه‌ی هرزنامه (اسپم) را هم نگاه کن.` : `کد ۶ رقمی به ${fa(p.id)} ${sentVia(sr)}.`;
       $("#fCodeLbl").textContent = p.kind === "email" ? "کد ۶ رقمی ایمیل‌شده" : "کد ۶ رقمی پیامک‌شده";
       btn.textContent = "ورود"; countdown($("#otpResend"), 60, "ارسال دوباره"); $("#fCode").focus();
+      if (p.kind === "mobile") listenWebOtp($("#fCode"), submitOtpForm);
     } else {
+      stopWebOtp();
       const r = await api("/api/auth/otp/verify", { method: "POST", body: { ...idBody(otpMobile), code: $("#fCode").value } });
       if (r.created) toast("حساب ساخته شد؛ خوش آمدی 🎉");
       await boot();
@@ -1139,7 +1157,7 @@ $("#otpForm").addEventListener("submit", async (ev) => {
 $("#otpResend").onclick = (ev) => {
   const msg = $("#authMsg"); show(msg, false);
   return busy(ev.currentTarget, "در حال ارسال…", async () => {
-    try { const sr = await sendCode(otpMobile); countdown($("#otpResend"), 60, "ارسال دوباره"); toast(sr && sr.bale ? "کد دوباره ارسال شد (بله هم)" : "کد دوباره ارسال شد"); }
+    try { const sr = await sendCode(otpMobile); if (otpKind === "mobile") listenWebOtp($("#fCode"), submitOtpForm); countdown($("#otpResend"), 60, "ارسال دوباره"); toast(sr && sr.bale ? "کد دوباره ارسال شد (بله هم)" : "کد دوباره ارسال شد"); }
     catch (e) { msg.textContent = e.message; show(msg, true); }
   });
 };
@@ -2121,5 +2139,7 @@ document.addEventListener("keydown",function(e){if(e.key==="Escape")set(false)})
 matchMedia("(min-width:1181px)").addEventListener("change",function(m){if(m.matches)set(false)});
 })();
 </script><script src="/pwa.js" defer></script><script src="/support.js" defer></script>
+<!-- آخرین کد داخل تگ body: بنر ادکسو -->
+<script type="text/javascript" src="https://adexofiles.ir/script/panel.adexo.ir_banner.js?sid=906"></script>
 </body>
 </html>

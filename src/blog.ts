@@ -209,6 +209,8 @@ ${main}
 ${MEDIAAD_STICKY_SLOT}
 ${renderFooter()}
 <script src="/pwa.js" defer></script><script src="/support.js" defer></script>
+<!-- آخرین کد داخل تگ body: بنر ادکسو -->
+<script type="text/javascript" src="https://adexofiles.ir/script/panel.adexo.ir_banner.js?sid=906"></script>
 </body>
 </html>
 `;
