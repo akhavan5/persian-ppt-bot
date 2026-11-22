@@ -78,7 +78,8 @@ export const MEDIAAD_CONTENT_SLOT = `<div id="mediaad-X2V5O" ></div>`;
 export const MEDIAAD_RELATED_SLOT = `<div id="mediaad-6pQpw"></div>`;
 
 /** جایگاه تبلیغ چسبان مدیاد؛ خودش جای نمایش را پیدا می‌کند، فقط یک‌بار در هر صفحه (قبل از فوتر). شناسه را تغییر ندهید. */
-export const MEDIAAD_STICKY_SLOT = `<div id="mediaad-3e9jx" ></div>`;
+export const MEDIAAD_STICKY_SLOT = `<div id="mediaad-3e9jx" ></div>
+<div id="mediaad-jgzw8"></div>`;
 
 /** سربرگ‌های امنیتی و کش مشترک پاسخ‌های HTML ساخته‌شده در Worker. stale-while-revalidate: بازدید بعد از انقضا هم فوری جواب می‌گیرد. */
 export const HTML_HEADERS: Record<string, string> = {
