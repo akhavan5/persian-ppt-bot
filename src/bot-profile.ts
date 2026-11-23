@@ -7,11 +7,12 @@
 import type { Env } from "./env";
 import { emailOtpEnabled, getUserById, normMobile, otpEnabled } from "./auth";
 import { attachContact, contactRewardInfo, normContact, sendContactCode, type ContactKind } from "./profile";
-import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, getCredit } from "./settings";
+import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, getCredit, hasContactReward } from "./settings";
 import { resolveUid } from "./link";
 import { esc, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { siteLoginUrl } from "./deck-service";
+import { isBaleId } from "./bale-format";
 
 type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
@@ -115,6 +116,35 @@ export async function handleProfileInput(env: Env, userId: number, chatId: numbe
   return true;
 }
 
+
+// ---------- درخواست اختیاری شماره بعد از دکمه‌ی «ساخت» (ربات تلگرام و بله) ----------
+// مثل مینی‌اپ: تا وقتی شماره ثبت نشده، بعد از هر شروع ساخت پرسیده می‌شود؛ ساخت ارائه هیچ‌وقت منتظر جواب نمی‌ماند.
+// دکمه‌ی request_contact در کیبورد پاسخ (تلگرام و بله هر دو پشتیبانی می‌کنند) شماره را به‌صورت پیام «مخاطب» می‌فرستد
+// و handleSharedContact بدون OTP ثبتش می‌کند (فقط اگر contact.user_id == from.id).
+export const SKIP_CONTACT_TEXT = "⏭ فعلاً نه";
+const REMOVE_KB = { reply_markup: { remove_keyboard: true } };
+const isTgOrBale = (env: Env, chatId: number): boolean => isBaleId(chatId) || (env.PLATFORM !== "bale" && env.PLATFORM !== "rubika" && env.PLATFORM !== "splus" && chatId > 0 && chatId < 100_000_000_000_000);
+
+export async function askShareContact(env: Env, chatId: number, uid: string | number): Promise<void> {
+  try {
+    if (!isTgOrBale(env, chatId) || typeof uid !== "string") return; // ایتا/روبیکا/سروش پلاس و حساب مدیر: نه
+    const user = await getUserById(env, uid);
+    if (!user || user.mobile) return;
+    // هدیه فقط وقتی ذکر می‌شود که هدیه‌ی «موبایل» این حساب هنوز گرفته نشده باشد (هر مورد یک‌بار هدیه دارد)
+    const gift = CONTACT_CREDITS > 0 && !(await hasContactReward(env, user.id, "mobile").catch(() => true));
+    await sendMessage(env, chatId,
+      "📱 <b>ثبت شماره (اختیاری)</b>\nاگر دوست داری شماره‌ات روی حسابت ثبت شود، دکمه‌ی زیر را بزن. ساخت ارائه‌ات به این بستگی ندارد و همین حالا ادامه دارد." + (gift ? `\n\n${giftLine()}` : ""),
+      { reply_markup: { keyboard: [[{ text: "📱 اشتراک‌گذاری شماره‌ام", request_contact: true }], [{ text: SKIP_CONTACT_TEXT }]], resize_keyboard: true, one_time_keyboard: true } });
+  } catch (e) { console.error("askShareContact", e instanceof Error ? e.message.slice(0, 200) : e); }
+}
+
+/** دکمه‌ی «فعلاً نه»: فقط کیبورد را برمی‌دارد. true = پیام همین بود و تمام شد. */
+export async function handleContactSkip(env: Env, chatId: number, text: string): Promise<boolean> {
+  if (text !== SKIP_CONTACT_TEXT) return false;
+  await sendMessage(env, chatId, "باشه 👍 هر وقت خواستی از /profile ثبتش کن.", REMOVE_KB).catch(() => {});
+  return true;
+}
+
 /** پیام «مخاطب» که کاربر از Mini App (دکمه‌ی ساخت ← requestContact تلگرام/بله) به ربات فرستاده؛ شماره‌ی خود کاربر بدون کد پیامکی ثبت می‌شود.
  *  فقط وقتی user_id مخاطب با فرستنده یکی باشد (یعنی شماره‌ی خود فرستنده است، نه مخاطبِ فوروارد/دلخواه) و کاربر شماره‌ای نداشته باشد.
  *  true = پیام مخاطب بود و همین‌جا تمام شد. هر خطا فقط لاگ می‌شود و ساخت ارائه به آن وابسته نیست. */
@@ -131,6 +161,6 @@ export async function handleSharedContact(env: Env, msg: any, userId: number, ch
   if ("error" in r) { console.error("shared contact", r.status, r.error.slice(0, 120)); return true; }
   await sendMessage(env, chatId, r.merged
     ? "✅ شماره‌ات ثبت شد و این حساب به حساب سایتِ دارنده‌ی آن وصل شد؛ اعتبار و فایل‌هایت در همه‌ی پلتفرم‌ها یکی است."
-    : "✅ شماره‌ات ثبت شد." + (r.reward > 0 ? `\n\n🎁 <b>${toFa(String(r.reward))} اعتبار هدیه</b> به حسابت اضافه شد.` : "")).catch(() => {});
+    : "✅ شماره‌ات ثبت شد." + (r.reward > 0 ? `\n\n🎁 <b>${toFa(String(r.reward))} اعتبار هدیه</b> به حسابت اضافه شد.` : ""), REMOVE_KB).catch(() => {});
   return true;
 }

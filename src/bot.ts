@@ -27,7 +27,7 @@ import { PLANS } from "./payment";
 import { inviteBody, inviteLinkFor, inviteMarkup } from "./invite-msg";
 import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
-import { handleProfileCallback, handleProfileInput, handleSharedContact, showProfile } from "./bot-profile";
+import { askShareContact, handleContactSkip, handleProfileCallback, handleProfileInput, handleSharedContact, showProfile } from "./bot-profile";
 import { notifyInviterJoined } from "./referral";
 import { SUPPORT_MAX_TEXT, supportBotAsk } from "./support-chat";
 import { hasBrowser } from "./browser-api";
@@ -243,6 +243,7 @@ async function launchFromPending(env: Env, cq: any, uid: Uid, tgId: number, chat
     if (!ok) {
       return await editMessage(env, chatId, mid, "❌ شروع ساخت ارائه ممکن نشد. اعتبارت برگردانده شد؛ چند دقیقه بعد دوباره امتحان کن.").catch(() => {});
     }
+    await askShareContact(env, chatId, uid); // شماره‌ی اختیاری (تلگرام/بله)؛ بعد از شروع ساخت و بدون هیچ انتظاری
   } catch (e) {
     await begin.undo();
     throw e;
@@ -714,6 +715,8 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
 
   // شماره‌ی اشتراک‌گذاری‌شده از Mini App (requestContact تلگرام/بله): ثبت بدون OTP؛ خطایش جلوی ادامه‌ی پیام را نمی‌گیرد
   if (msg.contact && (await handleSharedContact(env, msg, userId, chatId).catch((e) => { console.error("shared contact", e); return true; }))) return;
+
+  if (!msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleContactSkip(env, chatId, text))) return; // «فعلاً نه» زیر درخواست شماره
 
   // مرحله‌های ثبت موبایل/ایمیل (شماره/ایمیل ← کد OTP): پیام متنی بعدی کاربر ورودی همان مرحله است
   if (!msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleProfileInput(env, userId, chatId, text, !!cmd).catch((e) => { console.error("profile input", e); return false; }))) return;

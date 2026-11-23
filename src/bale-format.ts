@@ -133,8 +133,12 @@ export function baleMarkup(markup: unknown, siteUrl: string, webApp = true): unk
 
 // ---------- آپدیت ----------
 const mapUser = (u: any) => (u && typeof u.id === "number" ? { ...u, id: toBaleId(u.id) } : u);
+// contact.user_id هم جابه‌جا می‌شود تا شرط امنیتی «contact.user_id == from.id» (bot-profile.ts ← handleSharedContact) روی بله درست کار کند
+const mapContact = (c: any) => (c && typeof c.user_id === "number" ? { ...c, user_id: toBaleId(c.user_id) } : c);
 const mapMessage = (m: any) =>
-  m && m.chat && typeof m.chat.id === "number" ? { ...m, from: mapUser(m.from), chat: { ...m.chat, id: toBaleId(m.chat.id) } } : m;
+  m && m.chat && typeof m.chat.id === "number"
+    ? { ...m, from: mapUser(m.from), chat: { ...m.chat, id: toBaleId(m.chat.id) }, ...(m.contact ? { contact: mapContact(m.contact) } : {}) }
+    : m;
 
 /** آپدیت بله ← آپدیت هم‌شکل تلگرام با شناسه‌های جابه‌جاشده. آپدیت‌های بی‌ربط (edited_message، پرداخت و …) null می‌شوند */
 export function normalizeBaleUpdate(update: any): any | null {
