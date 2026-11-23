@@ -86,6 +86,12 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .ok{color:var(--ok)}
 .sample-badge{display:inline-block;margin-inline-start:6px;padding:1px 8px;border-radius:999px;background:#fff3e0;color:#b45309;font-size:11px;font-weight:700}
 .poster{width:100%;border-radius:10px;margin-top:10px;border:1px solid var(--line)}
+/* تبلیغ مدیاد (فقط داخل برنامک/مینی‌اپ پیام‌رسان‌ها): نوار چسبان وسط‌چین بالای تب‌ها؛ ارتفاعش در --adh و ارتفاع تب‌ها در --navh ثبت می‌شود */
+#mAd{position:fixed;left:0;right:0;bottom:var(--navh,0px);z-index:4;display:flex;justify-content:center;align-items:center;text-align:center;overflow:hidden;background:var(--card);border-top:1px solid var(--line)}
+#mAd.noad{height:0;padding:0;border:0;visibility:hidden;pointer-events:none}
+#mAd>div{display:flex;justify-content:center;max-width:100%}
+html.has-ad body{padding-bottom:calc(76px + var(--adh))}
+html.has-ad #toast{bottom:calc(84px + var(--adh))}
 nav{position:fixed;inset:auto 0 0 0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 8px calc(6px + var(--sab));z-index:5}
 nav button{flex:1;background:none;border:0;color:var(--hint);font:inherit;font-size:.78rem;padding:4px 0;cursor:pointer}
 nav button b{display:block;font-size:1.25rem;line-height:1.4}
@@ -867,7 +873,7 @@ async function boot() {
     // نشست نامعتبر، یا حسابِ تلگرامِ وصل‌شده با این کاربر نمی‌خواند (مثلاً دو حساب تلگرام روی یک دستگاه) ⇒ ورود تازه
     if (!me.user || (me.telegram && myTg && me.telegram !== myTg)) { token = ""; keep.set(null); await login(); me = await api("/api/me"); }
   } catch (e) { showFail(e); return; }
-  show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
+  show($("#boot"), false); show($("#app"), true); show($("#nav"), true); initAd();
   show($("#go"), true); // دکمه‌ی داخل صفحه همیشه می‌ماند: اگر کلاینت تلگرام (یا نسخه‌های غیررسمی) رویداد دکمه‌ی اصلی را نرساند، ساخت باز هم کار کند
   show($("#pasteTopic"), TG.canPaste);
   if (IS_EITAA) { show($("#filesReview"), true); eitaaTexts(); askEitaaWrite(); }
@@ -903,6 +909,28 @@ async function refreshMe() {
     me = r; renderHead(); renderCreditInfo(); renderProfile();
     if (lim) renderMake(); // انتخاب‌های فعلی فرم حفظ می‌شود (prevS/prevI)
   } catch {}
+}
+
+// ---------- تبلیغ مدیاد (همه‌ی برنامک‌ها و مینی‌اپ‌ها: تلگرام، ایتا، بله، سروش‌پلاس) ----------
+// فقط بعد از ورود موفق و نمایش تب‌ها اجرا می‌شود (در مرورگر معمولی صفحه‌ی خطا می‌ماند و تبلیغ نمی‌آید). جایگاه را تغییر ندهید.
+let adOn = false;
+function initAd() {
+  if (adOn) return; adOn = true;
+  const bar = document.createElement("div"); bar.id = "mAd"; bar.className = "noad";
+  const box = document.createElement("div"); box.id = "mediaad-YwmJY"; bar.appendChild(box); document.body.appendChild(bar);
+  const nav = $("#nav"), root = document.documentElement;
+  const fit = () => {
+    const has = box.offsetHeight > 0 && box.children.length > 0;
+    bar.classList.toggle("noad", !has);
+    root.style.setProperty("--navh", (nav.offsetHeight || 0) + "px");
+    const h = has ? bar.offsetHeight : 0;
+    root.style.setProperty("--adh", h + "px");
+    root.classList.toggle("has-ad", h > 0);
+  };
+  try { const ro = new ResizeObserver(fit); ro.observe(box); ro.observe(nav); new MutationObserver(fit).observe(box, { childList: true, subtree: true }); } catch {}
+  addEventListener("resize", fit); setTimeout(fit, 1500); setTimeout(fit, 4000);
+  const sc = document.createElement("script"); sc.type = "text/javascript"; sc.async = true;
+  sc.src = "https://s1.mediaad.org/serve/pptsaz.ir/loader.js"; document.head.appendChild(sc);
 }
 
 // ---------- تب‌ها ----------
