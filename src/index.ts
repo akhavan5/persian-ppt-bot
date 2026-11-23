@@ -13,7 +13,7 @@ import { LIFECYCLE_CRON, runLifecycle } from "./lifecycle";
 import { FEEDBACK_CRON, sendPlanFeedbackSurveys } from "./plan-feedback";
 import { handleWeb } from "./web";
 import { miniappUrl } from "./deck-service";
-import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from "./landing";
+import { findLanding, HTML_HEADERS, landingSitemapEntries, MEDIAAD_EITAA_SLOT, MEDIAAD_EITAA_STYLE, renderLanding } from "./landing";
 import { HOME_IMAGES, imageTags } from "./seo-images";
 import { blogFeed, blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
 
@@ -287,7 +287,9 @@ export default {
     if (url.pathname === "/eitaa" && (req.method === "GET" || req.method === "HEAD")) {
       const res = await env.ASSETS.fetch(new Request(`${url.origin}/app`, { headers: req.headers }));
       if (!res.ok) return res;
-      const html = (await res.text()).replace(/<head[^>]*>/i, (m) => `${m}\n<script src="https://developer.eitaa.com/eitaa-web-app.js"></script>`);
+      const html = (await res.text()).replace(/<head[^>]*>/i, (m) => `${m}\n<script src="https://developer.eitaa.com/eitaa-web-app.js"></script>`)
+        .replace("</head>", () => `${MEDIAAD_EITAA_STYLE}\n</head>`) // تبلیغ مدیاد فقط در ایتا: نوار چسبان زیر تب‌ها (landing.ts)
+        .replace("</body>", () => `${MEDIAAD_EITAA_SLOT}\n</body>`);
       const h = new Headers(res.headers);
       for (const k of ["content-length", "content-encoding", "etag", "x-frame-options"]) h.delete(k);
       h.set("content-type", "text/html; charset=utf-8");

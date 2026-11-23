@@ -81,6 +81,35 @@ export const MEDIAAD_RELATED_SLOT = `<div id="mediaad-6pQpw"></div>`;
 export const MEDIAAD_STICKY_SLOT = `<div id="mediaad-3e9jx" ></div>
 <div id="mediaad-jgzw8"></div>`;
 
+/** تبلیغ مدیاد برای برنامک ایتا (/eitaa): نوار چسبان وسط‌چین، درست بالای تب‌های پایین (مثل اندروید). شناسه‌ی جایگاه را تغییر ندهید.
+ *  ارتفاع نوار با ResizeObserver اندازه گرفته و در --adh ثبت می‌شود تا تب‌ها بالای آن بنشینند و محتوا زیرش گم نشود؛ تا وقتی تبلیغی نیامده ارتفاع صفر است و فضای خالی نمی‌ماند. */
+export const MEDIAAD_EITAA_STYLE = `<style>
+#eitaaAd{position:fixed;left:0;right:0;bottom:var(--navh,0px);z-index:4;display:flex;justify-content:center;align-items:center;text-align:center;overflow:hidden;background:var(--card);border-top:1px solid var(--line)}
+#eitaaAd.noad{height:0;padding:0;border:0;visibility:hidden;pointer-events:none}
+#eitaaAd>div{display:flex;justify-content:center;max-width:100%}
+html.has-ad body{padding-bottom:calc(76px + var(--adh))!important}
+html.has-ad #toast{bottom:calc(84px + var(--adh))!important}
+</style>`;
+export const MEDIAAD_EITAA_SLOT = `<div id="eitaaAd" class="noad"><div id="mediaad-YwmJY" ></div></div>
+<script>
+(function(){
+  var bar=document.getElementById("eitaaAd"),box=document.getElementById("mediaad-YwmJY"),nav=document.getElementById("nav"),root=document.documentElement;
+  if(!bar||!box)return;
+  function fit(){
+    var has=box.offsetHeight>0&&box.children.length>0;
+    bar.classList.toggle("noad",!has);
+    root.style.setProperty("--navh",(nav&&nav.offsetHeight||0)+"px");
+    var h=has?bar.offsetHeight:0;
+    root.style.setProperty("--adh",h+"px");
+    root.classList.toggle("has-ad",h>0);
+  }
+  try{var ro=new ResizeObserver(fit);ro.observe(box);if(nav)ro.observe(nav);new MutationObserver(fit).observe(box,{childList:true,subtree:true});}catch(e){}
+  addEventListener("resize",fit);
+  setTimeout(fit,1500);setTimeout(fit,4000);
+})();
+</script>
+${MEDIAAD_SCRIPT}`;
+
 /** سربرگ‌های امنیتی و کش مشترک پاسخ‌های HTML ساخته‌شده در Worker. stale-while-revalidate: بازدید بعد از انقضا هم فوری جواب می‌گیرد. */
 export const HTML_HEADERS: Record<string, string> = {
   "content-type": "text/html; charset=utf-8", "content-language": "fa",
