@@ -19,6 +19,7 @@ import { miniappUrl } from "./deck-service";
 import { firstName, render } from "./plan-notify";
 import { toFa } from "./util";
 import { parseDevices, sendWebPushDevices, webPushEnabled, type WebPushMsg } from "./webpush";
+import { parseFcmCol, pushEnabled, sendPushToUser } from "./push";
 
 /** cron ساعتی (دقیقه‌ی ۴۷ تا با cron روزانه‌ی ۰۳:۱۷ هم‌زمان نشود)؛ باید با triggers.crons در wrangler.jsonc یکی باشد */
 export const ACTIVATION_CRON = "47 * * * *";
@@ -104,7 +105,7 @@ export function activationTelegram2(credits: number, topic: string): string {
   ].join("\n");
 }
 
-interface Row { k: string; v: string; bonus: string | null; sub: string | null; banned: number | null; tg: string | null; wps: string | null }
+interface Row { k: string; v: string; bonus: string | null; sub: string | null; banned: number | null; tg: string | null; wps: string | null; fcm: string | null }
 
 /** marker: پیشوند نشانگر «فرستاده شد» (act24 / act5d) — ثابتِ کد است، نه ورودی کاربر */
 const sqlFor = (marker: string) => `
@@ -113,7 +114,8 @@ SELECT u.k AS k, u.v AS v,
   (SELECT s.v FROM kv s WHERE s.k = 'sub:' || substr(u.k, 4) AND (s.exp IS NULL OR s.exp > ?3)) AS sub,
   (SELECT 1 FROM kv n WHERE n.k = 'ban:' || substr(u.k, 4)) AS banned,
   (SELECT t.v FROM kv t WHERE t.k = 'w2tg:' || substr(u.k, 4)) AS tg,
-  (SELECT p.v FROM kv p WHERE p.k = 'wps:' || substr(u.k, 4) AND (p.exp IS NULL OR p.exp > ?3)) AS wps
+  (SELECT p.v FROM kv p WHERE p.k = 'wps:' || substr(u.k, 4) AND (p.exp IS NULL OR p.exp > ?3)) AS wps,
+  (SELECT f.v FROM kv f WHERE f.k = 'ptu:' || substr(u.k, 4) AND (f.exp IS NULL OR f.exp > ?3)) AS fcm
 FROM kv u
 WHERE u.k >= ?1 AND u.k < ?2 AND (u.exp IS NULL OR u.exp > ?3)
   AND json_extract(u.v, '$.created') >= ?4 AND json_extract(u.v, '$.created') < ?5
@@ -142,8 +144,8 @@ export async function remindInactiveSignups(env: Env): Promise<{ scanned: number
   try {
     const now = Date.now();
     if (!inSendHours(now)) return { scanned, sent };
-    const mailOn = emailEnabled(env), tgOn = !!env.TELEGRAM_BOT_TOKEN, pushOn = webPushEnabled(env);
-    if (!mailOn && !tgOn && !pushOn) return { scanned, sent };
+    const mailOn = emailEnabled(env), tgOn = !!env.TELEGRAM_BOT_TOKEN, pushOn = webPushEnabled(env), fcmOn = pushEnabled(env);
+    if (!mailOn && !tgOn && !pushOn && !fcmOn) return { scanned, sent };
     await env.KV.ready();
     const nowSec = Math.floor(now / 1000);
     let sub = 36; // سقف زیردرخواست باقی‌مانده برای ارسال‌ها (۵۰ − پرس‌وجوها و batchها − حاشیه)؛ اعلان وب فقط وقتی جا باشد
@@ -172,20 +174,25 @@ export async function remindInactiveSignups(env: Env): Promise<{ scanned: number
         const to = mailOn && u.email ? u.email : "";
         // مسدود، بدون اعتبار یا بدون هیچ کانالی: ردش می‌کنیم و نشانگر می‌گذاریم تا صف را پر نکند
         const devices = pushOn ? parseDevices(r.wps) : [];
-        if (r.banned || credits <= 0 || (!to && !(tgOn && tgId) && !devices.length)) { mark(uid, "0", DONE_TTL); continue; }
+        const fcmTokens = fcmOn ? parseFcmCol(r.fcm) : [];
+        if (r.banned || credits <= 0 || (!to && !(tgOn && tgId) && !devices.length && !fcmTokens.length)) { mark(uid, "0", DONE_TTL); continue; }
 
         sub -= (to ? 1 : 0) + (tgOn && tgId ? 1 : 0);
         const usePush = devices.length > 0 && sub >= Math.min(3, devices.length);
         if (usePush) sub -= Math.min(3, devices.length);
-        const [mailOk, tgOk, pushOk] = await Promise.all([
+        const useFcm = fcmTokens.length > 0 && sub >= 3;
+        if (useFcm) sub -= 3;
+        const [mailOk, tgOk, pushOk, fcmOk] = await Promise.all([
           to ? sendEmail(env, { to, ...st.email(env, u.name, credits, uid), tag: st.tag, idempotencyKey: `${st.idem}-${uid}` }) : Promise.resolve(false),
           tgOn && tgId
             ? sendMessage(env, tgId, st.telegram(credits, uid), { reply_markup: { inline_keyboard: [[{ text: "🚀 ساخت ارائه", web_app: { url: `${miniappUrl(env)}/app` } }]] } })
                 .then(() => true).catch((e) => { console.error("activation telegram", String(e).slice(0, 200)); return false; })
             : Promise.resolve(false),
           usePush ? sendWebPushDevices(env, uid, devices, st.push(credits, uid)).then((x) => x.ok > 0).catch(() => false) : Promise.resolve(false),
+          // اپ اندروید: برچسب activation / activation5d همتای محلی (act1 / act2) را در اپ مهار می‌کند
+          useFcm ? (() => { const p = st.push(credits, uid); return sendPushToUser(env, uid, { title: p.title, body: p.body, tag: st.marker === "act24" ? "activation" : "activation5d" }, fcmTokens, 1).then((x) => x.ok > 0).catch(() => false); })() : Promise.resolve(false),
         ]);
-        if (mailOk || tgOk || pushOk) { sent++; mark(uid, "1", DONE_TTL); }
+        if (mailOk || tgOk || pushOk || fcmOk) { sent++; mark(uid, "1", DONE_TTL); }
         else if (to) mark(uid, "r", RETRY_TTL);   // ایمیل شکست خورد (قطعی موقت Resend): دو ساعت بعد دوباره
         else mark(uid, "0", DONE_TTL);            // فقط تلگرام بود و نرسید (معمولاً ربات را بلاک کرده): تلاش مجدد ندارد
       }

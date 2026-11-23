@@ -80,7 +80,7 @@ object Push {
         }
     }
 
-    fun showPromo(ctx: Context, title: String, body: String, url: String?) {
+    fun showPromo(ctx: Context, title: String, body: String, url: String?, tab: Int = -1) {
         val nm = NotificationManagerCompat.from(ctx)
         if (!nm.areNotificationsEnabled()) return
         ensureChannel(ctx)
@@ -91,6 +91,7 @@ object Push {
         } else {
             Intent(ctx, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                if (tab >= 0) putExtra("tab", tab)
             }
         }
         val pi = PendingIntent.getActivity(ctx, id, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

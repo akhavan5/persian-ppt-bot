@@ -6,6 +6,8 @@ import { toFa } from "./util";
 import { getLinkedTg } from "./link";
 import { esc as tgEsc, sendMessage } from "./telegram";
 import { BRAND, sendEmail, siteOf } from "./email";
+import { sendWebPush } from "./webpush";
+import { sendPushToUser } from "./push";
 
 const FONT = "Vazirmatn,Tahoma,'Segoe UI',Arial,sans-serif";
 const BLUE = "#2563eb", INK = "#0f1b33", MUTED = "#5b6b86", LINE = "#e3e9f5", SOFT = "#eef4ff";
@@ -138,7 +140,22 @@ export async function sendReceiptTelegram(env: Env, r: Receipt): Promise<boolean
   }
 }
 
-/** رسید کامل: ایمیل + تلگرام (هر کدام که برای حساب موجود باشد) */
+/** اعلان کوتاه «پرداخت موفق بود» در سایت/PWA (اعلان وب) و اپ اندروید (FCM) */
+export async function sendReceiptPush(env: Env, r: Receipt): Promise<boolean> {
+  try {
+    const msg = { title: "✅ پرداخت موفق بود", body: `پلن ${r.planName} فعال شد؛ ${toFa(String(r.credits))} اعتبار به حسابت اضافه شد.`, tag: "receipt" };
+    const [w, f] = await Promise.all([
+      sendWebPush(env, r.uid, { ...msg, url: "/" }).then((x) => x.ok > 0).catch(() => false),
+      sendPushToUser(env, r.uid, msg).then((x) => x.ok > 0).catch(() => false),
+    ]);
+    return w || f;
+  } catch (e) {
+    console.error("receipt push", e);
+    return false;
+  }
+}
+
+/** رسید کامل: ایمیل + تلگرام/پیام‌رسان + اعلان وب + اپ اندروید (هر کدام که برای حساب موجود باشد) */
 export async function sendReceipt(env: Env, r: Receipt): Promise<void> {
-  await Promise.all([sendReceiptEmail(env, r), sendReceiptTelegram(env, r)]);
+  await Promise.all([sendReceiptEmail(env, r), sendReceiptTelegram(env, r), sendReceiptPush(env, r)]);
 }

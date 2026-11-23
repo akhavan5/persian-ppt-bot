@@ -15,7 +15,8 @@ import { esc, sendMessage } from "./telegram";
 const TOKEN_RE = /^[\w:.-]{60,400}$/;
 const TOKEN_TTL = 120 * 86400; // هر بار که اپ باز می‌شود تمدید می‌شود
 export const pushEnabled = (env: Env) => !!env.FCM_SERVICE_ACCOUNT;
-export type PushMsg = { title: string; body: string; url?: string };
+/** tag = برچسب نوع پیام؛ اپ اندروید با آن همتای محلی (Reminders.kt) را مهار می‌کند تا کاربر یک پیام را دو بار نبیند و مقصد (تب) را می‌فهمد */
+export type PushMsg = { title: string; body: string; url?: string; tag?: string };
 
 /** گروه‌های مخاطب اعلان اپ */
 export type PushSegment = "all" | "nocredit" | "expiring" | "inactive";
@@ -33,10 +34,62 @@ const INACTIVE_MS = 7 * 86_400_000;
 // مقدار: JSON با شناسه‌ی کاربر و زمان آخرین باز شدن اپ (اپ در هر اجرا ثبت را تمدید می‌کند). مقدار قدیمی «1» یعنی کاربر نامشخص.
 export async function putPushToken(env: Env, token: unknown, promo: boolean, remove: boolean, userId?: string): Promise<string | null> {
   if (typeof token !== "string" || !TOKEN_RE.test(token)) return "توکن نامعتبر است.";
+  // کاربر قبلیِ همین توکن (گوشی‌ای که حساب عوض کرده): از فهرست او برداشته می‌شود
+  const [o1, o0] = await Promise.all([env.KV.get(`pt1:${token}`).catch(() => null), env.KV.get(`pt0:${token}`).catch(() => null)]);
+  let prevU: string | undefined;
+  try { const j = JSON.parse(o1 ?? o0 ?? "null"); if (j && typeof j.u === "string") prevU = j.u; } catch { /* مقدار قدیمی «1» */ }
   await Promise.all([env.KV.delete(`pt1:${token}`), env.KV.delete(`pt0:${token}`)]);
   if (!remove) await env.KV.put(`${promo ? "pt1" : "pt0"}:${token}`, JSON.stringify({ u: userId, t: Date.now() }), { expirationTtl: TOKEN_TTL });
+  if (prevU && prevU !== userId) await idxRemove(env, prevU, token);
+  if (userId) { if (remove) await idxRemove(env, userId, token); else await idxAdd(env, userId, token); }
   return null;
 }
+
+// ---------- فهرست معکوس «کاربر ← توکن‌ها» (برای اعلان خودکار به یک کاربر) ----------
+// ptu:<کاربر> = آرایه‌ی JSON حداکثر ۳ توکن (تازه‌ترین اول)؛ TTL مثل توکن و با هر باز شدن اپ تمدید می‌شود.
+// ثبت توکن در هر اجرای اپ تکرار می‌شود (Push.sync)، پس توکن‌های قدیمی بدون این فهرست خودبه‌خود پر می‌شوند.
+const IDX_MAX = 3;
+const idxKey = (u: string) => `ptu:${u}`;
+function parseIdx(raw: string | null | undefined): string[] {
+  try { const a = JSON.parse(raw ?? "[]"); return Array.isArray(a) ? a.filter((x): x is string => typeof x === "string") : []; } catch { return []; }
+}
+async function idxAdd(env: Env, u: string, token: string): Promise<void> {
+  const cur = parseIdx(await env.KV.get(idxKey(u)).catch(() => null));
+  const next = [token, ...cur.filter((t) => t !== token)].slice(0, IDX_MAX);
+  await env.KV.put(idxKey(u), JSON.stringify(next), { expirationTtl: TOKEN_TTL }).catch(() => {});
+}
+async function idxRemove(env: Env, u: string, token: string): Promise<void> {
+  const cur = parseIdx(await env.KV.get(idxKey(u)).catch(() => null));
+  const next = cur.filter((t) => t !== token);
+  if (next.length === cur.length) return;
+  if (next.length) await env.KV.put(idxKey(u), JSON.stringify(next), { expirationTtl: TOKEN_TTL }).catch(() => {});
+  else await env.KV.delete(idxKey(u)).catch(() => {});
+}
+/** توکن‌های FCM یک کاربر (تازه‌ترین اول)؛ بدون FCM_SERVICE_ACCOUNT یا بدون توکن = [] */
+export async function fcmTokensOf(env: Env, uid: string): Promise<string[]> {
+  if (!pushEnabled(env) || !uid) return [];
+  return parseIdx(await env.KV.get(idxKey(uid)).catch(() => null));
+}
+/** اعلان خودکار به یک کاربر (اپ اندروید). tokens اگر از بیرون داده شود (مثلاً از ستون ptu در پرس‌وجوی lifecycle) دوباره خوانده نمی‌شود.
+ *  فقط به تازه‌ترین `max` دستگاه می‌رود (هر ارسال یک زیردرخواست). توکن مرده از فهرست و ثبت حذف می‌شود. هرگز خطا پرتاب نمی‌کند. */
+export async function sendPushToUser(env: Env, uid: string, m: PushMsg, tokens?: string[], max = 1): Promise<{ ok: number; tried: number }> {
+  const out = { ok: 0, tried: 0 };
+  try {
+    const list = (tokens ?? await fcmTokensOf(env, uid)).slice(0, Math.max(1, max));
+    for (const t of list) {
+      out.tried++;
+      const r = await sendPush(env, t, m);
+      if (r === "ok") out.ok++;
+      else if (r === "dead") {
+        await Promise.all([env.KV.delete(`pt1:${t}`), env.KV.delete(`pt0:${t}`)]).catch(() => {});
+        await idxRemove(env, uid, t);
+      }
+    }
+  } catch (e) { console.error("sendPushToUser", String(e).slice(0, 160)); }
+  return out;
+}
+/** ستون ptu برای پرس‌وجوی D1 → آرایه‌ی توکن */
+export const parseFcmCol = (raw: string | null | undefined): string[] => parseIdx(raw);
 
 export type TokenRow = { token: string; u?: string; t?: number };
 
@@ -132,6 +185,7 @@ export async function sendPush(env: Env, token: string, m: PushMsg): Promise<"ok
     if (!at) return "fail";
     const data: Record<string, string> = { kind: "promo", title: m.title.slice(0, 80), body: m.body.slice(0, 300) };
     if (m.url) data.url = m.url;
+    if (m.tag) data.tag = m.tag.slice(0, 40);
     const r = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
       method: "POST",
       headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },

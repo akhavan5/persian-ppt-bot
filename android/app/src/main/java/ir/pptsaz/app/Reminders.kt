@@ -30,6 +30,10 @@ import java.util.concurrent.TimeUnit
  *  files1         ۱ ساعت بعد از ساخت ارائه: «فایل‌هایت آماده‌ی دانلود است» (همتای ایمیل سرور؛ تا ۲۰ ساعت مهلت چون فایل‌ها ۲۴ ساعت می‌مانند).
  *  buy48          پیشنهاد خرید پلن: ۴۸ ساعت بعد از آخرین ارائه، فقط اگر پلن فعال ندارد و هرگز پلن نداشته؛ یک‌بار برای هر دستگاه
  *                 (کاربران قدیمی که زمان آخرین ارائه‌شان ثبت نشده، ۴۸ ساعت بعد از اولین باز شدنِ نسخه‌ی جدید).
+ *  next           «ارائه‌ی بعدی»: ۳ روز بعد از ارائه‌ی اول یا دوم، با یک ایده‌ی نمونه (همتای کار nx سرور).
+ *  low            فقط ۱ اعتبار از پلن مانده و پلن بیش از ۲ روز دیگر فعال است (همتای کار low سرور).
+ *  coffee         «یک قهوه مهمانم کن»: ۲۴ ساعت بعد از ارائه‌ی دوم یا بعدتر؛ یک‌بار برای هر دستگاه؛ لینک /support.
+ *  invite         دعوت دوستان: ۳ ساعت بعد از ارائه‌ی دوم تا ششم؛ یک‌بار برای هر دستگاه.
  *  pf             هدیه‌ی تکمیل پروفایل (همتای اعلان «profile-gift» سرور): ۲۶ ساعت تا ۸ روز بعد از آخرین ارائه، فقط اگر سرور هنوز
  *                 هدیه‌ی ثبت موبایل/ایمیل را قابل‌دریافت می‌داند (giftAvailable)؛ یک‌بار برای هر دستگاه؛ با ثبت و تایید لغو می‌شود.
  *
@@ -42,7 +46,44 @@ object Reminders {
     private const val DAY = 24 * HOUR
     private const val TEHRAN = 12_600_000L // UTC+3:30 (ایران ساعت تابستانی ندارد)
 
-    private val KINDS = listOf("act1", "act2", "daily", "plan3", "plan1", "planout", "extras", "inactive7", "inactive21", "files1", "buy48", "pf")
+    private val KINDS = listOf("act1", "act2", "daily", "plan3", "plan1", "planout", "extras", "inactive7", "inactive21", "files1", "buy48", "pf", "next", "low", "coffee", "invite")
+    private const val SUPPORT_URL = "https://pptsaz.ir/support?utm_source=app&utm_medium=local&utm_campaign=coffee"
+
+    /** برچسب اعلان FCM سرور ← نوع(های) همتای محلی؛ برای اینکه کاربر یک پیام را هم از سرور و هم از گوشی نبیند */
+    private val TAG_KINDS = mapOf(
+        "activation" to listOf("act1"), "activation5d" to listOf("act2"), "plan-expiry" to listOf("plan3", "plan1"),
+        "plan-out" to listOf("planout"), "extras" to listOf("extras"), "buy48" to listOf("buy48"), "profile-gift" to listOf("pf"),
+        "winback" to listOf("inactive7", "inactive21"), "next" to listOf("next"), "low" to listOf("low"),
+        "coffee" to listOf("coffee"), "invite" to listOf("invite"),
+    )
+
+    /** برچسب اعلان FCM سرور ← تبی که با زدن اعلان باز می‌شود (۰ ساخت، ۱ فایل‌ها، ۳ حساب) */
+    private val TAG_TAB = mapOf(
+        "activation" to 0, "activation5d" to 0, "winback" to 0, "next" to 0, "invitee" to 0, "survey" to 0,
+        "extras" to 1, "receipt" to 3, "pay" to 3, "low" to 3, "buy48" to 3, "plan-expiry" to 3, "plan-out" to 3,
+        "profile-gift" to 3, "invite" to 3, "referral" to 3,
+    )
+
+    /** اعلان خودکار سرور (FCM) رسید. null = نشان داده نشود (همتای محلی همین الان نمایش داده شده)؛ وگرنه تب مقصد (−۱ = پیش‌فرض).
+     *  اگر همتای محلی دارد، آن برای ۲ روز مهار می‌شود تا کاربر همان پیام را دوباره نگیرد. */
+    fun onServerPush(ctx: Context, tag: String): Int? {
+        try {
+            val p = prefs(ctx)
+            val now = System.currentTimeMillis()
+            val kinds = TAG_KINDS[tag].orEmpty()
+            if (kinds.isNotEmpty()) {
+                val log = logEntries(p, now)
+                if (kinds.any { k -> log.any { it.second == k && now - it.first < 20 * HOUR } }) return null
+                val e = p.edit()
+                for (k in kinds) e.putLong("srv_$k", now)
+                e.apply()
+            }
+        } catch (_: Exception) {
+        }
+        return TAG_TAB[tag] ?: -1
+    }
+
+    private fun wasSent(p: android.content.SharedPreferences, key: String): Boolean = key in p.getStringSet("sent", emptySet()).orEmpty()
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("reminders", Context.MODE_PRIVATE)
 
@@ -134,6 +175,14 @@ object Reminders {
 
             scheduleInactive(ctx, now)
 
+            // کم‌شدن اعتبار پلن: ۱ اعتبار مانده، پلن بیش از ۲ روز دیگر فعال، و تازه ارائه ساخته؛ برای هر دوره‌ی پلن یک‌بار زمان‌بندی می‌شود
+            if (planActive && me.planCredits == 1 && me.planExp - now > 2 * DAY && now - p.getLong("deck_done_at", 0L) < 2 * DAY) {
+                if (p.getLong("low_for", 0L) != me.planExp) {
+                    p.edit().putLong("low_for", me.planExp).apply()
+                    schedule(ctx, "low", snap(now + HOUR), now + 2 * DAY)
+                }
+            } else cancel(ctx, "low")
+
             // هدیه‌ی تکمیل پروفایل: با ثبت موبایل/ایمیل (giftAvailable=false) لغو می‌شود
             if (p.getBoolean("gift", false)) scheduleGift(ctx, p, now) else cancel(ctx, "pf")
 
@@ -190,6 +239,12 @@ object Reminders {
             if (!p.getBoolean("unl", false) && p.getString("plan_id", "").orEmpty().isEmpty() &&
                 !p.getBoolean("ever_plan", false) && !p.getBoolean("buy48_done", false)
             ) schedule(ctx, "buy48", snap(now + 2 * DAY), now + 9 * DAY)
+            val n = p.getInt("decks", 0)
+            // «ارائه‌ی بعدی»: ۳ روز بعد از ارائه‌ی اول یا دوم
+            if (n in 1..2) schedule(ctx, "next", snap(now + 3 * DAY), now + 5 * DAY)
+            // قهوه و دعوت دوستان: یک‌بار برای هر دستگاه (کلید once در مجموعه‌ی «ارسال‌شده‌ها»)
+            if (n >= 2 && !wasSent(p, "coffee|once")) schedule(ctx, "coffee", snap(now + DAY), now + 4 * DAY)
+            if (n in 2..6 && !wasSent(p, "invite|once")) schedule(ctx, "invite", snap(now + 3 * HOUR), now + 3 * DAY)
         } catch (_: Exception) {
         }
     }
@@ -232,7 +287,7 @@ object Reminders {
 
     // ------------------------------------------------------------------ نمایش (از ReminderWorker)
 
-    private class Msg(val title: String, val body: String, val tab: Int, val topic: String? = null, val key: String = "")
+    private class Msg(val title: String, val body: String, val tab: Int, val topic: String? = null, val key: String = "", val url: String? = null)
 
     /** شرط هنگام نمایش از وضعیت ذخیره‌شده خوانده می‌شود؛ null = دیگر لازم نیست. */
     private fun build(ctx: Context, kind: String, deadline: Long, now: Long): Msg? {
@@ -300,6 +355,29 @@ object Reminders {
                 val gift = if (both) "$n اعتبار هدیه برای هر مورد" else "$n اعتبار هدیه"
                 Msg("🎁 هدیه‌ی تکمیل پروفایل", "با ثبت و تایید $what، $gift بگیر (برای هر مورد فقط یک‌بار).", 3, key = "once")
             }
+            "next" -> {
+                val doneAt = p.getLong("deck_done_at", 0L)
+                if (decks !in 1..2 || doneAt == 0L || now - doneAt < 3 * DAY - HOUR) return null
+                val topic = SAMPLE_TOPICS[((now / DAY) % SAMPLE_TOPICS.size).toInt()]
+                Msg("ارائه‌ی بعدی‌ات چیه؟ 💡", "ایده: «$topic» — بزن روش تا آماده‌ی ساخت بشه.", 0, topic, key = doneAt.toString())
+            }
+            "low" -> {
+                val exp = p.getLong("plan_exp", 0L)
+                if (p.getInt("plan_credits", 0) != 1 || exp <= now + 2 * DAY) return null
+                val name = p.getString("plan_name", "").orEmpty().ifEmpty { "ویژه" }
+                val days = ((exp - now + DAY - 1) / DAY).toInt().coerceAtLeast(1)
+                Msg("فقط ۱ اعتبار از پلنت مونده", "پلن $name تا ${days.fa()} روز دیگه فعاله؛ برای ادامه تمدیدش کن.", 3, key = exp.toString())
+            }
+            "coffee" -> {
+                val doneAt = p.getLong("deck_done_at", 0L)
+                if (decks < 2 || doneAt == 0L || now - doneAt < DAY - HOUR) return null
+                Msg("☕ یه قهوه مهمونم می‌کنی؟", "اگه از pptساز خوشت اومده، یه قهوه مهمونم کن 💛", 0, key = "once", url = SUPPORT_URL)
+            }
+            "invite" -> {
+                val doneAt = p.getLong("deck_done_at", 0L)
+                if (decks !in 2..6 || doneAt == 0L || now - doneAt < 2 * HOUR) return null
+                Msg("🙌 به دوستانت هم معرفی کن", "با دعوت دوستانت اعتبار هدیه بگیر؛ لینک اختصاصی‌ات توی بخش «حساب» آماده‌ست.", 3, key = "once")
+            }
             "inactive7", "inactive21" -> {
                 val days = if (kind == "inactive7") 7 else 21
                 if (lastOpen == 0L || now - lastOpen < days * DAY - HOUR) return null
@@ -348,6 +426,7 @@ object Reminders {
         val now = System.currentTimeMillis()
         if (deadline > 0 && now > deadline) return
         if (AppForeground.on) return // کاربر همین حالا در اپ است
+        if (now - p.getLong("srv_$kind", 0L) < 2 * DAY) return // سرور همین پیام را با FCM فرستاده (onServerPush)
         val msg = build(ctx, kind, deadline, now) ?: return
         if (!NotificationManagerCompat.from(ctx).areNotificationsEnabled()) return
 
@@ -386,7 +465,9 @@ object Reminders {
             }
         }
         val id = 0x52454D + KINDS.indexOf(kind)
-        val i = Intent(ctx, MainActivity::class.java).apply {
+        val i = if (msg.url != null && msg.url.startsWith("https://")) {
+            Intent(Intent.ACTION_VIEW, android.net.Uri.parse(msg.url)) // مثل «قهوه»: صفحه‌ی وب
+        } else Intent(ctx, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("tab", msg.tab)
             if (msg.topic != null) putExtra("rem_topic", msg.topic)

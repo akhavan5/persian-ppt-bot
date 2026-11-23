@@ -13,6 +13,7 @@ import { PLANS } from "./payment";
 import { buyKbFor } from "./deck-service";
 import { toFa } from "./util";
 import { sendWebPush, webPushEnabled } from "./webpush";
+import { fcmTokensOf, sendPushToUser } from "./push";
 
 const DAY = 86_400_000;
 /** چند روز مانده به پایان پلن یادآوری فرستاده شود */
@@ -150,8 +151,15 @@ async function remindOne(env: Env, uid: string, s: Sub, last: boolean): Promise<
   const mail = await emailOf(env, uid);
   const tgId = isWebId(uid) ? await getLinkedTg(env, uid) : (Number.isSafeInteger(Number(uid)) && Number(uid) > 0 ? Number(uid) : null);
   const pushOn = webPushEnabled(env) && isWebId(uid); // اعلان وب: فقط حساب‌های وب (wps:<حساب>)
-  if (!mail && !tgId && !pushOn) { await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); return false; }
+  const fcm = await fcmTokensOf(env, String(uid)); // اپ اندروید (FCM)؛ بدون کلید/توکن = []
+  if (!mail && !tgId && !pushOn && !fcm.length) { await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); return false; }
   const jobs: Promise<boolean>[] = [];
+  if (fcm.length) {
+    const days = Math.max(1, Math.ceil((s.exp - Date.now()) / DAY));
+    jobs.push(sendPushToUser(env, String(uid), last
+      ? { title: `پلن ${planName(s)} فردا تمام می‌شود`, body: "برای اینکه اعتبار و امکانات پلن قطع نشود، همین حالا تمدیدش کن.", tag: "plan-expiry" }
+      : { title: `${toFa(String(days))} روز تا پایان پلن ${planName(s)}`, body: "اگر پیش از پایان تمدید کنی، ۳۰ روز به مدت پلن اضافه می‌شود.", tag: "plan-expiry" }, fcm, 1).then((r) => r.ok > 0));
+  }
   if (pushOn) {
     const days = Math.max(1, Math.ceil((s.exp - Date.now()) / DAY));
     jobs.push(sendWebPush(env, uid, last
@@ -170,7 +178,7 @@ async function remindOne(env: Env, uid: string, s: Sub, last: boolean): Promise<
   }
   const ok = (await Promise.all(jobs)).some(Boolean);
   if (ok) await env.KV.put(key, "1", { expirationTtl: 10 * 86_400 }); // اگر هیچ کانالی نرسید، فردا دوباره تلاش می‌شود
-  else if (!mail && !tgId) await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); // فقط اعلان وب بود و دستگاهی نداشت: تلاش مجدد ندارد
+  else if (!mail && !tgId) await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); // فقط اعلان وب/اپ بود و دستگاهی نداشت: تلاش مجدد ندارد
   return ok;
 }
 
@@ -252,10 +260,13 @@ export async function notifyPlanCreditsOut(env: Env, uid: Uid): Promise<void> {
     const key = `planout:${uid}:${s.exp}`;
     if (await env.KV.get(key)) return;
     const mail = await emailOf(env, uid);
-    const tgId = isWebId(uid) ? await getLinkedTg(env, String(uid)) : null; // ربات: همان کانالی که یادآوری پایان پلن هم می‌گیرد
+    // ربات: حساب وبِ لینک‌شده، یا کاربر فقط‌ربات (شناسه‌ی عددی = خودِ پیام‌رسان؛ مثل یادآوری پایان پلن)
+    const tgId = isWebId(uid) ? await getLinkedTg(env, String(uid)) : (Number.isSafeInteger(Number(uid)) && Number(uid) > 0 ? Number(uid) : null);
     const pushOn = webPushEnabled(env) && isWebId(uid);
-    if (!mail && !tgId && !pushOn) return;
+    const fcm = await fcmTokensOf(env, String(uid));
+    if (!mail && !tgId && !pushOn && !fcm.length) return;
     const jobs: Promise<boolean>[] = [];
+    if (fcm.length) jobs.push(sendPushToUser(env, String(uid), { title: `اعتبار پلن ${planName(s)} تمام شد`, body: "مدت پلن هنوز باقی است؛ با تمدید، اعتبار و امکانات پلن برمی‌گردد.", tag: "plan-out" }, fcm, 1).then((r) => r.ok > 0));
     if (pushOn) jobs.push(sendWebPush(env, String(uid), { title: `اعتبار پلن ${planName(s)} تمام شد`, body: "مدت پلن هنوز باقی است؛ با تمدید، اعتبار و امکانات پلن برمی‌گردد.", url: "/?buy=1", tag: "plan-out" }).then((r) => r.ok > 0).catch(() => false));
     if (mail) jobs.push(sendEmail(env, { to: mail.to, ...creditsOutEmail(env, mail.name, s), tag: "plan-credits-out", idempotencyKey: `plan-out-${uid}-${s.exp}`.slice(0, 256) }));
     if (tgId) {

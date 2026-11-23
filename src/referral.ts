@@ -12,6 +12,10 @@ import { toFa } from "./util";
 import { getLinkedTg, resolveUid } from "./link";
 import { sendMessage } from "./telegram";
 import { sendWebPush } from "./webpush";
+import { sendPushToUser } from "./push";
+import { getUserById } from "./auth";
+import { BRAND, emailEnabled, sendEmail } from "./email";
+import { firstName, render } from "./plan-notify";
 
 /** شناسه‌ی دعوتِ یک حساب: پیام‌رسان/مدیر ← همان عدد؛ حساب وب ← پیام‌رسانِ وصل‌شده (اگر هست) وگرنه شناسه‌ی خودِ حساب وب */
 export async function refIdOf(env: Env, uid: Uid): Promise<RefId | null> {
@@ -24,12 +28,32 @@ export async function refCount(env: Env, id: RefId): Promise<number> {
   return Math.min(REF_MAX, Math.max(0, Number(await env.KV.get(`refc:${id}`).catch(() => null)) || 0));
 }
 
-/** پیام به دعوت‌کننده: پیام‌رسان ← پیام در همان پیام‌رسان؛ حساب فقط‌وب/اپ ← اعلان وب (اگر اجازه داده). خطا نمی‌پرتابد. */
-async function notifyInviter(env: Env, inviter: RefId, html: string): Promise<void> {
+/** پیام به دعوت‌کننده در همه‌ی کانال‌هایی که دارد: پیام‌رسان (اگر شناسه‌اش عددی است) + اعلان وب + اپ اندروید (FCM)
+ *  و، فقط برای پاداش نهایی (email=true)، ایمیل. کانال‌ها مستقل‌اند و خطای یکی بقیه را خراب نمی‌کند. خطا نمی‌پرتابد. */
+async function notifyInviter(env: Env, inviter: RefId, html: string, email = false): Promise<void> {
   try {
-    if (typeof inviter === "number") { await sendMessage(env, inviter, html); return; }
     const body = html.replace(/<[^>]+>/g, "").replace(/\s*\n+\s*/g, " ").trim();
-    await sendWebPush(env, inviter, { title: "🎁 دعوت دوستان", body, url: "/", tag: "referral" });
+    const acct = typeof inviter === "number" ? await resolveUid(env, inviter) : inviter; // حساب اصلی دعوت‌کننده
+    const jobs: Promise<unknown>[] = [];
+    if (typeof inviter === "number") jobs.push(sendMessage(env, inviter, html));
+    if (isWebId(acct)) {
+      const id = String(acct);
+      jobs.push(sendWebPush(env, id, { title: "🎁 دعوت دوستان", body, url: "/", tag: "referral" }));
+      jobs.push(sendPushToUser(env, id, { title: "🎁 دعوت دوستان", body, tag: "referral" }));
+      if (email && emailEnabled(env)) {
+        jobs.push((async () => {
+          const u = await getUserById(env, id);
+          if (!u?.email) return;
+          const m = render(env, `پاداش دعوت دوستانت رسید 🎁 — ${BRAND}`, {
+            head: "پاداش دعوت دوستانت رسید 🎁", sub: `${firstName(u.name)}، دوستت اولین ارائه‌اش را ساخت`,
+            paras: body.split(/(?<=[.!؟])\s+/).filter(Boolean).slice(0, 4), rows: [], cta: "دیدن حساب ←", color: "#0f766e",
+            foot: "این پیام فقط وقتی فرستاده می‌شود که دعوت یکی از دوستانت کامل شود.", preview: "دعوت دوستت شمرده شد.",
+          } as Parameters<typeof render>[2]);
+          await sendEmail(env, { to: u.email, ...m, tag: "referral-reward", idempotencyKey: `ref-${id}-${Date.now().toString(36)}`.slice(0, 250) });
+        })());
+      }
+    }
+    await Promise.allSettled(jobs);
   } catch { /* اعلان اختیاری است */ }
 }
 
@@ -42,7 +66,7 @@ export async function completeReferral(env: Env, uid: Uid): Promise<boolean> {
   const creditTo: Uid = typeof inviter === "number" ? await resolveUid(env, inviter) : inviter; // اعتبار روی حساب اصلی دعوت‌کننده
   const r = await rewardReferral(env, inviter, me, creditTo); // خطا ⇒ دعوت در انتظار می‌ماند و ارائه‌ی بعدی دوباره تلاش می‌کند
   await clearPendingReferral(env, me);
-  if (r) await notifyInviter(env, inviter, referralMsg(r));
+  if (r) await notifyInviter(env, inviter, referralMsg(r), true);
   return !!r;
 }
 

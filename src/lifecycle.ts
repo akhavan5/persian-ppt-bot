@@ -29,8 +29,10 @@ import { buyKbFor, miniappUrl } from "./deck-service";
 import { extraButtons } from "./extras";
 import { PLANS } from "./payment";
 import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES } from "./settings";
-import { botUsername, inviteBody, inviteLinkFor, inviteMarkup, invitePlatform } from "./invite-msg";
+import { botUsername, inviteBody, inviteLinkFor, inviteMarkup, invitePlatform, webInviteLink } from "./invite-msg";
+import type { RefId } from "./settings";
 import { sendWebPush, webPushEnabled, type WebPushMsg } from "./webpush";
+import { parseFcmCol, pushEnabled, sendPushToUser } from "./push";
 import { isBaleId } from "./bale-format";
 import { isRubikaId } from "./rubika-format";
 import { isEitaaId } from "./eitaa-format";
@@ -57,9 +59,9 @@ const CAP_TTL = 20 * 3600;
 interface Ctx { env: Env; now: number; nowSec: number; left: number; mailOn: boolean; botNames: Map<string, string> }
 const take = (c: Ctx, n: number) => { if (c.left < n) return false; c.left -= n; return true; };
 
-interface Contact { uid: string; name: string; email: string; tgId: number | null; push: boolean }
+interface Contact { uid: string; name: string; email: string; tgId: number | null; push: boolean; /** توکن‌های FCM اپ اندروید (تازه‌ترین اول) */ fcm: string[] }
 /** ستون‌های مشترک همه‌ی کارها: شناسه‌ی حساب وب در ستون u */
-interface Base { k: string; uid: string; usr: string | null; tg: string | null; banned: number | null; blk: number | null; push: number | null }
+interface Base { k: string; uid: string; usr: string | null; tg: string | null; banned: number | null; blk: number | null; push: number | null; fcm: string | null }
 type Mail = Parameters<typeof render>[2];
 interface Note {
   /** برچسب ایمیل در Resend */ tag: string;
@@ -68,8 +70,10 @@ interface Note {
   kb?: (c: Contact) => Promise<Record<string, unknown>>;
   /** ایمیل؛ undefined = این اعلان ایمیل ندارد */
   mail?: { subject: string; m: Mail };
-  /** اعلان وب؛ undefined = ندارد */
+  /** اعلان وب؛ undefined = ندارد. همین عنوان/متن/برچسب به اپ اندروید هم (FCM) می‌رود */
   push?: WebPushMsg;
+  /** آدرس https کامل برای اعلان اپ (باز شدن در مرورگر)؛ بدون آن اعلان اپ را باز می‌کند */
+  fcmUrl?: string;
   /** فقط از همین کانال بفرست (مثلاً ایمیل) و سراغ ربات/اعلان وب نرو */
   only?: "email";
   /** پیوست ایمیل (base64) */
@@ -87,7 +91,7 @@ function contactOf(c: Ctx, r: Base): Contact {
   try { u = r.usr ? (JSON.parse(r.usr) as WebUser) : null; } catch { /* بدون ایمیل */ }
   const n = Number(r.tg);
   const tgId = !r.blk && Number.isSafeInteger(n) && n > 0 && botReady(c.env, n) ? n : null;
-  return { uid: r.uid, name: u?.name ?? "", email: c.mailOn && u?.email ? u.email : "", tgId, push: !!r.push && webPushEnabled(c.env) };
+  return { uid: r.uid, name: u?.name ?? "", email: c.mailOn && u?.email ? u.email : "", tgId, push: !!r.push && webPushEnabled(c.env), fcm: pushEnabled(c.env) ? parseFcmCol(r.fcm) : [] };
 }
 
 /** اعلان به همه‌ی کانال‌های موجود می‌رسد (ربات + اعلان وب + ایمیل)؛ نوت‌های only:"email" فقط ایمیل. null = هیچ‌کدام نرسید یا بودجه تمام شد (skip) */
@@ -106,6 +110,12 @@ async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" 
     if (k.push && n.push && take(c, 4)) {
       tried = true;
       if ((await sendWebPush(c.env, k.uid, n.push)).ok > 0) ok ??= "push";
+    }
+    // اپ اندروید (FCM): فقط تازه‌ترین دستگاه؛ اپ با برچسب (tag) همتای محلی همین پیام را مهار می‌کند تا دوبار نمایش داده نشود
+    if (k.fcm.length && n.push && take(c, 3)) {
+      tried = true;
+      const r = await sendPushToUser(c.env, k.uid, { title: n.push.title, body: n.push.body, tag: n.push.tag, url: n.fcmUrl }, k.fcm, 1);
+      if (r.ok > 0) ok ??= "push";
     }
     if (k.email && n.mail && take(c, 1)) {
       tried = true;
@@ -135,7 +145,8 @@ const CONTACT = (u: string) => `
   (SELECT t.v FROM kv t WHERE t.k = 'w2tg:' || ${u}) AS tg,
   (SELECT 1 FROM kv n WHERE n.k = 'ban:' || ${u}) AS banned,
   (SELECT 1 FROM kv b WHERE b.k = 'blk:' || (SELECT t2.v FROM kv t2 WHERE t2.k = 'w2tg:' || ${u})) AS blk,
-  (SELECT 1 FROM kv p WHERE p.k = 'wps:' || ${u} AND (p.exp IS NULL OR p.exp > ?1)) AS push`;
+  (SELECT 1 FROM kv p WHERE p.k = 'wps:' || ${u} AND (p.exp IS NULL OR p.exp > ?1)) AS push,
+  (SELECT f.v FROM kv f WHERE f.k = 'ptu:' || ${u} AND (f.exp IS NULL OR f.exp > ?1)) AS fcm`;
 const notMarked = (key: string) => `NOT EXISTS (SELECT 1 FROM kv m WHERE m.k = ${key} AND (m.exp IS NULL OR m.exp > ?1))`;
 const notCapped = (u: string) => notMarked(`'lcl:' || ${u}`);
 /** ?2 = زمان فعلی (ms) */
@@ -175,7 +186,7 @@ async function runJob<R extends Base>(c: Ctx, job: Job<R>): Promise<number> {
     const ttl = job.doneTtl ?? DONE_TTL;
     if (r.banned) { marks.push(put(c, key, "0", ttl)); continue; }
     const k = contactOf(c, r);
-    if (!k.tgId && !k.push && !k.email) { marks.push(put(c, key, "0", ttl)); continue; }
+    if (!k.tgId && !k.push && !k.email && !k.fcm.length) { marks.push(put(c, key, "0", ttl)); continue; }
     let n: Note | null = null;
     try { n = await job.note(c, r, k); } catch (e) { console.error("lifecycle note", job.name, String(e).slice(0, 200)); }
     if (!n) { marks.push(put(c, key, "0", ttl)); continue; }
@@ -437,6 +448,7 @@ WHERE ${notMarked("'lc:buy:' || x.u")}
   -- فقط حساب‌هایی که حداقل یک کانال دارند؛ بقیه ردیف و سهمیه مصرف نکنند
   AND (EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || x.u)
     OR EXISTS (SELECT 1 FROM kv p WHERE p.k = 'wps:' || x.u AND (p.exp IS NULL OR p.exp > ?1))
+    OR EXISTS (SELECT 1 FROM kv f WHERE f.k = 'ptu:' || x.u AND (f.exp IS NULL OR f.exp > ?1))
     OR EXISTS (SELECT 1 FROM kv w WHERE w.k = 'wu:' || x.u AND COALESCE(json_extract(w.v,'$.email'), '') <> ''))
   AND ${notCapped("x.u")}
 ORDER BY json_extract(x.v,'$.l') DESC
@@ -558,15 +570,18 @@ const invJob: Job<ActRow> = {
 SELECT ${ACT_COLS()}
 ${ACT_FROM("json_extract(v,'$.n') BETWEEN 2 AND 6 AND json_extract(v,'$.l') <= ?4 AND json_extract(v,'$.l') > ?5")}
 WHERE ${notMarked("'lc:inv:' || x.u")}
-  AND (SELECT t.v FROM kv t WHERE t.k = 'w2tg:' || x.u) IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM kv r WHERE r.k = 'refc:' || (SELECT t3.v FROM kv t3 WHERE t3.k = 'w2tg:' || x.u))
+  AND (EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || x.u)
+    OR EXISTS (SELECT 1 FROM kv p WHERE p.k = 'wps:' || x.u AND (p.exp IS NULL OR p.exp > ?1))
+    OR EXISTS (SELECT 1 FROM kv f WHERE f.k = 'ptu:' || x.u AND (f.exp IS NULL OR f.exp > ?1))
+    OR EXISTS (SELECT 1 FROM kv w WHERE w.k = 'wu:' || x.u AND COALESCE(json_extract(w.v,'$.email'), '') <> ''))
+  AND NOT EXISTS (SELECT 1 FROM kv r WHERE r.k = 'refc:' || COALESCE((SELECT t3.v FROM kv t3 WHERE t3.k = 'w2tg:' || x.u), x.u))
   AND ${notCapped("x.u")}
 ORDER BY x.k LIMIT ?3`,
   extra: (now) => [now - 2 * HOUR, now - 72 * HOUR],
   marker: (r) => `lc:inv:${r.uid}`,
   note: async (c, r, k) => {
-    const id = k.tgId;
-    if (!id) return null;
+    // کاربر پیام‌رسان‌دار: لینک پلتفرم خودش؛ حساب فقط‌وب/اپ (بدون ربات): لینک سایت (?ref=)
+    const id: RefId = k.tgId ?? k.uid;
     // لینک اختصاصی پلتفرم خودِ کاربر (تلگرام/بله/روبیکا: ربات، ایتا: برنامک)؛ نام ربات‌ها یک‌بار در هر اجرا گرفته می‌شود
     const plat = invitePlatform(id);
     let name: string | undefined;
@@ -581,10 +596,20 @@ ORDER BY x.k LIMIT ?3`,
     }
     const link = await inviteLinkFor(c.env, id, name);
     if (!link) return null;
+    const siteLink = webInviteLink(c.env, id);
     return {
       tag: "invite-ask",
       tg: `🙌 اگر از ساخت ارائه راضی بودی، به دوستانت هم معرفی کن:\n\n${inviteBody(link, 0)}`,
       kb: async () => inviteMarkup(id, link),
+      mail: {
+        subject: `دوستانت را دعوت کن و اعتبار هدیه بگیر 🎁 — ${BRAND}`,
+        m: {
+          href: utm(c.env, "invite", "/"), head: "اگر راضی بودی، به دوستانت هم معرفی کن 🙌", sub: `${firstName(k.name)}، دعوت دوستان اعتبار هدیه دارد`,
+          paras: ["به ازای هر چند دوستی که با لینک تو وارد شوند و اولین ارائه‌شان را بسازند، اعتبار هدیه می‌گیری.", "لینک اختصاصی‌ات را برای دوستانت بفرست؛ دعوت وقتی شمرده می‌شود که دوستت اولین ارائه‌اش را بسازد."],
+          rows: [["لینک اختصاصی تو", siteLink]], cta: "دعوت دوستان ←", color: "#0f766e", foot: "این پیام فقط یک‌بار فرستاده می‌شود.", preview: "با دعوت دوستانت اعتبار هدیه بگیر.",
+        },
+      },
+      push: { title: "🙌 دوستانت را دعوت کن", body: "با هر دعوت موفق اعتبار هدیه بگیر؛ لینک اختصاصی‌ات در بخش «حساب» است.", url: "/", tag: "invite" },
     };
   },
 };
@@ -595,7 +620,7 @@ const rfnJob: Job<RfnRow> = {
   name: "rfn",
   sql: `
 SELECT x.k AS k, x.tgid AS tgid, ${CONTACT("x.u")}
-FROM (SELECT r.k AS k, substr(r.k, 6) AS tgid, (SELECT w.v FROM kv w WHERE w.k = 'tg2w:' || substr(r.k, 6)) AS u FROM kv r
+FROM (SELECT r.k AS k, substr(r.k, 6) AS tgid, COALESCE((SELECT w.v FROM kv w WHERE w.k = 'tg2w:' || substr(r.k, 6)), CASE WHEN substr(r.k, 6, 2) = 'w_' THEN substr(r.k, 6) END) AS u FROM kv r
       WHERE ${rng("r.k", "refp:")} AND r.exp - 2592000 <= ?4 AND r.exp - 2592000 > ?5) x
 WHERE x.u IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM kv a WHERE a.k = 'act:' || x.u)
@@ -605,7 +630,7 @@ ORDER BY x.k LIMIT ?3`,
   // exp ردیف refp: بر حسب ثانیه است و ۳۰ روز اعتبار دارد؛ پس «ساخته‌شده ۳ تا ۴۸ ساعت پیش» ⇔ exp - ۳۰ روز در این بازه
   extra: (now) => [Math.floor((now - 3 * HOUR) / 1000), Math.floor((now - 48 * HOUR) / 1000)],
   marker: (r) => `lc:rfn:${r.tgid}`,
-  note: (c) => ({
+  note: (c, _r, k) => ({
     tag: "referral-invitee",
     tg: [
       "🎁 <b>اولین ارائه‌ات یک پیام فاصله دارد</b>",
@@ -614,6 +639,15 @@ ORDER BY x.k LIMIT ?3`,
       "با ساخت اولین ارائه‌ات، دعوتِ دوستت هم شمرده می‌شود.",
     ].join("\n"),
     kb: startKb(c.env),
+    mail: {
+      subject: `اولین ارائه‌ات یک پیام فاصله دارد 🎁 — ${BRAND}`,
+      m: {
+        href: utm(c.env, "invitee", "/"), head: "اولین ارائه‌ات یک قدم فاصله دارد 🎁", sub: `${firstName(k.name)}، با لینک دعوت یکی از دوستانت وارد شدی`,
+        paras: ["موضوعت را بنویس (یا فایل Word/PDF یا لینک بده)؛ ۱ تا ۲ دقیقه بعد فایل PPTX فارسی‌ات آماده است.", "با ساخت اولین ارائه‌ات، دعوتِ دوستت هم شمرده می‌شود."],
+        rows: [], cta: "ساخت ارائه ←", color: "#0f766e", foot: "این پیام فقط یک‌بار فرستاده می‌شود.", preview: "اولین ارائه‌ات یک پیام فاصله دارد.",
+      },
+    },
+    push: { title: "🎁 اولین ارائه‌ات یک پیام فاصله دارد", body: "موضوعت را بنویس؛ با اولین ارائه‌ات، دعوتِ دوستت هم شمرده می‌شود.", url: "/", tag: "invitee" },
   }),
 };
 
@@ -687,6 +721,7 @@ WHERE ${notMarked("'lc:cf:' || x.u")}
   AND NOT EXISTS (SELECT 1 FROM kv n WHERE n.k = 'ban:' || x.u)
   AND (EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || x.u)
     OR EXISTS (SELECT 1 FROM kv p WHERE p.k = 'wps:' || x.u AND (p.exp IS NULL OR p.exp > ?1))
+    OR EXISTS (SELECT 1 FROM kv f WHERE f.k = 'ptu:' || x.u AND (f.exp IS NULL OR f.exp > ?1))
     OR EXISTS (SELECT 1 FROM kv w WHERE w.k = 'wu:' || x.u AND COALESCE(json_extract(w.v,'$.email'), '') <> ''))
   AND ${notCapped("x.u")}
 ORDER BY json_extract(x.v,'$.l') DESC
@@ -720,6 +755,7 @@ LIMIT MIN(?3, MAX(0, ?6 - (SELECT COUNT(*) FROM kv m WHERE ${rng("m.k", "lc:cf:"
         },
       },
       push: { title: "☕ یه قهوه مهمونم می‌کنی؟", body: "اگه از pptساز خوشت اومده، یه قهوه مهمونم کن 💛", url: "/support", tag: "coffee" },
+      fcmUrl: `${siteOf(c.env)}/support?utm_source=lifecycle&utm_medium=app&utm_campaign=coffee`,
     };
   },
 };
@@ -732,7 +768,7 @@ export async function runLifecycle(env: Env): Promise<Record<string, number>> {
     const now = Date.now();
     if (!inSendHours(now)) return sent;
     const mailOn = emailEnabled(env);
-    if (!mailOn && !env.TELEGRAM_BOT_TOKEN && !env.BALE_BOT_TOKEN && !env.SPLUS_BOT_TOKEN && !env.RUBIKA_BOT_TOKEN && !env.EITAA_APP_TOKEN && !webPushEnabled(env)) return sent;
+    if (!mailOn && !env.TELEGRAM_BOT_TOKEN && !env.BALE_BOT_TOKEN && !env.SPLUS_BOT_TOKEN && !env.RUBIKA_BOT_TOKEN && !env.EITAA_APP_TOKEN && !webPushEnabled(env) && !pushEnabled(env)) return sent;
     await env.KV.ready();
     const c: Ctx = { env, now, nowSec: Math.floor(now / 1000), left: SUBREQUEST_BUDGET, mailOn, botNames: new Map() };
     // پرداخت و هشدار اعتبار همیشه اول؛ بقیه هر ساعت با ترتیب چرخشی تا هیچ‌کدام گرسنه نماند

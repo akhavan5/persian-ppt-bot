@@ -15,6 +15,9 @@ import { FEEDBACK_CREDITS } from "./settings";
 import { esc as tgEsc, sendMessage } from "./telegram";
 import { BRAND, emailEnabled, sendEmail, siteOf } from "./email";
 import { inSendHours } from "./activation-reminder";
+import { isEitaaId } from "./eitaa-format";
+import { sendWebPush, webPushEnabled } from "./webpush";
+import { fcmTokensOf, pushEnabled, sendPushToUser } from "./push";
 import { faDate, firstName, render } from "./plan-notify";
 import { toFa } from "./util";
 import { PLANS } from "./payment";
@@ -86,8 +89,8 @@ export async function sendPlanFeedbackSurveys(env: Env): Promise<{ scanned: numb
   try {
     const now = Date.now();
     if (!inSendHours(now)) return { scanned, sent };
-    const mailOn = emailEnabled(env), tgOn = !!env.TELEGRAM_BOT_TOKEN;
-    if (!mailOn && !tgOn) return { scanned, sent };
+    const mailOn = emailEnabled(env), tgOn = !!env.TELEGRAM_BOT_TOKEN, pushOn = webPushEnabled(env), fcmOn = pushEnabled(env);
+    if (!mailOn && !tgOn && !pushOn && !fcmOn) return { scanned, sent };
     await env.KV.ready();
     const nowSec = Math.floor(now / 1000);
     const rows = (await env.DB.prepare(SQL).bind("sub:", "sub:" + MAXC, nowSec, now - DELAY, MAX_PER_RUN).all<Row>()).results ?? [];
@@ -108,16 +111,26 @@ export async function sendPlanFeedbackSurveys(env: Env): Promise<{ scanned: numb
       const tgN = uid.startsWith("w_") ? Number(r.tg) : Number(uid); // مدیرها (شناسه‌ی عددی) خودِ تلگرامشان هستند
       const tgId = Number.isSafeInteger(tgN) && tgN > 0 ? tgN : null;
       const to = mailOn && u?.email ? u.email : "";
-      if (r.banned || (!to && !(tgOn && tgId))) { mark(uid, exp, "0", DONE_TTL); continue; }
+      // اعلان وب و اپ اندروید: کاربر فقط‌وب/اپ هم نظرسنجی می‌گیرد (نظر را از همان فرمِ «ارسال نظر» سایت/اپ می‌نویسد)
+      const fcm = fcmOn ? await fcmTokensOf(env, uid) : [];
+      const webOn = pushOn && uid.startsWith("w_");
+      if (r.banned || (!to && !(tgOn && tgId) && !webOn && !fcm.length)) { mark(uid, exp, "0", DONE_TTL); continue; }
+      const pushMsg = { title: "نظرت درباره‌ی پلن چیست؟", body: "از چه چیزی راضی بودی و چه چیزی کم بود؟ در بخش «ارسال نظر» برایمان بنویس.", url: "/", tag: "survey" };
 
-      const [mailOk, tgOk] = await Promise.all([
+      // ایتا دکمه‌ی callback ندارد؛ برای ایتا دکمه‌ی برنامک گذاشته می‌شود که به یک خط لینک تبدیل می‌شود
+      const fbMarkup = isEitaaId(tgId ?? 0)
+        ? { inline_keyboard: [[{ text: "💬 ارسال نظر", web_app: { url: siteOf(env) } }]] }
+        : { inline_keyboard: [[{ text: "💬 ارسال نظر", callback_data: "fb:p" }]] };
+      const [mailOk, tgOk, webOk, fcmOk] = await Promise.all([
         to ? sendEmail(env, { to, ...feedbackEmail(env, u!.name, plan, exp, why), tag: "plan-feedback", idempotencyKey: `plan-fb-${uid}-${exp}`.slice(0, 256) }) : Promise.resolve(false),
         tgOn && tgId
-          ? sendMessage(env, tgId, feedbackTelegram(plan, exp, why, FEEDBACK_CREDITS > 0 && !r.rewarded), { reply_markup: { inline_keyboard: [[{ text: "💬 ارسال نظر", callback_data: "fb:p" }]] } })
+          ? sendMessage(env, tgId, feedbackTelegram(plan, exp, why, FEEDBACK_CREDITS > 0 && !r.rewarded), { reply_markup: fbMarkup })
               .then(() => true).catch((e) => { console.error("plan feedback telegram", String(e).slice(0, 200)); return false; })
           : Promise.resolve(false),
+        webOn ? sendWebPush(env, uid, pushMsg).then((x) => x.ok > 0).catch(() => false) : Promise.resolve(false),
+        fcm.length ? sendPushToUser(env, uid, pushMsg, fcm, 1).then((x) => x.ok > 0).catch(() => false) : Promise.resolve(false),
       ]);
-      if (mailOk || tgOk) { sent++; mark(uid, exp, "1", DONE_TTL); }
+      if (mailOk || tgOk || webOk || fcmOk) { sent++; mark(uid, exp, "1", DONE_TTL); }
       else if (to) mark(uid, exp, "r", RETRY_TTL); // ایمیل شکست خورد: دو ساعت بعد دوباره
       else mark(uid, exp, "0", DONE_TTL);          // فقط تلگرام بود و نرسید (معمولاً ربات را بلاک کرده)
     }
