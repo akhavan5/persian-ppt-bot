@@ -5,7 +5,7 @@
  * حساب، اعتبار و فایل‌ها همان حساب یکپارچه‌ی سایت است؛ پس ثبت از هر پلتفرمی در همه‌ی پلتفرم‌ها دیده می‌شود.
  */
 import type { Env } from "./env";
-import { emailOtpEnabled, getUserById, otpEnabled } from "./auth";
+import { emailOtpEnabled, getUserById, normMobile, otpEnabled } from "./auth";
 import { attachContact, contactRewardInfo, normContact, sendContactCode, type ContactKind } from "./profile";
 import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, getCredit } from "./settings";
 import { resolveUid } from "./link";
@@ -112,5 +112,25 @@ export async function handleProfileInput(env: Env, userId: number, chatId: numbe
   } else {
     await sendMessage(env, chatId, `✅ ${what} ثبت شد.` + (r.reward > 0 ? `\n\n🎁 <b>${toFa(String(r.reward))} اعتبار هدیه</b> به حسابت اضافه شد — ${esc(CONTACT_REWARD_NOTE)}\nموجودی: /credit` : ""));
   }
+  return true;
+}
+
+/** پیام «مخاطب» که کاربر از Mini App (دکمه‌ی ساخت ← requestContact تلگرام/بله) به ربات فرستاده؛ شماره‌ی خود کاربر بدون کد پیامکی ثبت می‌شود.
+ *  فقط وقتی user_id مخاطب با فرستنده یکی باشد (یعنی شماره‌ی خود فرستنده است، نه مخاطبِ فوروارد/دلخواه) و کاربر شماره‌ای نداشته باشد.
+ *  true = پیام مخاطب بود و همین‌جا تمام شد. هر خطا فقط لاگ می‌شود و ساخت ارائه به آن وابسته نیست. */
+export async function handleSharedContact(env: Env, msg: any, userId: number, chatId: number): Promise<boolean> {
+  const c = msg?.contact;
+  if (!c) return false;
+  if (Number(c.user_id) !== userId) return true; // شماره‌ی شخص دیگر: نادیده گرفته می‌شود
+  const mobile = normMobile(String(c.phone_number ?? "").replace(/[\s()-]/g, ""));
+  if (!mobile) return true;
+  const uid = await resolveUid(env, userId);
+  const user = typeof uid === "string" ? await getUserById(env, uid) : null;
+  if (!user || user.mobile) return true;
+  const r = await attachContact(env, user, "mobile", mobile, "", userId, true);
+  if ("error" in r) { console.error("shared contact", r.status, r.error.slice(0, 120)); return true; }
+  await sendMessage(env, chatId, r.merged
+    ? "✅ شماره‌ات ثبت شد و این حساب به حساب سایتِ دارنده‌ی آن وصل شد؛ اعتبار و فایل‌هایت در همه‌ی پلتفرم‌ها یکی است."
+    : "✅ شماره‌ات ثبت شد." + (r.reward > 0 ? `\n\n🎁 <b>${toFa(String(r.reward))} اعتبار هدیه</b> به حسابت اضافه شد.` : "")).catch(() => {});
   return true;
 }

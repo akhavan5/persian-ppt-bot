@@ -27,7 +27,7 @@ import { PLANS } from "./payment";
 import { inviteBody, inviteLinkFor, inviteMarkup } from "./invite-msg";
 import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
-import { handleProfileCallback, handleProfileInput, showProfile } from "./bot-profile";
+import { handleProfileCallback, handleProfileInput, handleSharedContact, showProfile } from "./bot-profile";
 import { notifyInviterJoined } from "./referral";
 import { SUPPORT_MAX_TEXT, supportBotAsk } from "./support-chat";
 import { hasBrowser } from "./browser-api";
@@ -711,6 +711,9 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (admin && !cmd && text && !msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleAdminInput(env, chatId, userId, text).catch((e) => { console.error("admin input", e); return false; }))) return;
 
   if (!msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleFeedback(env, msg, userId, uid, chatId, text, !!cmd).catch((e) => { console.error("feedback", e); return false; }))) return;
+
+  // شماره‌ی اشتراک‌گذاری‌شده از Mini App (requestContact تلگرام/بله): ثبت بدون OTP؛ خطایش جلوی ادامه‌ی پیام را نمی‌گیرد
+  if (msg.contact && (await handleSharedContact(env, msg, userId, chatId).catch((e) => { console.error("shared contact", e); return true; }))) return;
 
   // مرحله‌های ثبت موبایل/ایمیل (شماره/ایمیل ← کد OTP): پیام متنی بعدی کاربر ورودی همان مرحله است
   if (!msg.document && !msg.photo && !msg.voice && !msg.audio && (await handleProfileInput(env, userId, chatId, text, !!cmd).catch((e) => { console.error("profile input", e); return false; }))) return;

@@ -553,6 +553,11 @@ function makeBale(W) {
     initData: W.initData, startParam, since, on, main, back, confirmClose, haptic, cloud, download, paint, readClipboard, canPaste,
     canDownload: false,
     via: "miniapp", idBase: BALE_ID_BASE,
+    // درخواست شماره (اگر SDK بله requestContact داشته باشد؛ شماره را ربات بله از پیام مخاطب ثبت می‌کند). نداشت ⇒ بی‌صدا رد می‌شود.
+    requestContact(cb) {
+      let done = false; const fin = () => { if (!done) { done = true; cb(null); } };
+      try { if (typeof W.requestContact !== "function") return fin(); W.requestContact(fin); setTimeout(fin, 60000); } catch { fin(); }
+    },
     openTg(path) { openLink("https://t.me" + path); },
     openLink,
     // اشتراک‌گذاری: پیوند https://ble.ir/share (مستندات «پیوندهای بله»)؛ کاربر گفتگو را انتخاب می‌کند و پیش از ارسال می‌تواند متن را ویرایش کند
@@ -765,6 +770,13 @@ const TG = IS_EITAA ? makeEitaa(EW) : IS_BALE ? makeBale(BLW) : IS_SPLUS ? makeS
     openLink(url) { if (window.TelegramWebviewProxy || inIframe) post("web_app_open_link", { url, try_instant_view: false }); else window.open(url, "_blank"); },
     via: "miniapp", idBase: 0,
     share(link) { TG.openTg("/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")); },
+    // درخواست شماره: تلگرام (۶.۹+) پنجره‌ی اشتراک‌گذاری شماره را نشان می‌دهد و شماره را به‌صورت پیام «مخاطب» به ربات می‌فرستد (نه به صفحه)؛
+    // ثبتش را ربات انجام می‌دهد (bot-profile.ts ← handleSharedContact). cb(null) = پنجره بسته شد (تأیید یا رد)؛ جواب برای صفحه مهم نیست.
+    requestContact(cb) {
+      if (!since("6.9")) return cb(null);
+      let done = false; const fin = () => { if (!done) { done = true; cb(null); } };
+      on("phone_requested", fin); post("web_app_request_phone"); setTimeout(fin, 60000);
+    },
     askWrite() {},
   };
 })();
@@ -1238,9 +1250,10 @@ $("#go").onclick = async () => {
   const topic = $("#topic").value.trim();
   if (extracting) return genErr("صبر کن تا خواندن فایل یا لینک تمام شود.");
   if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
-  // ایتا: شماره‌ی موبایل (تأییدشده توسط خود ایتا) اختیاری است؛ هر بار که کاربر دکمه‌ی ساخت را می‌زند (تا وقتی شماره ثبت نشده) پرسیده می‌شود و در هر حالت (تأیید، رد، خطا، بی‌پاسخ) ارائه ساخته می‌شود.
+  // شماره‌ی موبایل اختیاری است (ایتا، تلگرام، بله): هر بار که کاربر دکمه‌ی ساخت را می‌زند (تا وقتی شماره ثبت نشده) پرسیده می‌شود و در هر حالت
+  // (تأیید، رد، خطا، بی‌پاسخ) ارائه ساخته می‌شود. ایتا شماره‌ی امضاشده را به صفحه می‌دهد؛ تلگرام/بله آن را به ربات می‌فرستند و ربات ثبتش می‌کند.
   // requestContact باید مستقیم از لمس کاربر صدا زده شود، پس قبل از هر await است.
-  if (IS_EITAA && me && me.user && !me.user.mobile) {
+  if (typeof TG.requestContact === "function" && me && me.user && !me.user.mobile) {
     await busy($("#go"), "…", () => new Promise((done) => {
       const t = setTimeout(done, 30000); // اگر پنجره بی‌پاسخ ماند، ساخت معطل نمی‌شود
       TG.requestContact(async (data) => {
@@ -1249,7 +1262,7 @@ $("#go").onclick = async () => {
             const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
             if (r.user) me.user = r.user;
             refreshMe(); toast(r.reward > 0 ? `🎁 ${fa(r.reward)} اعتبار هدیه گرفتی` : "شماره ثبت شد ✓");
-          }
+          } else if (!IS_EITAA) setTimeout(refreshMe, 3000); // تلگرام/بله: ربات شماره را ثبت می‌کند؛ کمی بعد وضعیت حساب تازه می‌شود
         } catch {}
         clearTimeout(t); done();
       });
