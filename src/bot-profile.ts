@@ -13,6 +13,7 @@ import { esc, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { siteLoginUrl } from "./deck-service";
 import { isBaleId } from "./bale-format";
+import { sendWelcomeOnce } from "./safir";
 
 type Btn = { text: string; callback_data?: string; url?: string };
 const kb = (rows: Btn[][]) => ({ reply_markup: { inline_keyboard: rows } });
@@ -159,6 +160,8 @@ export async function handleSharedContact(env: Env, msg: any, userId: number, ch
   if (!user || user.mobile) return true;
   const r = await attachContact(env, user, "mobile", mobile, "", userId, true);
   if ("error" in r) { console.error("shared contact", r.status, r.error.slice(0, 120)); return true; }
+  // پیام خوش‌آمد بله (سفیر؛ یک‌بار برای هر شماره، مثل ثبت با OTP و ایتا). اگر شماره بله ندارد یا خطا بخورد بی‌صدا رد می‌شود و جلوی ثبت را نمی‌گیرد.
+  if (!r.merged) await sendWelcomeOnce(env, mobile).catch(() => {});
   await sendMessage(env, chatId, r.merged
     ? "✅ شماره‌ات ثبت شد و این حساب به حساب سایتِ دارنده‌ی آن وصل شد؛ اعتبار و فایل‌هایت در همه‌ی پلتفرم‌ها یکی است."
     : "✅ شماره‌ات ثبت شد." + (r.reward > 0 ? `\n\n🎁 <b>${toFa(String(r.reward))} اعتبار هدیه</b> به حسابت اضافه شد.` : ""), REMOVE_KB).catch(() => {});
