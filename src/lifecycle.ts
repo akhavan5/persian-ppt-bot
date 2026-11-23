@@ -12,6 +12,8 @@
  *    pf   هدیه‌ی تکمیل پروفایل: یک‌بار، ۲۶ ساعت تا ۸ روز بعد از آخرین ارائه (نه در بدو ورود)، برای کسی که موبایل یا ایمیلش ثبت نیست و هدیه‌ی آن مورد را هنوز نگرفته؛ با ثبت و تایید هر مورد ۱ اعتبار (profile.ts).
  *    rfn  یادآوری نرم به دعوت‌شده‌ای که با لینک دوست آمده ولی ۳ تا ۴۸ ساعت بعد هنوز ارائه‌ای نساخته (دعوتِ دوستش به ارائه‌ی او بسته است).
  *
+ *    cf   «یک قهوه مهمانم کن»: یک‌بار برای کسی که حداقل ۲ ارائه ساخته و ۲۴ ساعت یا بیشتر از آخرین ارائه‌اش گذشته (قدیمی‌ها هم، با سقف هر اجرا و روزانه)؛ لینک صفحه‌ی /support.
+ *
  *  کانال: هر اعلان به «همه‌ی» کانال‌هایی که کاربر دارد می‌رسد: ربات (تلگرام/بله/روبیکا/ایتا) + اعلان وب (webpush.ts) + ایمیل؛ موفق = حداقل یک کانال رسید. استثنا: نوت‌های only:"email" (مثل fl با پیوست) فقط ایمیل‌اند.
  *  سقف: غیر از پیگیری پرداخت، هر کاربر در ۲۰ ساعت حداکثر یک اعلان از این ماژول می‌گیرد (lcl:<حساب>)؛ فقط ساعت ۹ تا ۲۱ تهران.
  *  سقف زیردرخواست: هر اجرای Worker در پلن رایگان ۵۰ زیردرخواست دارد؛ همه‌ی کارها یک «بودجه‌ی» مشترک دارند و اگر تمام شود، بقیه به اجرای ساعت بعد می‌رود.
@@ -671,6 +673,57 @@ ORDER BY x.k LIMIT ?3`,
   },
 };
 
+// کار ۹: «یک قهوه مهمانم کن» (حمایت از سازنده، صفحه‌ی /support). یک‌بار برای هر کسی که حداقل ۲ ارائه ساخته و ۲۴ ساعت یا بیشتر از آخرین ارائه‌اش گذشته
+// (بدون سقف بالا: کاربران قدیمی هم می‌گیرند؛ تازه‌ترین‌ها اول). مثل «buy» سقف هر اجرا و سقف روزانه دارد تا بک‌لاگ قدیمی‌ها در چند روز خالی شود نه یک‌جا؛
+// فقط حساب‌هایی که حداقل یک کانال دارند ردیف و سهمیه مصرف می‌کنند. سقف «۱ اعلان در ۲۰ ساعت» هم رعایت می‌شود. لحن دوستانه و دعوت است نه درخواست.
+const CF_PER_RUN = 5;
+const CF_PER_DAY = 60;
+const cfJob: Job<ActRow> = {
+  name: "cf", doneTtl: INV_TTL, maxRows: CF_PER_RUN,
+  sql: `
+SELECT ${ACT_COLS()}
+${ACT_FROM("json_extract(v,'$.n') >= 2 AND json_extract(v,'$.l') <= ?4")}
+WHERE ${notMarked("'lc:cf:' || x.u")}
+  AND NOT EXISTS (SELECT 1 FROM kv n WHERE n.k = 'ban:' || x.u)
+  AND (EXISTS (SELECT 1 FROM kv t WHERE t.k = 'w2tg:' || x.u)
+    OR EXISTS (SELECT 1 FROM kv p WHERE p.k = 'wps:' || x.u AND (p.exp IS NULL OR p.exp > ?1))
+    OR EXISTS (SELECT 1 FROM kv w WHERE w.k = 'wu:' || x.u AND COALESCE(json_extract(w.v,'$.email'), '') <> ''))
+  AND ${notCapped("x.u")}
+ORDER BY json_extract(x.v,'$.l') DESC
+-- سقف روزانه: تعداد پیام‌های واقعاً فرستاده‌شده (نشانگر «1») در ۲۴ ساعت گذشته از سقف کم می‌شود
+LIMIT MIN(?3, MAX(0, ?6 - (SELECT COUNT(*) FROM kv m WHERE ${rng("m.k", "lc:cf:")} AND m.v = '1' AND m.exp > ?5)))`,
+  // ?4 = ۲۴ ساعت پیش (بدون سقف بالا). ?5 = آستانه‌ی «امروز» روی exp نشانگرها (ثانیه)، ?6 = سقف روزانه
+  extra: (now) => [now - 24 * HOUR, Math.floor(now / 1000) + INV_TTL - 86_400, CF_PER_DAY],
+  marker: (r) => `lc:cf:${r.uid}`,
+  note: (c, r, k) => {
+    const url = utm(c.env, "coffee", "/support"); // ایمیل
+    const botUrl = `${siteOf(c.env)}/support?utm_source=lifecycle&utm_medium=bot&utm_campaign=coffee`; // ربات
+    return {
+      tag: "coffee",
+      tg: [
+        "☕ <b>یه قهوه مهمونم می‌کنی؟</b>",
+        "",
+        "دیدم چند تا ارائه با pptساز ساختی؛ امیدوارم کارت رو راه انداخته باشه 😊",
+        "اگه ازش خوشت اومده، یه قهوه مهمونم کن تا با انرژی بیشتر بهترش کنم ☕💛",
+        "",
+        "همین که ازش استفاده می‌کنی برام ارزش داره 🙏",
+        "",
+        tgEsc(botUrl),
+      ].join("\n"),
+      kb: async () => ({ reply_markup: { inline_keyboard: [[{ text: "☕ یه قهوه مهمونت می‌کنم", url: botUrl }]] } }),
+      mail: {
+        subject: `یه قهوه مهمونم می‌کنی؟ ☕ — ${BRAND}`,
+        m: {
+          href: url, head: "یه قهوه مهمونم می‌کنی؟ ☕", sub: `${firstName(k.name)}، چند تا ارائه با هم ساختیم 😊`,
+          paras: ["امیدوارم pptساز کارت رو راه انداخته باشه. اگه ازش خوشت اومده، یه قهوه مهمونم کن تا با انرژی بیشتر بهترش کنم 💛", "همین که ازش استفاده می‌کنی برام ارزش داره 🙏"],
+          rows: [], cta: "یه قهوه مهمونم کن ←", color: "#b45309", foot: "این پیام فقط یک‌بار فرستاده می‌شود.", preview: "اگه از pptساز خوشت اومده، یه قهوه مهمونم کن ☕",
+        },
+      },
+      push: { title: "☕ یه قهوه مهمونم می‌کنی؟", body: "اگه از pptساز خوشت اومده، یه قهوه مهمونم کن 💛", url: "/support", tag: "coffee" },
+    };
+  },
+};
+
 // ---------- اجرا ----------
 /** از cron ساعتی صدا زده می‌شود. */
 export async function runLifecycle(env: Env): Promise<Record<string, number>> {
@@ -683,7 +736,7 @@ export async function runLifecycle(env: Env): Promise<Record<string, number>> {
     await env.KV.ready();
     const c: Ctx = { env, now, nowSec: Math.floor(now / 1000), left: SUBREQUEST_BUDGET, mailOn, botNames: new Map() };
     // پرداخت و هشدار اعتبار همیشه اول؛ بقیه هر ساعت با ترتیب چرخشی تا هیچ‌کدام گرسنه نماند
-    const rest: Job<any>[] = [flJob, buyJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, pfJob, rfnJob];
+    const rest: Job<any>[] = [flJob, buyJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, pfJob, cfJob, rfnJob];
     const shift = Math.floor(now / HOUR) % rest.length;
     const order: Job<any>[] = [payJob, lowJob, ...rest.slice(shift), ...rest.slice(0, shift)];
     for (const job of order) {
