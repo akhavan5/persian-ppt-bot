@@ -1233,16 +1233,14 @@ const genErr = (msg, buy) => {
   $("#genErr").textContent = msg || ""; show($("#genErr"), !!msg); show($("#buyBox"), !!buy);
   if (msg) { toast(msg); try { $("#genErr").scrollIntoView({ block: "center", behavior: "smooth" }); } catch {} }
 };
-let askedMobile = false;
 $("#go").onclick = async () => {
   genErr("");
   const topic = $("#topic").value.trim();
   if (extracting) return genErr("صبر کن تا خواندن فایل یا لینک تمام شود.");
   if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
-  // ایتا: شماره‌ی موبایل (تأییدشده توسط خود ایتا) اختیاری است؛ یک‌بار در هر باز شدن برنامک پرسیده می‌شود و در هر حالت (تأیید، رد، خطا، بی‌پاسخ) ارائه ساخته می‌شود.
+  // ایتا: شماره‌ی موبایل (تأییدشده توسط خود ایتا) اختیاری است؛ هر بار که کاربر دکمه‌ی ساخت را می‌زند (تا وقتی شماره ثبت نشده) پرسیده می‌شود و در هر حالت (تأیید، رد، خطا، بی‌پاسخ) ارائه ساخته می‌شود.
   // requestContact باید مستقیم از لمس کاربر صدا زده شود، پس قبل از هر await است.
-  if (IS_EITAA && me && me.user && !me.user.mobile && !askedMobile) {
-    askedMobile = true;
+  if (IS_EITAA && me && me.user && !me.user.mobile) {
     await busy($("#go"), "…", () => new Promise((done) => {
       const t = setTimeout(done, 30000); // اگر پنجره بی‌پاسخ ماند، ساخت معطل نمی‌شود
       TG.requestContact(async (data) => {
