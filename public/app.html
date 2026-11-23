@@ -865,6 +865,36 @@ function eitaaTexts() {
 }
 // ایتا: درخواست دسترسی ارسال پیام؛ بعد از اجازه‌ی کاربر پیام خوش‌آمدگویی/اعلان‌ها می‌تواند ارسال شود
 function askEitaaWrite() { if (IS_EITAA) TG.askWrite(() => api("/api/miniapp/welcome", { method: "POST" }).catch(() => {})); }
+// درخواست شماره‌ی موبایل (اختیاری): فقط وقتی شماره ثبت نشده. باید مستقیم از لمس کاربر (قبل از هر await) صدا زده شود.
+// هر حالتی (تأیید، رد، خطا، بی‌پاسخ ۳۰ ثانیه) resolve می‌شود تا کار اصلی (ساخت/دانلود) هیچ‌وقت معطل نماند. هم‌زمان فقط یک پنجره باز می‌شود.
+let contactAsking = false;
+function askContact() {
+  if (contactAsking || typeof TG.requestContact !== "function" || !me || !me.user || me.user.mobile) return Promise.resolve();
+  contactAsking = true;
+  return new Promise((done) => {
+    let fin = false, tm = 0;
+    const end = () => { if (fin) return; fin = true; contactAsking = false; clearTimeout(tm); done(); };
+    tm = setTimeout(end, 30000);
+    try {
+      TG.requestContact(async (data) => {
+        try {
+          if (data) {
+            const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
+            if (r.user) me.user = r.user;
+            refreshMe(); toast(r.reward > 0 ? `🎁 ${fa(r.reward)} اعتبار هدیه گرفتی` : "شماره ثبت شد ✓");
+          } else if (!IS_EITAA) setTimeout(refreshMe, 3000); // تلگرام/بله: ربات شماره را ثبت می‌کند؛ کمی بعد وضعیت حساب تازه می‌شود
+        } catch {}
+        end();
+      });
+    } catch { end(); }
+  });
+}
+// ایتا: اول شماره (اگر ثبت نشده)، بعد دسترسی ارسال پیام؛ پشت‌سرهم و نه هم‌زمان تا دو پنجره روی هم نیفتند
+async function askEitaa() {
+  if (!IS_EITAA) return;
+  await askContact();
+  askEitaaWrite();
+}
 async function boot() {
   show($("#fail"), false);
   if (!TG.initData) { show($("#boot"), false); show($("#outside"), true); return; }
@@ -1253,21 +1283,7 @@ $("#go").onclick = async () => {
   // شماره‌ی موبایل اختیاری است (ایتا، تلگرام، بله): هر بار که کاربر دکمه‌ی ساخت را می‌زند (تا وقتی شماره ثبت نشده) پرسیده می‌شود و در هر حالت
   // (تأیید، رد، خطا، بی‌پاسخ) ارائه ساخته می‌شود. ایتا شماره‌ی امضاشده را به صفحه می‌دهد؛ تلگرام/بله آن را به ربات می‌فرستند و ربات ثبتش می‌کند.
   // requestContact باید مستقیم از لمس کاربر صدا زده شود، پس قبل از هر await است.
-  if (typeof TG.requestContact === "function" && me && me.user && !me.user.mobile) {
-    await busy($("#go"), "…", () => new Promise((done) => {
-      const t = setTimeout(done, 30000); // اگر پنجره بی‌پاسخ ماند، ساخت معطل نمی‌شود
-      TG.requestContact(async (data) => {
-        try {
-          if (data) {
-            const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
-            if (r.user) me.user = r.user;
-            refreshMe(); toast(r.reward > 0 ? `🎁 ${fa(r.reward)} اعتبار هدیه گرفتی` : "شماره ثبت شد ✓");
-          } else if (!IS_EITAA) setTimeout(refreshMe, 3000); // تلگرام/بله: ربات شماره را ثبت می‌کند؛ کمی بعد وضعیت حساب تازه می‌شود
-        } catch {}
-        clearTimeout(t); done();
-      });
-    }));
-  }
+  if (me && me.user && !me.user.mobile) await busy($("#go"), "…", () => askContact());
   try {
     askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، همین‌جا دوباره پرسیده می‌شود (ساخت منتظرش نمی‌ماند)
     const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: {
@@ -1498,8 +1514,8 @@ async function sendToChat(id, btn, kind = "send") {
 
 // دانلود مستقیم با web_app_request_file_download: سرور لینک ۵ دقیقه‌ای می‌دهد (تلگرام هدر Authorization نمی‌فرستد)
 async function dlFile(id, btn) {
-  askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، موقع دانلود هم پرسیده می‌شود
   return busy(btn, "در حال آماده‌سازی…", async () => {
+    await askEitaa(); // ایتا: شماره (اگر ثبت نشده) و سپس دسترسی ارسال پیام (اگر هنوز نداده)
     for (let i = 0; i < 10; i++) {
       try {
         const d = await api("/api/miniapp/dl", { method: "POST", body: { id } });
@@ -1515,8 +1531,8 @@ async function dlFile(id, btn) {
 
 // PDF در ایتا: سرور PDF را می‌سازد (یا از کش می‌خواند) و لینک ۵ دقیقه‌ای می‌دهد؛ دانلود مثل PPTX با downloadFile
 async function dlPdf(id, btn) {
-  askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، موقع دانلود هم پرسیده می‌شود
   return busy(btn, "در حال ساخت PDF…", async () => {
+    await askEitaa(); // ایتا: شماره (اگر ثبت نشده) و سپس دسترسی ارسال پیام (اگر هنوز نداده)
     for (let i = 0; i < 10; i++) {
       try {
         const d = await api("/api/miniapp/pdf-dl", { method: "POST", body: { id } });
@@ -1531,8 +1547,8 @@ async function dlPdf(id, btn) {
 
 // مشاهده‌ی PDF در ایتا: همان لینک ۵ دقیقه‌ای ولی با view:true (inline)؛ در مرورگر بیرونی (openLink) باز و نمایش داده می‌شود. PDF ساخته‌شده ۲۴ ساعت کش است، پس دفعه‌ی بعد ساخته نمی‌شود.
 async function viewPdf(id, btn) {
-  askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، موقع دانلود هم پرسیده می‌شود
   return busy(btn, "در حال آماده‌سازی PDF…", async () => {
+    await askEitaa(); // ایتا: شماره (اگر ثبت نشده) و سپس دسترسی ارسال پیام (اگر هنوز نداده)
     for (let i = 0; i < 10; i++) {
       try {
         const d = await api("/api/miniapp/pdf-dl", { method: "POST", body: { id, view: true } });
