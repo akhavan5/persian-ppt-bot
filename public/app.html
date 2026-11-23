@@ -1233,11 +1233,30 @@ const genErr = (msg, buy) => {
   $("#genErr").textContent = msg || ""; show($("#genErr"), !!msg); show($("#buyBox"), !!buy);
   if (msg) { toast(msg); try { $("#genErr").scrollIntoView({ block: "center", behavior: "smooth" }); } catch {} }
 };
+let askedMobile = false;
 $("#go").onclick = async () => {
   genErr("");
   const topic = $("#topic").value.trim();
   if (extracting) return genErr("صبر کن تا خواندن فایل یا لینک تمام شود.");
   if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
+  // ایتا: شماره‌ی موبایل (تأییدشده توسط خود ایتا) اختیاری است؛ یک‌بار در هر باز شدن برنامک پرسیده می‌شود و در هر حالت (تأیید، رد، خطا، بی‌پاسخ) ارائه ساخته می‌شود.
+  // requestContact باید مستقیم از لمس کاربر صدا زده شود، پس قبل از هر await است.
+  if (IS_EITAA && me && me.user && !me.user.mobile && !askedMobile) {
+    askedMobile = true;
+    await busy($("#go"), "…", () => new Promise((done) => {
+      const t = setTimeout(done, 30000); // اگر پنجره بی‌پاسخ ماند، ساخت معطل نمی‌شود
+      TG.requestContact(async (data) => {
+        try {
+          if (data) {
+            const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
+            if (r.user) me.user = r.user;
+            refreshMe(); toast(r.reward > 0 ? `🎁 ${fa(r.reward)} اعتبار هدیه گرفتی` : "شماره ثبت شد ✓");
+          }
+        } catch {}
+        clearTimeout(t); done();
+      });
+    }));
+  }
   try {
     askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، همین‌جا دوباره پرسیده می‌شود (ساخت منتظرش نمی‌ماند)
     const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: {
