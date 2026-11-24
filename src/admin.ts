@@ -29,6 +29,7 @@ import {
 import { webPushCounts, webPushEnabled, type WebPushMsg } from "./webpush";
 import { STORE_LABEL, osTag } from "./app-ua";
 import { APPVER_HELP, STORES, STORE_NAMES, appVerText, applyAppVer, getAppVersions, isStoreId, type StoreId } from "./app-version";
+import { tavilyKeys } from "./tavily";
 
 /** دستورهای متنی مدیر: ورود به پنل و لغو ورودی در انتظار؛ بقیه‌ی کارها (از جمله نسخه‌ی اپ و اعلان به اپ) با دکمه‌های پنل انجام می‌شود.
  *  دستورهای قدیمی /appver و /apppush هم هنوز کار می‌کنند ولی زیرشان دکمه‌ی «باز کردن در پنل» هست. */
@@ -994,7 +995,7 @@ async function systemScreen(env: Env): Promise<Screen> {
       `🤖 مدل‌ها (${fa(models.length)}): ${models.slice(0, 6).map((m) => esc(m.name) + (m.extra ? (m.free ? "🆓" : "⭐") : "")).join("، ") || "⚠️ هیچ مدلی تنظیم نشده"}${models.length > 6 ? "…" : ""}\n` +
       `${ok(hasKey(env))} کلید مدل زبانی · ${ok(env.EXTRA_LLM_API_KEY && env.EXTRA_LLM_BASE_URL)} ارائه‌دهنده‌ی دوم · ${ok(customN)} CUSTOM_LLM_MODELS (${fa(customN)} مدل${env.CUSTOM_LLM_MODELS && !customN ? "؛ ⚠️ JSON/مدل نامعتبر، لاگ را ببین" : ""})\n` +
       `${ok(env.AI)} تولید تصویر (Workers AI) · ${ok(env.PEXELS_API_KEY)} Pexels\n` +
-      `${ok((env.WEB_SEARCH ?? "").toLowerCase() !== "off")} جستجوی وب · ${ok(env.TAVILY_API_KEY)} Tavily\n` +
+      `${ok((env.WEB_SEARCH ?? "").toLowerCase() !== "off")} جستجوی وب · ${ok(tavilyKeys(env).length)} Tavily${tavilyKeys(env).length > 1 ? ` (${fa(tavilyKeys(env).length)} کلید)` : ""}\n` +
       `${ok(env.OCR_SPACE_API_KEY)} OCR.space · ${ok(env.OCR_WORKFLOW)} OCR تلگرام · ${ok(env.WEB_OCR_WORKFLOW)} OCR وب\n` +
       `${ok(hasBrowser(env))} ساخت PDF · ${ok(payEnabled(env))} درگاه پرداخت · ${ok(otpEnabled(env))} پیامک · ${ok(googleEnabled(env))} ورود گوگل\n\n` +
       `👮 مدیرها: ${fa(admins)} · 🔒 فهرست مجاز: ${restricted ? fa(restricted) + " نفر" : "همه آزادند"}\n` +

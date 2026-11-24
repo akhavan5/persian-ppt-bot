@@ -208,7 +208,7 @@ export interface Env {
   SMS_API_URL?: string;
   /** اختیاری: نوع قالب پیامک: کد=0، کد ورود=1 (پیش‌فرض)، کد تایید=2، رمز=3، رمز ورود=4 */
   SMS_TEMPLATE?: string;
-  /** جستجوی آنلاین پشت‌صحنه (رایگان: ویکی‌پدیا + DuckDuckGo): WEB_SEARCH=off خاموش می‌کند؛ TAVILY_API_KEY اختیاری (سطح رایگان tavily.com) */
+  /** جستجوی آنلاین پشت‌صحنه (رایگان: ویکی‌پدیا + DuckDuckGo): WEB_SEARCH=off خاموش می‌کند؛ TAVILY_API_KEY اختیاری (سطح رایگان tavily.com)؛ چند کلید هم مجاز است (هر خط یا «;» یا «,»): با پر شدن سهمیه‌ی یک کلید خودکار کلید بعدی استفاده می‌شود (tavily.ts) */
   WEB_SEARCH?: string;
   TAVILY_API_KEY?: string;
   /** ساخت ارائه از روی لینک (Tavily Extract): با داشتن TAVILY_API_KEY فعال است؛ LINK_SOURCE=off خاموش می‌کند.

@@ -10,7 +10,6 @@ import {
   checkOtp, emailOtpEnabled, getUserByEmail, getUserByMobile, normEmail, normMobile, otpEnabled, saveWebUser, sendEmailOtp, sendOtp, validEmail, type WebUser,
 } from "./auth";
 import { CONTACT_CREDITS, claimContactReward, hasContactReward, type ContactKind } from "./settings";
-import { getLinkedTg } from "./link";
 import { isEitaaId } from "./eitaa-format";
 import { getLinkedTg, linkBotToAccount } from "./link";
 

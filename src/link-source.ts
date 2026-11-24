@@ -11,12 +11,13 @@
 import type { Env } from "./env";
 import { hitLimit } from "./auth";
 import { today, type Uid } from "./settings";
+import { tavilyEnabled, tavilyFetch } from "./tavily";
 
 export const MAX_LINK_CHARS = 120000; // مثل MAX_SOURCE_CHARS در deck-service
 const MIN_USABLE = 300; // کمتر از این برای basic ⇒ یک بار advanced
 const MIN_TEXT = 30; // کمتر از این یعنی صفحه متنی ندارد (beginDeck هم همین را می‌خواهد)
 
-export const linkEnabled = (env: Env) => !!(env.TAVILY_API_KEY ?? "").trim() && !/^(off|0|false|no)$/i.test((env.LINK_SOURCE ?? "").trim());
+export const linkEnabled = (env: Env) => tavilyEnabled(env) && !/^(off|0|false|no)$/i.test((env.LINK_SOURCE ?? "").trim());
 
 const dailyCap = (env: Env) => Math.max(1, Math.floor(Number(env.LINK_DAILY_LIMIT) || 10));
 export const linkCapNote = (env: Env) => `هر کاربر روزی حداکثر ${dailyCap(env).toLocaleString("fa-IR")} لینک می‌تواند بخواند.`;
@@ -69,12 +70,7 @@ type Pull = { text: string } | { error: string; fatal?: boolean };
 async function extractOnce(env: Env, url: string, depth: "basic" | "advanced", timeoutMs: number): Promise<Pull> {
   let r: Response;
   try {
-    r = await fetch("https://api.tavily.com/extract", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${env.TAVILY_API_KEY}` },
-      body: JSON.stringify({ urls: [url], extract_depth: depth, format: "markdown", include_images: false }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    r = await tavilyFetch(env, "extract", { urls: [url], extract_depth: depth, format: "markdown", include_images: false }, timeoutMs); // چند کلید: با پر شدن سهمیه، کلید بعدی (tavily.ts)
   } catch (e) {
     console.error("tavily extract", depth, e instanceof Error ? e.message : e);
     return { error: "خواندن لینک بیش از حد طول کشید؛ کمی بعد دوباره امتحان کن." };

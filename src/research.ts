@@ -13,6 +13,7 @@
  */
 import type { Env } from "./env";
 import { askQuick } from "./llm";
+import { tavilyEnabled, tavilyFetch } from "./tavily";
 
 interface Hit { src: string; title: string; text: string; /** موتور جستجو: wiki-fa | wiki-en | ddg | tavily */ via: string }
 
@@ -160,13 +161,9 @@ async function duckduckgo(query: string, limit: number): Promise<Hit[]> {
 
 /** Tavily (اختیاری، سطح رایگان) */
 async function tavily(env: Env, query: string, limit: number, sink?: FoundImage[]): Promise<Hit[]> {
-  if (!env.TAVILY_API_KEY) return [];
-  const r = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${env.TAVILY_API_KEY}` },
-    body: JSON.stringify({ query: query.slice(0, 380), max_results: limit, search_depth: "basic", ...(sink ? { include_images: true, include_image_descriptions: true } : {}) }),
-    signal: AbortSignal.timeout(TAVILY_TIMEOUT_MS),
-  });
+  if (!tavilyEnabled(env)) return [];
+  // چند کلید: اگر سهمیه‌ی یک کلید پر شد خودکار با کلید بعدی تکرار می‌شود (tavily.ts)
+  const r = await tavilyFetch(env, "search", { query: query.slice(0, 380), max_results: limit, search_depth: "basic", ...(sink ? { include_images: true, include_image_descriptions: true } : {}) }, TAVILY_TIMEOUT_MS);
   if (!r.ok) throw new Error(`tavily ${r.status}`);
   const j = (await r.json()) as any;
   if (sink && Array.isArray(j?.images)) { // تصویرها یا رشته‌ی نشانی‌اند یا {url, description}
@@ -211,7 +208,7 @@ async function researchNotes(env: Env, q: string, sink: FoundImage[]): Promise<s
   try {
     // هر سه منبع (Tavily، ویکی‌پدیا، DuckDuckGo) موازی اجرا می‌شوند. اگر کلید Tavily تنظیم باشد، Tavily اولویت دارد
     // (۸ نتیجه، اولین نوبت و بدون فیلتر)؛ نتیجه‌های ویکی/DDG همیشه از فیلتر ارتباط رد می‌شوند.
-    const useTav = !!env.TAVILY_API_KEY;
+    const useTav = tavilyEnabled(env);
     const [wfa, wen, ddg, tav] = await Promise.all([
       WIKI_NOTES ? safe("wiki-fa", wikipedia("fa", q, 3)) : Promise.resolve([] as Hit[]),
       WIKI_NOTES && /[A-Za-z]{3}/.test(q) ? safe("wiki-en", wikipedia("en", q, 2)) : Promise.resolve([] as Hit[]), // پرسش کاملاً فارسی در ویکی انگلیسی نتیجه‌ی مفیدی ندارد
