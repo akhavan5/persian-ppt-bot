@@ -3,6 +3,7 @@
 import type { Env } from "./env";
 import { toFa } from "./util";
 import { BRAND, sendEmail, siteOf } from "./email";
+import { mailUrl } from "./email-blocks";
 
 const FONT = "Vazirmatn,Tahoma,'Segoe UI',Arial,sans-serif";
 const BLUE = "#2563eb", INK = "#0f1b33", MUTED = "#5b6b86", SOFT = "#eef4ff";
@@ -19,8 +20,8 @@ export function otpEmail(env: Env, code: string): { subject: string; html: strin
 <tr><td dir="rtl" align="center" style="padding:28px 12px;">
   <table dir="rtl" role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:480px;">
     <tr><td dir="rtl" align="center" bgcolor="${BLUE}" style="background:${BLUE};border-radius:20px 20px 0 0;padding:26px 20px;">
-      <img src="${site}/icon-192.png" width="52" height="52" alt="${BRAND}" style="display:block;border:0;border-radius:13px;margin:0 auto 10px;">
-      <div style="font:700 18px/1.7 ${FONT};color:#ffffff;">${BRAND}</div>
+      <a href="${mailUrl(env, "/", "otp", "header")}" target="_blank" style="text-decoration:none;"><img src="${site}/icon-192.png" width="52" height="52" alt="${BRAND}" style="display:block;border:0;border-radius:13px;margin:0 auto 10px;"></a>
+      <div style="font:700 18px/1.7 ${FONT};"><a href="${mailUrl(env, "/", "otp", "header")}" target="_blank" style="color:#ffffff;text-decoration:none;">${BRAND}</a></div>
     </td></tr>
     <tr><td dir="rtl" bgcolor="#ffffff" align="center" style="background:#ffffff;border-radius:0 0 20px 20px;padding:28px 24px 30px;font-family:${FONT};text-align:center;">
       <div style="font:700 16px/1.9 ${FONT};color:${INK};">کد ورود یا ثبت‌نام شما</div>
@@ -29,13 +30,14 @@ export function otpEmail(env: Env, code: string): { subject: string; html: strin
         <td align="center" bgcolor="${SOFT}" style="background:${SOFT};border:1px solid #cfe0ff;border-radius:14px;padding:14px 30px;direction:ltr;font:800 34px/1.3 'Courier New',Consolas,monospace;letter-spacing:8px;color:${BLUE};">${code}</td>
       </tr></table>
       <div style="font:400 12.5px/2 ${FONT};color:${MUTED};padding-top:18px;">کد ۵ دقیقه اعتبار دارد و فقط یک‌بار قابل استفاده است.<br>اگر این درخواست از طرف تو نبوده، این ایمیل را نادیده بگیر؛ هیچ اتفاقی نمی‌افتد.</div>
+      <div style="font:400 12px/2 ${FONT};color:#8a97ad;padding-top:14px;">ساخت ارائه‌ی فارسی با هوش مصنوعی · <a href="${mailUrl(env, "/", "otp", "footer")}" target="_blank" style="color:${BLUE};text-decoration:none;font-weight:700;">${siteOf(env).replace(/^https?:\/\//, "")}</a></div>
     </td></tr>
   </table>
 </td></tr>
 </table>
 </body>
 </html>`;
-  const text = [`کد ورود شما به ${BRAND}: ${code}`, "", "این کد ۵ دقیقه اعتبار دارد و فقط یک‌بار قابل استفاده است.", "اگر این درخواست از طرف تو نبوده، این ایمیل را نادیده بگیر."].join("\n");
+  const text = [`کد ورود شما به ${BRAND}: ${code}`, "", "این کد ۵ دقیقه اعتبار دارد و فقط یک‌بار قابل استفاده است.", "اگر این درخواست از طرف تو نبوده، این ایمیل را نادیده بگیر.", "", `${BRAND}: ${mailUrl(env, "/", "otp", "footer")}`].join("\n");
   return { subject, html, text };
 }
 

@@ -46,7 +46,8 @@ async function notifyInviter(env: Env, inviter: RefId, html: string, email = fal
           if (!u?.email) return;
           const m = render(env, `پاداش دعوت دوستانت رسید 🎁 — ${BRAND}`, {
             head: "پاداش دعوت دوستانت رسید 🎁", sub: `${firstName(u.name)}، دوستت اولین ارائه‌اش را ساخت`,
-            paras: body.split(/(?<=[.!؟])\s+/).filter(Boolean).slice(0, 4), rows: [], cta: "دیدن حساب ←", color: "#0f766e",
+            paras: body.split(/(?<=[.!؟])\s+/).filter(Boolean).slice(0, 4), rows: [], cta: "دیدن حساب ←", color: "#0f766e", campaign: "referral-reward", promo: "features",
+            tip: "اعتبار هدیه را می‌توانی برای ساخت ارائه، پوستر، جزوه یا پادکست خرج کنی؛ و با دعوت دوستان بیشترش کنی.",
             foot: "این پیام فقط وقتی فرستاده می‌شود که دعوت یکی از دوستانت کامل شود.", preview: "دعوت دوستت شمرده شد.",
           } as Parameters<typeof render>[2]);
           await sendEmail(env, { to: u.email, ...m, tag: "referral-reward", idempotencyKey: `ref-${id}-${Date.now().toString(36)}`.slice(0, 250) });

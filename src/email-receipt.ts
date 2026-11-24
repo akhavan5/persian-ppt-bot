@@ -6,6 +6,7 @@ import { toFa } from "./util";
 import { getLinkedTg } from "./link";
 import { esc as tgEsc, sendMessage } from "./telegram";
 import { BRAND, sendEmail, siteOf } from "./email";
+import { featuresCard, featuresText, ghostButton, linkBar, linksText, mailUrl, tipBox } from "./email-blocks";
 import { sendWebPush } from "./webpush";
 import { sendPushToUser } from "./push";
 
@@ -65,7 +66,7 @@ export function receiptEmail(env: Env, name: string, r: Receipt): { subject: str
 <tr><td dir="rtl" align="center" style="padding:28px 12px;">
   <table dir="rtl" role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
     <tr><td dir="rtl" align="center" bgcolor="${BLUE}" style="background:${BLUE};border-radius:20px 20px 0 0;padding:28px 20px;">
-      <img src="${site}/icon-192.png" width="52" height="52" alt="${BRAND}" style="display:block;border:0;border-radius:13px;margin:0 auto 10px;">
+      <a href="${mailUrl(env, "/", "receipt", "header")}" target="_blank" style="text-decoration:none;"><img src="${site}/icon-192.png" width="52" height="52" alt="${BRAND}" style="display:block;border:0;border-radius:13px;margin:0 auto 10px;"></a>
       <div style="font:700 21px/1.6 ${FONT};color:#ffffff;">پرداخت موفق ✅</div>
       <div style="font:400 13.5px/1.9 ${FONT};color:#dbeafe;">${esc(first)}، ممنون از خریدت؛ پلن ${esc(r.planName)} فعال شد.</div>
     </td></tr>
@@ -75,12 +76,15 @@ export function receiptEmail(env: Env, name: string, r: Receipt): { subject: str
       </table>
       <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td dir="rtl" align="center" style="padding:24px 0 10px;">
         <table dir="rtl" role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td dir="rtl" align="center" bgcolor="${BLUE}" style="border-radius:13px;background:${BLUE};"><a href="${site}/" target="_blank" style="display:inline-block;padding:13px 34px;font:700 15px/1.4 ${FONT};color:#ffffff;text-decoration:none;border-radius:13px;">ساخت ارائه ←</a></td>
+          <td dir="rtl" align="center" bgcolor="${BLUE}" style="border-radius:13px;background:${BLUE};"><a href="${mailUrl(env, "/", "receipt", "cta")}" target="_blank" style="display:inline-block;padding:13px 34px;font:700 15px/1.4 ${FONT};color:#ffffff;text-decoration:none;border-radius:13px;">همین حالا یک ارائه بساز ←</a></td>
         </tr></table>
       </td></tr></table>
+      ${tipBox("اعتبارت فقط برای ارائه نیست: از هر ارائه می‌توانی پوستر، جزوه‌ی Word، اسلاید صوتی و پادکست هم بسازی؛ هرکدام ۱ اعتبار.")}
+      ${featuresCard(env, "receipt", "با اعتبار تازه‌ات این‌ها را امتحان کن")}
     </td></tr>
-    <tr><td dir="rtl" bgcolor="${SOFT}" align="center" style="background:${SOFT};border-radius:0 0 20px 20px;padding:16px 22px;font:400 12px/2 ${FONT};color:${MUTED};">
+    <tr><td dir="rtl" bgcolor="${SOFT}" align="center" style="background:${SOFT};border-radius:0 0 20px 20px;padding:16px 22px 18px;font:400 12px/2 ${FONT};color:${MUTED};">
       این ایمیل رسید خرید توست؛ آن را نگه دار. برای پیگیری یا هر سؤالی، همین ایمیل را پاسخ بده.
+      ${linkBar(env, "receipt")}
     </td></tr>
   </table>
 </td></tr>
@@ -92,8 +96,12 @@ export function receiptEmail(env: Env, name: string, r: Receipt): { subject: str
     "",
     ...rows.map(([k, v]) => `${k}: ${v}`),
     "",
-    `شروع: ${site}/`,
+    `شروع: ${mailUrl(env, "/", "receipt", "cta")}`,
+    ...featuresText(env, "receipt"),
+    "",
     "سؤالی داشتی؟ همین ایمیل را پاسخ بده.",
+    "",
+    linksText(env, "receipt"),
   ].join("\n");
   return { subject, html, text };
 }

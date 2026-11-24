@@ -17,6 +17,7 @@ import { esc as tgEsc, sendMessage } from "./telegram";
 import { BRAND, emailEnabled, sendEmail } from "./email";
 import { miniappUrl } from "./deck-service";
 import { firstName, render } from "./plan-notify";
+import { mailUrl } from "./email-blocks";
 import { toFa } from "./util";
 import { parseDevices, sendWebPushDevices, webPushEnabled, type WebPushMsg } from "./webpush";
 import { parseFcmCol, pushEnabled, sendPushToUser } from "./push";
@@ -38,7 +39,10 @@ export const inSendHours = (t: number) => { const h = tehranHour(t); return h >=
 
 export function activationEmail(env: Env, name: string, credits: number) {
   const n = toFa(String(credits));
-  return render(env, `${n} ارائه‌ی رایگان هنوز منتظر توست — ${BRAND}`, {
+  return render(env, `🎁 ${n} ارائه‌ی رایگانت هنوز دست‌نخورده مانده — ${BRAND}`, {
+    campaign: "activation-24h", promo: "features",
+    tip: "موضوع به ذهنت نمی‌رسد؟ فقط بنویس «معرفی هوش مصنوعی» و ببین ۲ دقیقه بعد چه تحویل می‌گیری.",
+    cta2: { text: "راهنما و نمونه‌ها", href: mailUrl(env, "/blog", "activation-24h", "cta") },
     head: "اولین ارائه‌ات منتظر توست 🎁",
     sub: `${firstName(name)}، ${n} اعتبار رایگان هنوز دست‌نخورده در حسابت مانده است.`,
     paras: [
@@ -77,7 +81,10 @@ export const pickTopic = (uid: string) => SAMPLE_TOPICS[[...uid].reduce((a, c) =
 
 export function activationEmail2(env: Env, name: string, credits: number, topic: string) {
   const n = toFa(String(credits));
-  return render(env, `یک موضوع آماده برای اولین ارائه‌ات — ${BRAND}`, {
+  return render(env, `💡 «${topic}»؛ موضوع آماده‌ی اولین ارائه‌ات — ${BRAND}`, {
+    campaign: "activation-5d", promo: "features",
+    tip: "موضوع را کپی کن، در سایت یا ربات بفرست و ۱ تا ۲ دقیقه بعد فایل PPTX فارسی‌ات را تحویل بگیر.",
+    cta2: { text: "راهنما و نمونه‌ها", href: mailUrl(env, "/blog", "activation-5d", "cta") },
     head: "نمی‌دانی چه موضوعی بنویسی؟ 💡",
     sub: `${firstName(name)}، ${n} اعتبار رایگان هنوز در حسابت مانده است.`,
     paras: [

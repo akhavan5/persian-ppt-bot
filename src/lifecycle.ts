@@ -81,6 +81,28 @@ interface Note {
   attach?: { filename: string; content: string }[];
 }
 
+/** بلوک زیر دکمه‌ی ایمیل هر اعلان: plans = کارت مقایسه‌ی پلن‌ها، features = چهار امکان با لینک، false = هیچ (نوار لینک سایت همیشه هست) */
+const PROMO: Record<string, Mail["promo"]> = {
+  "payment-recovery": "plans", "plan-credit-low": "plans", "buy-offer-48h": "plans",
+  "extras-nudge": "features", "files-ready": "features", "next-deck": "features", "winback": "features",
+  "profile-gift": "features", "referral-invitee": "features",
+  "invite-ask": false, "coffee": false,
+};
+/** نکته‌ی برجسته‌ی ایمیل هر اعلان (ایمیل‌هایی که خودشان tip دارند عوض نمی‌شوند) */
+const TIP: Record<string, string> = {
+  "payment-recovery": "با پلن، ارائه‌ی بلندتر با اسلاید و تصویر بیشتر و مدل‌های ویژه می‌سازی؛ دو پلن را پایین ببین 👇",
+  "plan-credit-low": "تمدید زودهنگام ضرری ندارد: ۳۰ روز به مدت فعلی اضافه می‌شود و اعتبار تازه روی اعتبار باقی‌مانده جمع می‌شود.",
+  "buy-offer-48h": "با پلن، ارائه‌های بلندتر با تصویر بیشتر، حالت‌های ساخت ویژه و مدل‌های ویژه به دستت می‌رسد.",
+  "extras-nudge": "یک ارائه، چهار خروجی: پوستر برای اشتراک‌گذاری، جزوه برای کلاس، اسلاید صوتی و پادکست برای گوش‌دادن در مسیر.",
+  "files-ready": "فایل PPTX کاملاً قابل ویرایش است؛ در پاورپوینت باز کن و هر چه خواستی عوض کن.",
+  "next-deck": "موضوع ندارم؟ ایده‌ی بالا را کپی کن و بفرست؛ ۱ تا ۲ دقیقه بعد فایل آماده است.",
+  "winback": "موضوع ندارم؟ ایده‌ی بالا را کپی کن و بفرست؛ ۱ تا ۲ دقیقه بعد فایل آماده است.",
+  "profile-gift": "فقط یک کد یک‌بارمصرف تا اعتبار هدیه‌ات.",
+  "referral-invitee": "با ساخت اولین ارائه‌ات، دوستت هم یک قدم به اعتبار هدیه‌اش نزدیک‌تر می‌شود.",
+};
+/** ایمیل یک اعلان با کمپین، بلوک تبلیغی و نکته‌ی پیش‌فرضش (فیلدهای خودِ اعلان اولویت دارند) */
+const mailOf = (n: Note) => render0(n);
+
 const GONE_RE = /bot was blocked by the user|user is deactivated|chat not found|bot can't initiate|Rubika \w+: INVALID_ACCESS|Eitaa sendMessage: not allow write access/i;
 const BLK_TTL = 90 * 86_400;
 
@@ -94,6 +116,8 @@ function contactOf(c: Ctx, r: Base): Contact {
   const tgId = !r.blk && Number.isSafeInteger(n) && n > 0 && botReady(c.env, n) ? n : null;
   return { uid: r.uid, name: u?.name ?? "", email: c.mailOn && u?.email ? u.email : "", tgId, push: !!r.push && webPushEnabled(c.env), fcm: pushEnabled(c.env) ? parseFcmCol(r.fcm) : [] };
 }
+
+function render0(n: Note) { return n.mail ? { subject: n.mail.subject, m: { campaign: n.tag, promo: PROMO[n.tag] ?? "features", ...(TIP[n.tag] ? { tip: TIP[n.tag] } : {}), ...n.mail.m } as Mail } : null; }
 
 /** اعلان به همه‌ی کانال‌های موجود می‌رسد (ربات + اعلان وب + ایمیل)؛ نوت‌های only:"email" فقط ایمیل. null = هیچ‌کدام نرسید یا بودجه تمام شد (skip) */
 async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" | "push" | "email" | "fail" | "skip"> {
@@ -120,7 +144,8 @@ async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" 
     }
     if (k.email && n.mail && take(c, 1)) {
       tried = true;
-      const m = render(c.env, n.mail.subject, n.mail.m);
+      const mm = mailOf(n)!;
+      const m = render(c.env, mm.subject, mm.m);
       if (await sendEmail(c.env, { to: k.email, ...m, tag: n.tag, attachments: n.attach, idempotencyKey: `lc-${key}`.slice(0, 250) })) ok ??= "email";
     }
     return ok ?? (tried ? "fail" : "skip");
@@ -130,7 +155,8 @@ async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" 
   if (k.email && n.mail) {
     if (!take(c, 1)) return tried ? "fail" : "skip";
     tried = true;
-    const m = render(c.env, n.mail.subject, n.mail.m);
+    const mm = mailOf(n)!;
+    const m = render(c.env, mm.subject, mm.m);
     if (await sendEmail(c.env, { to: k.email, ...m, tag: n.tag, attachments: n.attach, idempotencyKey: `lc-${key}`.slice(0, 250) })) return "email";
   }
   return "fail";
@@ -281,7 +307,7 @@ ORDER BY x.k LIMIT ?3`,
       ].join("\n"),
       kb: async (kk) => (await buyKbFor(c.env, kk.uid, kk.tgId ?? undefined)),
       mail: {
-        subject: `پرداخت پلن ${plan} کامل نشد — ${BRAND}`,
+        subject: `🛒 یک قدم تا پلن ${plan} مانده؛ پرداختت نیمه‌کاره ماند — ${BRAND}`,
         m: {
           href: utm(c.env, "pay", "/?buy=1"), head: "پرداختت کامل نشد 🛒", sub: `${firstName(k.name)}، پلن ${plan} هنوز فعال نشده است.`,
           paras: ["اگر در درگاه مشکلی پیش آمد یا وقت نشد، می‌توانی همین حالا دوباره امتحان کنی.", "اگر پولی از حسابت کم شده ولی پلن فعال نشده، همین ایمیل را پاسخ بده تا همان لحظه بررسی کنیم."],
@@ -325,7 +351,7 @@ ORDER BY x.k LIMIT ?3`,
       ].join("\n"),
       kb: async (kk) => buyKbFor(c.env, kk.uid, kk.tgId ?? undefined),
       mail: {
-        subject: `فقط ۱ اعتبار از پلن ${plan} مانده — ${BRAND}`,
+        subject: `⚠️ فقط ۱ اعتبار از پلن ${plan} مانده — ${BRAND}`,
         m: {
           href: utm(c.env, "low", "/?buy=1"), head: "فقط ۱ اعتبار مانده 🎟", sub: `${firstName(k.name)}، پلن ${plan} یک اعتبار دارد.`,
           paras: [`بعد از این اعتبار، ساخت ارائه با اعتبار رایگان ادامه پیدا می‌کند (${free}).`, "اگر پلن را تمدید کنی، ۳۰ روز به مدتش اضافه می‌شود و اعتبار جدید روی اعتبار باقی‌مانده جمع می‌شود."],
@@ -375,7 +401,7 @@ ORDER BY x.k LIMIT ?3`,
       ].join("\n"),
       kb: async () => ({ reply_markup: { inline_keyboard: rows } }),
       mail: {
-        subject: `پوستر، جزوه و پادکست ارائه‌ات — ${BRAND}`,
+        subject: `🎨 ارائه‌ات را به پوستر، جزوه و پادکست تبدیل کن — ${BRAND}`,
         m: {
           href: utm(c.env, "extras"), head: "ارائه‌ات را کامل‌تر کن ✨", sub: `${firstName(k.name)}، ارائه‌ی امروزت هنوز چند همراه ندارد.`,
           paras: [`پوستر، جزوه‌ی Word، اسلاید صوتی و پادکست از همان ارائه ساخته می‌شود؛ هرکدام ۱ اعتبار. این امکان تا حدود ${lf} ساعت دیگر (۲۴ ساعت بعد از ساخت ارائه) باز است.`],
@@ -426,7 +452,7 @@ ORDER BY x.k LIMIT ?3`,
       kb: startKb(c.env),
       attach,
       mail: {
-        subject: `فایل ارائه‌ات آماده است — ${BRAND}`,
+        subject: `📂 فایل ارائه‌ات آماده است — ${BRAND}`,
         m: {
           href: utm(c.env, "files"), head: "فایل‌هایت آماده است 📂", sub: `${firstName(k.name)}، ارائه‌ات ${agoTxt} پیش ساخته شد.`,
           paras: [
@@ -480,11 +506,11 @@ LIMIT MIN(?3, MAX(0, ?6 - (SELECT COUNT(*) FROM kv m WHERE ${rng("m.k", "lc:buy:
       ].join("\n"),
       kb: async (kk) => buyKbFor(c.env, kk.uid, kk.tgId ?? undefined),
       mail: {
-        subject: `پلن ماهانه برای ارائه‌های بیشتر — ${BRAND}`,
+        subject: `🚀 ارائه‌های بیشتر، اسلاید بلندتر: پلن‌های ${BRAND}`,
         m: {
           href: utm(c.env, "buy48", "/?buy=1"), head: "ارائه‌های بیشتر و بلندتر 🚀", sub: `${firstName(k.name)}، دو روز از آخرین ارائه‌ات گذشته.`,
-          paras: ["با پلن ماهانه می‌توانی ارائه‌ی بیشتری در ماه و با اسلاید بیشتر بسازی."],
-          rows: [[`پلن ${plus.name}`, `${fa(plus.credits)} ارائه`], [`پلن ${pro.name}`, `${fa(pro.credits)} ارائه`]],
+          paras: ["با پلن ماهانه می‌توانی ارائه‌ی بیشتری در ماه، با اسلاید و تصویر بیشتر بسازی. مقایسه‌ی دو پلن را پایین ببین."],
+          rows: [],
           cta: "دیدن پلن‌ها ←", color: "#2563eb", foot: "این پیشنهاد فقط یک‌بار فرستاده می‌شود.", preview: "پلن‌های ماهانه برای ساخت ارائه‌ی بیشتر.",
         },
       },
@@ -519,7 +545,7 @@ ORDER BY x.k LIMIT ?3`,
       ].join("\n"),
       kb: startKb(c.env),
       mail: {
-        subject: `ارائه‌ی بعدی‌ات چیست؟ — ${BRAND}`,
+        subject: `💡 ایده‌ی ارائه‌ی بعدی‌ات: «${topic}» — ${BRAND}`,
         m: {
           href: utm(c.env, "next"), head: "ارائه‌ی بعدی‌ات چیست؟ 💡", sub: `${firstName(k.name)}، یک نکته برای ارائه‌ی بعدی.`,
           paras: [`برای ارائه‌ی بعدی می‌توانی ${tip}.`, `یک ایده برای شروع: «${topic}».`],
@@ -558,7 +584,7 @@ ORDER BY x.k LIMIT ?3`,
       ].join("\n"),
       kb: startKb(c.env),
       mail: {
-        subject: `یک ایده برای ارائه‌ی بعدی‌ات — ${BRAND}`,
+        subject: `👋 «${topic}»؛ ایده‌ی این روزهای تو — ${BRAND}`,
         m: {
           href: utm(c.env, `wb${days}`), head: "یک ایده برای ارائه‌ی بعدی‌ات 💡", sub: `${firstName(k.name)}، ${lead}.`,
           paras: [`امروز ${toFa(String(DAILY_FREE_CREDITS))} ارائه‌ی رایگان داری. موضوع پیشنهادی این روزها: «${topic}».`, "متن، فایل Word/PDF یا لینک هم می‌توانی بدهی."],

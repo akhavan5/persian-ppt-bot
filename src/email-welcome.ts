@@ -5,6 +5,7 @@ import type { WebUser } from "./auth";
 import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, SIGNUP_CREDITS } from "./settings";
 import { toFa } from "./util";
 import { BRAND, sendEmail, siteOf } from "./email";
+import { linkBar, linksText, mailUrl, plansCard, plansText, tipBox } from "./email-blocks";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -61,7 +62,7 @@ export function welcomeEmail(env: Env, name: string): { subject: string; html: s
 
     <!-- سربرگ -->
     <tr><td dir="rtl" align="center" bgcolor="${BLUE}" style="background:${BLUE};background-image:linear-gradient(135deg,${BLUE} 0%,${CYAN} 100%);border-radius:22px 22px 0 0;padding:34px 24px 30px;">
-      <img src="${site}/icon-192.png" width="64" height="64" alt="${BRAND}" style="display:block;border:0;border-radius:16px;margin:0 auto 14px;">
+      <a href="${mailUrl(env, "/", "welcome", "header")}" target="_blank" style="text-decoration:none;"><img src="${site}/icon-192.png" width="64" height="64" alt="${BRAND}" style="display:block;border:0;border-radius:16px;margin:0 auto 14px;"></a>
       <div style="font:700 26px/1.5 ${FONT};color:#ffffff;">${n}، خوش آمدی! 👋</div>
       <div style="font:400 14px/1.9 ${FONT};color:#dbeafe;">به ${BRAND} پیوستی؛ ارائه‌ی فارسی بساز، بدون دردسر.</div>
     </td></tr>
@@ -86,11 +87,13 @@ ${CONTACT_CREDITS > 0 ? `
       </tr></table>
 ` : ""}
 
+      <div style="padding-top:14px;">${tipBox("موضوع به ذهنت نمی‌رسد؟ فقط بنویس «معرفی هوش مصنوعی» و ببین ۲ دقیقه بعد چه تحویل می‌گیری.")}</div>
+
       <!-- دکمه -->
-      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td dir="rtl" align="center" style="padding:26px 0 8px;">
+      <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td dir="rtl" align="center" style="padding:12px 0 8px;">
         <table dir="rtl" role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
           <td dir="rtl" align="center" bgcolor="${BLUE}" style="border-radius:14px;background:${BLUE};background-image:linear-gradient(135deg,${BLUE},#1d4ed8);">
-            <a href="${site}/" target="_blank" style="display:inline-block;padding:15px 40px;font:700 16px/1.4 ${FONT};color:#ffffff;text-decoration:none;border-radius:14px;">ساخت اولین ارائه ←</a>
+            <a href="${mailUrl(env, "/", "welcome", "cta")}" target="_blank" style="display:inline-block;padding:15px 40px;font:700 16px/1.4 ${FONT};color:#ffffff;text-decoration:none;border-radius:14px;">ساخت اولین ارائه ←</a>
           </td>
         </tr></table>
       </td></tr></table>
@@ -102,15 +105,21 @@ ${CONTACT_CREDITS > 0 ? `
     </td></tr>
 
     <!-- امکانات -->
-    <tr><td dir="rtl" bgcolor="#f8faff" style="background:#f8faff;padding:22px 28px 22px 18px;border-top:1px solid ${LINE};border-radius:0 0 22px 22px;font-family:${FONT};text-align:right;">
+    <tr><td dir="rtl" bgcolor="#f8faff" style="background:#f8faff;padding:22px 28px 22px 18px;border-top:1px solid ${LINE};font-family:${FONT};text-align:right;">
       <div style="font:700 15px/1.8 ${FONT};color:${INK};padding:0 0 12px 10px;">کارهایی که می‌توانی بکنی</div>
       <table dir="rtl" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${chipRows}</table>
     </td></tr>
 
+    <!-- پلن‌ها: وقتی اعتبار رایگان کم آمد، راه ادامه را از همین اول می‌داند -->
+    <tr><td dir="rtl" bgcolor="#ffffff" style="background:#ffffff;padding:6px 24px 22px;border-radius:0 0 22px 22px;font-family:${FONT};text-align:right;">
+      ${plansCard(env, "welcome", "وقتی اعتبار رایگان کم آمد، پلن‌ها همین‌جاست")}
+    </td></tr>
+
     <!-- پانوشت -->
     <tr><td dir="rtl" align="center" style="padding:20px 16px 4px;font:400 12px/2 ${FONT};color:#8a97ad;">
-      این ایمیل را به‌خاطر ثبت‌نامت در <a href="${site}/" style="color:#8a97ad;">${site.replace(/^https?:\/\//, "")}</a> برایت فرستادیم.<br>
+      این ایمیل را به‌خاطر ثبت‌نامت در ${BRAND} برایت فرستادیم.<br>
       سؤالی داشتی؟ همین ایمیل را پاسخ بده، می‌خوانیمش.
+      ${linkBar(env, "welcome")}
     </td></tr>
 
   </table>
@@ -128,9 +137,12 @@ ${CONTACT_CREDITS > 0 ? `
     "در سه قدم ارائه‌ات آماده است:",
     ...STEPS.map(([t], i) => `${toFa(String(i + 1))}. ${t}`),
     "",
-    `شروع: ${site}/`,
+    `شروع: ${mailUrl(env, "/", "welcome", "cta")}`,
+    ...plansText(env, "welcome"),
     "",
     "سؤالی داشتی؟ همین ایمیل را پاسخ بده.",
+    "",
+    linksText(env, "welcome"),
   ].join("\n");
 
   return { subject, html, text };

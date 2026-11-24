@@ -19,6 +19,7 @@ import { isEitaaId } from "./eitaa-format";
 import { sendWebPush, webPushEnabled } from "./webpush";
 import { fcmTokensOf, pushEnabled, sendPushToUser } from "./push";
 import { faDate, firstName, render } from "./plan-notify";
+import { mailUrl } from "./email-blocks";
 import { toFa } from "./util";
 import { PLANS } from "./payment";
 
@@ -43,7 +44,10 @@ export function feedbackEmail(env: Env, name: string, plan: string, exp: number,
   const pn = plan;
   const body = ["۱) از چه چیزی راضی بودم:", "", "۲) چه چیزی کم بود یا اذیتم کرد:", "", "۳) پلن را تمدید می‌کنم؟ چرا (یا چرا نه):", ""].join("\n");
   const href = `mailto:${replyAddr(env)}?subject=${encodeURIComponent(`نظر من درباره‌ی پلن ${pn}`)}&body=${encodeURIComponent(body)}`;
-  return render(env, `پلن ${pn} تمام شد؛ نظرت را بگو — ${BRAND}`, {
+  return render(env, `💬 پلن ${pn} تمام شد؛ دو دقیقه نظرت را بگو — ${BRAND}`, {
+    campaign: "plan-feedback", promo: false,
+    tip: "پاسخ‌ها را خودمان می‌خوانیم و کارهای بعدی ربات و سایت را از روی همین‌ها انتخاب می‌کنیم.",
+    cta2: { text: "برگشت به سایت و ساخت ارائه", href: mailUrl(env, "/", "plan-feedback", "cta") },
     href,
     head: "نظرت برای ما مهم است 💬",
     sub: `${firstName(name)}، ممنون که با پلن ${pn} همراه ما بودی.`,
