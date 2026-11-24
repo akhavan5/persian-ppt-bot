@@ -1794,7 +1794,7 @@ function renderProfile() {
   ];
   if (cr.available && cr.credits > 0) {
     kids.push(h("div", { class: "muted", style: "margin-top:8px;line-height:1.9" },
-      `🎁 با ثبت و تأیید هر مورد، ${fa(cr.credits)} اعتبار هدیه می‌گیری (برای هر مورد فقط یک‌بار).`, cr.note ? [h("br"), cr.note] : null));
+      (IS_EITAA ? `🎁 با ثبت و تأیید ایمیل، ${fa(cr.credits)} اعتبار هدیه می‌گیری (فقط یک‌بار).` : `🎁 با ثبت و تأیید هر مورد، ${fa(cr.credits)} اعتبار هدیه می‌گیری (برای هر مورد فقط یک‌بار).`), cr.note ? [h("br"), cr.note] : null));
   }
   if (pf) {
     const isM = pf.kind === "mobile";

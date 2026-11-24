@@ -353,7 +353,7 @@ async function verifySigned(botToken: string, data: string, now = Date.now()): P
 }
 
 /** POST /api/profile/mobile/eitaa {contact} — شماره‌ی تأییدشده‌ی خود ایتا (requestContact). کاربر باید خودش دکمه‌ی «ثبت شماره» را زده باشد.
- *  امضا سرور-ساید بررسی می‌شود؛ اگر user_id داخل داده باشد باید با کاربر فعلی یکی باشد. شماره با همان قانون پروفایل (اعتبار هدیه) ثبت می‌شود. */
+ *  امضا سرور-ساید بررسی می‌شود؛ اگر user_id داخل داده باشد باید با کاربر فعلی یکی باشد. شماره با قانون پروفایل ثبت می‌شود؛ اما چون در ایتا اجباری است هدیه‌ی شماره ندارد (profile.ts ← attachContact). */
 export async function miniappContact(req: Request, env: Env, user: WebUser): Promise<Response> {
   if (!env.EITAA_APP_TOKEN) return err("ثبت شماره از ایتا فعال نیست.", 503);
   const id = await getLinkedTg(env, user.id);

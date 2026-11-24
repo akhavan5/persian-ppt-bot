@@ -6,7 +6,7 @@
  */
 import type { Env } from "./env";
 import { emailOtpEnabled, getUserById, normMobile, otpEnabled } from "./auth";
-import { attachContact, contactRewardInfo, normContact, sendContactCode, type ContactKind } from "./profile";
+import { attachContact, contactRewardInfo, isEitaaAccount, normContact, sendContactCode, type ContactKind } from "./profile";
 import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, getCredit, hasContactReward } from "./settings";
 import { resolveUid } from "./link";
 import { esc, sendMessage, tg } from "./telegram";
@@ -37,7 +37,7 @@ export async function showProfile(env: Env, chatId: number, userId: number, uid:
     `✉️ ایمیل: ${user.email ? `<code>${esc(user.email)}</code>${user.verified ? " ✅" : ""}` : "ثبت نشده"}`,
     c.unlimited ? "💳 اعتبار: نامحدود" : `💳 اعتبار: <b>${toFa(String(c.total))}</b> ارائه`,
   ];
-  if (info.available) lines.push("", giftLine(), "به‌ازای هر مورد (موبایل و ایمیل جداگانه) پس از تایید با کد، یک‌بار اضافه می‌شود.");
+  if (info.available) lines.push("", giftLine(), (await isEitaaAccount(env, user)) ? "با ثبت و تایید ایمیل (با کد)، یک‌بار اضافه می‌شود." : "به‌ازای هر مورد (موبایل و ایمیل جداگانه) پس از تایید با کد، یک‌بار اضافه می‌شود.");
   const rows: Btn[][] = [];
   const add: Btn[] = [];
   if (info.missing.includes("mobile")) add.push({ text: "📱 ثبت شماره‌ی موبایل", callback_data: "pf:m" });
