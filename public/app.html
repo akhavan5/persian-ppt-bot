@@ -463,6 +463,27 @@ function makeEitaa(W) {
       } catch (e) { eWAsking = false; }
       setTimeout(() => { eWAsking = false; }, 20000); // اگر کلاینت ایتا callback نداد، قفل برای همیشه نماند
     },
+    // دسترسی ارسال پیام «اجباری» (دکمه‌ی «بساز»): بدون محدودیت ۱۵ثانیه‌ای؛ تا جواب کاربر منتظر می‌ماند و true/false برمی‌گرداند.
+    // اگر پنجره‌ی قبلی هنوز باز است، تمام شدنش را صبر می‌کند و دوباره پنجره‌ی تازه نمی‌سازد.
+    requireWrite() {
+      const granted = () => !!(t(() => W.initDataUnsafe.user.allows_write_to_pm) || store.get("eWG"));
+      if (granted()) return Promise.resolve(true);
+      return new Promise((res) => {
+        let fin = false;
+        const end = (v) => { if (fin) return; fin = true; clearTimeout(tm); clearInterval(iv); res(!!v); };
+        const tm = setTimeout(() => end(granted()), 60000);
+        let iv = 0;
+        if (eWAsking) { iv = setInterval(() => { if (granted()) end(true); else if (!eWAsking) end(false); }, 300); return; }
+        eWAsking = true; eWLast = Date.now();
+        try {
+          W.requestWriteAccess((ok) => {
+            eWAsking = false; eWLast = Date.now();
+            if (ok) { store.set("eWG", "1"); api("/api/miniapp/welcome", { method: "POST" }).catch(() => {}); }
+            end(ok);
+          });
+        } catch (e) { eWAsking = false; end(false); }
+      });
+    },
   };
 }
 
@@ -865,8 +886,9 @@ function eitaaTexts() {
 }
 // ایتا: درخواست دسترسی ارسال پیام؛ بعد از اجازه‌ی کاربر پیام خوش‌آمدگویی/اعلان‌ها می‌تواند ارسال شود
 function askEitaaWrite() { if (IS_EITAA) TG.askWrite(() => api("/api/miniapp/welcome", { method: "POST" }).catch(() => {})); }
-// درخواست شماره‌ی موبایل (اختیاری): فقط وقتی شماره ثبت نشده. باید مستقیم از لمس کاربر (قبل از هر await) صدا زده شود.
-// هر حالتی (تأیید، رد، خطا، بی‌پاسخ ۳۰ ثانیه) resolve می‌شود تا کار اصلی (ساخت/دانلود) هیچ‌وقت معطل نماند. هم‌زمان فقط یک پنجره باز می‌شود.
+// درخواست شماره‌ی موبایل: فقط وقتی شماره ثبت نشده. باید مستقیم از لمس کاربر (قبل از هر await) صدا زده شود.
+// هر حالتی (تأیید، رد، خطا، بی‌پاسخ ۳۰ ثانیه) resolve می‌شود (نتیجه از me.user.mobile خوانده می‌شود). هم‌زمان فقط یک پنجره باز می‌شود.
+// در ایتا برای دکمه‌ی «بساز» اجباری است (پایین‌تر در #go.onclick)؛ در تلگرام/بله همچنان اختیاری است.
 let contactAsking = false;
 function askContact() {
   if (contactAsking || typeof TG.requestContact !== "function" || !me || !me.user || me.user.mobile) return Promise.resolve();
@@ -1280,12 +1302,16 @@ $("#go").onclick = async () => {
   const topic = $("#topic").value.trim();
   if (extracting) return genErr("صبر کن تا خواندن فایل یا لینک تمام شود.");
   if (topic.length < 3) return genErr("موضوع را کمی کامل‌تر بنویس.");
-  // شماره‌ی موبایل اختیاری است (ایتا، تلگرام، بله): هر بار که کاربر دکمه‌ی ساخت را می‌زند (تا وقتی شماره ثبت نشده) پرسیده می‌شود و در هر حالت
-  // (تأیید، رد، خطا، بی‌پاسخ) ارائه ساخته می‌شود. ایتا شماره‌ی امضاشده را به صفحه می‌دهد؛ تلگرام/بله آن را به ربات می‌فرستند و ربات ثبتش می‌کند.
+  // ایتا: شماره‌ی موبایل و دسترسی ارسال پیام «اجباری» است؛ تا هر دو داده نشود ساخت شروع نمی‌شود.
+  // تلگرام/بله: شماره اختیاری است؛ هر بار (تا وقتی ثبت نشده) پرسیده می‌شود و در هر حالت (تأیید، رد، خطا، بی‌پاسخ) ارائه ساخته می‌شود.
   // requestContact باید مستقیم از لمس کاربر صدا زده شود، پس قبل از هر await است.
   if (me && me.user && !me.user.mobile) await busy($("#go"), "…", () => askContact());
+  if (IS_EITAA) {
+    if (me && me.user && !me.user.mobile) return genErr("برای ساخت ارائه، باید شماره‌ی موبایلت را تأیید کنی. دوباره «بساز» را بزن و در پنجره‌ی ایتا «اشتراک‌گذاری شماره» را تأیید کن.");
+    const wOk = await busy($("#go"), "…", () => TG.requireWrite ? TG.requireWrite() : Promise.resolve(true));
+    if (!wOk) return genErr("برای ساخت ارائه، باید اجازه‌ی ارسال پیام را بدهی (برای اعلان آماده شدن ارائه). دوباره «بساز» را بزن و در پنجره‌ی ایتا تأیید کن.");
+  }
   try {
-    askEitaaWrite(); // ایتا: اگر هنوز اجازه‌ی ارسال پیام نداده، همین‌جا دوباره پرسیده می‌شود (ساخت منتظرش نمی‌ماند)
     const r = await busy($("#go"), "در حال ارسال…", () => api("/api/generate", { method: "POST", body: {
       topic, slides: Number($("#slides").value), images: $("#imgs").value !== "0", imagesMany: $("#imgs").value === "2", via: TG.via,
       ...(srcText ? { source: srcText } : {}),
