@@ -22,6 +22,7 @@ import { refundCredit, type CreditSource } from "./settings";
 import { appReadyMarkup, fileNameWithSite, siteHost } from "./deck-service";
 import { toFa } from "./util";
 import { unmarkExtra } from "./extras";
+import { sendWebPush } from "./webpush";
 import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript } from "./podcast";
@@ -164,6 +165,12 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           await sendMessage(this.env, tgChat, `✅ ${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
             await appReadyMarkup(this.env, tgChat, out.ids[0]));
         }).catch((ne) => console.error("notify-app", String(ne).slice(0, 200)));
+      }
+      // اعلان وب (PWA): کاربر وب که تب را بسته از آماده شدن اسلاید صوتی/پادکست خبردار می‌شود؛ بدون اشتراک یا VAPID بی‌اثر است و خطایش به اعتبار نمی‌رسد
+      if (web && !event.payload.notify && out.ids.length && typeof uid === "string") {
+        await step.do("notify-webpush", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+          await sendWebPush(this.env, uid, { title: `${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} آماده شد ✅`, body: `«${out.title}»؛ برای گرفتن فایل بزن. فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`, url: "/", tag: "extra-done" });
+        }).catch((ne) => console.error("notify-webpush", String(ne).slice(0, 200)));
       }
       return out;
     } catch (e) {

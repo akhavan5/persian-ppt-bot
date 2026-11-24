@@ -47,7 +47,7 @@ self.addEventListener("push", (e) => {
   try { d = e.data ? e.data.json() : {}; } catch { d = {}; }
   e.waitUntil(
     (async () => {
-      if (d.tag === "deck-done") {
+      if (d.tag === "deck-done" || d.tag === "extra-done") {
         const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
         if (wins.some((w) => w.visibilityState === "visible" && w.focused)) return;
       }

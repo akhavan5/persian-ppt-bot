@@ -54,13 +54,13 @@ object Reminders {
         "activation" to listOf("act1"), "activation5d" to listOf("act2"), "plan-expiry" to listOf("plan3", "plan1"),
         "plan-out" to listOf("planout"), "extras" to listOf("extras"), "buy48" to listOf("buy48"), "profile-gift" to listOf("pf"),
         "winback" to listOf("inactive7", "inactive21"), "next" to listOf("next"), "low" to listOf("low"),
-        "coffee" to listOf("coffee"), "invite" to listOf("invite"),
+        "coffee" to listOf("coffee"), "invite" to listOf("invite"), "files" to listOf("files1"),
     )
 
     /** برچسب اعلان FCM سرور ← تبی که با زدن اعلان باز می‌شود (۰ ساخت، ۱ فایل‌ها، ۳ حساب) */
     private val TAG_TAB = mapOf(
         "activation" to 0, "activation5d" to 0, "winback" to 0, "next" to 0, "invitee" to 0, "survey" to 0,
-        "extras" to 1, "receipt" to 3, "pay" to 3, "low" to 3, "buy48" to 3, "plan-expiry" to 3, "plan-out" to 3,
+        "extras" to 1, "files" to 1, "receipt" to 3, "pay" to 3, "low" to 3, "buy48" to 3, "plan-expiry" to 3, "plan-out" to 3,
         "profile-gift" to 3, "invite" to 3, "referral" to 3,
     )
 

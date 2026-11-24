@@ -24,6 +24,7 @@ import { makeInfographic, renderInfographicImage } from "./infographic";
 import { buildDocx, imageInfo, makeHandout, type DocImage } from "./handout";
 import { notifyPlanCreditsOut } from "./plan-notify";
 import { unmarkExtra } from "./extras";
+import { sendWebPush } from "./webpush";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const LLM_STEP = { retries: { limit: 1, delay: "10 seconds" }, timeout: "5 minutes" } as const;
@@ -109,6 +110,12 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
           await sendMessage(this.env, tgChat, `✅ ${kind === "poster" ? "🖼 پوستر" : "📝 جزوه"} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
             await appReadyMarkup(this.env, tgChat, out.ids[0]));
         }).catch((ne) => console.error("notify-app", String(ne).slice(0, 200)));
+      }
+      // اعلان وب (PWA): کاربر وب که تب را بسته از آماده شدن پوستر/جزوه خبردار می‌شود (مثل «ارائه آماده شد» در workflow.ts)؛ بدون اشتراک یا VAPID بی‌اثر است
+      if (web && !event.payload.notify && typeof uid === "string") {
+        await step.do("notify-webpush", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+          await sendWebPush(this.env, uid, { title: `${kind === "poster" ? "🖼 پوستر" : "📝 جزوه"} آماده شد ✅`, body: `«${out.title}»؛ برای گرفتن فایل بزن. فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`, url: "/", tag: "extra-done" });
+        }).catch((ne) => console.error("notify-webpush", String(ne).slice(0, 200)));
       }
       if (credit.source === "plan") {
         await step.do("plan-credits-out", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, () => notifyPlanCreditsOut(this.env, uid))
