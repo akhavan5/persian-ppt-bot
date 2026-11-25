@@ -91,6 +91,7 @@ struct ChannelInfo: Identifiable {
     var notify = false
     var available = false
     var canUnlink = false
+    var url = ""
     var id: String { key }
 }
 
@@ -325,7 +326,7 @@ func parseMe(_ j: J) -> Me? {
     m.giftMissing = cw["missing"].arr.map { $0.str }
     m.channels = j["channels"].arr.map {
         ChannelInfo(key: $0["key"].str, label: $0["label"].str, connected: $0["connected"].bool, shown: $0["shown"].exists ? $0["shown"].str : "",
-                    notify: $0["notify"].bool, available: $0["available"].bool, canUnlink: $0["canUnlink"].bool)
+                    notify: $0["notify"].bool, available: $0["available"].bool, canUnlink: $0["canUnlink"].bool, url: $0["url"].str)
     }
     m.devApp = j["devices"]["app"].bool
     m.devWeb = j["devices"]["web"].bool

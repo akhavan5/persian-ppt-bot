@@ -172,8 +172,8 @@ export async function setChannelNotify(env: Env, uid: string, ch: Chan, on: bool
 }
 /** هویت‌هایی که اعلان به آن‌ها می‌رسد: وصل‌شده، روشن و دارای ربات فعال. ترتیب: هویت اصلی اول. */
 export async function notifyIds(env: Env, uid: string): Promise<number[]> {
-  const [ids, muted] = await Promise.all([getLinkedIds(env, uid), getMuted(env, uid)]);
-  return ids.filter((i) => !muted.includes(chanOf(i)) && chanReady(env, chanOf(i)));
+  const ids = await getLinkedIds(env, uid);
+  return ids.filter((i) => chanReady(env, chanOf(i))); // اعلان همیشه روشن است؛ خاموش‌کردن وجود ندارد (muted نادیده گرفته می‌شود)
 }
 /** یک پیام را به همه‌ی پیام‌رسان‌های روشنِ حساب می‌فرستد (هر کدام جدا؛ خطای یکی بقیه را نمی‌گیرد). ok = تعداد رسیده. */
 export async function sendToChannels(env: Env, uid: string, send: (id: number) => Promise<unknown>, only?: number[]): Promise<{ ok: number; tried: number }> {
@@ -193,13 +193,13 @@ export interface ChannelInfo {
   /** قابل جدا کردن؟ (پیام‌رسانِ محل ساخت حساب جدا نمی‌شود) */ canUnlink: boolean;
 }
 export async function channelStatus(env: Env, uid: string): Promise<ChannelInfo[]> {
-  const [ids, muted] = await Promise.all([getLinkedIds(env, uid), getMuted(env, uid)]);
+  const ids = await getLinkedIds(env, uid);
   return Promise.all(CHANS.map(async (key): Promise<ChannelInfo> => {
     const id = ids.find((i) => chanOf(i) === key);
     return {
       key, label: CHAN_LABEL[key], connected: !!id, shown: id ? shownId(id) : null,
-      notify: !!id && !muted.includes(key), available: chanReady(env, key),
-      primary: !!id && id === ids[0], canUnlink: !!id && (await profileId(id)) !== uid,
+      notify: !!id, available: chanReady(env, key),
+      primary: !!id && id === ids[0], canUnlink: false, // جدا کردن پلتفرم از رابط‌ها حذف شده است
     };
   }));
 }

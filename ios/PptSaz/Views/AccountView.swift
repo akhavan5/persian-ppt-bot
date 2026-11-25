@@ -8,7 +8,6 @@ struct AccountView: View {
     @State private var showPrivacy = false
     @State private var confirmLogout = false
     @State private var buying: String?
-    @State private var unlinking: ChannelInfo?
 
     var body: some View {
         NavigationStack {
@@ -56,10 +55,6 @@ struct AccountView: View {
                 if let u = URL(string: Api.base + "/privacy") { SafariView(url: u).ignoresSafeArea() }
             }
             .sheet(isPresented: $m.needMobile) { ProfileSheet(startWithMobile: true).environmentObject(m) }
-            .confirmationDialog("جدا کردن \(unlinking?.label ?? "")؟", isPresented: Binding(get: { unlinking != nil }, set: { if !$0 { unlinking = nil } }), titleVisibility: .visible) {
-                Button("جدا کن", role: .destructive) { if let c = unlinking { Task { await m.unlinkChannel(c.key) } } }
-                Button("انصراف", role: .cancel) {}
-            }
             .confirmationDialog("از حساب خارج می‌شوی؟", isPresented: $confirmLogout, titleVisibility: .visible) {
                 Button("خروج", role: .destructive) { Task { await m.logout() } }
                 Button("انصراف", role: .cancel) {}
@@ -219,43 +214,90 @@ struct AccountView: View {
         }
     }
 
-    /// اتصال پلتفرم‌ها: وضعیت هر پیام‌رسان، اعلان روشن/خاموش، جدا کردن و ساخت کد اتصال
+    private static let iosStores: [(String, String)] = [
+        ("سیبچه", "https://sibche.com/applications/paorpoyntsaz"), ("سیب ایرانی", "https://sibirani.com/apps/pptsaz-ir/"), ("سیب‌اپ", "https://sibapp.com/applications/pptsaz"),
+        ("اناردونی", "https://anardoni.com/ios/app/irpptsazapp"), ("آی‌اپس", "https://iapps.ir/app/paorpoynt-saz-hosh-msnoaay/714593784191"), ("اپ‌استار", "https://app-star.store/app.php?id=pptsaz"),
+    ]
+
+    private func openURL(_ s: String) { if let u = URL(string: s) { UIApplication.shared.open(u) } }
+
+    /// کارت یک پلتفرم: آیکن رنگی، نام، وضعیت، توضیح و دکمه‌ها
+    private func platformCard<Actions: View>(_ icon: String, _ color: Color, _ name: String, status: String = "", ok: Bool = false, desc: String = "", @ViewBuilder actions: () -> Actions) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(icon).font(.system(size: 21)).frame(width: 42, height: 42)
+                .background(color.opacity(0.16)).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(name).font(.subheadline.weight(.bold))
+                    Spacer()
+                    if !status.isEmpty { Text(status).font(.caption2).foregroundColor(ok ? color : .secondary) }
+                }
+                if !desc.isEmpty { Text(desc).font(.caption).foregroundColor(.secondary) }
+                actions()
+            }
+        }
+        .padding(12)
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(ok ? color : Color(.separator), lineWidth: 1))
+    }
+
+    private func linkChip(_ title: String, _ color: Color, filled: Bool = false, _ url: String) -> some View {
+        Button(title) { openURL(url) }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .foregroundColor(filled ? .white : color)
+            .background(filled ? color : Color.clear)
+            .overlay(Capsule().stroke(color, lineWidth: 1))
+            .clipShape(Capsule())
+    }
+
+    /// اتصال پلتفرم‌ها: به ترتیب سایت، اندروید (بازار و مایکت)، بله، ایتا، اپل، سروش‌پلاس، تلگرام (روبیکا آخر)؛ اتصال فقط با تأیید شماره‌ی موبایل است
     @ViewBuilder
     private func channelsSection(_ me: Me) -> some View {
-        let shown = me.channels.filter { $0.connected || $0.available }
-        if !shown.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: "اتصال پلتفرم‌ها")
-                Text("با تأیید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها به همه‌ی پیام‌رسان‌های روشن می‌رسد.")
-                    .font(.footnote).foregroundColor(.secondary)
-                ForEach(shown) { c in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(c.label)
-                            Text(c.connected ? "✅ متصل" + (c.shown.isEmpty ? "" : " (\(Fa.digits(c.shown)))") : "⬜ وصل نیست")
-                                .font(.caption).foregroundColor(.secondary)
+        let chans = Dictionary(uniqueKeysWithValues: me.channels.filter { $0.connected || $0.available }.map { ($0.key, $0) })
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "اتصال پلتفرم‌ها")
+            Text("با تأیید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها به همه‌ی پیام‌رسان‌های روشن می‌رسد.")
+                .font(.footnote).foregroundColor(.secondary)
+            platformCard("🌐", .blue, "سایت پاورپوینت‌ساز", desc: "حساب اصلی تو؛ اعتبار و ارائه‌ها از همین‌جا به همه‌ی پلتفرم‌ها می‌رسد.") {
+                linkChip("pptsaz.ir", .blue, "https://pptsaz.ir")
+            }
+            platformCard("🤖", .green, "اپ اندروید", status: me.devApp ? "✅ وصل است" : "⬜ نصب نشده", ok: me.devApp,
+                         desc: me.devApp ? "اپ روی گوشی‌ات با همین حساب وارد شده و اعلان می‌گیرد." : "اپ را از یکی از فروشگاه‌ها نصب کن و با همین شماره وارد شو.") {
+                HStack {
+                    linkChip("دانلود از کافه‌بازار", .green, filled: !me.devApp, "https://cafebazaar.ir/app/ir.pptsaz.app")
+                    linkChip("دانلود از مایکت", .green, filled: !me.devApp, "https://myket.ir/app/ir.pptsaz.app")
+                }
+            }
+            ForEach(["bale", "eitaa", "apple", "splus", "tg", "rubika"], id: \.self) { key in
+                if key == "apple" {
+                    platformCard("🍎", .gray, "اپ iOS (اپل)", status: "✅ همین برنامه", ok: true, desc: "این برنامه با همین حساب وارد شده است. نسخه‌ی iOS از فروشگاه‌های ایرانی آیفون نصب می‌شود:") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack { ForEach(Self.iosStores, id: \.0) { linkChip($0.0, .gray, $0.1) } }
                         }
-                        Spacer()
-                        if c.connected {
-                            Button(c.notify ? "🔔 اعلان" : "🔕 اعلان") { Task { await m.setChannelNotify(c.key, !c.notify) } }
-                                .buttonStyle(.bordered).controlSize(.small)
-                            if c.canUnlink {
-                                Button("جدا کردن") { unlinking = c }.buttonStyle(.bordered).controlSize(.small)
-                            }
+                    }
+                } else if let c = chans[key] {
+                    let color: Color = key == "bale" ? .green : key == "eitaa" ? .orange : key == "splus" ? .cyan : key == "rubika" ? .purple : .blue
+                    let icon = key == "bale" ? "💬" : key == "eitaa" ? "🟠" : key == "splus" ? "🔵" : key == "rubika" ? "🟣" : "✈️"
+                    let url = c.url.isEmpty ? (key == "tg" ? "https://t.me/pptsaz_bot" : "") : c.url
+                    platformCard(icon, color, c.label,
+                                 status: c.connected ? "✅ متصل" + (c.shown.isEmpty ? "" : " (\(Fa.digits(c.shown)))") : "⬜ وصل نیست", ok: c.connected,
+                                 desc: c.connected ? "🔔 اعلان‌ها همیشه روشن است." : "ربات را باز کن و همان شماره را تأیید کن تا به این حساب وصل شود.") {
+                        HStack {
+                            if !url.isEmpty { linkChip(c.connected ? "باز کردن \(c.label)" : "ورود به \(c.label) و تأیید شماره", color, filled: !c.connected, url) }
                         }
                     }
                 }
-                Text("\(me.devApp ? "✅" : "⬜") اپ اندروید · \(me.devWeb ? "✅" : "⬜") اعلان مرورگر · \(me.devEmail ? "✅" : "⬜") ایمیل")
-                    .font(.caption).foregroundColor(.secondary)
-                Text(me.mobile.isEmpty
-                     ? "اول شماره‌ی موبایلت را در کارت پروفایل تأیید کن؛ بعد در هر پلتفرم دیگر همان شماره را تأیید کن تا به همین حساب وصل شود."
-                     : "برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (\(Fa.digits(me.mobile))) را تأیید کن؛ همان لحظه به این حساب وصل می‌شود.")
-                    .font(.footnote).foregroundColor(.secondary)
             }
-            .padding(16)
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            Text("\(me.devWeb ? "✅" : "⬜") اعلان مرورگر · \(me.devEmail ? "✅" : "⬜") ایمیل")
+                .font(.caption).foregroundColor(.secondary)
+            Text(me.mobile.isEmpty
+                 ? "اول شماره‌ی موبایلت را در کارت پروفایل تأیید کن؛ بعد در هر پلتفرم دیگر همان شماره را تأیید کن تا به همین حساب وصل شود."
+                 : "برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (\(Fa.digits(me.mobile))) را تأیید کن؛ همان لحظه به این حساب وصل می‌شود.")
+                .font(.footnote).foregroundColor(.secondary)
         }
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private var linksSection: some View {

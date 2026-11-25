@@ -1237,17 +1237,8 @@ function renderPfTg() {
       const url = c.url || (key === "tg" ? "https://t.me/pptsaz_bot" : "");
       const acts = [];
       if (url) acts.push(plGo(url, c.connected ? "باز کردن " + c.label : "ورود به " + c.label + " و تایید شماره", !c.connected));
-      if (c.connected) {
-        const cb = h("input", { type: "checkbox", "aria-label": "اعلان " + c.label }); cb.checked = !!c.notify;
-        cb.onchange = async () => { try { await chPost("/api/profile/channel/notify", { plat: c.key, on: cb.checked }); toast(`اعلان ${c.label} ${cb.checked ? "روشن" : "خاموش"} شد`); } catch (e) { cb.checked = !cb.checked; toast(e.message); } renderPfTg(); };
-        acts.push(h("label", { class: "pl-nt" }, cb, "🔔 اعلان"));
-        if (c.canUnlink) acts.push(h("button", { class: "btn ghost sm", type: "button", onclick: async () => {
-          if (!confirm(`${c.label} از حساب جدا شود؟ دیگر اعلان نمی‌گیرد و با آن وارد این حساب نمی‌شوی.`)) return;
-          try { await chPost("/api/profile/channel/unlink", { plat: c.key }); toast(c.label + " جدا شد"); } catch (e) { toast(e.message); } renderPfTg();
-        } }, "جدا کردن"));
-      }
       cards.push(plCard(key, c.connected ? "✅ متصل" + (c.shown ? ` (${fa(c.shown)})` : "") : "⬜ وصل نیست", c.connected,
-        c.connected ? "" : "ربات را باز کن و همان شماره را تایید کن تا به این حساب وصل شود.", acts));
+        c.connected ? "🔔 اعلان‌ها همیشه روشن است." : "ربات را باز کن و همان شماره را تایید کن تا به این حساب وصل شود.", acts));
     }
   }
   cards.push(h("div", { class: "muted", style: "font-size:.86rem" }, u.mobile

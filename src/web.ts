@@ -383,17 +383,13 @@ async function linkEmail(req: Request, env: Env, user: WebUser): Promise<Respons
 }
 
 async function channelUnlink(req: Request, env: Env, user: WebUser): Promise<Response> {
-  const b = await readBody(req, 300);
-  if (!isChan(b?.plat)) return err("پیام‌رسان نامعتبر است.", 400);
-  const r = await unlinkChannel(env, user.id, b.plat);
-  return "error" in r ? err(r.error, r.status) : json({ ok: true, channels: await channelStatus(env, user.id) });
+  void req; void env; void user;
+  return err("جدا کردن پلتفرم‌ها امکان‌پذیر نیست.", 403);
 }
 
 async function channelNotify(req: Request, env: Env, user: WebUser): Promise<Response> {
-  const b = await readBody(req, 300);
-  if (!isChan(b?.plat) || typeof b?.on !== "boolean") return err("درخواست نامعتبر است.", 400);
-  await setChannelNotify(env, user.id, b.plat, b.on);
-  return json({ ok: true, channels: await channelStatus(env, user.id) });
+  void req; void env; void user;
+  return err("اعلان‌ها همیشه روشن‌اند و خاموش نمی‌شوند.", 403);
 }
 
 // ---------- وضعیت کاربر ----------

@@ -1831,19 +1831,8 @@ function channelsNode() {
       const url = c.url || (key === "tg" ? "https://t.me/pptsaz_bot" : "");
       const acts = [];
       if (url && !(c.connected && key === PLAT_KEY)) acts.push(plGo(url, c.connected ? "باز کردن " + c.label : "ورود به " + c.label + " و تایید شماره", !c.connected));
-      if (c.connected) {
-        acts.push(h("button", { class: "btn ghost sm", type: "button", onclick: (e) => busy(e.currentTarget, "…", async () => {
-          try { await chPost("/api/profile/channel/notify", { plat: c.key, on: !c.notify }); toast(`اعلان ${c.label} ${c.notify ? "خاموش" : "روشن"} شد`); } catch (err) { toast(err.message); }
-          renderProfile();
-        }) }, c.notify ? "🔔 اعلان" : "🔕 اعلان"));
-        if (c.canUnlink) acts.push(h("button", { class: "btn ghost sm", type: "button", onclick: (e) => busy(e.currentTarget, "…", async () => {
-          if (!window.confirm(`${c.label} از حساب جدا شود؟`)) return;
-          try { await chPost("/api/profile/channel/unlink", { plat: c.key }); toast(c.label + " جدا شد"); } catch (err) { toast(err.message); }
-          renderProfile();
-        }) }, "جدا کردن"));
-      }
       cards.push(plCard(key, c.connected ? (key === PLAT_KEY ? "✅ متصل (اینجا)" : "✅ متصل") : "⬜ وصل نیست", c.connected,
-        c.connected ? "" : "ربات را باز کن و همان شماره را تایید کن تا به این حساب وصل شود.", acts));
+        c.connected ? "🔔 اعلان‌ها همیشه روشن است." : "ربات را باز کن و همان شماره را تایید کن تا به این حساب وصل شود.", acts));
     }
   }
   out.push(h("div", { class: "pl" }, cards));

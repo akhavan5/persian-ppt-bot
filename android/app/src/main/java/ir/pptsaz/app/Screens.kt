@@ -93,6 +93,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.IconButton
@@ -1538,31 +1539,77 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
 private fun imageLevel(s: Settings, premium: Boolean): Int = if (!s.images) 0 else if (s.imagesMany && premium) 2 else 1
 private fun imageLevelLabel(level: Int): String = when (level) { 0 -> "خیر"; 2 -> "زیاد"; else -> "نرمال" }
 
-/** اتصال پلتفرم‌ها: وضعیت هر پیام‌رسان (متصل یا نه)، روشن/خاموش‌کردن اعلان و جدا کردن؛ اتصال فقط با تأیید شماره‌ی موبایل است */
+private val PL_IOS = listOf(
+    "سیبچه" to "https://sibche.com/applications/paorpoyntsaz", "سیب ایرانی" to "https://sibirani.com/apps/pptsaz-ir/", "سیب‌اپ" to "https://sibapp.com/applications/pptsaz",
+    "اناردونی" to "https://anardoni.com/ios/app/irpptsazapp", "آی‌اپس" to "https://iapps.ir/app/paorpoynt-saz-hosh-msnoaay/714593784191", "اپ‌استار" to "https://app-star.store/app.php?id=pptsaz",
+)
+
+/** یک کارت پلتفرم: آیکن رنگی، نام، وضعیت، توضیح و دکمه‌ها (content) */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlatformRow(icon: String, color: Color, name: String, status: String, ok: Boolean, desc: String, content: @Composable () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, if (ok) color else cs.outlineVariant, RoundedCornerShape(14.dp)).padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) { Text(icon, fontSize = 21.sp) }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.labelSmall, color = if (ok) color else cs.onSurfaceVariant)
+            }
+            if (desc.isNotEmpty()) Text(desc, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) { content() }
+        }
+    }
+}
+
+@Composable
+private fun PlatformLinkButton(text: String, color: Color, filled: Boolean, onClick: () -> Unit) {
+    val pad = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+    if (filled) Button(onClick = onClick, contentPadding = pad, modifier = Modifier.height(34.dp), colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White)) { Text(text, style = MaterialTheme.typography.labelMedium) }
+    else OutlinedButton(onClick = onClick, contentPadding = pad, modifier = Modifier.height(34.dp), border = BorderStroke(1.dp, color), colors = ButtonDefaults.outlinedButtonColors(contentColor = color)) { Text(text, style = MaterialTheme.typography.labelMedium) }
+}
+
+/** اتصال پلتفرم‌ها: کارت هر پلتفرم با لینک، به ترتیب سایت، اندروید، بله، ایتا، اپل، سروش‌پلاس، تلگرام (روبیکا آخر)؛ اتصال فقط با تأیید شماره‌ی موبایل است */
 @Composable
 private fun ChannelsCard(me: Me, vm: AppViewModel) {
     val cs = MaterialTheme.colorScheme
-    var confirmUnlink by remember { mutableStateOf<ChannelInfo?>(null) }
-    val shown = me.channels.filter { it.connected || it.available }
-    if (shown.isEmpty()) return
+    val myket = BuildConfig.STORE == "myket" // نسخه‌ی مایکت: لینک وب‌سایت و تلگرام نمایش داده نمی‌شود
+    val chans = me.channels.filter { it.connected || it.available }.associateBy { it.key }
     SectionTitle("اتصال پلتفرم‌ها", Modifier.padding(top = 4.dp))
     SurfaceCard {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("با تأیید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها به همه‌ی پیام‌رسان‌های روشن می‌رسد.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-            shown.forEach { c ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text(c.label, style = MaterialTheme.typography.titleSmall)
-                        Text(if (c.connected) "✅ متصل" + (if (c.shown.isNotEmpty()) " (" + c.shown.faStr() + ")" else "") else "⬜ وصل نیست", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            if (!myket) PlatformRow("🌐", Color(0xFF2563EB), "سایت پاورپوینت‌ساز", "", false, "حساب اصلی تو؛ اعتبار و ارائه‌ها از همین‌جا به همه‌ی پلتفرم‌ها می‌رسد.") {
+                PlatformLinkButton("pptsaz.ir", Color(0xFF2563EB), false) { vm.openSite() }
+            }
+            PlatformRow("🤖", Color(0xFF16A34A), "اپ اندروید", "✅ همین برنامه", true, "این برنامه با همین حساب وارد شده و اعلان می‌گیرد.") {}
+            for (key in listOf("bale", "eitaa", "apple", "splus", "tg", "rubika")) {
+                if (key == "apple") {
+                    PlatformRow("🍎", Color(0xFF475569), "اپ iOS (اپل)", "", false, "نسخه‌ی iOS از فروشگاه‌های ایرانی آیفون نصب می‌شود؛ بعد با همین شماره وارد شو.") {
+                        PL_IOS.forEach { (n, u) -> PlatformLinkButton(n, Color(0xFF475569), false) { vm.openUrl(u) } }
                     }
-                    if (c.connected) {
-                        TextButton(onClick = { vm.setChannelNotify(c.key, !c.notify) }) { Text(if (c.notify) "🔔 اعلان" else "🔕 اعلان") }
-                        if (c.canUnlink) TextButton(onClick = { confirmUnlink = c }) { Text("جدا کردن") }
-                    }
+                    continue
+                }
+                val c = chans[key] ?: continue
+                if (myket && key == "tg") continue
+                val (icon, color) = when (key) {
+                    "bale" -> "💬" to Color(0xFF1AA34A); "eitaa" -> "🟠" to Color(0xFFF97316); "splus" -> "🔵" to Color(0xFF0EA5E9)
+                    "rubika" -> "🟣" to Color(0xFFA855F7); else -> "✈️" to Color(0xFF229ED9)
+                }
+                val url = c.url.ifEmpty { if (key == "tg") "https://t.me/pptsaz_bot" else "" }
+                PlatformRow(
+                    icon, color, c.label,
+                    if (c.connected) "✅ متصل" + (if (c.shown.isNotEmpty()) " (" + c.shown.faStr() + ")" else "") else "⬜ وصل نیست", c.connected,
+                    if (c.connected) "🔔 اعلان‌ها همیشه روشن است." else "ربات را باز کن و همان شماره را تأیید کن تا به این حساب وصل شود.",
+                ) {
+                    if (url.isNotEmpty()) PlatformLinkButton(if (c.connected) "باز کردن " + c.label else "ورود به " + c.label + " و تأیید شماره", color, !c.connected) { vm.openUrl(url) }
                 }
             }
             Text(
-                (if (me.devices.app) "✅" else "⬜") + " اپ اندروید · " + (if (me.devices.web) "✅" else "⬜") + " اعلان مرورگر · " + (if (me.devices.email) "✅" else "⬜") + " ایمیل",
+                (if (me.devices.web) "✅" else "⬜") + " اعلان مرورگر · " + (if (me.devices.email) "✅" else "⬜") + " ایمیل",
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
             )
             Text(
@@ -1571,16 +1618,6 @@ private fun ChannelsCard(me: Me, vm: AppViewModel) {
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
             )
         }
-    }
-    confirmUnlink?.let { c ->
-        AlertDialog(
-            onDismissRequest = { confirmUnlink = null },
-            shape = RoundedCornerShape(28.dp),
-            title = { Text("جدا کردن " + c.label) },
-            text = { Text("دیگر اعلان نمی‌گیرد و با آن وارد این حساب نمی‌شوی؛ هر وقت خواستی دوباره وصل کن.") },
-            confirmButton = { TextButton(onClick = { vm.unlinkChannel(c.key); confirmUnlink = null }) { Text("جدا کن") } },
-            dismissButton = { TextButton(onClick = { confirmUnlink = null }) { Text("انصراف") } },
-        )
     }
 }
 
