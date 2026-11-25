@@ -19,6 +19,7 @@ object CrashReporter {
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             if (isBazaarUpdaterGlitch(e)) return@setDefaultUncaughtExceptionHandler // باگ داخلی BazaarUpdater (unbind دوباره‌ی سرویس)؛ اپ نباید به‌خاطرش بسته شود
+            if (isNetworkCallbackOsGlitch(e)) return@setDefaultUncaughtExceptionHandler // باگ سیستم‌عامل (اندروید ۱۱ و برخی ROMها)؛ فقط thread همان کتابخانه می‌افتد و اپ باید بماند
             try {
                 val sw = StringWriter()
                 e.printStackTrace(PrintWriter(sw))
@@ -48,6 +49,22 @@ object CrashReporter {
             val known = (c is IllegalArgumentException && c.message?.contains("Service not registered") == true) ||
                 c is android.os.RemoteException || c is android.os.DeadObjectException
             if (known && c.stackTrace.any { it.className.startsWith("com.farsitel.bazaar.updater") }) return true
+            c = c.cause
+        }
+        return false
+    }
+
+    /** «SecurityException: Package android does not belong to <uid>» هنگام ConnectivityManager.registerDefaultNetworkCallback / requestNetwork:
+     *  باگ شناخته‌شده‌ی اندروید (بیشتر ۱۱ و برخی ROMها) وقتی کتابخانه‌ای (تبلیغات، FCM، …) با Context سیستمی یا وقتی پروسه در پس‌زمینه بیدار شده شبکه را رصد می‌کند.
+     *  کد خودِ اپ این فراخوانی را try/catch کرده؛ این خطا روی thread کتابخانه پرتاب می‌شود و به ما نمی‌رسد.
+     *  فقط وقتی نادیده گرفته می‌شود که پیام «does not belong to» باشد و در ردپا ConnectivityManager باشد؛ کرش‌های دیگر همچنان ثبت می‌شوند. */
+    private fun isNetworkCallbackOsGlitch(e: Throwable): Boolean {
+        var c: Throwable? = e
+        var depth = 0
+        while (c != null && depth++ < 6) {
+            if (c is SecurityException && c.message?.contains("does not belong to") == true &&
+                c.stackTrace.any { it.className == "android.net.ConnectivityManager" || it.className.startsWith("android.net.IConnectivityManager") }
+            ) return true
             c = c.cause
         }
         return false
