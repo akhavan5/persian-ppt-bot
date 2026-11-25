@@ -121,6 +121,7 @@ struct Me {
     /// اتصال پلتفرم‌ها: هم‌زمان به چند پیام‌رسان؛ اعلان به همه‌ی روشن‌ها می‌رسد
     var channels: [ChannelInfo] = []
     var devApp = false
+    var devIos = false
     var devWeb = false
     var devEmail = false
 
@@ -329,6 +330,7 @@ func parseMe(_ j: J) -> Me? {
                     notify: $0["notify"].bool, available: $0["available"].bool, canUnlink: $0["canUnlink"].bool, url: $0["url"].str)
     }
     m.devApp = j["devices"]["app"].bool
+    m.devIos = j["devices"]["ios"].bool
     m.devWeb = j["devices"]["web"].bool
     m.devEmail = j["devices"]["email"].bool
     return m

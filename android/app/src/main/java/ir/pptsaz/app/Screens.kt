@@ -1581,15 +1581,15 @@ private fun ChannelsCard(me: Me, vm: AppViewModel) {
     SectionTitle("اتصال پلتفرم‌ها", Modifier.padding(top = 4.dp))
     SurfaceCard {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("با تأیید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها به همه‌ی پیام‌رسان‌های روشن می‌رسد.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-            if (!myket) PlatformRow("🌐", Color(0xFF2563EB), "سایت پاورپوینت‌ساز", "", false, "حساب اصلی تو؛ اعتبار و ارائه‌ها از همین‌جا به همه‌ی پلتفرم‌ها می‌رسد.") {
+            Text("حسابت را به چند پلتفرم وصل کن؛ اعتبار و ارائه‌هایت همه‌جا یکی است و اعلان‌ها هم به همه‌ی آن‌ها می‌رسد.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            if (!myket) PlatformRow("🌐", Color(0xFF2563EB), "سایت پاورپوینت‌ساز", "", false, "ساخت پاورپوینت با هوش مصنوعی مستقیم در مرورگر، بدون نیاز به نصب برنامه.") {
                 PlatformLinkButton("pptsaz.ir", Color(0xFF2563EB), false) { vm.openSite() }
             }
-            PlatformRow("🤖", Color(0xFF16A34A), "اپ اندروید", "✅ همین برنامه", true, "این برنامه با همین حساب وارد شده و اعلان می‌گیرد.") {}
-            for (key in listOf("bale", "eitaa", "apple", "splus", "tg", "rubika")) {
+            PlatformRow("🤖", Color(0xFF16A34A), "اپ اندروید", "✅ همین برنامه", true, "همین حالا از اپ اندروید استفاده می‌کنی.") {}
+            for (key in listOf("bale", "eitaa", "apple", "splus", "tg")) {
                 if (key == "apple") {
-                    PlatformRow("🍎", Color(0xFF475569), "اپ iOS (اپل)", "", false, "نسخه‌ی iOS از فروشگاه‌های ایرانی آیفون نصب می‌شود؛ بعد با همین شماره وارد شو.") {
-                        PL_IOS.forEach { (n, u) -> PlatformLinkButton(n, Color(0xFF475569), false) { vm.openUrl(u) } }
+                    PlatformRow("🍎", Color(0xFF475569), "اپ iOS (اپل)", if (me.devices.ios) "✅ وصل است" else "⬜ نصب نشده", me.devices.ios, if (me.devices.ios) "اپ روی آیفونت وصل است." else "نسخه‌ی iOS را از یکی از این فروشگاه‌ها نصب کن و با همین شماره وارد شو.") {
+                        if (!me.devices.ios) PL_IOS.forEach { (n, u) -> PlatformLinkButton(n, Color(0xFF475569), false) { vm.openUrl(u) } }
                     }
                     continue
                 }
@@ -1597,13 +1597,13 @@ private fun ChannelsCard(me: Me, vm: AppViewModel) {
                 if (myket && key == "tg") continue
                 val (icon, color) = when (key) {
                     "bale" -> "💬" to Color(0xFF1AA34A); "eitaa" -> "🟠" to Color(0xFFF97316); "splus" -> "🔵" to Color(0xFF0EA5E9)
-                    "rubika" -> "🟣" to Color(0xFFA855F7); else -> "✈️" to Color(0xFF229ED9)
+                    else -> "✈️" to Color(0xFF229ED9)
                 }
                 val url = c.url.ifEmpty { if (key == "tg") "https://t.me/pptsaz_bot" else "" }
                 PlatformRow(
                     icon, color, c.label,
                     if (c.connected) "✅ متصل" + (if (c.shown.isNotEmpty()) " (" + c.shown.faStr() + ")" else "") else "⬜ وصل نیست", c.connected,
-                    if (c.connected) "🔔 اعلان‌ها همیشه روشن است." else "ربات را باز کن و همان شماره را تأیید کن تا به این حساب وصل شود.",
+                    if (c.connected) "🔔 اعلان‌ها همیشه روشن است." else "ربات را باز کن و شماره‌ات را تأیید کن؛ همان لحظه وصل می‌شود.",
                 ) {
                     if (url.isNotEmpty()) PlatformLinkButton(if (c.connected) "باز کردن " + c.label else "ورود به " + c.label + " و تأیید شماره", color, !c.connected) { vm.openUrl(url) }
                 }
@@ -1613,8 +1613,8 @@ private fun ChannelsCard(me: Me, vm: AppViewModel) {
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
             )
             Text(
-                if (me.mobile.isNotEmpty()) "برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (" + me.mobile.faStr() + ") را تأیید کن؛ همان لحظه به این حساب وصل می‌شود."
-                else "اول شماره‌ی موبایلت را در کارت پروفایل تأیید کن؛ بعد در هر پلتفرم دیگر همان شماره را تأیید کن تا به همین حساب وصل شود.",
+                if (me.mobile.isNotEmpty()) "برای وصل‌کردن پلتفرم دیگر، در همان ربات این شماره (" + me.mobile.faStr() + ") را تأیید کن."
+                else "اول شماره‌ی موبایلت را در کارت پروفایل ثبت کن؛ بعد در هر پلتفرم همان شماره را تأیید کن.",
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
             )
         }

@@ -1790,8 +1790,8 @@ function afterMerge() { toast("پیام‌رسان به حساب دارنده‌
 async function chPost(path, body) { const r = await api(path, { method: "POST", body }); if (r && r.channels) me.channels = r.channels; return r; }
 const PL_ANDROID = [["کافه‌بازار", "https://cafebazaar.ir/app/ir.pptsaz.app"], ["مایکت", "https://myket.ir/app/ir.pptsaz.app"]];
 const PL_IOS = [["سیبچه", "https://sibche.com/applications/paorpoyntsaz"], ["سیب ایرانی", "https://sibirani.com/apps/pptsaz-ir/"], ["سیب‌اپ", "https://sibapp.com/applications/pptsaz"], ["اناردونی", "https://anardoni.com/ios/app/irpptsazapp"], ["آی‌اپس", "https://iapps.ir/app/paorpoynt-saz-hosh-msnoaay/714593784191"], ["اپ‌استار", "https://app-star.store/app.php?id=pptsaz"]];
-// ترتیب نمایش: سایت، اندروید (بازار و مایکت)، بله، ایتا، اپل، سروش‌پلاس، تلگرام (روبیکا اگر فعال بود، آخر)
-const PL_ORDER = ["site", "android", "bale", "eitaa", "apple", "splus", "tg", "rubika"];
+// ترتیب نمایش: سایت، اندروید (بازار و مایکت)، بله، ایتا، اپل، سروش‌پلاس، تلگرام 
+const PL_ORDER = ["site", "android", "bale", "eitaa", "apple", "splus", "tg"];
 const PL_META = {
   site: { icon: "🌐", name: "سایت پاورپوینت‌ساز", color: "#2563eb" },
   android: { icon: "🤖", name: "اپ اندروید", color: "#16a34a" },
@@ -1800,7 +1800,6 @@ const PL_META = {
   apple: { icon: "🍎", name: "اپ iOS (اپل)", color: "#475569" },
   splus: { icon: "🔵", name: "سروش‌پلاس", color: "#0ea5e9" },
   tg: { icon: "✈️", name: "تلگرام", color: "#229ed9" },
-  rubika: { icon: "🟣", name: "روبیکا", color: "#a855f7" },
 };
 function plGo(url, text, fill) { return h("button", { class: "pl-go" + (fill ? " fill" : ""), type: "button", onclick: () => TG.openLink(url) }, text); }
 function plCard(key, status, ok, desc, actions) {
@@ -1819,27 +1818,27 @@ function channelsNode() {
   const cards = [];
   for (const key of PL_ORDER) {
     if (key === "site") {
-      cards.push(plCard("site", "", false, "حساب اصلی تو؛ اعتبار و ارائه‌ها از همین‌جا به همه‌ی پلتفرم‌ها می‌رسد.", [plGo("https://pptsaz.ir", "باز کردن pptsaz.ir", true)]));
+      cards.push(plCard("site", "", false, "ساخت پاورپوینت با هوش مصنوعی مستقیم در مرورگر، بدون نیاز به نصب برنامه.", [plGo("https://pptsaz.ir", "باز کردن pptsaz.ir", true)]));
     } else if (key === "android") {
-      cards.push(plCard("android", d.app ? "✅ وصل است" : "⬜ نصب نشده", !!d.app, d.app ? "اپ روی گوشی‌ات با همین حساب وارد شده و اعلان می‌گیرد." : "اپ را از یکی از فروشگاه‌ها نصب کن و با همین شماره وارد شو.",
-        PL_ANDROID.map(([n, url]) => plGo(url, "دانلود از " + n, !d.app))));
+      cards.push(plCard("android", d.app ? "✅ وصل است" : "⬜ نصب نشده", !!d.app, d.app ? "اپ روی گوشی‌ات وصل است." : "اپ را نصب کن و با همین شماره وارد شو.",
+        (d.app ? [] : PL_ANDROID).map(([n, url]) => plGo(url, "دانلود از " + n, true))));
     } else if (key === "apple") {
-      cards.push(plCard("apple", "", false, "نسخه‌ی iOS از فروشگاه‌های ایرانی آیفون نصب می‌شود؛ بعد با همین شماره وارد شو.",
-        PL_IOS.map(([n, url]) => h("button", { class: "pl-go sm", type: "button", onclick: () => TG.openLink(url) }, n))));
+      cards.push(plCard("apple", d.ios ? "✅ وصل است" : "⬜ نصب نشده", !!d.ios, d.ios ? "اپ روی آیفونت وصل است." : "نسخه‌ی iOS را از یکی از این فروشگاه‌ها نصب کن و با همین شماره وارد شو.",
+        (d.ios ? [] : PL_IOS).map(([n, url]) => h("button", { class: "pl-go sm", type: "button", onclick: () => TG.openLink(url) }, n))));
     } else {
       const c = chans[key]; if (!c || (!c.connected && !c.available)) continue;
       const url = c.url || (key === "tg" ? "https://t.me/pptsaz_bot" : "");
       const acts = [];
       if (url && !(c.connected && key === PLAT_KEY)) acts.push(plGo(url, c.connected ? "باز کردن " + c.label : "ورود به " + c.label + " و تایید شماره", !c.connected));
       cards.push(plCard(key, c.connected ? (key === PLAT_KEY ? "✅ متصل (اینجا)" : "✅ متصل") : "⬜ وصل نیست", c.connected,
-        c.connected ? "🔔 اعلان‌ها همیشه روشن است." : "ربات را باز کن و همان شماره را تایید کن تا به این حساب وصل شود.", acts));
+        c.connected ? "🔔 اعلان‌ها همیشه روشن است." : "ربات را باز کن و شماره‌ات را تایید کن؛ همان لحظه وصل می‌شود.", acts));
     }
   }
   out.push(h("div", { class: "pl" }, cards));
   out.push(h("div", { class: "muted", style: "font-size:.85rem;margin-top:4px" }, `${d.web ? "✅" : "⬜"} اعلان مرورگر · ${d.email ? "✅" : "⬜"} ایمیل`));
   out.push(h("div", { class: "muted", style: "font-size:.85rem;margin-top:6px;line-height:1.9" }, u.mobile
-    ? `برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (${fa(u.mobile)}) را تایید کن؛ همان لحظه به این حساب وصل می‌شود.`
-    : "اول شماره‌ی موبایلت را بالا ثبت و تایید کن؛ بعد در هر پلتفرم دیگر همان شماره را تایید کن تا به همین حساب وصل شود."));
+    ? `برای وصل‌کردن پلتفرم دیگر، در همان ربات این شماره (${fa(u.mobile)}) را تایید کن.`
+    : "اول شماره‌ی موبایلت را بالا ثبت کن؛ بعد در هر پلتفرم همان شماره را تایید کن."));
   return out;
 }
 function renderProfile() {

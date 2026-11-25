@@ -256,32 +256,30 @@ struct AccountView: View {
         let chans = Dictionary(uniqueKeysWithValues: me.channels.filter { $0.connected || $0.available }.map { ($0.key, $0) })
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "اتصال پلتفرم‌ها")
-            Text("با تأیید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها به همه‌ی پیام‌رسان‌های روشن می‌رسد.")
+            Text("حسابت را به چند پلتفرم وصل کن؛ اعتبار و ارائه‌هایت همه‌جا یکی است و اعلان‌ها هم به همه‌ی آن‌ها می‌رسد.")
                 .font(.footnote).foregroundColor(.secondary)
-            platformCard("🌐", .blue, "سایت پاورپوینت‌ساز", desc: "حساب اصلی تو؛ اعتبار و ارائه‌ها از همین‌جا به همه‌ی پلتفرم‌ها می‌رسد.") {
+            platformCard("🌐", .blue, "سایت پاورپوینت‌ساز", desc: "ساخت پاورپوینت با هوش مصنوعی مستقیم در مرورگر، بدون نیاز به نصب برنامه.") {
                 linkChip("pptsaz.ir", .blue, "https://pptsaz.ir")
             }
             platformCard("🤖", .green, "اپ اندروید", status: me.devApp ? "✅ وصل است" : "⬜ نصب نشده", ok: me.devApp,
-                         desc: me.devApp ? "اپ روی گوشی‌ات با همین حساب وارد شده و اعلان می‌گیرد." : "اپ را از یکی از فروشگاه‌ها نصب کن و با همین شماره وارد شو.") {
-                HStack {
-                    linkChip("دانلود از کافه‌بازار", .green, filled: !me.devApp, "https://cafebazaar.ir/app/ir.pptsaz.app")
-                    linkChip("دانلود از مایکت", .green, filled: !me.devApp, "https://myket.ir/app/ir.pptsaz.app")
+                         desc: me.devApp ? "اپ روی گوشی‌ات وصل است." : "اپ را نصب کن و با همین شماره وارد شو.") {
+                if !me.devApp {
+                    HStack {
+                        linkChip("دانلود از کافه‌بازار", .green, filled: true, "https://cafebazaar.ir/app/ir.pptsaz.app")
+                        linkChip("دانلود از مایکت", .green, filled: true, "https://myket.ir/app/ir.pptsaz.app")
+                    }
                 }
             }
-            ForEach(["bale", "eitaa", "apple", "splus", "tg", "rubika"], id: \.self) { key in
+            ForEach(["bale", "eitaa", "apple", "splus", "tg"], id: \.self) { key in
                 if key == "apple" {
-                    platformCard("🍎", .gray, "اپ iOS (اپل)", status: "✅ همین برنامه", ok: true, desc: "این برنامه با همین حساب وارد شده است. نسخه‌ی iOS از فروشگاه‌های ایرانی آیفون نصب می‌شود:") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack { ForEach(Self.iosStores, id: \.0) { linkChip($0.0, .gray, $0.1) } }
-                        }
-                    }
+                    platformCard("🍎", .gray, "اپ iOS (اپل)", status: "✅ همین برنامه", ok: true, desc: "همین حالا از اپ iOS استفاده می‌کنی.") {}
                 } else if let c = chans[key] {
-                    let color: Color = key == "bale" ? .green : key == "eitaa" ? .orange : key == "splus" ? .cyan : key == "rubika" ? .purple : .blue
-                    let icon = key == "bale" ? "💬" : key == "eitaa" ? "🟠" : key == "splus" ? "🔵" : key == "rubika" ? "🟣" : "✈️"
+                    let color: Color = key == "bale" ? .green : key == "eitaa" ? .orange : key == "splus" ? .cyan : .blue
+                    let icon = key == "bale" ? "💬" : key == "eitaa" ? "🟠" : key == "splus" ? "🔵" : "✈️"
                     let url = c.url.isEmpty ? (key == "tg" ? "https://t.me/pptsaz_bot" : "") : c.url
                     platformCard(icon, color, c.label,
                                  status: c.connected ? "✅ متصل" + (c.shown.isEmpty ? "" : " (\(Fa.digits(c.shown)))") : "⬜ وصل نیست", ok: c.connected,
-                                 desc: c.connected ? "🔔 اعلان‌ها همیشه روشن است." : "ربات را باز کن و همان شماره را تأیید کن تا به این حساب وصل شود.") {
+                                 desc: c.connected ? "🔔 اعلان‌ها همیشه روشن است." : "ربات را باز کن و شماره‌ات را تأیید کن؛ همان لحظه وصل می‌شود.") {
                         HStack {
                             if !url.isEmpty { linkChip(c.connected ? "باز کردن \(c.label)" : "ورود به \(c.label) و تأیید شماره", color, filled: !c.connected, url) }
                         }
@@ -291,8 +289,8 @@ struct AccountView: View {
             Text("\(me.devWeb ? "✅" : "⬜") اعلان مرورگر · \(me.devEmail ? "✅" : "⬜") ایمیل")
                 .font(.caption).foregroundColor(.secondary)
             Text(me.mobile.isEmpty
-                 ? "اول شماره‌ی موبایلت را در کارت پروفایل تأیید کن؛ بعد در هر پلتفرم دیگر همان شماره را تأیید کن تا به همین حساب وصل شود."
-                 : "برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (\(Fa.digits(me.mobile))) را تأیید کن؛ همان لحظه به این حساب وصل می‌شود.")
+                 ? "اول شماره‌ی موبایلت را در کارت پروفایل ثبت کن؛ بعد در هر پلتفرم همان شماره را تأیید کن."
+                 : "برای وصل‌کردن پلتفرم دیگر، در همان ربات این شماره (\(Fa.digits(me.mobile))) را تأیید کن.")
                 .font(.footnote).foregroundColor(.secondary)
         }
         .padding(16)

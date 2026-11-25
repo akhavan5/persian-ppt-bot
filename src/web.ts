@@ -312,6 +312,8 @@ async function noteApp(env: Env, user: WebUser, req: Request): Promise<void> {
   if (a) {
     const f = appFields(a);
     if (!user.app) { user.app = true; changed = true; }
+    const used = a.os ?? "android"; // نسخه‌ی قدیمی اپ اندروید سیستم‌عامل نمی‌فرستد
+    if (!(user.oss ?? []).includes(used)) { user.oss = [...(user.oss ?? []), used]; changed = true; }
     // کاربرِ iOS که قبلاً از نسخه‌ی اندروید فروشگاه داشت (یا برعکس): فیلدهای فروشگاه/نسخه‌ی قبلی پاک می‌شود تا قاطی نشود
     if (a.os && user.os !== a.os) { delete user.store; delete user.andv; changed = true; }
     for (const [k, v] of Object.entries(f)) if ((user as any)[k] !== v) { (user as any)[k] = v; changed = true; }
@@ -406,7 +408,11 @@ async function me(env: Env, user: WebUser): Promise<Response> {
     // وضعیت اتصال همه‌ی پلتفرم‌ها برای بخش «اتصال پلتفرم‌ها» در همه‌ی کلاینت‌ها (سایت، Mini App، اپ‌ها): هر پیام‌رسان + دستگاه‌های اعلان
     channels: await channelStatus(env, user.id).then((cs) => Promise.all(cs.map(async (c) => ({ ...c, url: c.available || c.connected ? await channelOpenLink(env, c.key).catch(() => "") : "" })))).catch(() => []),
     linkedIds: await getLinkedIds(env, user.id).catch(() => []), // شناسه‌ی داخلی همه‌ی پیام‌رسان‌های وصل‌شده (Mini App با آن می‌فهمد این نشست مال همین کاربر است)
-    devices: await deviceStatus(env, user.id, !!user.email).catch(() => ({ app: false, web: false, email: false })),
+    devices: await deviceStatus(env, user.id, !!user.email).catch(() => ({ app: false, web: false, email: false })).then((d) => {
+      // اندروید: توکن اعلان یا اینکه اپ اندروید را باز کرده؛ iOS: اپ iOS را باز کرده (هر دو می‌توانند هم‌زمان درست باشند؛ حساب‌های قدیمی بدون oss/os اندرویدند)
+      const oss = user.oss ?? (user.app ? [user.os ?? "android"] : []);
+      return { ...d, app: d.app || oss.includes("android"), ios: oss.includes("ios") };
+    }),
     telegram, // آیدی عددی تلگرامِ وصل‌شده (یا null)؛ برای بله/ایتا/روبیکا همان شناسه‌ی داخلی (جمع‌شده با پایه) است
     // پروفایل سایت: پیام‌رسانِ وصل‌شده ("tg" | "bale" | "eitaa" | "rubika") و شناسه‌ی واقعی خودش (روبیکا: null چون شناسه‌اش هش است)
     telegramPlat: telegram ? (isSplusId(telegram) ? "splus" : isEitaaId(telegram) ? "eitaa" : isRubikaId(telegram) ? "rubika" : isBaleId(telegram) ? "bale" : "tg") : null,
