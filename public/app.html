@@ -1818,7 +1818,7 @@ function renderSettings() {
   $("#tplList").replaceChildren(...tpls.map((t) => optCard(`${t.emoji || ""} ${t.name}`.trim(), t.hint, (s.template || "classic") === t.key, () => save({ template: t.key }))));
   $("#themes").replaceChildren(...cfg.themes.map((t) => { const on = s.theme === t.key;
     return h("button", { type: "button", class: "swt" + (on ? " on" : ""), ...radio(on), "data-k": t.key, onclick: () => save({ theme: t.key }) },
-      h("i", {}, h("span", { style: `background:linear-gradient(135deg,${t.primary} 55%,${t.accent} 55%)` }, on ? "✓" : "")), t.name); }));
+      h("i", {}, h("span", { style: `background:linear-gradient(135deg,#${t.primary} 55%,#${t.accent} 55%)` }, on ? "✓" : "")), t.name); }));
   $("#fonts").replaceChildren(...cfg.fonts.map((f) => h("button", { type: "button", class: "chip" + (s.font === f ? " on" : ""), ...radio(s.font === f), onclick: () => save({ font: f }) }, f)));
   $("#tones").replaceChildren(...Object.entries(cfg.tones).map(([k, l]) => h("button", { type: "button", class: "chip" + (s.tone === k ? " on" : ""), ...radio(s.tone === k), onclick: () => save({ tone: k }) }, l)));
   const MODES = [["normal", "عادی", "ساختار آزاد، متناسب با موضوع"], ["student", "دانشجویی", "فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع (حداقل ۸ اسلاید)"],
