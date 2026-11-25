@@ -81,6 +81,20 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .chip{display:flex;align-items:center;gap:7px;border:2px solid var(--line);background:var(--sec);color:var(--fg);border-radius:999px;padding:4px 12px;font:inherit;font-size:.85rem;cursor:pointer}
 .chip.on{border-color:var(--btn)}
 .dot{width:14px;height:14px;border-radius:50%;display:inline-block}
+.scrH h1{font-size:1.35rem;margin:4px 2px 0;line-height:1.6}.scrH p{margin:0 2px 8px;color:var(--hint);font-size:.85rem}
+.secT{font-weight:700;font-size:.92rem;margin:16px 2px 8px}
+.opt{display:flex;align-items:center;gap:12px;width:100%;text-align:start;border:2px solid var(--line);background:var(--card);color:var(--fg);border-radius:16px;padding:12px 14px;font:inherit;cursor:pointer;margin:0 0 8px}
+.opt.on{border-color:var(--btn);background:color-mix(in srgb,var(--btn) 10%,var(--card))}
+.opt .tx{flex:1;min-width:0}.opt b{display:block;font-size:.95rem}.opt small{display:block;color:var(--hint);font-size:.78rem;line-height:1.7}
+.opt .rd{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;color:var(--btn-fg);font-size:.78rem}
+.opt.on .rd{background:var(--btn);border-color:var(--btn)}
+.swRow{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.swt{flex:none;width:68px;background:none;border:0;color:var(--hint);font:inherit;font-size:.72rem;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:6px 0;border-radius:16px}
+.swt i{width:50px;height:50px;border-radius:50%;border:2.5px solid transparent;padding:4px;display:block}
+.swt i span{width:100%;height:100%;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:.95rem}
+.swt.on{color:var(--btn);font-weight:700}.swt.on i{border-color:var(--btn)}
+.chip.on{background:color-mix(in srgb,var(--btn) 12%,var(--sec))}
+.tg .sw small{display:block;color:var(--hint);font-size:.78rem;line-height:1.7}
 .file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .file:first-child{border-top:0}
 .file strong{display:-webkit-box;font-size:.92rem;overflow:hidden;white-space:normal;overflow-wrap:anywhere;line-height:1.6;-webkit-line-clamp:3;-webkit-box-orient:vertical}
@@ -271,24 +285,23 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
 
     <!-- تنظیمات -->
     <section id="t-set" role="tabpanel" aria-labelledby="tb-set" hidden>
-      <div class="card"><h2>تم رنگی</h2><div class="chips" id="themes"></div></div>
-      <div class="card">
-        <div class="grid2">
-          <div><label class="f" for="mode">حالت ساخت</label><select id="mode">
-            <option value="normal">📄 عادی</option><option value="student">🎓 دانشجویی</option><option value="business">💼 کسب‌وکار</option><option value="teacher">🍎 معلم</option><option value="thesis">🎓 دفاع پایان‌نامه</option></select></div>
-          <div><label class="f" for="tone">لحن</label><select id="tone"></select></div>
-          <div><label class="f" for="font">فونت</label><select id="font"></select></div>
-          <div id="tplBox"><label class="f" for="tpl">قالب اسلاید</label><select id="tpl"></select></div>
-        </div>
-        <div style="margin-top:8px">
-          <label class="sw"><span>ارقام فارسی</span><input type="checkbox" id="digits"></label>
-          <label class="sw"><span>اسلاید منابع</span><input type="checkbox" id="sources"></label>
-          <label class="sw"><span>اسلاید پرسش‌های پایانی</span><input type="checkbox" id="questions"></label>
-          <label class="sw"><span>یادداشت سخنرانی</span><input type="checkbox" id="notes"></label>
-        </div>
+      <div class="scrH"><h1>تنظیمات</h1><p>ظاهر و محتوای ارائه‌هایتان</p></div>
+      <div id="tplBox"><div class="secT">قالب</div><div id="tplList" role="radiogroup" aria-label="قالب"></div></div>
+      <div class="secT">تم رنگی</div><div class="swRow" id="themes" role="radiogroup" aria-label="تم رنگی"></div>
+      <div class="secT">فونت</div><div class="chips" id="fonts" role="radiogroup" aria-label="فونت"></div>
+      <div class="muted" style="margin-top:6px">فونت Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد؛ Tahoma و Arial همه‌جا کار می‌کنند.</div>
+      <div class="secT">لحن</div><div class="chips" id="tones" role="radiogroup" aria-label="لحن"></div>
+      <div class="secT">حالت ساخت</div><div id="modes" role="radiogroup" aria-label="حالت ساخت"></div>
+      <div class="secT">گزینه‌ها</div>
+      <div class="card tg">
+        <label class="sw"><span>ارقام فارسی<small>نمایش اعداد به‌صورت ۱۲۳</small></span><input type="checkbox" id="digits"></label>
+        <label class="sw"><span>اسلاید منابع<small>فهرست منابع در پایان ارائه</small></span><input type="checkbox" id="sources"></label>
+        <label class="sw"><span>اسلاید پرسش‌های پایانی<small>پرسش و پاسخ برای جمع‌بندی</small></span><input type="checkbox" id="questions"></label>
+        <label class="sw"><span>یادداشت سخنرانی<small>متن پیشنهادی برای ارائه‌ی هر اسلاید</small></span><input type="checkbox" id="notes"></label>
       </div>
     </section>
     <section id="t-acc" role="tabpanel" aria-labelledby="tb-acc" hidden>
+      <div class="scrH"><h1>حساب من</h1><p>پروفایل، اعتبار و دعوت دوستان</p></div>
       <div class="card" id="pfCard">
         <h2>👤 پروفایل</h2>
         <div id="pfBody"></div>
@@ -1757,14 +1770,23 @@ function renderCreditInfo() {
 }
 function renderSettings() {
   const s = me.settings;
-  $("#themes").replaceChildren(...cfg.themes.map((t) => h("button", { type: "button", class: "chip" + (s.theme === t.key ? " on" : ""), "data-k": t.key, onclick: () => save({ theme: t.key }) },
-    h("span", { class: "dot", style: `background:linear-gradient(135deg,${t.primary} 50%,${t.accent} 50%)` }), t.name)));
   const fill = (sel, opts, val) => { $(sel).replaceChildren(...opts.map(([v, l]) => h("option", { value: v }, l))); $(sel).value = val; };
-  fill("#tone", Object.entries(cfg.tones), s.tone);
-  fill("#font", cfg.fonts.map((f) => [f, f]), s.font);
-  $("#mode").value = s.mode;
+  const radio = (on) => ({ role: "radio", "aria-checked": String(on) });
+  const optCard = (title, desc, on, fn) => h("button", { type: "button", class: "opt" + (on ? " on" : ""), ...radio(on), onclick: fn },
+    h("span", { class: "tx" }, h("b", {}, title), desc ? h("small", {}, desc) : null), h("span", { class: "rd", "aria-hidden": "true" }, on ? "✓" : ""));
   const tpls = cfg.templates || []; show($("#tplBox"), tpls.length > 1);
-  fill("#tpl", tpls.map((t) => [t.key, `${t.emoji} ${t.name}`]), s.template || "classic");
+  $("#tplList").replaceChildren(...tpls.map((t) => optCard(`${t.emoji || ""} ${t.name}`.trim(), t.hint, (s.template || "classic") === t.key, () => save({ template: t.key }))));
+  $("#themes").replaceChildren(...cfg.themes.map((t) => { const on = s.theme === t.key;
+    return h("button", { type: "button", class: "swt" + (on ? " on" : ""), ...radio(on), "data-k": t.key, onclick: () => save({ theme: t.key }) },
+      h("i", {}, h("span", { style: `background:linear-gradient(135deg,${t.primary} 55%,${t.accent} 55%)` }, on ? "✓" : "")), t.name); }));
+  $("#fonts").replaceChildren(...cfg.fonts.map((f) => h("button", { type: "button", class: "chip" + (s.font === f ? " on" : ""), ...radio(s.font === f), onclick: () => save({ font: f }) }, f)));
+  $("#tones").replaceChildren(...Object.entries(cfg.tones).map(([k, l]) => h("button", { type: "button", class: "chip" + (s.tone === k ? " on" : ""), ...radio(s.tone === k), onclick: () => save({ tone: k }) }, l)));
+  const MODES = [["normal", "عادی", "ساختار آزاد، متناسب با موضوع"], ["student", "دانشجویی", "فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع (حداقل ۸ اسلاید)"],
+    ["business", "کسب‌وکار", "خلاصه‌ی مدیریتی، مسئله و راه‌حل، جدول و نمودار، برنامه‌ی اجرا و گام‌های بعدی (حداقل ۸ اسلاید)"],
+    ["teacher", "معلم", "اهداف درس، پرسش آغازین، محتوا، فعالیت کلاسی، جمع‌بندی و پرسش‌های مرور (حداقل ۸ اسلاید)"],
+    ["thesis", "دفاع پایان‌نامه", "مسئله، اهداف، پیشینه، روش، یافته‌ها، نتیجه‌گیری، پیشنهادها و منابع (حداقل ۱۰ اسلاید)"]];
+  $("#modes").replaceChildren(...MODES.map(([k, n, d]) => { const locked = k !== "normal" && !me.premium;
+    return optCard(locked ? n + " 🔒" : n, d, s.mode === k, () => locked ? toast(`حالت ${n} (دارای حداقل اسلاید) فقط برای کاربران دارای پلن پلاس/پرو فعال است`) : save({ mode: k })); }));
   show($("#modelBox"), (cfg.models || []).length > 1);
   fill("#model", (cfg.models || []).map((m) => [m.id, m.name + (m.free === false ? " (ویژه)" : "")]), s.model || (cfg.models.find((m) => m.free !== false) || cfg.models[0] || {}).id);
   for (const k of ["digits", "sources", "questions"]) $("#" + k).checked = !!s[k];
@@ -1783,10 +1805,6 @@ async function save(patch) {
   try { me.settings = (await api("/api/settings", { method: "PUT", body: patch })).settings; renderSettings(); toast("ذخیره شد ✓"); TG.haptic("select"); } // فقط تب تنظیمات دوباره رندر می‌شود؛ انتخاب‌های تب «ساخت» دست نمی‌خورد
   catch (e) { toast(e.message); renderSettings(); }
 }
-$("#mode").onchange = (e) => save({ mode: e.target.value });
-$("#tone").onchange = (e) => save({ tone: e.target.value });
-$("#font").onchange = (e) => save({ font: e.target.value });
-$("#tpl").onchange = (e) => save({ template: e.target.value });
 $("#model").onchange = (e) => save({ model: e.target.value });
 for (const k of ["digits", "sources", "questions", "notes"]) $("#" + k).onchange = (e) => save({ [k]: e.target.checked });
 
