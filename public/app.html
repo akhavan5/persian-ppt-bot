@@ -844,11 +844,11 @@ const TG = IS_EITAA ? makeEitaa(EW) : IS_BALE ? makeBale(BLW) : IS_SPLUS ? makeS
     via: "miniapp", idBase: 0,
     share(link) { TG.openTg("/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent("ساخت پاورپوینت فارسی با هوش مصنوعی، مستقیم توی تلگرام 👇")); },
     // درخواست شماره: تلگرام (۶.۹+) پنجره‌ی اشتراک‌گذاری شماره را نشان می‌دهد و شماره را به‌صورت پیام «مخاطب» به ربات می‌فرستد (نه به صفحه)؛
-    // ثبتش را ربات انجام می‌دهد (bot-profile.ts ← handleSharedContact). cb(null) = پنجره بسته شد (تأیید یا رد)؛ جواب برای صفحه مهم نیست.
+    // ثبتش را ربات انجام می‌دهد (bot-profile.ts ← handleSharedContact). cb(null) = پنجره بسته شد؛ با status=sent پرچم «ارسال شد» می‌خورد تا askContact بعد از ثبت، ورود دوباره بزند و در صورت ادغام حساب، صفحه تازه شود.
     requestContact(cb) {
       if (!since("6.9")) return cb(null);
       let done = false; const fin = () => { if (!done) { done = true; cb(null); } };
-      on("phone_requested", fin); post("web_app_request_phone"); setTimeout(fin, 60000);
+      on("phone_requested", (e) => { if (e && e.status === "sent") markContactSent(); fin(); }); post("web_app_request_phone"); setTimeout(fin, 60000);
     },
     askWrite() {},
   };
@@ -1940,9 +1940,9 @@ function renderProfile() {
     h("span", {}, `${icon} ${label}: `, val ? h("bdi", { dir: "ltr" }, String(val)) : "ثبت نشده", val ? " ✅" : ""),
     !val && miss.includes(kind) && !(pf && pf.kind === kind)
       ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => {
-          // ایتا: شماره فقط با requestContact داخلی (طبق مستند، فرم دستی مجاز نیست) و فقط بعد از کلیک کاربر
-          if ((IS_EITAA || IS_SPLUS || IS_BALE) && kind === "mobile" && typeof TG.requestContact === "function") return busy(e.currentTarget, "…", () => new Promise((done) => TG.requestContact(async (data) => {
-            if (!data) { if (IS_SPLUS || IS_BALE) { if (contactSentNoData && (await awaitContactRegistered()) !== "none") return done(); pf = { kind, step: "v", v: "", c: "" }; renderProfile(); return done(); } toast("شماره به اشتراک گذاشته نشد."); return done(); } // سروش‌پلاس: اگر خودکار نشد، ثبت دستی با کد پیامکی
+          // ایتا: شماره فقط با requestContact داخلی (طبق مستند، فرم دستی مجاز نیست) و فقط بعد از کلیک کاربر؛ سروش‌پلاس/بله/تلگرام: اول requestContact و اگر ثبت خودکار نشد فرم دستی
+          if ((IS_EITAA || IS_SPLUS || IS_BALE || PLAT_KEY === "tg") && kind === "mobile" && typeof TG.requestContact === "function") return busy(e.currentTarget, "…", () => new Promise((done) => TG.requestContact(async (data) => {
+            if (!data) { if (IS_SPLUS || IS_BALE || PLAT_KEY === "tg") { if (contactSentNoData && (await awaitContactRegistered()) !== "none") return done(); pf = { kind, step: "v", v: "", c: "" }; renderProfile(); return done(); } toast("شماره به اشتراک گذاشته نشد."); return done(); } // سروش‌پلاس: اگر خودکار نشد، ثبت دستی با کد پیامکی
             try {
               const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
               if (r.merged) { done(); return afterMerge(); }
