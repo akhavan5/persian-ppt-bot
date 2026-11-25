@@ -908,6 +908,19 @@ async function authFetch(path, init = {}, retried = false) {
 }
 // پشتیبانی هوشمند (support.js): همان نشست Bearer اپ؛ پنجره‌ی گفتگو از کارت «پشتیبانی هوشمند» در تنظیمات باز می‌شود
 window.ppSupportAuth = () => token; window.ppSupportRelogin = login; window.ppSupportVia = TG.via;
+// نشست قدیمی بعد از اتصال شماره: وقتی شماره در چت ربات (یا جای دیگر) تأیید و این هویت به حسابِ دارنده‌ی شماره وصل می‌شود، توکن ذخیره‌شده‌ی مینی‌اپ هنوز
+// مال «پروفایل خودکار» قبلی است و شماره را نشان نمی‌دهد. تا وقتی شماره‌ای دیده نمی‌شود، با ورود دوباره (initData) حساب فعلی این هویت را از سرور می‌گیریم؛
+// اگر حساب عوض شده باشد سرور توکن تازه می‌دهد (وگرنه همان توکن تمدید می‌شود). حداکثر هر ۲۰ ثانیه یک بار.
+let reconAt = 0;
+async function reconcileSession() {
+  if (!TG.initData || !me || !me.user || me.user.mobile || Date.now() - reconAt < 20000) return false;
+  reconAt = Date.now();
+  const old = token;
+  try { await login(); } catch { return false; }
+  if (token === old) return false;
+  try { const r = await api("/api/me"); if (r && r.user) { me = r; return true; } } catch {}
+  return false;
+}
 async function busy(btn, label, fn) {
   if (btn.classList.contains("busy")) return;
   const o = btn.textContent; btn.classList.add("busy"); btn.disabled = true; btn.textContent = label;
@@ -975,6 +988,7 @@ async function boot() {
     me = await api("/api/me");
     // نشست نامعتبر، یا حسابِ تلگرامِ وصل‌شده با این کاربر نمی‌خواند (مثلاً دو حساب تلگرام روی یک دستگاه) ⇒ ورود تازه
     if (!me.user || (myTg && (Array.isArray(me.linkedIds) ? me.linkedIds.length > 0 && !me.linkedIds.includes(myTg) : me.telegram && me.telegram !== myTg))) { token = ""; keep.set(null); await login(); me = await api("/api/me"); }
+    await reconcileSession();
   } catch (e) { showFail(e); return; }
   show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
   show($("#go"), true); // دکمه‌ی داخل صفحه همیشه می‌ماند: اگر کلاینت تلگرام (یا نسخه‌های غیررسمی) رویداد دکمه‌ی اصلی را نرساند، ساخت باز هم کار کند
@@ -1006,8 +1020,11 @@ function renderHead() {
 }
 async function refreshMe() {
   try {
-    const r = await api("/api/me");
+    let r = await api("/api/me");
     if (!r.user) return;
+    const prev = me; me = r;
+    if (await reconcileSession()) { renderAll(); return; } // حساب عوض شده (اتصال شماره): کل صفحه با حساب تازه
+    me = prev;
     const lim = r.maxSlides !== me.maxSlides || r.maxImages !== me.maxImages; // مثلاً بعد از خرید پلن
     me = r; renderHead(); renderCreditInfo(); renderProfile();
     if (lim) renderMake(); // انتخاب‌های فعلی فرم حفظ می‌شود (prevS/prevI)
