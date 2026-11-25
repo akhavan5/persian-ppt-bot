@@ -256,6 +256,21 @@ details>summary::after{content:"▾";color:var(--muted)} details[open]>summary::
   .file .fa{flex:1 1 100%} .file .fa .btn{flex:1;justify-content:center;text-align:center;white-space:nowrap;padding:7px 6px;font-size:.84rem}
 }
 dialog{border:1px solid var(--line);border-radius:20px;background:#fff;color:var(--text);max-width:440px;width:calc(100% - 32px);padding:24px;box-shadow:0 30px 80px rgba(15,27,51,.25)}
+.pl{display:grid;gap:10px}
+.plc{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fff}
+.plc.on{border-color:var(--pc);box-shadow:inset 0 0 0 1px var(--pc)}
+.plc .pi{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:21px;background:color-mix(in srgb,var(--pc) 16%,transparent)}
+.plc .pb{flex:1;min-width:0}
+.plc .pt{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.plc .pn{font-weight:800}
+.plc .ps{font-size:.8rem;border-radius:99px;padding:1px 9px;background:var(--soft);color:var(--muted);white-space:nowrap}
+.plc .ps.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.plc .pd{font-size:.82rem;color:var(--muted);margin:2px 0 0;line-height:1.7}
+.plc .pa{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.plc a.pl-go,.plc button.pl-go{display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:.84rem;font-weight:700;text-decoration:none;cursor:pointer;padding:5px 12px;border-radius:99px;border:1px solid var(--pc);color:var(--pc);background:transparent}
+.plc a.pl-go.fill,.plc button.pl-go.fill{background:var(--pc);color:#fff}
+.plc a.pl-go.sm,.plc button.pl-go.sm{font-weight:600;font-size:.78rem;padding:3px 10px}
+.plc label.pl-nt{display:flex;gap:5px;align-items:center;font-size:.82rem;cursor:pointer;margin-inline-start:auto}
 dialog::backdrop{background:rgba(15,27,51,.5);backdrop-filter:blur(3px)}
 .x{position:absolute;inset-block-start:10px;inset-inline-start:12px;border:0;background:transparent;font-size:1.5rem;cursor:pointer;color:var(--muted);line-height:1}
 .toast{position:fixed;inset-inline:0;bottom:18px;display:flex;justify-content:center;pointer-events:none;z-index:50}
@@ -788,7 +803,7 @@ address{font-style:normal}
   </div>
   <label>🔗 اتصال پلتفرم‌ها</label>
   <p class="muted" style="margin:0 0 8px;font-size:.86rem">با تایید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها (رسید، پایان پلن، یادآوری‌ها) به <b>همه‌ی پیام‌رسان‌های روشن</b> می‌رسد؛ مثلاً هم بله و هم ایتا.</p>
-  <div id="pfChBox" style="display:grid;gap:8px"></div>
+  <div id="pfChBox" class="pl"></div>
   <div class="muted" id="pfDevices" style="margin-top:8px;font-size:.86rem"></div>
   <div id="pfInvBox" hidden>
     <label>🎁 دعوت دوستان</label>
@@ -1178,35 +1193,68 @@ function renderPfMobile() {
 // ---------- اتصال پلتفرم‌ها (چند پیام‌رسان همزمان) ----------
 // اتصال فقط با شماره‌ی موبایل است: کاربر در ربات/برنامک هر پلتفرم همان شماره را تأیید می‌کند و همان لحظه به این حساب وصل می‌شود (سرور: profile.ts ← attachContact).
 // اینجا فقط وضعیت، روشن/خاموش‌کردن اعلان هر پیام‌رسان و جدا کردن است.
-const CH_ICON = { tg: "✈️", bale: "🟢", eitaa: "🟠", rubika: "🟣", splus: "🔵" };
+const PL_ANDROID = [["کافه‌بازار", "https://cafebazaar.ir/app/ir.pptsaz.app"], ["مایکت", "https://myket.ir/app/ir.pptsaz.app"]];
+const PL_IOS = [["سیبچه", "https://sibche.com/applications/paorpoyntsaz"], ["سیب ایرانی", "https://sibirani.com/apps/pptsaz-ir/"], ["سیب‌اپ", "https://sibapp.com/applications/pptsaz"], ["اناردونی", "https://anardoni.com/ios/app/irpptsazapp"], ["آی‌اپس", "https://iapps.ir/app/paorpoynt-saz-hosh-msnoaay/714593784191"], ["اپ‌استار", "https://app-star.store/app.php?id=pptsaz"]];
+// ترتیب نمایش: سایت، اندروید (بازار و مایکت)، بله، ایتا، اپل، سروش‌پلاس، تلگرام (روبیکا اگر فعال بود، آخر)
+const PL_ORDER = ["site", "android", "bale", "eitaa", "apple", "splus", "tg", "rubika"];
+const PL_META = {
+  site: { icon: "🌐", name: "سایت پاورپوینت‌ساز", color: "#2563eb" },
+  android: { icon: "🤖", name: "اپ اندروید", color: "#16a34a" },
+  bale: { icon: "💬", name: "بله", color: "#1aa34a" },
+  eitaa: { icon: "🟠", name: "ایتا", color: "#f97316" },
+  apple: { icon: "🍎", name: "اپ iOS (اپل)", color: "#475569" },
+  splus: { icon: "🔵", name: "سروش‌پلاس", color: "#0ea5e9" },
+  tg: { icon: "✈️", name: "تلگرام", color: "#229ed9" },
+  rubika: { icon: "🟣", name: "روبیکا", color: "#a855f7" },
+};
+function plGo(url, text, fill) { return h("a", { class: "pl-go" + (fill ? " fill" : ""), href: url, target: "_blank", rel: "noopener noreferrer" }, text); }
+function plCard(key, status, ok, desc, actions) {
+  const m = PL_META[key];
+  return h("div", { class: "plc" + (ok ? " on" : ""), style: "--pc:" + m.color },
+    h("div", { class: "pi" }, m.icon),
+    h("div", { class: "pb" },
+      h("div", { class: "pt" }, h("span", { class: "pn" }, m.name), status ? h("span", { class: "ps" + (ok ? " ok" : "") }, status) : null),
+      desc ? h("p", { class: "pd" }, desc) : null,
+      actions && actions.length ? h("div", { class: "pa" }, actions) : null));
+}
 async function chPost(path, body) { const r = await api(path, { method: "POST", body }); if (r && r.channels) me.channels = r.channels; return r; }
 function renderPfTg() {
   const box = $("#pfChBox"); if (!box || !me) return;
-  const kids = [];
-  for (const c of me.channels || []) {
-    if (!c.connected && !c.available) continue; // ربات این پلتفرم روی سرور فعال نیست
-    const head = h("div", { class: "row", style: "justify-content:space-between;gap:8px;flex-wrap:nowrap" },
-      h("span", {}, `${CH_ICON[c.key] || "🔗"} `, h("b", {}, c.label), c.connected ? ` ✅ متصل${c.shown ? ` (${fa(c.shown)})` : ""}` : " ⬜ وصل نیست"));
-    const acts = h("div", { class: "row", style: "gap:8px" });
-    if (c.connected) {
-      const cb = h("input", { type: "checkbox", "aria-label": "اعلان " + c.label }); cb.checked = !!c.notify;
-      cb.onchange = async () => { try { await chPost("/api/profile/channel/notify", { plat: c.key, on: cb.checked }); toast(`اعلان ${c.label} ${cb.checked ? "روشن" : "خاموش"} شد`); } catch (e) { cb.checked = !cb.checked; toast(e.message); } renderPfTg(); };
-      acts.append(h("label", { style: "display:flex;gap:6px;align-items:center;font-size:.88rem;cursor:pointer" }, cb, "🔔 اعلان"));
-      if (c.canUnlink) acts.append(h("button", { class: "btn ghost sm", type: "button", onclick: async () => {
-        if (!confirm(`${c.label} از حساب جدا شود؟ دیگر اعلان نمی‌گیرد و با آن وارد این حساب نمی‌شوی.`)) return;
-        try { await chPost("/api/profile/channel/unlink", { plat: c.key }); toast(c.label + " جدا شد"); } catch (e) { toast(e.message); } renderPfTg();
-      } }, "جدا کردن"));
+  const u = me.user || {}, d = me.devices || {};
+  const chans = {}; for (const c of me.channels || []) chans[c.key] = c;
+  const cards = [];
+  for (const key of PL_ORDER) {
+    if (key === "site") {
+      cards.push(plCard("site", "✅ همین‌جا", true, "حساب اصلی تو؛ اعتبار و ارائه‌ها از همین‌جا به همه‌ی پلتفرم‌ها می‌رسد.", [plGo(location.origin + "/", "pptsaz.ir", false)]));
+    } else if (key === "android") {
+      cards.push(plCard("android", d.app ? "✅ وصل است" : "⬜ نصب نشده", !!d.app, d.app ? "اپ روی گوشی‌ات با همین حساب وارد شده و اعلان می‌گیرد." : "اپ را از یکی از فروشگاه‌ها نصب کن و با همین شماره وارد شو.",
+        PL_ANDROID.map(([n, url]) => plGo(url, "دانلود از " + n, !d.app))));
+    } else if (key === "apple") {
+      cards.push(plCard("apple", "", false, "نسخه‌ی iOS از فروشگاه‌های ایرانی آیفون نصب می‌شود؛ بعد با همین شماره وارد شو.",
+        PL_IOS.map(([n, url]) => h("a", { class: "pl-go sm", href: url, target: "_blank", rel: "noopener noreferrer" }, n))));
+    } else {
+      const c = chans[key]; if (!c || (!c.connected && !c.available)) continue; // ربات این پلتفرم روی سرور فعال نیست
+      const url = c.url || (key === "tg" ? "https://t.me/pptsaz_bot" : "");
+      const acts = [];
+      if (url) acts.push(plGo(url, c.connected ? "باز کردن " + c.label : "ورود به " + c.label + " و تایید شماره", !c.connected));
+      if (c.connected) {
+        const cb = h("input", { type: "checkbox", "aria-label": "اعلان " + c.label }); cb.checked = !!c.notify;
+        cb.onchange = async () => { try { await chPost("/api/profile/channel/notify", { plat: c.key, on: cb.checked }); toast(`اعلان ${c.label} ${cb.checked ? "روشن" : "خاموش"} شد`); } catch (e) { cb.checked = !cb.checked; toast(e.message); } renderPfTg(); };
+        acts.push(h("label", { class: "pl-nt" }, cb, "🔔 اعلان"));
+        if (c.canUnlink) acts.push(h("button", { class: "btn ghost sm", type: "button", onclick: async () => {
+          if (!confirm(`${c.label} از حساب جدا شود؟ دیگر اعلان نمی‌گیرد و با آن وارد این حساب نمی‌شوی.`)) return;
+          try { await chPost("/api/profile/channel/unlink", { plat: c.key }); toast(c.label + " جدا شد"); } catch (e) { toast(e.message); } renderPfTg();
+        } }, "جدا کردن"));
+      }
+      cards.push(plCard(key, c.connected ? "✅ متصل" + (c.shown ? ` (${fa(c.shown)})` : "") : "⬜ وصل نیست", c.connected,
+        c.connected ? "" : "ربات را باز کن و همان شماره را تایید کن تا به این حساب وصل شود.", acts));
     }
-    head.append(acts);
-    kids.push(h("div", { style: "display:grid;gap:8px" }, head));
   }
-  const u = me.user || {};
-  kids.push(h("div", { class: "muted", style: "font-size:.86rem" }, u.mobile
+  cards.push(h("div", { class: "muted", style: "font-size:.86rem" }, u.mobile
     ? `برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (${fa(u.mobile)}) را تایید کن؛ همان لحظه به این حساب وصل می‌شود.`
     : "اول شماره‌ی موبایلت را بالا ثبت و تایید کن؛ بعد در هر پلتفرم دیگر همان شماره را تایید کن تا به همین حساب وصل شود."));
-  box.replaceChildren(...kids);
-  const d = me.devices || {};
-  $("#pfDevices").textContent = `${d.app ? "✅" : "⬜"} اپ اندروید · ${d.web ? "✅" : "⬜"} اعلان مرورگر · ${d.email ? "✅" : "⬜"} ایمیل`;
+  box.replaceChildren(...cards);
+  $("#pfDevices").textContent = `${d.web ? "✅" : "⬜"} اعلان مرورگر · ${d.email ? "✅" : "⬜"} ایمیل`;
 }
 /** هدیه‌ی تکمیل پروفایل: ثبت و تایید موبایل یا ایمیل برای حسابی که ندارد = اعتبار هدیه (فقط یک‌بار)؛ جمله‌ی کنارش از سرور می‌آید */
 function renderGift() {

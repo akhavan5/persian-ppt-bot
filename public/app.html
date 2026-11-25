@@ -32,6 +32,21 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--btn);outline-off
 .btn.ghost{background:var(--sec);color:var(--fg);border:1px solid var(--line)}
 .btn.sm{width:auto;padding:6px 12px;font-size:.82rem;border-radius:9px}
 /* نظر کاربر کنار ارائه (امتیاز ستاره‌ای + متن؛ اعتبار هدیه‌ی یک‌باره) */
+.pl{display:grid;gap:10px}
+.plc{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.plc.on{border-color:var(--pc);box-shadow:inset 0 0 0 1px var(--pc)}
+.plc .pi{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:21px;background:color-mix(in srgb,var(--pc) 16%,transparent)}
+.plc .pb{flex:1;min-width:0}
+.plc .pt{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.plc .pn{font-weight:800}
+.plc .ps{font-size:.8rem;border-radius:99px;padding:1px 9px;background:var(--sec);color:var(--hint);white-space:nowrap}
+.plc .ps.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.plc .pd{font-size:.82rem;color:var(--hint);margin:2px 0 0;line-height:1.7}
+.plc .pa{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.plc a.pl-go,.plc button.pl-go{display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:.84rem;font-weight:700;text-decoration:none;cursor:pointer;padding:5px 12px;border-radius:99px;border:1px solid var(--pc);color:var(--pc);background:transparent}
+.plc a.pl-go.fill,.plc button.pl-go.fill{background:var(--pc);color:#fff}
+.plc a.pl-go.sm,.plc button.pl-go.sm{font-weight:600;font-size:.78rem;padding:3px 10px}
+.plc label.pl-nt{display:flex;gap:5px;align-items:center;font-size:.82rem;cursor:pointer;margin-inline-start:auto}
 .fbBox{margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:12px;background:var(--sec)}
 .fbBox h3{margin:0 0 2px;font-size:.95rem}
 .fbStars{display:flex;gap:2px;margin:8px 0;direction:ltr;justify-content:flex-end}
@@ -1770,30 +1785,69 @@ const pfValue = () => pf.kind === "mobile" ? toEn(pf.v).replace(/[\s-]/g, "") : 
 // ---------- اتصال پلتفرم‌ها (چند پیام‌رسان همزمان؛ سرور: link.ts) ----------
 // اتصال فقط با شماره‌ی موبایل است؛ اینجا وضعیت، اعلان هر پیام‌رسان و جدا کردن.
 const PLAT_KEY = IS_EITAA ? "eitaa" : IS_BALE ? "bale" : IS_SPLUS ? "splus" : "tg";
-const CH_BOT = { tg: "ربات تلگرام", bale: "ربات بله", eitaa: "برنامک ایتا", rubika: "ربات روبیکا", splus: "ربات سروش‌پلاس" };
 // شماره مال حساب دیگری بود و این پیام‌رسان به آن وصل شد: نشست این Mini App مال حساب قبلی است ⇒ دوباره وارد شو
 function afterMerge() { toast("پیام‌رسان به حساب دارنده‌ی این شماره وصل شد ✓"); keep.set(null); setTimeout(() => location.reload(), 900); }
 async function chPost(path, body) { const r = await api(path, { method: "POST", body }); if (r && r.channels) me.channels = r.channels; return r; }
+const PL_ANDROID = [["کافه‌بازار", "https://cafebazaar.ir/app/ir.pptsaz.app"], ["مایکت", "https://myket.ir/app/ir.pptsaz.app"]];
+const PL_IOS = [["سیبچه", "https://sibche.com/applications/paorpoyntsaz"], ["سیب ایرانی", "https://sibirani.com/apps/pptsaz-ir/"], ["سیب‌اپ", "https://sibapp.com/applications/pptsaz"], ["اناردونی", "https://anardoni.com/ios/app/irpptsazapp"], ["آی‌اپس", "https://iapps.ir/app/paorpoynt-saz-hosh-msnoaay/714593784191"], ["اپ‌استار", "https://app-star.store/app.php?id=pptsaz"]];
+// ترتیب نمایش: سایت، اندروید (بازار و مایکت)، بله، ایتا، اپل، سروش‌پلاس، تلگرام (روبیکا اگر فعال بود، آخر)
+const PL_ORDER = ["site", "android", "bale", "eitaa", "apple", "splus", "tg", "rubika"];
+const PL_META = {
+  site: { icon: "🌐", name: "سایت پاورپوینت‌ساز", color: "#2563eb" },
+  android: { icon: "🤖", name: "اپ اندروید", color: "#16a34a" },
+  bale: { icon: "💬", name: "بله", color: "#1aa34a" },
+  eitaa: { icon: "🟠", name: "ایتا", color: "#f97316" },
+  apple: { icon: "🍎", name: "اپ iOS (اپل)", color: "#475569" },
+  splus: { icon: "🔵", name: "سروش‌پلاس", color: "#0ea5e9" },
+  tg: { icon: "✈️", name: "تلگرام", color: "#229ed9" },
+  rubika: { icon: "🟣", name: "روبیکا", color: "#a855f7" },
+};
+function plGo(url, text, fill) { return h("button", { class: "pl-go" + (fill ? " fill" : ""), type: "button", onclick: () => TG.openLink(url) }, text); }
+function plCard(key, status, ok, desc, actions) {
+  const m = PL_META[key];
+  return h("div", { class: "plc" + (ok ? " on" : ""), style: "--pc:" + m.color },
+    h("div", { class: "pi" }, m.icon),
+    h("div", { class: "pb" },
+      h("div", { class: "pt" }, h("span", { class: "pn" }, m.name), status ? h("span", { class: "ps" + (ok ? " ok" : "") }, status) : null),
+      desc ? h("p", { class: "pd" }, desc) : null,
+      actions && actions.length ? h("div", { class: "pa" }, actions) : null));
+}
 function channelsNode() {
-  const out = [h("div", { class: "muted", style: "margin-top:12px;margin-bottom:4px" }, "🔗 پلتفرم‌های متصل")];
-  for (const c of me.channels || []) {
-    if (!c.connected && !c.available) continue;
-    out.push(h("div", { class: "sw" },
-      h("span", {}, `${c.label}: `, c.connected ? `وصل است ✅${c.key === PLAT_KEY ? " (اینجا)" : ""}` : "وصل نیست"),
-      c.connected ? h("span", { style: "display:flex;gap:6px" },
-        h("button", { class: "btn ghost sm", type: "button", onclick: (e) => busy(e.currentTarget, "…", async () => {
+  const out = [h("div", { class: "muted", style: "margin-top:12px;margin-bottom:6px" }, "🔗 اتصال پلتفرم‌ها")];
+  const d = me.devices || {}, u = me.user || {};
+  const chans = {}; for (const c of me.channels || []) chans[c.key] = c;
+  const cards = [];
+  for (const key of PL_ORDER) {
+    if (key === "site") {
+      cards.push(plCard("site", "", false, "حساب اصلی تو؛ اعتبار و ارائه‌ها از همین‌جا به همه‌ی پلتفرم‌ها می‌رسد.", [plGo("https://pptsaz.ir", "باز کردن pptsaz.ir", true)]));
+    } else if (key === "android") {
+      cards.push(plCard("android", d.app ? "✅ وصل است" : "⬜ نصب نشده", !!d.app, d.app ? "اپ روی گوشی‌ات با همین حساب وارد شده و اعلان می‌گیرد." : "اپ را از یکی از فروشگاه‌ها نصب کن و با همین شماره وارد شو.",
+        PL_ANDROID.map(([n, url]) => plGo(url, "دانلود از " + n, !d.app))));
+    } else if (key === "apple") {
+      cards.push(plCard("apple", "", false, "نسخه‌ی iOS از فروشگاه‌های ایرانی آیفون نصب می‌شود؛ بعد با همین شماره وارد شو.",
+        PL_IOS.map(([n, url]) => h("button", { class: "pl-go sm", type: "button", onclick: () => TG.openLink(url) }, n))));
+    } else {
+      const c = chans[key]; if (!c || (!c.connected && !c.available)) continue;
+      const url = c.url || (key === "tg" ? "https://t.me/pptsaz_bot" : "");
+      const acts = [];
+      if (url && !(c.connected && key === PLAT_KEY)) acts.push(plGo(url, c.connected ? "باز کردن " + c.label : "ورود به " + c.label + " و تایید شماره", !c.connected));
+      if (c.connected) {
+        acts.push(h("button", { class: "btn ghost sm", type: "button", onclick: (e) => busy(e.currentTarget, "…", async () => {
           try { await chPost("/api/profile/channel/notify", { plat: c.key, on: !c.notify }); toast(`اعلان ${c.label} ${c.notify ? "خاموش" : "روشن"} شد`); } catch (err) { toast(err.message); }
           renderProfile();
-        }) }, c.notify ? "🔔 اعلان" : "🔕 اعلان"),
-        c.canUnlink ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => busy(e.currentTarget, "…", async () => {
+        }) }, c.notify ? "🔔 اعلان" : "🔕 اعلان"));
+        if (c.canUnlink) acts.push(h("button", { class: "btn ghost sm", type: "button", onclick: (e) => busy(e.currentTarget, "…", async () => {
           if (!window.confirm(`${c.label} از حساب جدا شود؟`)) return;
           try { await chPost("/api/profile/channel/unlink", { plat: c.key }); toast(c.label + " جدا شد"); } catch (err) { toast(err.message); }
           renderProfile();
-        }) }, "جدا کردن") : null) : null));
+        }) }, "جدا کردن"));
+      }
+      cards.push(plCard(key, c.connected ? (key === PLAT_KEY ? "✅ متصل (اینجا)" : "✅ متصل") : "⬜ وصل نیست", c.connected,
+        c.connected ? "" : "ربات را باز کن و همان شماره را تایید کن تا به این حساب وصل شود.", acts));
+    }
   }
-  const d = me.devices || {};
-  out.push(h("div", { class: "muted", style: "font-size:.85rem;margin-top:4px" }, `${d.app ? "✅" : "⬜"} اپ اندروید · ${d.web ? "✅" : "⬜"} اعلان مرورگر · ${d.email ? "✅" : "⬜"} ایمیل`));
-  const u = me.user || {};
+  out.push(h("div", { class: "pl" }, cards));
+  out.push(h("div", { class: "muted", style: "font-size:.85rem;margin-top:4px" }, `${d.web ? "✅" : "⬜"} اعلان مرورگر · ${d.email ? "✅" : "⬜"} ایمیل`));
   out.push(h("div", { class: "muted", style: "font-size:.85rem;margin-top:6px;line-height:1.9" }, u.mobile
     ? `برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (${fa(u.mobile)}) را تایید کن؛ همان لحظه به این حساب وصل می‌شود.`
     : "اول شماره‌ی موبایلت را بالا ثبت و تایید کن؛ بعد در هر پلتفرم دیگر همان شماره را تایید کن تا به همین حساب وصل شود."));

@@ -35,6 +35,14 @@ export async function botUsername(env: Env, plat: "tg" | "bale" | "rubika" | "sp
   return name;
 }
 
+/** لینک صفحه‌ی ربات/برنامک هر پیام‌رسان (بدون پارامتر دعوت) برای بخش «اتصال پلتفرم‌ها»؛ "" = ساخته نشد */
+export async function channelOpenLink(env: Env, ch: "tg" | "bale" | "eitaa" | "rubika" | "splus"): Promise<string> {
+  if (ch === "eitaa") return eitaaLink(env);
+  const name = await botUsername(env, ch).catch(() => "");
+  if (!name) return "";
+  return ch === "splus" ? `https://splus.ir/${name}` : ch === "rubika" ? `https://rubika.ir/${name}` : ch === "bale" ? `https://ble.ir/${name}` : `https://t.me/${name}`;
+}
+
 /** لینک دعوت اختصاصی همین حساب در پلتفرم خودش؛ "" = ساخته نشد (ربات/برنامک تنظیم نیست یا getMe خطا داد).
  *  botName اگر از بیرون داده شود (مثلاً پیام همگانی که نام را یک‌بار می‌گیرد) getMe صدا زده نمی‌شود. */
 export async function inviteLinkFor(env: Env, id: RefId, botName?: string): Promise<string> {

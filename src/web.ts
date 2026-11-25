@@ -38,6 +38,7 @@ import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
 import { addLinkedId, autoBotId, channelStatus, consumeLoginToken, deviceStatus, ensureUid, getLinkedIds, getLinkedTg, isChan, linkedFor, setChannelNotify, unlinkChannel } from "./link";
+import { channelOpenLink } from "./invite-msg";
 import { EXTRA_KINDS, audioKind, isMainDeck, missingExtras, startExtra } from "./extras";
 import { isBaleId, fromBaleId } from "./bale-format";
 import { isEitaaId, fromEitaaId } from "./eitaa-format";
@@ -407,7 +408,7 @@ async function me(env: Env, user: WebUser): Promise<Response> {
   return json({
     user: publicUser(user),
     // وضعیت اتصال همه‌ی پلتفرم‌ها برای بخش «اتصال پلتفرم‌ها» در همه‌ی کلاینت‌ها (سایت، Mini App، اپ‌ها): هر پیام‌رسان + دستگاه‌های اعلان
-    channels: await channelStatus(env, user.id).catch(() => []),
+    channels: await channelStatus(env, user.id).then((cs) => Promise.all(cs.map(async (c) => ({ ...c, url: c.available || c.connected ? await channelOpenLink(env, c.key).catch(() => "") : "" })))).catch(() => []),
     linkedIds: await getLinkedIds(env, user.id).catch(() => []), // شناسه‌ی داخلی همه‌ی پیام‌رسان‌های وصل‌شده (Mini App با آن می‌فهمد این نشست مال همین کاربر است)
     devices: await deviceStatus(env, user.id, !!user.email).catch(() => ({ app: false, web: false, email: false })),
     telegram, // آیدی عددی تلگرامِ وصل‌شده (یا null)؛ برای بله/ایتا/روبیکا همان شناسه‌ی داخلی (جمع‌شده با پایه) است
