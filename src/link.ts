@@ -69,6 +69,14 @@ export async function consumeLoginToken(env: Env, token: string): Promise<number
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
+/** تلگرام وصل‌شده به این حساب وب (اگر باشد)؛ «هویت اصلی» حساب. فهرست همه‌ی پیام‌رسان‌ها: getLinkedIds */
+export async function getLinkedTg(env: Env, uid: string): Promise<number | null> {
+  const n = Number(await env.KV.get(`w2tg:${uid}`).catch(() => null));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+type LinkErr = { error: string; status: number };
+
 /** تلگرام را به حساب وب وصل می‌کند؛ اعتبار هدیه/شارژ و پلنِ پروفایل خودکارِ قبلیِ این تلگرام (اگر بود) به حساب وب منتقل می‌شود تا چیزی از دست نرود */
 async function performLink(env: Env, uid: string, tgId: number) {
   const auto = await profileId(tgId);
