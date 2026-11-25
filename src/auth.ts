@@ -93,6 +93,9 @@ export async function getUserByMobile(env: Env, mobile: string): Promise<WebUser
 }
 
 // ---------- نشست ----------
+/** «سایت وصل است» = این حساب دست‌کم یک بار در مرورگر وارد سایت شده (لینک ورود ربات، کد پیامکی/ایمیلی یا گوگل). نمایش در بخش اتصال پلتفرم‌ها (link.ts ← deviceStatus). */
+export const markSite = (env: Env, uid: string): Promise<void> => env.KV.put(`site:${uid}`, "1").catch(() => {});
+
 export async function createSession(env: Env, userId: string): Promise<string> {
   const token = randomToken();
   await env.KV.put(`ws:${await sha256hex(token)}`, userId, { expirationTtl: SESSION_TTL });
@@ -376,6 +379,7 @@ export async function googleCallback(env: Env, req: Request, url: URL): Promise<
       return appReturn(url, { c });
     }
     const h = new Headers({ location: `${url.origin}/`, ...nh });
+    await markSite(env, uid); // ورود مرورگر با گوگل
     h.append("set-cookie", sessionCookie(await createSession(env, uid)));
     h.append("set-cookie", setCookie(STATE_COOKIE, "", 0, "/api/auth"));
     return new Response(null, { status: 302, headers: h });

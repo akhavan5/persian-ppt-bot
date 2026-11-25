@@ -227,7 +227,7 @@ export async function autoBotId(env: Env, uid: string, plat: unknown): Promise<n
 }
 
 /** مسیرهای اعلانِ غیرپیام‌رسان برای نمایش وضعیت «متصل است یا نه»: اپ اندروید (FCM)، اعلان مرورگر (PWA) و ایمیل */
-export async function deviceStatus(env: Env, uid: string, hasEmail: boolean): Promise<{ app: boolean; web: boolean; email: boolean }> {
-  const [fcm, wp] = await Promise.all([fcmTokensOf(env, uid), webPushEnabled(env) ? env.KV.get(`${WP_PREFIX}${uid}`).catch(() => null) : null]);
-  return { app: fcm.length > 0, web: parseDevices(wp).length > 0, email: hasEmail };
+export async function deviceStatus(env: Env, uid: string, hasEmail: boolean): Promise<{ app: boolean; web: boolean; email: boolean; site: boolean }> {
+  const [fcm, wp, site] = await Promise.all([fcmTokensOf(env, uid), webPushEnabled(env) ? env.KV.get(`${WP_PREFIX}${uid}`).catch(() => null) : null, env.KV.get(`site:${uid}`).catch(() => null)]);
+  return { app: fcm.length > 0, web: parseDevices(wp).length > 0, email: hasEmail, site: !!site };
 }

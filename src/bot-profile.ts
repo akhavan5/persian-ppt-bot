@@ -81,7 +81,9 @@ async function channelLines(env: Env, uid: string, user: { email?: string; oss?:
   const [views, dev] = await Promise.all([channelViews(env, uid), deviceStatus(env, uid, !!user.email)]);
   const here = chanOf(userId);
   const out = ["🔗 <b>اتصال پلتفرم‌ها</b>"];
-  out.push(`🌐 <a href="${esc(siteUrl(env))}">سایت پاورپوینت‌ساز</a>`);
+  // لینک ورود یک‌بارمصرف (نه آدرس ساده): کاربری که با ایتا/بله/... شروع کرده بدون ثبت شماره یا اتصال جدا، مستقیم با همین حساب وارد سایت می‌شود
+  const login = await siteLoginUrl(env, userId, "home").catch(() => siteUrl(env));
+  out.push(dev.site ? `🌐 <a href="${esc(login)}">سایت پاورپوینت‌ساز</a>: ✅ متصل` : `🌐 <a href="${esc(login)}">سایت پاورپوینت‌ساز</a>: ⬜️ هنوز وارد نشده‌ای · با لینک بزن (بدون ثبت‌نام)`);
   // مثل سایت: اندروید = توکن اعلان یا باز کردن اپ؛ iOS = باز کردن اپ iOS (حساب‌های قدیمی بدون oss اندرویدند)
   const oss = user.oss ?? (user.app ? [user.os ?? "android"] : []);
   const hasAndroid = dev.app || oss.includes("android"), hasIos = oss.includes("ios");
@@ -101,7 +103,7 @@ async function channelLines(env: Env, uid: string, user: { email?: string; oss?:
 /** دکمه‌های لینک پلتفرم‌ها (مثل دکمه‌های کارت‌های سایت): وصل‌نشده «ورود و تایید شماره»، وصل‌شده «باز کردن»؛ پلتفرم فعلی دکمه ندارد */
 async function channelButtons(env: Env, uid: string, userId: number): Promise<Btn[][]> {
   const here = chanOf(userId);
-  const rows: Btn[][] = [];
+  const rows: Btn[][] = [[{ text: "🌐 ورود به سایت با همین حساب", url: await siteLoginUrl(env, userId, "home").catch(() => siteUrl(env)) }]];
   for (const c of await channelViews(env, uid)) {
     if (!c.url || (c.connected && c.key === here)) continue;
     rows.push([{ text: c.connected ? `باز کردن ${labelFor(c.label, here)}` : `ورود به ${labelFor(c.label, here)} و تایید شماره`, url: c.url }]);

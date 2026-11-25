@@ -25,7 +25,7 @@ import { removeWebSub, saveWebSub, webPushEnabled } from "./webpush";
 import { getAppVersions } from "./app-version";
 import { appFields, appPlatform, parseAppUA, pwaOf, pwaPlatform } from "./app-ua";
 import {
-  authUser, checkOtp, clearSessionCookie, createSession, createUser, destroySession, emailOtpEnabled, getUserByEmail, getUserByMobile, googleCallback,
+  authUser, checkOtp, markSite, clearSessionCookie, createSession, createUser, destroySession, emailOtpEnabled, getUserByEmail, getUserByMobile, googleCallback,
   googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtpEx,
   sessionCookie, validEmail, type WebUser,
 } from "./auth";
@@ -349,6 +349,7 @@ async function otpVerify(req: Request, env: Env): Promise<Response> {
   } else {
     await noteApp(env, user, req);
   }
+  if (!fromApp(req)) await markSite(env, user.id); // ورود مرورگر با کد پیامکی/ایمیلی (اپ اندروید/iOS جدا حساب می‌شود)
   const token = await createSession(env, user.id);
   return json({ user: publicUser(user), created: Date.now() - user.created < 5000 }, 200, { "set-cookie": sessionCookie(token) });
 }
@@ -490,6 +491,7 @@ async function tgLogin(env: Env, req: Request, url: URL): Promise<Response> {
   const uid = await ensureUid(env, tgId); // حساب وب خودکار اگر هنوز نبود
   if (typeof uid !== "string") return fail(); // مدیرها پروفایل وب خودکار ندارند
   await addLinkedId(env, uid, tgId).catch(() => {}); // نمایش پیام‌رسان وصل‌شده در پروفایل (برای حساب‌های قدیمی هم)؛ پیام‌رسان‌های دیگرِ وصل‌شده دست‌نخورده می‌مانند
+  await markSite(env, uid); // اولین ورود با لینک ربات = سایت وصل شد
   const token = await createSession(env, uid);
   return new Response(null, {
     status: 303,
