@@ -98,6 +98,19 @@ async function performLink(env: Env, uid: string, tgId: number) {
   await addLinkedId(env, uid, tgId); // هویت اصلی (w2tg) فقط وقتی نبود ست می‌شود؛ پیام‌رسان‌های دیگر کنارش می‌مانند
 }
 
+/** پیش‌بررسی اتصال هویت ربات به حساب `uid`: خطا ⇒ {error,status}؛ قبلاً همین‌جا وصل است ⇒ {ok:true} (فقط فهرست اصلاح می‌شود)؛ آزاد برای اتصال ⇒ null (performLink اجرا می‌شود).
+ *  (این تابع در کد وجود نداشت و linkBotToAccount با ReferenceError می‌افتاد؛ مثلاً هنگام ثبت شماره‌ای که مال حساب دیگری است.) */
+async function linkCheck(env: Env, uid: string, botId: number): Promise<LinkErr | { ok: true } | null> {
+  const cur = await env.KV.get(`tg2w:${botId}`).catch(() => null);
+  if (cur === uid) { await addLinkedId(env, uid, botId); return { ok: true }; }
+  // این هویت قبلاً به یک حساب «واقعی» دیگر وصل شده (نه پروفایل خودکار خودش)
+  if (cur && WEB_ID.test(cur) && cur !== (await profileId(botId))) return { error: "این پیام‌رسان قبلاً به حساب دیگری وصل شده است.", status: 409 };
+  // همین حساب از همین پیام‌رسان با هویت دیگری وصل دارد
+  const ch = chanOf(botId);
+  if ((await getLinkedIds(env, uid)).some((i) => chanOf(i) === ch && i !== botId)) return { error: `به این حساب قبلاً یک ${CHAN_LABEL[ch]} دیگر وصل است.`, status: 409 };
+  return null;
+}
+
 /** وصل کردن هویت یک ربات (تلگرام/بله/روبیکا/ایتا) به یک حساب موجود، بعد از اینکه مالکیت موبایل/ایمیل آن حساب با کد یک‌بارمصرف ثابت شد.
  *  اعتبار و پلنِ پروفایل خودکارِ ربات به حساب مقصد منتقل می‌شود (performLink) تا چیزی از دست نرود. */
 export async function linkBotToAccount(env: Env, uid: string, botId: number): Promise<LinkErr | { ok: true }> {
