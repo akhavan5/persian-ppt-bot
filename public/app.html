@@ -688,7 +688,7 @@ function makeSplus(W) {
       if (typeof W.requestContact !== "function") return fin(null);
       const str = (d) => (typeof d === "string" ? d : d && typeof d.response === "string" ? d.response : "");
       try {
-        on("contactRequested", (e) => { const s = str(e); fin(e && e.status === "sent" && s ? s : null); });
+        on("contactRequested", (e) => { const s = str(e); if (e && e.status === "sent" && !s) markContactSent(); fin(e && e.status === "sent" && s ? s : null); });
         W.requestContact((ok, d) => { const s = str(d); if (!ok) fin(null); else if (s) fin(s); }); // ok بدون response: منتظر رویداد می‌ماند
         setTimeout(() => fin(null), 60000);
       } catch { fin(null); }
@@ -908,16 +908,39 @@ async function authFetch(path, init = {}, retried = false) {
 }
 // پشتیبانی هوشمند (support.js): همان نشست Bearer اپ؛ پنجره‌ی گفتگو از کارت «پشتیبانی هوشمند» در تنظیمات باز می‌شود
 window.ppSupportAuth = () => token; window.ppSupportRelogin = login; window.ppSupportVia = TG.via;
-// نشست قدیمی بعد از اتصال شماره: وقتی شماره در چت ربات (یا جای دیگر) تأیید و این هویت به حسابِ دارنده‌ی شماره وصل می‌شود، توکن ذخیره‌شده‌ی مینی‌اپ هنوز
-// مال «پروفایل خودکار» قبلی است و شماره را نشان نمی‌دهد. تا وقتی شماره‌ای دیده نمی‌شود، با ورود دوباره (initData) حساب فعلی این هویت را از سرور می‌گیریم؛
-// اگر حساب عوض شده باشد سرور توکن تازه می‌دهد (وگرنه همان توکن تمدید می‌شود). حداکثر هر ۲۰ ثانیه یک بار.
+// سروش‌پلاس: دکمه‌ی requestContact شماره را به‌صورت پیام «مخاطب» به چت بات می‌فرستد و به صفحه فقط status=sent می‌رسد (بدون خودِ شماره)؛
+// ثبت و ادغام با حساب دارنده‌ی شماره سمت سرور و بیرون از مینی‌اپ انجام می‌شود، پس توکن ذخیره‌شده هنوز مال پروفایل خودکار قبلی است.
+// بعد از «ارسال شد» چند بار (فقط همین‌جا) ورود دوباره می‌زنیم: اگر حساب عوض شده باشد سرور توکن تازه می‌دهد و صفحه دوباره بارگذاری می‌شود.
+let contactSentNoData = false;
+const CS_KEY = "pptsaz.cs";
+function markContactSent() { contactSentNoData = true; try { localStorage.setItem(CS_KEY, String(Date.now())); } catch {} }
+function clearContactSent() { contactSentNoData = false; try { localStorage.removeItem(CS_KEY); } catch {} }
+// "merged" | "ok" | "none"
+async function awaitContactRegistered() {
+  contactSentNoData = false;
+  for (let i = 0; i < 6; i++) {
+    await new Promise((r) => setTimeout(r, i ? 1500 : 800));
+    const old = token;
+    try { await login(); } catch { continue; }
+    if (token !== old) { clearContactSent(); afterMerge(); return "merged"; }
+    try {
+      const r = await api("/api/me");
+      if (r && r.user) { me = r; if (r.user.mobile) { clearContactSent(); renderHead(); renderCreditInfo(); renderProfile(); toast("شماره ثبت شد ✓"); return "ok"; } }
+    } catch {}
+  }
+  return "none";
+}
+// اگر مینی‌اپ بین ارسال شماره و ثبت بسته/باز شده باشد (پرچم ≤ ۱۵ دقیقه): فقط همان‌وقت و حداکثر هر ۲۰ ثانیه یک بار ورود دوباره می‌زنیم
 let reconAt = 0;
 async function reconcileSession() {
-  if (!TG.initData || !me || !me.user || me.user.mobile || Date.now() - reconAt < 20000) return false;
+  let t = 0; try { t = Number(localStorage.getItem(CS_KEY) || 0); } catch {}
+  if (!t || Date.now() - t > 900000 || !TG.initData || !me || !me.user || me.user.mobile) { if (t && me && me.user && me.user.mobile) clearContactSent(); return false; }
+  if (Date.now() - reconAt < 20000) return false;
   reconAt = Date.now();
   const old = token;
   try { await login(); } catch { return false; }
   if (token === old) return false;
+  clearContactSent();
   try { const r = await api("/api/me"); if (r && r.user) { me = r; return true; } } catch {}
   return false;
 }
@@ -962,7 +985,7 @@ function askContact() {
             const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
             if (r.user) me.user = r.user;
             refreshMe(); toast(r.reward > 0 ? `🎁 ${fa(r.reward)} اعتبار هدیه گرفتی` : "شماره ثبت شد ✓");
-          } else if (!IS_EITAA) setTimeout(refreshMe, 3000); // تلگرام/بله: ربات شماره را ثبت می‌کند؛ کمی بعد وضعیت حساب تازه می‌شود
+          } else if (!IS_EITAA) { if (contactSentNoData) await awaitContactRegistered(); else setTimeout(refreshMe, 3000); } // تلگرام/بله: ربات شماره را ثبت می‌کند؛ کمی بعد وضعیت حساب تازه می‌شود
         } catch {}
         end();
       });
@@ -1911,7 +1934,7 @@ function renderProfile() {
       ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => {
           // ایتا: شماره فقط با requestContact داخلی (طبق مستند، فرم دستی مجاز نیست) و فقط بعد از کلیک کاربر
           if ((IS_EITAA || IS_SPLUS) && kind === "mobile" && typeof TG.requestContact === "function") return busy(e.currentTarget, "…", () => new Promise((done) => TG.requestContact(async (data) => {
-            if (!data) { if (IS_SPLUS) { pf = { kind, step: "v", v: "", c: "" }; renderProfile(); return done(); } toast("شماره به اشتراک گذاشته نشد."); return done(); } // سروش‌پلاس: اگر خودکار نشد، ثبت دستی با کد پیامکی
+            if (!data) { if (IS_SPLUS) { if (contactSentNoData && (await awaitContactRegistered()) !== "none") return done(); pf = { kind, step: "v", v: "", c: "" }; renderProfile(); return done(); } toast("شماره به اشتراک گذاشته نشد."); return done(); } // سروش‌پلاس: اگر خودکار نشد، ثبت دستی با کد پیامکی
             try {
               const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
               if (r.merged) { done(); return afterMerge(); }
