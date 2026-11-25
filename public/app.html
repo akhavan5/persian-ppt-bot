@@ -158,7 +158,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
   <div id="app" hidden>
     <div class="head">
       <div class="who"><div class="av" id="av"></div><div><b id="uname"></b><div class="muted" id="plan"></div></div></div>
-      <div class="pill" id="credit"></div>
+      <div class="pill" id="credit" role="button" tabindex="0" style="cursor:pointer" aria-label="اعتبار و حساب من"></div>
     </div>
 
     <!-- ساخت -->
@@ -287,6 +287,8 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
           <label class="sw"><span>یادداشت سخنرانی</span><input type="checkbox" id="notes"></label>
         </div>
       </div>
+    </section>
+    <section id="t-acc" role="tabpanel" aria-labelledby="tb-acc" hidden>
       <div class="card" id="pfCard">
         <h2>👤 پروفایل</h2>
         <div id="pfBody"></div>
@@ -321,6 +323,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
   <button id="tb-make" role="tab" aria-controls="t-make" aria-selected="true" data-t="make" class="on"><b aria-hidden="true">✨</b>ساخت</button>
   <button id="tb-files" role="tab" aria-controls="t-files" aria-selected="false" data-t="files"><b aria-hidden="true">📁</b>فایل‌ها</button>
   <button id="tb-set" role="tab" aria-controls="t-set" aria-selected="false" data-t="set"><b aria-hidden="true">⚙️</b>تنظیمات</button>
+  <button id="tb-acc" role="tab" aria-controls="t-acc" aria-selected="false" data-t="acc"><b aria-hidden="true">👤</b>حساب</button>
 </nav>
 <div class="modal" id="plansModal" role="dialog" aria-modal="true" aria-labelledby="plansTitle" hidden>
   <div class="sheet">
@@ -1002,12 +1005,15 @@ async function refreshMe() {
 function setTab(t) {
   tab = t;
   document.querySelectorAll("#nav button").forEach((x) => { const on = x.dataset.t === t; x.classList.toggle("on", on); x.setAttribute("aria-selected", String(on)); });
-  for (const k of ["make", "files", "set"]) show($("#t-" + k), k === t);
+  for (const k of ["make", "files", "set", "acc"]) show($("#t-" + k), k === t);
   if (t === "files") loadFiles();
   scrollTo(0, 0); syncUI();
 }
 document.querySelectorAll("#nav button").forEach((b) => b.onclick = () => { if (b.dataset.t !== tab) TG.haptic("select"); setTab(b.dataset.t); });
 TG.back.onPress = () => setTab("make");
+// مثل اندروید: لمس اعتبار در سربرگ، تب «حساب» را باز می‌کند
+$("#credit").onclick = () => { if (tab !== "acc") { TG.haptic("select"); setTab("acc"); } };
+$("#credit").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#credit").click(); } };
 // ناوبری با کلید جهت‌دار (الگوی tablist)؛ صفحه RTL است: ← = تب بعدی
 $("#nav").addEventListener("keydown", (e) => {
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -1036,11 +1042,11 @@ TG.main.onPress = () => {
 };
 
 // ---------- لینک عمیق (startapp) و پیش‌نویس در CloudStorage ----------
-// startapp=files | settings | t_<متن موضوع به base64url>
+// startapp=files | settings | account | t_<متن موضوع به base64url>
 function applyStart() {
   const sp = TG.startParam;
   if (!sp) return false;
-  if (sp === "files" || sp === "settings") { setTab(sp === "files" ? "files" : "set"); return true; }
+  if (sp === "files" || sp === "settings" || sp === "account") { setTab(sp === "files" ? "files" : sp === "settings" ? "set" : "acc"); return true; }
   const m = /^t_([A-Za-z0-9_-]{1,512})$/.exec(sp);
   if (!m) return false;
   try {
