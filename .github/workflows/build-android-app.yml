@@ -52,7 +52,7 @@ jobs:
       - name: Unit tests
         run: gradle -p android testBazaarDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build APK + AAB
+      - name: Build APK
         env:
           KEYSTORE_FILE: ${{ github.workspace }}/android/pptsaz-release.keystore
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -78,7 +78,7 @@ jobs:
           ADIVERY_INTERSTITIAL_PLACEMENT: ${{ secrets.ADIVERY_INTERSTITIAL_PLACEMENT }}
           ADIVERY_NATIVE_PLACEMENT: ${{ secrets.ADIVERY_NATIVE_PLACEMENT }}
           ADIVERY_REWARDED_PLACEMENT: ${{ secrets.ADIVERY_REWARDED_PLACEMENT }}
-        run: gradle -p android assembleBazaarRelease assembleMyketRelease bundleBazaarRelease bundleMyketRelease --no-daemon --stacktrace
+        run: gradle -p android assembleBazaarRelease assembleMyketRelease --no-daemon --stacktrace
 
       - name: Verify APKs
         run: |
@@ -89,9 +89,8 @@ jobs:
             "$BT/apksigner" verify --print-certs "$APK" | head -5
             "$BT/aapt2" dump badging "$APK" | grep -E "^package|sdkVersion|targetSdk"
             cp "$APK" dist/pptsaz-$S.apk
-            cp android/app/build/outputs/bundle/${S}Release/app-$S-release.aab dist/pptsaz-$S.aab
             # نقشه‌ی R8 برای خواندن گزارش کرش‌ها؛ برای هر نسخه نگه دارید
-            # (در artifact جدا آپلود می‌شود تا دانلود APK/AAB سنگین نشود)
+            # (در artifact جدا آپلود می‌شود تا دانلود APK سنگین نشود)
             cp android/app/build/outputs/mapping/${S}Release/mapping.txt mappings/mapping-$S.txt
           done
           # نسخه‌ی مایکت نباید هیچ نشانی از بازار داشته باشد
@@ -111,7 +110,7 @@ jobs:
           name: pptsaz-android
           path: dist/*
 
-      # نقشه‌های R8 (mapping-bazaar.txt و mapping-myket.txt) سنگین‌اند؛ جدا از APK/AAB آپلود می‌شوند تا دانلود اپ‌ها کند نشود
+      # نقشه‌های R8 (mapping-bazaar.txt و mapping-myket.txt) سنگین‌اند؛ جدا از APK آپلود می‌شوند تا دانلود اپ‌ها کند نشود
       - uses: actions/upload-artifact@v4
         with:
           name: pptsaz-mappings
