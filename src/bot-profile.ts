@@ -8,10 +8,11 @@ import type { Env } from "./env";
 import { emailOtpEnabled, getUserById, normMobile, otpEnabled } from "./auth";
 import { attachContact, contactRewardInfo, isEitaaAccount, normContact, sendContactCode, type ContactKind } from "./profile";
 import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, getCredit, hasContactReward } from "./settings";
-import { channelStatus, chanOf, deviceStatus, resolveUid } from "./link";
+import { channelStatus, chanOf, deviceStatus, resolveUid, type Chan } from "./link";
 import { esc, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { siteLoginUrl } from "./deck-service";
+import { channelOpenLink } from "./invite-msg";
 import { isBaleId } from "./bale-format";
 import { sendWelcomeOnce } from "./safir";
 
@@ -50,17 +51,57 @@ export async function showProfile(env: Env, chatId: number, userId: number, uid:
 }
 
 // ---------- اتصال پلتفرم‌ها (چند پیام‌رسان همزمان؛ link.ts) ----------
-/** خط‌های وضعیت اتصال: هر پیام‌رسان + اپ/مرورگر/ایمیل. «اینجا» = پیام‌رسانی که کاربر همین حالا در آن است. */
-async function channelLines(env: Env, uid: string, user: { email?: string }, userId: number): Promise<string[]> {
-  const [chs, dev] = await Promise.all([channelStatus(env, uid), deviceStatus(env, uid, !!user.email)]);
+/** ترتیب نمایش پلتفرم‌ها دقیقاً مثل سایت (PL_ORDER در app.html): سایت، اندروید، بله، ایتا، سروش‌پلاس، تلگرام */
+const PL_ORDER: Chan[] = ["bale", "eitaa", "splus", "tg"];
+const PL_ICON: Record<Chan, string> = { tg: "✈️", bale: "💬", eitaa: "🟠", rubika: "🟣", splus: "🔵" };
+const PL_ANDROID: [string, string][] = [["کافه‌بازار", "https://cafebazaar.ir/app/ir.pptsaz.app"], ["مایکت", "https://myket.ir/app/ir.pptsaz.app"]];
+const PL_IOS: [string, string][] = [["سیبچه", "https://sibche.com/applications/paorpoyntsaz"], ["سیب ایرانی", "https://sibirani.com/apps/pptsaz-ir/"], ["سیب‌اپ", "https://sibapp.com/applications/pptsaz"], ["اناردونی", "https://anardoni.com/ios/app/irpptsazapp"], ["آی‌اپس", "https://iapps.ir/app/paorpoynt-saz-hosh-msnoaay/714593784191"], ["اپ‌استار", "https://app-star.store/app.php?id=pptsaz"]];
+const storeLinks = (l: [string, string][]) => l.map(([n, u]) => `<a href="${u}">${n}</a>`).join(" · ");
+const siteUrl = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
+
+type ChanView = { key: Chan; label: string; connected: boolean; url: string };
+
+/** وضعیت هر پیام‌رسان به ترتیب سایت + لینک ربات/برنامک (همان channelOpenLink که سایت استفاده می‌کند) */
+async function channelViews(env: Env, uid: string): Promise<ChanView[]> {
+  const chs = await channelStatus(env, uid);
+  const list = chs.filter((c) => PL_ORDER.includes(c.key) && (c.connected || c.available))
+    .sort((a, b) => PL_ORDER.indexOf(a.key) - PL_ORDER.indexOf(b.key));
+  return Promise.all(list.map(async (c) => ({
+    key: c.key, label: c.label, connected: c.connected,
+    url: await channelOpenLink(env, c.key).catch(() => "") || (c.key === "tg" ? "https://t.me/pptsaz_bot" : ""),
+  })));
+}
+
+/** خط‌های وضعیت اتصال هم‌شکل سایت: هر پلتفرم با آیکون، وضعیت و لینک. «اینجا» = پیام‌رسانی که کاربر همین حالا در آن است. */
+async function channelLines(env: Env, uid: string, user: { email?: string; oss?: string[]; app?: unknown; os?: string }, userId: number): Promise<string[]> {
+  const [views, dev] = await Promise.all([channelViews(env, uid), deviceStatus(env, uid, !!user.email)]);
   const here = chanOf(userId);
-  const out = ["🔗 <b>پلتفرم‌های متصل</b>"];
-  for (const c of chs) {
-    if (!c.connected && !c.available) continue;
-    out.push(`${c.connected ? "✅" : "⬜️"} ${c.label}: ${c.connected ? `وصل است${c.key === here ? " (اینجا)" : ""} · 🔔 اعلان روشن` : "وصل نیست"}`);
+  const out = ["🔗 <b>اتصال پلتفرم‌ها</b>"];
+  out.push(`🌐 <a href="${esc(siteUrl(env))}">سایت پاورپوینت‌ساز</a>`);
+  // مثل سایت: اندروید = توکن اعلان یا باز کردن اپ؛ iOS = باز کردن اپ iOS (حساب‌های قدیمی بدون oss اندرویدند)
+  const oss = user.oss ?? (user.app ? [user.os ?? "android"] : []);
+  const hasAndroid = dev.app || oss.includes("android"), hasIos = oss.includes("ios");
+  out.push(`🤖 اپ اندروید: ${hasAndroid ? "✅ وصل است" : `⬜️ نصب نشده · ${storeLinks(PL_ANDROID)}`}`);
+  const iosLine = `🍎 اپ iOS: ${hasIos ? "✅ وصل است" : `⬜️ نصب نشده · ${storeLinks(PL_IOS)}`}`;
+  for (const c of views) {
+    if (c.key === "splus" && !out.includes(iosLine)) out.push(iosLine); // ترتیب سایت: ... ایتا، iOS، سروش‌پلاس، تلگرام
+    const name = c.url ? `<a href="${esc(c.url)}">${esc(c.label)}</a>` : esc(c.label);
+    out.push(`${PL_ICON[c.key]} ${name}: ${c.connected ? `✅ متصل${c.key === here ? " (اینجا)" : ""} · 🔔 اعلان روشن` : "⬜️ وصل نیست"}`);
   }
-  out.push(`${dev.app ? "✅" : "⬜️"} اپ اندروید · ${dev.web ? "✅" : "⬜️"} اعلان مرورگر · ${dev.email ? "✅" : "⬜️"} ایمیل`);
+  if (!out.includes(iosLine)) out.push(iosLine);
+  out.push(`${dev.web ? "✅" : "⬜️"} اعلان مرورگر · ${dev.email ? "✅" : "⬜️"} ایمیل`);
   return out;
+}
+
+/** دکمه‌های لینک پلتفرم‌ها (مثل دکمه‌های کارت‌های سایت): وصل‌نشده «ورود و تایید شماره»، وصل‌شده «باز کردن»؛ پلتفرم فعلی دکمه ندارد */
+async function channelButtons(env: Env, uid: string, userId: number): Promise<Btn[][]> {
+  const here = chanOf(userId);
+  const rows: Btn[][] = [];
+  for (const c of await channelViews(env, uid)) {
+    if (!c.url || (c.connected && c.key === here)) continue;
+    rows.push([{ text: c.connected ? `باز کردن ${c.label}` : `ورود به ${c.label} و تایید شماره`, url: c.url }]);
+  }
+  return rows;
 }
 
 /** پنل اتصال پلتفرم‌ها: وضعیت + روشن/خاموش‌کردن اعلان هر پیام‌رسان + جدا کردن + کد اتصال */
@@ -80,6 +121,7 @@ export async function showChannels(env: Env, chatId: number, userId: number, uid
   void chs;
   const rows: Btn[][] = [];
   if (!user.mobile && otpEnabled(env)) rows.push([{ text: "📱 ثبت شماره‌ی موبایل", callback_data: "pf:m" }]);
+  rows.push(...(await channelButtons(env, uid, userId)));
   return sendMessage(env, chatId, lines.join("\n"), kb(rows));
 }
 
