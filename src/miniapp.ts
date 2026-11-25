@@ -9,7 +9,7 @@
 import type { Env } from "./env";
 import { createSession, getUserById, hitLimit, publicUser, randomToken, reuseSession, type WebUser } from "./auth";
 import { REF_MAX, REF_EVERY, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
-import { ensureUid, getLinkedTg } from "./link";
+import { addLinkedId, autoBotId, ensureUid, linkedFor } from "./link";
 import { listFiles, loadFileDirect } from "./files";
 import { isSampleId, sampleById, sampleCaption, sampleMime } from "./samples";
 import { buildDeckPdf, cachedPdf } from "./pdf";
@@ -89,7 +89,7 @@ async function dailyTouch(env: Env, u: TgUser, uid: string, name: string): Promi
   // ایتا: پیام خوش‌آمدگویی (الزام انتشار)؛ فقط اگر کاربر دسترسی ارسال پیام داده باشد
   if (isEitaaId(u.id) && u.allows_write_to_pm) await eitaaWelcome(env, u.id).catch(() => {});
   await noteActive(env, u.id, u.username, name).catch((e) => console.error("noteActive", e));
-  if ((await getLinkedTg(env, uid)) !== u.id) await env.KV.put(`w2tg:${uid}`, String(u.id)).catch(() => {});
+  await addLinkedId(env, uid, u.id).catch(() => {}); // این پیام‌رسان به فهرست پیام‌رسان‌های حساب اضافه می‌شود (بقیه‌ی پیام‌رسان‌های وصل‌شده دست‌نخورده)
 }
 
 /** POST /api/auth/miniapp {initData} ← {token, user}؛ توکن را کلاینت در هدر Authorization: Bearer می‌فرستد.
@@ -160,10 +160,10 @@ const MIME: Record<string, string> = {
 
 /** POST /api/miniapp/send {id} — فایل (pptx، جزوه، پوستر، اسلاید صوتی، پادکست) را ربات به چت تلگرام خود کاربر می‌فرستد.
  *  دانلود مستقیم blob داخل WebView تلگرام (به‌خصوص iOS) قابل‌اتکا نیست؛ ارسال به چت همه‌جا کار می‌کند. */
-export async function miniappSend(env: Env, user: WebUser, body: Record<string, unknown> | null, ip: string): Promise<Response> {
+export async function miniappSend(env: Env, user: WebUser, body: Record<string, unknown> | null, ip: string, plat?: unknown): Promise<Response> {
   const id = typeof body?.id === "string" ? body.id : "";
   if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
-  const tgId = await getLinkedTg(env, user.id);
+  const tgId = await linkedFor(env, user.id, plat);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
   if (isEitaaId(tgId)) return err("در ایتا ارسال فایل به چت ممکن نیست؛ دکمه‌ی «دانلود» را بزن.", 409);
   if (await hitLimit(env, `mas:${user.id}`, 30, 3600) || await hitLimit(env, `mas:ip:${ip}`, 90, 3600)) return err("تعداد ارسال‌ها زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
@@ -193,19 +193,19 @@ export async function miniappSend(env: Env, user: WebUser, body: Record<string, 
 }
 
 /** POST /api/miniapp/buy — لینک ورود یک‌بارمصرف به صفحه‌ی خرید پلن در سایت (برای باز شدن در مرورگر بیرونی) */
-export async function miniappBuy(env: Env, user: WebUser): Promise<Response> {
-  const tgId = await getLinkedTg(env, user.id);
+export async function miniappBuy(env: Env, user: WebUser, plat?: unknown): Promise<Response> {
+  const tgId = await linkedFor(env, user.id, plat);
   return json({ url: await siteLoginUrl(env, tgId ?? undefined, "buy") });
 }
 
 /** POST /api/miniapp/site {id?} ← {url} — لینک ورود یک‌بارمصرف به سایت، مستقیم روی بخش فایل‌ها (و در صورت دادن id، روی همان فایل).
  *  برای دکمه‌ی «مشاهده در سایت» برنامک ایتا؛ فایل باید مال خود کاربر باشد (وگرنه فقط بخش فایل‌ها باز می‌شود). */
-export async function miniappSite(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
+export async function miniappSite(env: Env, user: WebUser, body: Record<string, unknown> | null, plat?: unknown): Promise<Response> {
   let id = typeof body?.id === "string" ? body.id : "";
   if (id && !/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
   if (await hitLimit(env, `msite:${user.id}`, 60, 3600)) return err("تعداد درخواست زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
   if (id && !(await loadFileDirect(env, user.id, id).catch(() => null))) id = ""; // فایل منقضی/ناپیدا: فقط بخش فایل‌ها
-  const tgId = await getLinkedTg(env, user.id);
+  const tgId = await linkedFor(env, user.id, plat);
   return json({ url: await siteLoginUrl(env, tgId ?? undefined, "files", id || undefined) });
 }
 
@@ -245,10 +245,10 @@ export async function miniappPdfLink(env: Env, user: WebUser, body: Record<strin
 }
 
 /** POST /api/miniapp/pdf {id} — نسخه‌ی PDF ارائه (مثل دکمه‌ی PDF ربات) ساخته و به چت تلگرام کاربر فرستاده می‌شود */
-export async function miniappPdf(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
+export async function miniappPdf(env: Env, user: WebUser, body: Record<string, unknown> | null, plat?: unknown): Promise<Response> {
   const id = typeof body?.id === "string" ? body.id : "";
   if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
-  const tgId = await getLinkedTg(env, user.id);
+  const tgId = await linkedFor(env, user.id, plat);
   if (!tgId) return err("حساب تلگرام شما پیدا نشد؛ Mini App را از داخل ربات باز کن.", 409);
   if (isEitaaId(tgId)) return err("در ایتا ارسال PDF به چت ممکن نیست؛ فایل PPTX را دانلود کن.", 409);
   const name = (title: string) => fileNameWithSite(env, title, "pdf", "", 80);
@@ -356,7 +356,7 @@ async function verifySigned(botToken: string, data: string, now = Date.now()): P
  *  امضا سرور-ساید بررسی می‌شود؛ اگر user_id داخل داده باشد باید با کاربر فعلی یکی باشد. شماره با قانون پروفایل ثبت می‌شود؛ اما چون در ایتا اجباری است هدیه‌ی شماره ندارد (profile.ts ← attachContact). */
 export async function miniappContact(req: Request, env: Env, user: WebUser): Promise<Response> {
   if (!env.EITAA_APP_TOKEN) return err("ثبت شماره از ایتا فعال نیست.", 503);
-  const id = await getLinkedTg(env, user.id);
+  const id = await linkedFor(env, user.id, "eitaa");
   if (!id || !isEitaaId(id)) return err("این روش فقط داخل برنامک ایتا کار می‌کند.", 403);
   if (await hitLimit(env, `eic:${id}`, 10, 3600)) return err("تعداد تلاش زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
   const b = (await req.json().catch(() => null)) as { contact?: unknown } | null;
@@ -389,16 +389,16 @@ export async function miniappContact(req: Request, env: Env, user: WebUser): Pro
     console.error("eitaa contact: شماره پیدا نشد؛ کلیدها:", [...p.keys()].join(","), "| ساختار contact:", String(p.get("contact") ?? "").replace(/\d/g, "9").slice(0, 120));
     return err("شماره‌ی موبایل ایرانی معتبر نیامد.", 400);
   }
-  const r = await attachContact(env, user, "mobile", mobile, "", undefined, true);
+  const r = await attachContact(env, user, "mobile", mobile, "", (await autoBotId(env, user.id, "eitaa")) ?? undefined, true); // شماره‌ی تأییدشده‌ی ایتا؛ اگر مال حساب دیگری بود ایتا به آن وصل می‌شود
   if ("error" in r) return err(r.error, r.status);
   // کاربر ایتایی که شماره‌اش را داده کدی نمی‌گیرد؛ پیام خوش‌آمد بله (سفیر، یک‌بار برای هر شماره؛ اگر بله ندارد بی‌صدا رد می‌شود)
   if (!r.merged) await sendWelcomeOnce(env, mobile).catch(() => {});
-  return json({ user: publicUser(r.user), reward: r.reward });
+  return json({ user: publicUser(r.user), reward: r.reward, ...(r.merged ? { merged: true } : {}) });
 }
 
 /** POST /api/miniapp/welcome — کلاینت ایتا بعد از موافقت کاربر با requestWriteAccess صدا می‌زند؛ پیام خوش‌آمدگویی (فقط یک بار برای هر کاربر) */
 export async function miniappWelcome(env: Env, user: WebUser): Promise<Response> {
-  const id = await getLinkedTg(env, user.id);
+  const id = await linkedFor(env, user.id, "eitaa");
   if (!id || !isEitaaId(id)) return json({ ok: true, sent: false });
   if (await hitLimit(env, `mawel:${id}`, 5, 3600)) return json({ ok: true, sent: false });
   return json({ ok: true, sent: await eitaaWelcome(env, id).catch(() => false) });

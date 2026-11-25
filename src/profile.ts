@@ -11,7 +11,7 @@ import {
 } from "./auth";
 import { CONTACT_CREDITS, claimContactReward, hasContactReward, type ContactKind } from "./settings";
 import { isEitaaId } from "./eitaa-format";
-import { getLinkedTg, linkBotToAccount } from "./link";
+import { CHAN_LABEL, chanOf, getLinkedIds, getLinkedTg, linkBotToAccount } from "./link";
 
 export type { ContactKind };
 type Err = { error: string; status: number };
@@ -62,7 +62,9 @@ export async function attachContact(env: Env, user: WebUser, kind: ContactKind, 
     const what = kind === "mobile" ? "این شماره" : "این ایمیل";
     if (!botId) return { error: `${what} برای حساب دیگری ثبت شده است.`, status: 409 };
     // ربات: حسابِ دارنده‌ی این شماره/ایمیل را «حساب اصلی» می‌کنیم و هویت ربات را به آن وصل می‌کنیم (اعتبار منتقل می‌شود)
-    if (await getLinkedTg(env, other.id)) return { error: `${what} به حساب دیگری وصل است که یک پیام‌رسان دیگر هم دارد؛ با همان پیام‌رسان یا از سایت وارد شو.`, status: 409 };
+    // چند پیام‌رسان همزمان: فقط وقتی آن حساب همین پلتفرم را با هویت دیگری وصل دارد جا نیست؛ پلتفرم‌های دیگرش کنار هم می‌مانند
+    const ch = chanOf(botId);
+    if ((await getLinkedIds(env, other.id)).some((i) => chanOf(i) === ch && i !== botId)) return { error: `${what} به حساب دیگری وصل است که یک ${CHAN_LABEL[ch]} دیگر هم دارد؛ با همان ${CHAN_LABEL[ch]} یا از سایت وارد شو.`, status: 409 };
     const r = await linkBotToAccount(env, other.id, botId);
     if ("error" in r) return r;
     return { user: other, reward: 0, merged: other.id };

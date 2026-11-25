@@ -37,7 +37,7 @@ import { WEB_MAX_FILE, extractFileBytes } from "./tg-file";
 import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
-import { consumeLoginToken, ensureUid, getLinkedTg, startTgLink, verifyTgLink } from "./link";
+import { addLinkedId, autoBotId, channelStatus, consumeLoginToken, deviceStatus, ensureUid, getLinkedIds, getLinkedTg, isChan, linkedFor, setChannelNotify, unlinkChannel } from "./link";
 import { EXTRA_KINDS, audioKind, isMainDeck, missingExtras, startExtra } from "./extras";
 import { isBaleId, fromBaleId } from "./bale-format";
 import { isEitaaId, fromEitaaId } from "./eitaa-format";
@@ -203,12 +203,12 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     return bad ? err(bad, 400) : json({ ok: true });
   }
   if (path === "/api/feedback" && method === "POST") return submitFeedback(env, user, await readBody(req, 6_000)); // نظر کنار ارائه (سایت/مینی‌اپ/ایتا) + هدیه‌ی یک‌باره
-  if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req));
+  if (path === "/api/miniapp/send" && method === "POST") return miniappSend(env, user, await readBody(req, 2_000), clientIp(req), req.headers.get("x-plat"));
   if (path === "/api/miniapp/dl" && method === "POST") return miniappDlLink(env, user, await readBody(req, 2_000));
-  if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user);
-  if (path === "/api/miniapp/site" && method === "POST") return miniappSite(env, user, await readBody(req, 2_000));
+  if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user, req.headers.get("x-plat"));
+  if (path === "/api/miniapp/site" && method === "POST") return miniappSite(env, user, await readBody(req, 2_000), req.headers.get("x-plat"));
   if (path === "/api/miniapp/welcome" && method === "POST") return miniappWelcome(env, user);
-  if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000));
+  if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000), req.headers.get("x-plat"));
   if (path === "/api/miniapp/pdf-dl" && method === "POST") return miniappPdfLink(env, user, await readBody(req, 2_000));
   // دعوت دوستان برای همه‌ی پلتفرم‌ها (سایت، اپ اندروید، Mini App تلگرام/بله، برنامک ایتا)؛ /api/miniapp/invite برای نسخه‌های قدیمی Mini App می‌ماند
   if ((path === "/api/invite" && (method === "GET" || method === "POST")) || (path === "/api/miniapp/invite" && method === "POST")) return inviteInfo(env, user);
@@ -222,8 +222,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/profile/mobile" && method === "POST") return linkMobile(req, env, user);
   if (path === "/api/profile/mobile/eitaa" && method === "POST") return miniappContact(req, env, user);
   if (path === "/api/profile/email" && method === "POST") return linkEmail(req, env, user);
-  if (path === "/api/profile/telegram/send" && method === "POST") return tgLinkSend(req, env, user);
-  if (path === "/api/profile/telegram/verify" && method === "POST") return tgLinkVerify(req, env, user);
+  // اتصال چند پیام‌رسان همزمان (link.ts): اتصال فقط با شماره‌ی موبایل (/api/profile/mobile)؛ اینجا فقط جدا کردن و روشن/خاموش کردن اعلان هر پیام‌رسان
+  if (path === "/api/profile/channel/unlink" && method === "POST") return channelUnlink(req, env, user);
+  if (path === "/api/profile/channel/notify" && method === "POST") return channelNotify(req, env, user);
   if (path === "/api/settings" && method === "PUT") return putSettings(req, env, user);
   if (path === "/api/generate" && method === "POST") return generate(req, env, user);
   const ex = method === "POST" ? path.match(/^\/api\/files\/([\w-]{1,80})\/extra$/) : null;
@@ -363,9 +364,11 @@ async function linkMobile(req: Request, env: Env, user: WebUser): Promise<Respon
   const b = await readBody(req);
   const mobile = normMobile(b?.mobile), code = String(b?.code ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\s/g, "");
   if (!mobile) return err("شماره‌ی موبایل معتبر نیست.");
-  const r = await attachContact(env, user, "mobile", mobile, code);
+  // Mini App (هدر X-Plat): اگر نشست فقط پروفایل خودکارِ همین پیام‌رسان است و شماره مال حساب دیگری باشد، هویت این پیام‌رسان به آن حساب وصل می‌شود (merged ⇒ کلاینت باید دوباره وارد شود)
+  const botId = (await autoBotId(env, user.id, req.headers.get("x-plat"))) ?? undefined;
+  const r = await attachContact(env, user, "mobile", mobile, code, botId);
   if ("error" in r) return err(r.error, r.status);
-  return json({ user: publicUser(r.user), reward: r.reward });
+  return json({ user: publicUser(r.user), reward: r.reward, ...(r.merged ? { merged: true } : {}) });
 }
 
 /** افزودن ایمیل به حساب فعلی (مثلاً حسابی که با موبایل ساخته شده) با تایید کد ایمیلی؛ رسید خرید به همین ایمیل می‌رود. ۱ اعتبار هدیه‌ی تکمیل پروفایل */
@@ -378,20 +381,18 @@ async function linkEmail(req: Request, env: Env, user: WebUser): Promise<Respons
   return json({ user: publicUser(r.user), reward: r.reward });
 }
 
-/** اتصال تلگرام ۱: آیدی عددی را می‌گیرد و ربات یک کد ۶ رقمی به چت تلگرام همان آیدی می‌فرستد */
-async function tgLinkSend(req: Request, env: Env, user: WebUser): Promise<Response> {
-  const b = await readBody(req);
-  const r = await startTgLink(env, user.id, clientIp(req), b?.tgId);
-  if ("error" in r) return err(r.error, r.status);
-  return json("already" in r ? { already: true, telegram: await getLinkedTg(env, user.id) } : { ok: true });
+async function channelUnlink(req: Request, env: Env, user: WebUser): Promise<Response> {
+  const b = await readBody(req, 300);
+  if (!isChan(b?.plat)) return err("پیام‌رسان نامعتبر است.", 400);
+  const r = await unlinkChannel(env, user.id, b.plat);
+  return "error" in r ? err(r.error, r.status) : json({ ok: true, channels: await channelStatus(env, user.id) });
 }
 
-/** اتصال تلگرام ۲: کد ۶ رقمی را تایید می‌کند و تلگرام را به حساب وب وصل می‌کند */
-async function tgLinkVerify(req: Request, env: Env, user: WebUser): Promise<Response> {
-  const b = await readBody(req);
-  const r = await verifyTgLink(env, user.id, b?.code);
-  if ("error" in r) return err(r.error, r.status);
-  return json({ telegram: r.tg });
+async function channelNotify(req: Request, env: Env, user: WebUser): Promise<Response> {
+  const b = await readBody(req, 300);
+  if (!isChan(b?.plat) || typeof b?.on !== "boolean") return err("درخواست نامعتبر است.", 400);
+  await setChannelNotify(env, user.id, b.plat, b.on);
+  return json({ ok: true, channels: await channelStatus(env, user.id) });
 }
 
 // ---------- وضعیت کاربر ----------
@@ -405,6 +406,10 @@ async function me(env: Env, user: WebUser): Promise<Response> {
   const activeJob = running.busy ? running.jobId : null;
   return json({
     user: publicUser(user),
+    // وضعیت اتصال همه‌ی پلتفرم‌ها برای بخش «اتصال پلتفرم‌ها» در همه‌ی کلاینت‌ها (سایت، Mini App، اپ‌ها): هر پیام‌رسان + دستگاه‌های اعلان
+    channels: await channelStatus(env, user.id).catch(() => []),
+    linkedIds: await getLinkedIds(env, user.id).catch(() => []), // شناسه‌ی داخلی همه‌ی پیام‌رسان‌های وصل‌شده (Mini App با آن می‌فهمد این نشست مال همین کاربر است)
+    devices: await deviceStatus(env, user.id, !!user.email).catch(() => ({ app: false, web: false, email: false })),
     telegram, // آیدی عددی تلگرامِ وصل‌شده (یا null)؛ برای بله/ایتا/روبیکا همان شناسه‌ی داخلی (جمع‌شده با پایه) است
     // پروفایل سایت: پیام‌رسانِ وصل‌شده ("tg" | "bale" | "eitaa" | "rubika") و شناسه‌ی واقعی خودش (روبیکا: null چون شناسه‌اش هش است)
     telegramPlat: telegram ? (isSplusId(telegram) ? "splus" : isEitaaId(telegram) ? "eitaa" : isRubikaId(telegram) ? "rubika" : isBaleId(telegram) ? "bale" : "tg") : null,
@@ -481,7 +486,7 @@ async function tgLogin(env: Env, req: Request, url: URL): Promise<Response> {
   if (!tgId || (await isBanned(env, tgId))) return fail();
   const uid = await ensureUid(env, tgId); // حساب وب خودکار اگر هنوز نبود
   if (typeof uid !== "string") return fail(); // مدیرها پروفایل وب خودکار ندارند
-  await env.KV.put(`w2tg:${uid}`, String(tgId)).catch(() => {}); // نمایش تلگرام وصل‌شده در پروفایل (برای حساب‌های قدیمی هم)
+  await addLinkedId(env, uid, tgId).catch(() => {}); // نمایش پیام‌رسان وصل‌شده در پروفایل (برای حساب‌های قدیمی هم)؛ پیام‌رسان‌های دیگرِ وصل‌شده دست‌نخورده می‌مانند
   const token = await createSession(env, uid);
   return new Response(null, {
     status: 303,
@@ -529,7 +534,7 @@ async function generate(req: Request, env: Env, user: WebUser): Promise<Response
   const jobId = `${user.id}-${randomToken(8).replace(/[^A-Za-z0-9]/g, "x")}`;
   // Mini App در تلگرام، بله و روبیکا یک کلاینت است؛ پلتفرم واقعی از شناسه‌ی حساب لینک‌شده‌ی همان ورود (w2tg) می‌آید، نه ثابت «تلگرام»
   const ua = appUA(req);
-  const miniPlat = b?.via === "miniapp" ? botPlatform(await getLinkedTg(env, user.id).catch(() => null)) : "tg";
+  const miniPlat = b?.via === "miniapp" ? botPlatform(await linkedFor(env, user.id, req.headers.get("x-plat")).catch(() => null)) : "tg";
   if (!(await launchDeck(env, begin, user.id, jobId, { chatId: 0, statusMessageId: 0, channel: "web", plat: b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? miniPlat : ua ? appPlatform(ua) : pwaReq(req) ? pwaPlatform(pwaReq(req)!) : "web", ...(ua && b?.via !== "eitaa" && b?.via !== "miniapp" ? { appv: ua.ver, ...(ua.osv ? { andv: ua.osv } : {}) } : {}), ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) }, posterWant))) {
     return err("شروع ساخت ارائه ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن.", 503);
   }

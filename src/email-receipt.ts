@@ -3,7 +3,7 @@
 import type { Env } from "./env";
 import { getUserById } from "./auth";
 import { toFa } from "./util";
-import { getLinkedTg } from "./link";
+import { sendToChannels } from "./link";
 import { esc as tgEsc, sendMessage } from "./telegram";
 import { BRAND, sendEmail, siteOf } from "./email";
 import { featuresCard, featuresText, ghostButton, linkBar, linksText, mailUrl, tipBox } from "./email-blocks";
@@ -138,10 +138,9 @@ export function receiptTelegram(r: Receipt): string {
 
 export async function sendReceiptTelegram(env: Env, r: Receipt): Promise<boolean> {
   try {
-    const tgId = await getLinkedTg(env, r.uid);
-    if (!tgId) return false;
-    await sendMessage(env, tgId, receiptTelegram(r));
-    return true;
+    // رسید به همه‌ی پیام‌رسان‌های وصل‌شده‌ی روشن (تلگرام، بله، ایتا، …) می‌رسد
+    const res = await sendToChannels(env, r.uid, (id) => sendMessage(env, id, receiptTelegram(r)));
+    return res.ok > 0;
   } catch (e) {
     console.error("receipt telegram", e);
     return false;

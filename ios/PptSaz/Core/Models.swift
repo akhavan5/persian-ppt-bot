@@ -82,6 +82,18 @@ struct Settings {
     }
 }
 
+/// وضعیت اتصال یک پیام‌رسان به حساب (سرور: channels در /api/me)؛ key: tg | bale | eitaa | rubika | splus
+struct ChannelInfo: Identifiable {
+    var key = ""
+    var label = ""
+    var connected = false
+    var shown = ""
+    var notify = false
+    var available = false
+    var canUnlink = false
+    var id: String { key }
+}
+
 struct Me {
     var name = ""
     var mobile = ""
@@ -105,6 +117,11 @@ struct Me {
     var giftCredits = 0
     var giftNote = ""
     var giftMissing: [String] = []
+    /// اتصال پلتفرم‌ها: هم‌زمان به چند پیام‌رسان؛ اعلان به همه‌ی روشن‌ها می‌رسد
+    var channels: [ChannelInfo] = []
+    var devApp = false
+    var devWeb = false
+    var devEmail = false
 
     var displayName: String {
         if !name.isEmpty { return name }
@@ -306,6 +323,13 @@ func parseMe(_ j: J) -> Me? {
     m.giftCredits = cw["credits"].int
     m.giftNote = cw["note"].str
     m.giftMissing = cw["missing"].arr.map { $0.str }
+    m.channels = j["channels"].arr.map {
+        ChannelInfo(key: $0["key"].str, label: $0["label"].str, connected: $0["connected"].bool, shown: $0["shown"].exists ? $0["shown"].str : "",
+                    notify: $0["notify"].bool, available: $0["available"].bool, canUnlink: $0["canUnlink"].bool)
+    }
+    m.devApp = j["devices"]["app"].bool
+    m.devWeb = j["devices"]["web"].bool
+    m.devEmail = j["devices"]["email"].bool
     return m
 }
 

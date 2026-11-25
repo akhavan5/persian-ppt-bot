@@ -14,7 +14,7 @@ import { LlmError } from "./llm";
 import { refundCredit, getSettings, type CreditSource, type Uid } from "./settings";
 import { loadPreview, saveFile } from "./files";
 import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
-import { getLinkedTg } from "./link";
+import { linkedFor } from "./link";
 import { withStore } from "./store";
 import { appReadyMarkup, fileNameWithSite } from "./deck-service";
 import { fontCaption } from "./themes";
@@ -105,7 +105,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ (خطایش به اعتبار نمی‌رسد)
       if (web && event.payload.notify) {
         await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
-          const tgChat = await getLinkedTg(this.env, String(uid));
+          const tgChat = await linkedFor(this.env, String(uid), event.payload.plat);
           if (!tgChat) return;
           await sendMessage(this.env, tgChat, `✅ ${kind === "poster" ? "🖼 پوستر" : "📝 جزوه"} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
             await appReadyMarkup(this.env, tgChat, out.ids[0]));

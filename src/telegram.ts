@@ -205,6 +205,7 @@ export const BOT_COMMANDS = [
   { command: "settings", description: "تنظیمات (تم، لحن، فونت، تعداد اسلاید)" },
   { command: "credit", description: "اعتبار باقی‌مانده و شارژ" },
   { command: "profile", description: "پروفایل: ثبت موبایل/ایمیل با کد تایید (۱ اعتبار هدیه)" },
+  { command: "link", description: "وضعیت اتصال پلتفرم‌ها (با تایید شماره‌ی موبایل)" },
   { command: "files", description: "فایل‌های ۲۴ ساعت اخیر من" },
   { command: "app", description: "باز کردن اپ ساخت ارائه (Mini App)" },
   { command: "site", description: "ورود خودکار به سایت (پلن‌ها و پرداخت)" },

@@ -41,6 +41,12 @@ data class Settings(val theme: String, val template: String, val tone: String, v
     val notes: Boolean = true,
 )
 
+/** وضعیت اتصال یک پیام‌رسان به حساب (سرور: channels در /api/me)؛ key: tg | bale | eitaa | rubika | splus */
+data class ChannelInfo(val key: String, val label: String, val connected: Boolean, val shown: String, val notify: Boolean, val available: Boolean, val canUnlink: Boolean)
+
+/** مسیرهای اعلانِ غیرپیام‌رسان: اپ اندروید، اعلان مرورگر، ایمیل */
+data class Devices(val app: Boolean = false, val web: Boolean = false, val email: Boolean = false)
+
 data class Me(
     val name: String,
     val mobile: String,
@@ -74,6 +80,9 @@ data class Me(
     val adCredits: Int = 1,
     /** ویدئوی باقی‌مانده‌ی امروز؛ ۰ = سقف روزانه تمام شده (سرور قدیمی: ۹۹) */
     val adLeft: Int = 99,
+    /** اتصال پلتفرم‌ها: هر حساب می‌تواند هم‌زمان به چند پیام‌رسان وصل باشد و اعلان به همه‌ی روشن‌ها می‌رسد */
+    val channels: List<ChannelInfo> = emptyList(),
+    val devices: Devices = Devices(),
 )
 
 /**
@@ -168,6 +177,10 @@ fun parseMe(j: JSONObject): Me? {
         adCredits = j.optJSONObject("adReward")?.optInt("credits", 1) ?: 1,
         adLeft = j.optJSONObject("adReward")?.optInt("left", 99) ?: 99,
         giftMissing = j.optJSONObject("contactReward")?.optJSONArray("missing")?.let { a -> (0 until a.length()).map { i -> a.optString(i) } } ?: emptyList(),
+        channels = j.optJSONArray("channels").objects().map {
+            ChannelInfo(it.str("key"), it.str("label"), it.optBoolean("connected"), if (it.isNull("shown")) "" else it.optString("shown"), it.optBoolean("notify"), it.optBoolean("available"), it.optBoolean("canUnlink"))
+        },
+        devices = j.optJSONObject("devices")?.let { Devices(it.optBoolean("app"), it.optBoolean("web"), it.optBoolean("email")) } ?: Devices(),
     )
 }
 

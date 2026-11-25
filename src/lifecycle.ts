@@ -39,6 +39,7 @@ import { isRubikaId } from "./rubika-format";
 import { isEitaaId } from "./eitaa-format";
 import { isSplusId } from "./splus-format";
 import { toFa } from "./util";
+import { chanOf, isChan } from "./link";
 
 
 /** cron ساعتی (دقیقه‌ی ۳۷)؛ باید با triggers.crons در wrangler.jsonc یکی باشد */
@@ -60,9 +61,9 @@ const CAP_TTL = 20 * 3600;
 interface Ctx { env: Env; now: number; nowSec: number; left: number; mailOn: boolean; botNames: Map<string, string> }
 const take = (c: Ctx, n: number) => { if (c.left < n) return false; c.left -= n; return true; };
 
-interface Contact { uid: string; name: string; email: string; tgId: number | null; push: boolean; /** توکن‌های FCM اپ اندروید (تازه‌ترین اول) */ fcm: string[] }
+interface Contact { uid: string; name: string; email: string; tgId: number | null; /** پیام‌رسان‌های وصل‌شده‌ی دیگرِ روشن (غیر از هویت اصلی tgId) */ extra: number[]; push: boolean; /** توکن‌های FCM اپ اندروید (تازه‌ترین اول) */ fcm: string[] }
 /** ستون‌های مشترک همه‌ی کارها: شناسه‌ی حساب وب در ستون u */
-interface Base { k: string; uid: string; usr: string | null; tg: string | null; banned: number | null; blk: number | null; push: number | null; fcm: string | null }
+interface Base { k: string; uid: string; usr: string | null; tg: string | null; banned: number | null; blk: number | null; push: number | null; fcm: string | null; /** w2ids: همه‌ی پیام‌رسان‌های وصل‌شده (JSON) */ ids?: string | null; /** nto: پیام‌رسان‌هایی که اعلانشان خاموش است (JSON) */ nto?: string | null }
 type Mail = Parameters<typeof render>[2];
 interface Note {
   /** برچسب ایمیل در Resend */ tag: string;
@@ -113,8 +114,12 @@ function contactOf(c: Ctx, r: Base): Contact {
   let u: WebUser | null = null;
   try { u = r.usr ? (JSON.parse(r.usr) as WebUser) : null; } catch { /* بدون ایمیل */ }
   const n = Number(r.tg);
-  const tgId = !r.blk && Number.isSafeInteger(n) && n > 0 && botReady(c.env, n) ? n : null;
-  return { uid: r.uid, name: u?.name ?? "", email: c.mailOn && u?.email ? u.email : "", tgId, push: !!r.push && webPushEnabled(c.env), fcm: pushEnabled(c.env) ? parseFcmCol(r.fcm) : [] };
+  const list = (raw: string | null | undefined): unknown[] => { try { const a = JSON.parse(raw ?? "[]"); return Array.isArray(a) ? a : []; } catch { return []; } };
+  const muted = list(r.nto).filter(isChan);
+  const usable = (i: number) => Number.isSafeInteger(i) && i > 0 && botReady(c.env, i) && !muted.includes(chanOf(i));
+  const tgId = !r.blk && usable(n) ? n : null;
+  const extra = list(r.ids).map(Number).filter((i) => i !== n && usable(i)).slice(0, 4);
+  return { uid: r.uid, name: u?.name ?? "", email: c.mailOn && u?.email ? u.email : "", tgId, extra, push: !!r.push && webPushEnabled(c.env), fcm: pushEnabled(c.env) ? parseFcmCol(r.fcm) : [] };
 }
 
 function render0(n: Note) { return n.mail ? { subject: n.mail.subject, m: { campaign: n.tag, promo: PROMO[n.tag] ?? "features", ...(TIP[n.tag] ? { tip: TIP[n.tag] } : {}), ...n.mail.m } as Mail } : null; }
@@ -130,6 +135,17 @@ async function deliver(c: Ctx, k: Contact, n: Note, key: string): Promise<"bot" 
         console.error("lifecycle bot", String(e).slice(0, 160));
         // گیرنده دیگر در دسترس نیست (ربات را بلاک کرده/حسابش حذف شده): از ارسال‌های بعدی حذف شود (مثل broadcast.ts)؛ با /start برمی‌گردد
         if (GONE_RE.test(String(e))) await c.env.KV.put(`blk:${k.tgId}`, "1", { expirationTtl: BLK_TTL }).catch(() => {});
+      }
+    }
+    // پیام‌رسان‌های وصل‌شده‌ی دیگر (مثلاً هم تلگرام و هم بله): همان اعلان با کیبورد مخصوص همان پلتفرم
+    for (const id of k.extra) {
+      if (!take(c, 3)) break;
+      if (await c.env.KV.get(`blk:${id}`).catch(() => null)) continue;
+      tried = true;
+      try { await sendMessage(c.env, id, n.tg, n.kb ? await n.kb({ ...k, tgId: id }) : undefined); ok ??= "bot"; }
+      catch (e) {
+        console.error("lifecycle bot extra", String(e).slice(0, 160));
+        if (GONE_RE.test(String(e))) await c.env.KV.put(`blk:${id}`, "1", { expirationTtl: BLK_TTL }).catch(() => {});
       }
     }
     if (k.push && n.push && take(c, 4)) {
@@ -170,6 +186,8 @@ const CONTACT = (u: string) => `
   ${u} AS uid,
   (SELECT w.v FROM kv w WHERE w.k = 'wu:' || ${u}) AS usr,
   (SELECT t.v FROM kv t WHERE t.k = 'w2tg:' || ${u}) AS tg,
+  (SELECT i.v FROM kv i WHERE i.k = 'w2ids:' || ${u}) AS ids,
+  (SELECT m.v FROM kv m WHERE m.k = 'nto:' || ${u}) AS nto,
   (SELECT 1 FROM kv n WHERE n.k = 'ban:' || ${u}) AS banned,
   (SELECT 1 FROM kv b WHERE b.k = 'blk:' || (SELECT t2.v FROM kv t2 WHERE t2.k = 'w2tg:' || ${u})) AS blk,
   (SELECT 1 FROM kv p WHERE p.k = 'wps:' || ${u} AND (p.exp IS NULL OR p.exp > ?1)) AS push,
@@ -215,7 +233,7 @@ async function runJob<R extends Base>(c: Ctx, job: Job<R>): Promise<number> {
     const ttl = job.doneTtl ?? DONE_TTL;
     if (r.banned) { marks.push(put(c, key, "0", ttl)); continue; }
     const k = contactOf(c, r);
-    if (!k.tgId && !k.push && !k.email && !k.fcm.length) { marks.push(put(c, key, "0", ttl)); continue; }
+    if (!k.tgId && !k.extra.length && !k.push && !k.email && !k.fcm.length) { marks.push(put(c, key, "0", ttl)); continue; }
     let n: Note | null = null;
     try { n = await job.note(c, r, k); } catch (e) { console.error("lifecycle note", job.name, String(e).slice(0, 200)); }
     if (!n) { marks.push(put(c, key, "0", ttl)); continue; }

@@ -11,7 +11,7 @@ import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { adminIds, botPlatform, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
 import { BUY_SITE_NOTE, appReadyMarkup, buyKbFor, fileNameWithSite } from "./deck-service";
-import { getLinkedTg } from "./link";
+import { linkedFor } from "./link";
 import { deckKeyboard, extraButtons, extrasHint, isGammaAdmin, markExtra, type ExtraKind } from "./extras";
 import { logDeck, saveFile, savePreview } from "./files";
 import { fontCaption } from "./themes";
@@ -297,7 +297,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     // بعد از «finish» (قفل قبلاً آزاد شده) و بدون تلاش مجدد: شکست یا کندی این پیام نباید به «برگشت اعتبار» یا شکست کار برسد.
     if (web && event.payload.notify) {
       await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
-        const tgChat = await getLinkedTg(this.env, String(userId));
+        const tgChat = await linkedFor(this.env, String(userId), event.payload.plat);
         if (!tgChat) return;
         const extras = [built.poster === "ok" ? "🖼 پوستر" : "", built.handout === "ok" ? "📝 جزوه" : "", built.audio === "pending" ? "🔊 اسلاید صوتی (چند دقیقه‌ی دیگر)" : "", built.podcast === "pending" ? "🎙 پادکست (چند دقیقه‌ی دیگر)" : ""].filter(Boolean);
         const text = `✅ <b>${esc(built.title)}</b> آماده شد (${toFa(String(built.slides))} اسلاید${extras.length ? " + " + extras.join(" + ") : ""}).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`;

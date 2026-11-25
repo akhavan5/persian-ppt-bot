@@ -27,7 +27,7 @@ import { PLANS } from "./payment";
 import { inviteBody, inviteLinkFor, inviteMarkup } from "./invite-msg";
 import { BUY_SITE_NOTE, audioEnabled, beginDeck, buyKbFor, fileNameWithSite, launchDeck, miniappUrl, posterEnabled, runningJob, siteLoginUrl, slidesLimitMsg } from "./deck-service";
 import { ensureUid, resolveUid } from "./link";
-import { askShareContact, handleContactSkip, handleProfileCallback, handleProfileInput, handleSharedContact, showProfile } from "./bot-profile";
+import { askShareContact, handleContactSkip, handleProfileCallback, handleProfileInput, handleSharedContact, showChannels, showProfile } from "./bot-profile";
 import { notifyInviterJoined } from "./referral";
 import { SUPPORT_MAX_TEXT, supportBotAsk } from "./support-chat";
 import { hasBrowser } from "./browser-api";
@@ -422,7 +422,7 @@ async function handleCallback(env: Env, cq: any) {
     await env.KV.delete(supKey(userId)).catch(() => {});
     return await sendMessage(env, chatId, "✅ گفتگو با دستیار تمام شد. هر وقت خواستی موضوع ارائه‌ات را بفرست.", kb([[{ text: "🏠 منوی اصلی", callback_data: "h:menu" }]]));
   }
-  if (act === "pf") return await handleProfileCallback(env, cq, userId, chatId, a); // ثبت موبایل/ایمیل با OTP (bot-profile.ts)
+  if (act === "pf") return await handleProfileCallback(env, cq, userId, chatId, a, b); // ثبت موبایل/ایمیل با OTP (bot-profile.ts)
   if (act === "bc") return await handleBroadcastCallback(env, cq);
   if (act === "af") return await handleAdminFileCallback(env, cq);
   if (act === "as" || act === "ap" || act === "ar") return await handleAdminSampleCallback(env, cq);
@@ -725,6 +725,7 @@ export async function handleUpdate(env: Env, update: any): Promise<unknown> {
   if (await handleSupportInput(env, chatId, userId, uid, text, !!cmd).catch((e) => { console.error("support input", e); return false; })) return;
 
   if (cmd === "/profile") return await showProfile(env, chatId, userId, uid);
+  if (cmd === "/link" || cmd === "/channels") return await showChannels(env, chatId, userId, uid); // وضعیت اتصال پلتفرم‌ها (اتصال فقط با تایید شماره؛ bot-profile.ts)
   if (cmd === "/app") return await showApp(env, chatId);
   if (cmd === "/site") return await showSite(env, chatId, userId);
   // دعوت دوستان: کاربر جدیدی که با لینک اختصاصی آمده فقط «دعوت در انتظار» ثبت می‌کند؛ وقتی اولین ارائه‌اش ساخته شد (referral.ts ← workflow.ts)

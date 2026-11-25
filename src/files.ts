@@ -31,12 +31,16 @@ export async function listFiles(env: Env, userId: Uid): Promise<FileEntry[]> {
 }
 
 /** id ثابت است (شناسه‌ی نمونه‌ی Workflow)؛ اگر گام تکرار شد، دوباره ذخیره نمی‌شود. */
-export async function saveFile(env: Env, userId: Uid, id: string, bytes: Uint8Array, name: string, title: string, slides: number): Promise<boolean> {
+export async function saveFile(env: Env, userId: Uid, id: string, bytes: Uint8Array, name: string, title: string, slides: number, at?: number): Promise<boolean> {
   if (bytes.byteLength > MAX_BYTES) return false;
+  // at: زمان ساخت اصلی (فقط برای انتقال فایل بین حساب‌ها)؛ عمر باقی‌مانده‌ی همان فایل حفظ می‌شود و تمدید نمی‌شود
+  const t = at ?? Date.now();
+  const ttl = Math.floor(TTL - (Date.now() - t) / 1000);
+  if (ttl < 60) return false; // تقریباً منقضی‌شده
   // متادیتا کنار خودِ فایل ذخیره می‌شود تا دانلود وب بدون خواندن فهرست (که ممکن است تا ۶۰ ثانیه قدیمی دیده شود) کار کند
-  await env.FILES.put(fileKey(userId, id), bytes, { expirationTtl: TTL, metadata: { name, title: title.slice(0, 120), slides, t: Date.now() } });
+  await env.FILES.put(fileKey(userId, id), bytes, { expirationTtl: ttl, metadata: { name, title: title.slice(0, 120), slides, t } });
   const rest = (await listFiles(env, userId)).filter((f) => f.id !== id);
-  const all = [{ id, name, title, slides, t: Date.now() }, ...rest];
+  const all = [{ id, name, title, slides, t }, ...rest].sort((a, b) => b.t - a.t);
   const KEEP = await keepFor(env, userId);
   for (const old of all.slice(KEEP)) await env.FILES.delete(fileKey(userId, old.id)).catch(() => {});
   await env.KV.put(listKey(userId), JSON.stringify(all.slice(0, KEEP)), { expirationTtl: TTL });
@@ -58,6 +62,29 @@ export async function loadFile(env: Env, userId: Uid, id: string): Promise<{ ent
   if (!entry) return null;
   const data = await env.FILES.get(fileKey(userId, id), "arrayBuffer");
   return data ? { entry, data } : null;
+}
+
+/** فایل‌های ۲۴ ساعته (و متن پیش‌نمایششان) را از یک حساب به حساب دیگر منتقل می‌کند؛ برای وقتی پروفایل خودکارِ یک پیام‌رسان به حساب اصلی وصل می‌شود
+ *  تا همه‌ی فایل‌ها در همه‌ی پلتفرم‌ها یکی باشد. قدیمی‌ترین اول منتقل می‌شود تا ترتیب فهرست حفظ شود و سقف نگه‌داری حساب مقصد رعایت شود.
+ *  بهترین‌تلاش است: خطای یک فایل بقیه را متوقف نمی‌کند. تعداد منتقل‌شده برگردانده می‌شود. */
+export async function moveFiles(env: Env, from: Uid, to: Uid, max = 12): Promise<number> {
+  if (from === to) return 0;
+  const list = (await listFiles(env, from)).slice(0, max).reverse();
+  let n = 0;
+  for (const e of list) {
+    try {
+      const f = await loadFileDirect(env, from, e.id);
+      if (!f) continue;
+      if (!(await saveFile(env, to, e.id, new Uint8Array(f.data), f.entry.name, f.entry.title, f.entry.slides, e.t))) continue;
+      const pv = await env.KV.get(previewKey(from, e.id));
+      if (pv) await env.KV.put(previewKey(to, e.id), pv, { expirationTtl: Math.max(60, Math.floor(TTL - (Date.now() - e.t) / 1000)) });
+      await env.FILES.delete(fileKey(from, e.id)).catch(() => {});
+      await env.KV.delete(previewKey(from, e.id)).catch(() => {});
+      n++;
+    } catch (err) { console.error("moveFiles", e.id, String(err).slice(0, 120)); }
+  }
+  await env.KV.delete(listKey(from)).catch(() => {});
+  return n;
 }
 
 // ---------- پیش‌نمایش در مرورگر (و خروجی PDF از روی همان صفحه) ----------

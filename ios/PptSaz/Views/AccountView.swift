@@ -8,6 +8,7 @@ struct AccountView: View {
     @State private var showPrivacy = false
     @State private var confirmLogout = false
     @State private var buying: String?
+    @State private var unlinking: ChannelInfo?
 
     var body: some View {
         NavigationStack {
@@ -18,6 +19,7 @@ struct AccountView: View {
                         profileCard(me)
                         creditCard(me)
                         if me.giftAvailable && me.giftCredits > 0 { giftCard(me) }
+                        channelsSection(me)
                         plansSection(me).id("plans")
                         linksSection
                         Button(role: .destructive) { confirmLogout = true } label: {
@@ -54,6 +56,10 @@ struct AccountView: View {
                 if let u = URL(string: Api.base + "/privacy") { SafariView(url: u).ignoresSafeArea() }
             }
             .sheet(isPresented: $m.needMobile) { ProfileSheet(startWithMobile: true).environmentObject(m) }
+            .confirmationDialog("جدا کردن \(unlinking?.label ?? "")؟", isPresented: Binding(get: { unlinking != nil }, set: { if !$0 { unlinking = nil } }), titleVisibility: .visible) {
+                Button("جدا کن", role: .destructive) { if let c = unlinking { Task { await m.unlinkChannel(c.key) } } }
+                Button("انصراف", role: .cancel) {}
+            }
             .confirmationDialog("از حساب خارج می‌شوی؟", isPresented: $confirmLogout, titleVisibility: .visible) {
                 Button("خروج", role: .destructive) { Task { await m.logout() } }
                 Button("انصراف", role: .cancel) {}
@@ -210,6 +216,45 @@ struct AccountView: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "checkmark.circle.fill").foregroundColor(Theme.success).font(.footnote).padding(.top, 2)
             Text(text).font(.subheadline)
+        }
+    }
+
+    /// اتصال پلتفرم‌ها: وضعیت هر پیام‌رسان، اعلان روشن/خاموش، جدا کردن و ساخت کد اتصال
+    @ViewBuilder
+    private func channelsSection(_ me: Me) -> some View {
+        let shown = me.channels.filter { $0.connected || $0.available }
+        if !shown.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader(title: "اتصال پلتفرم‌ها")
+                Text("با تأیید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها به همه‌ی پیام‌رسان‌های روشن می‌رسد.")
+                    .font(.footnote).foregroundColor(.secondary)
+                ForEach(shown) { c in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(c.label)
+                            Text(c.connected ? "✅ متصل" + (c.shown.isEmpty ? "" : " (\(Fa.digits(c.shown)))") : "⬜ وصل نیست")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        if c.connected {
+                            Button(c.notify ? "🔔 اعلان" : "🔕 اعلان") { Task { await m.setChannelNotify(c.key, !c.notify) } }
+                                .buttonStyle(.bordered).controlSize(.small)
+                            if c.canUnlink {
+                                Button("جدا کردن") { unlinking = c }.buttonStyle(.bordered).controlSize(.small)
+                            }
+                        }
+                    }
+                }
+                Text("\(me.devApp ? "✅" : "⬜") اپ اندروید · \(me.devWeb ? "✅" : "⬜") اعلان مرورگر · \(me.devEmail ? "✅" : "⬜") ایمیل")
+                    .font(.caption).foregroundColor(.secondary)
+                Text(me.mobile.isEmpty
+                     ? "اول شماره‌ی موبایلت را در کارت پروفایل تأیید کن؛ بعد در هر پلتفرم دیگر همان شماره را تأیید کن تا به همین حساب وصل شود."
+                     : "برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (\(Fa.digits(me.mobile))) را تأیید کن؛ همان لحظه به این حساب وصل می‌شود.")
+                    .font(.footnote).foregroundColor(.secondary)
+            }
+            .padding(16)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
 

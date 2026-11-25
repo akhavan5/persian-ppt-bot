@@ -170,6 +170,14 @@ final class Api {
         return j["reward"].int
     }
 
+    func channelNotify(plat: String, on: Bool) async throws {
+        _ = try await call("POST", "/api/profile/channel/notify", ["plat": plat, "on": on])
+    }
+
+    func channelUnlink(plat: String) async throws {
+        _ = try await call("POST", "/api/profile/channel/unlink", ["plat": plat])
+    }
+
     func invite() async throws -> InviteInfo {
         let j = try await call("GET", "/api/invite")
         let link = j["webLink"].str.isEmpty ? j["link"].str : j["webLink"].str

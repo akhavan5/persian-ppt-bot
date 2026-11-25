@@ -8,7 +8,7 @@ import type { Env } from "./env";
 import { emailOtpEnabled, getUserById, normMobile, otpEnabled } from "./auth";
 import { attachContact, contactRewardInfo, isEitaaAccount, normContact, sendContactCode, type ContactKind } from "./profile";
 import { CONTACT_CREDITS, CONTACT_REWARD_NOTE, getCredit, hasContactReward } from "./settings";
-import { resolveUid } from "./link";
+import { CHAN_LABEL, channelStatus, chanOf, deviceStatus, isChan, resolveUid, setChannelNotify, unlinkChannel } from "./link";
 import { esc, sendMessage, tg } from "./telegram";
 import { toEn, toFa } from "./util";
 import { siteLoginUrl } from "./deck-service";
@@ -38,18 +38,79 @@ export async function showProfile(env: Env, chatId: number, userId: number, uid:
     c.unlimited ? "💳 اعتبار: نامحدود" : `💳 اعتبار: <b>${toFa(String(c.total))}</b> ارائه`,
   ];
   if (info.available) lines.push("", giftLine(), (await isEitaaAccount(env, user)) ? "با ثبت و تایید ایمیل (با کد)، یک‌بار اضافه می‌شود." : "به‌ازای هر مورد (موبایل و ایمیل جداگانه) پس از تایید با کد، یک‌بار اضافه می‌شود.");
+  lines.push("", ...(await channelLines(env, uid, user, userId)));
   const rows: Btn[][] = [];
   const add: Btn[] = [];
   if (info.missing.includes("mobile")) add.push({ text: "📱 ثبت شماره‌ی موبایل", callback_data: "pf:m" });
   if (info.missing.includes("email")) add.push({ text: "✉️ ثبت ایمیل", callback_data: "pf:e" });
   if (add.length) rows.push(add);
+  rows.push([{ text: "🔗 اتصال پلتفرم‌ها", callback_data: "pf:c" }]);
   rows.push([{ text: "🌐 ورود به سایت", url: await siteLoginUrl(env, userId, "home") }]);
   return sendMessage(env, chatId, lines.join("\n"), kb(rows));
 }
 
+// ---------- اتصال پلتفرم‌ها (چند پیام‌رسان همزمان؛ link.ts) ----------
+/** خط‌های وضعیت اتصال: هر پیام‌رسان + اپ/مرورگر/ایمیل. «اینجا» = پیام‌رسانی که کاربر همین حالا در آن است. */
+async function channelLines(env: Env, uid: string, user: { email?: string }, userId: number): Promise<string[]> {
+  const [chs, dev] = await Promise.all([channelStatus(env, uid), deviceStatus(env, uid, !!user.email)]);
+  const here = chanOf(userId);
+  const out = ["🔗 <b>پلتفرم‌های متصل</b>"];
+  for (const c of chs) {
+    if (!c.connected && !c.available) continue;
+    out.push(`${c.connected ? "✅" : "⬜️"} ${c.label}: ${c.connected ? `وصل است${c.key === here ? " (اینجا)" : ""} · اعلان ${c.notify ? "🔔 روشن" : "🔕 خاموش"}` : "وصل نیست"}`);
+  }
+  out.push(`${dev.app ? "✅" : "⬜️"} اپ اندروید · ${dev.web ? "✅" : "⬜️"} اعلان مرورگر · ${dev.email ? "✅" : "⬜️"} ایمیل`);
+  return out;
+}
+
+/** پنل اتصال پلتفرم‌ها: وضعیت + روشن/خاموش‌کردن اعلان هر پیام‌رسان + جدا کردن + کد اتصال */
+export async function showChannels(env: Env, chatId: number, userId: number, uid: string | number): Promise<unknown> {
+  const user = typeof uid === "string" ? await getUserById(env, uid) : null;
+  if (!user || typeof uid !== "string") return sendMessage(env, chatId, "🔗 برای حساب مدیر اتصال چند پلتفرم فعال نیست.");
+  const chs = await channelStatus(env, uid);
+  const lines = [
+    ...(await channelLines(env, uid, user, userId)),
+    "",
+    "هر پیام‌رسانی که وصل کنی اعتبار، پلن و فایل‌هایت همان‌جا هم یکی است و اعلان‌ها (رسید، پایان پلن، یادآوری‌ها) به <b>همه‌ی پیام‌رسان‌های روشن</b> می‌رسد.",
+    "",
+    user.mobile
+      ? `➕ <b>اتصال پلتفرم دیگر:</b> در ربات/برنامک همان پلتفرم، همین شماره (<code>${esc(user.mobile)}</code>) را تایید کن؛ همان لحظه به این حساب وصل می‌شود.`
+      : "➕ <b>اتصال پلتفرم دیگر:</b> اول شماره‌ی موبایلت را ثبت و تایید کن (/profile)؛ بعد در هر پلتفرم دیگر همان شماره را تایید کن تا به همین حساب وصل شود.",
+  ];
+  const rows: Btn[][] = [];
+  for (const c of chs.filter((x) => x.connected)) {
+    const r: Btn[] = [{ text: `${c.notify ? "🔔" : "🔕"} ${c.label}: اعلان ${c.notify ? "روشن" : "خاموش"}`, callback_data: `pf:n:${c.key}` }];
+    if (c.canUnlink) r.push({ text: "❌ جدا کردن", callback_data: `pf:u:${c.key}` });
+    rows.push(r);
+  }
+  if (!user.mobile && otpEnabled(env)) rows.push([{ text: "📱 ثبت شماره‌ی موبایل", callback_data: "pf:m" }]);
+  return sendMessage(env, chatId, lines.join("\n"), kb(rows));
+}
+
 /** دکمه‌های pf:m (ثبت موبایل) | pf:e (ثبت ایمیل) | pf:x (لغو) */
-export async function handleProfileCallback(env: Env, cq: any, userId: number, chatId: number, action: string): Promise<void> {
+export async function handleProfileCallback(env: Env, cq: any, userId: number, chatId: number, action: string, arg?: string): Promise<void> {
   await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+  if (action === "c" || action === "n" || action === "u" || action === "U") {
+    const uid0 = await resolveUid(env, userId);
+    if (typeof uid0 !== "string") return void (await sendMessage(env, chatId, "🔗 برای حساب مدیر اتصال چند پلتفرم فعال نیست."));
+    if (action === "c") { await showChannels(env, chatId, userId, uid0); return; }
+    if (!isChan(arg)) return;
+    if (action === "n") {
+      const cur = (await channelStatus(env, uid0)).find((c) => c.key === arg);
+      if (!cur?.connected) return;
+      await setChannelNotify(env, uid0, arg, !cur.notify);
+      await showChannels(env, chatId, userId, uid0);
+      return;
+    }
+    if (action === "u") { // تایید قبل از جدا کردن
+      await sendMessage(env, chatId, `❌ ${CHAN_LABEL[arg]} از حساب جدا شود؟ دیگر اعلان نمی‌گیرد و با آن وارد این حساب نمی‌شوی (هر وقت خواستی دوباره وصل کن).`,
+        kb([[{ text: "✅ بله، جدا کن", callback_data: `pf:U:${arg}` }, { text: "✖️ انصراف", callback_data: "pf:c" }]]));
+      return;
+    }
+    const r = await unlinkChannel(env, uid0, arg);
+    await sendMessage(env, chatId, "error" in r ? `⚠️ ${esc(r.error)}` : `✅ ${CHAN_LABEL[arg]} از حساب جدا شد.`);
+    return;
+  }
   if (action === "x") {
     await env.KV.delete(stKey(userId)).catch(() => {});
     await sendMessage(env, chatId, "لغو شد. هر وقت خواستی: /profile");

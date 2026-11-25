@@ -786,13 +786,10 @@ address{font-style:normal}
     <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfMob" inputmode="tel" autocomplete="tel" maxlength="16" placeholder="09123456789" style="flex:1"><button class="btn ghost sm" id="pfMobSend" type="button">ارسال کد</button></div>
     <div class="row" id="pfCodeRow" style="gap:8px;margin-top:8px" hidden><input class="ltr" type="text" id="pfCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد ۶ رقمی" style="flex:1"><button class="btn sm" id="pfMobVerify" type="button">تایید</button></div>
   </div>
-  <label id="pfTgLabel">تلگرام</label>
-  <div class="ltr muted" id="pfTgSet" style="padding:6px 2px" hidden></div>
-  <div id="pfTgAdd" hidden>
-    <p class="muted" style="margin:0 0 8px;font-size:.86rem">در ربات تلگرام دستور <b>/id</b> را بزن، آیدی عددی‌ات را اینجا وارد کن تا ربات یک کد ۶ رقمی برایت بفرستد. بعد از تایید، اعتبار و ارائه‌های ربات و سایت یکی می‌شود.</p>
-    <div class="row" style="gap:8px"><input class="ltr" type="text" id="pfTg" inputmode="numeric" autocomplete="off" maxlength="16" placeholder="123456789" style="flex:1"><button class="btn ghost sm" id="pfTgSend" type="button">ارسال کد</button></div>
-    <div class="row" id="pfTgCodeRow" style="gap:8px;margin-top:8px" hidden><input class="ltr" type="text" id="pfTgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="کد ۶ رقمی تلگرام" style="flex:1"><button class="btn sm" id="pfTgVerify" type="button">تایید</button></div>
-  </div>
+  <label>🔗 اتصال پلتفرم‌ها</label>
+  <p class="muted" style="margin:0 0 8px;font-size:.86rem">با تایید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها (رسید، پایان پلن، یادآوری‌ها) به <b>همه‌ی پیام‌رسان‌های روشن</b> می‌رسد؛ مثلاً هم بله و هم ایتا.</p>
+  <div id="pfChBox" style="display:grid;gap:8px"></div>
+  <div class="muted" id="pfDevices" style="margin-top:8px;font-size:.86rem"></div>
   <div id="pfInvBox" hidden>
     <label>🎁 دعوت دوستان</label>
     <p class="muted" style="margin:0 0 8px;font-size:.86rem">به‌ازای هر ۵ دوستی که با لینک تو وارد شوند و اولین ارائه‌شان را بسازند، ۱ اعتبار پلن پلاس می‌گیری (تا سقف ۵۰ دعوت).</p>
@@ -1178,15 +1175,38 @@ function renderPfMobile() {
   if (!u.mobile && !cfg.otp) { $("#pfMobSet").textContent = "—"; show($("#pfMobSet"), true); }
   show($("#pfCodeRow"), false); $("#pfMob").value = ""; $("#pfCode").value = ""; $("#pfMobSend").disabled = false; $("#pfMobSend").textContent = "ارسال کد";
 }
+// ---------- اتصال پلتفرم‌ها (چند پیام‌رسان همزمان) ----------
+// اتصال فقط با شماره‌ی موبایل است: کاربر در ربات/برنامک هر پلتفرم همان شماره را تأیید می‌کند و همان لحظه به این حساب وصل می‌شود (سرور: profile.ts ← attachContact).
+// اینجا فقط وضعیت، روشن/خاموش‌کردن اعلان هر پیام‌رسان و جدا کردن است.
+const CH_ICON = { tg: "✈️", bale: "🟢", eitaa: "🟠", rubika: "🟣", splus: "🔵" };
+async function chPost(path, body) { const r = await api(path, { method: "POST", body }); if (r && r.channels) me.channels = r.channels; return r; }
 function renderPfTg() {
-  const t = me.telegram;
-  // حساب از بله/ایتا/روبیکا وصل شده؟ برچسب و شناسه‌ی همان پیام‌رسان نشان داده می‌شود (نه «تلگرام» و نه شناسه‌ی داخلی جمع‌شده با پایه)
-  const plat = t ? (me.telegramPlat || "tg") : "tg";
-  $("#pfTgLabel").textContent = { tg: "تلگرام", bale: "بله", eitaa: "ایتا", rubika: "روبیکا", splus: "سروش‌پلاس" }[plat] || "تلگرام";
-  const shown = plat === "tg" ? t : me.telegramShown;
-  $("#pfTgSet").textContent = t ? `✅ وصل است${shown ? ` (${fa(shown)})` : ""}` : ""; show($("#pfTgSet"), !!t);
-  show($("#pfTgAdd"), !t);
-  show($("#pfTgCodeRow"), false); $("#pfTg").value = ""; $("#pfTgCode").value = ""; $("#pfTgSend").disabled = false; $("#pfTgSend").textContent = "ارسال کد";
+  const box = $("#pfChBox"); if (!box || !me) return;
+  const kids = [];
+  for (const c of me.channels || []) {
+    if (!c.connected && !c.available) continue; // ربات این پلتفرم روی سرور فعال نیست
+    const head = h("div", { class: "row", style: "justify-content:space-between;gap:8px;flex-wrap:nowrap" },
+      h("span", {}, `${CH_ICON[c.key] || "🔗"} `, h("b", {}, c.label), c.connected ? ` ✅ متصل${c.shown ? ` (${fa(c.shown)})` : ""}` : " ⬜ وصل نیست"));
+    const acts = h("div", { class: "row", style: "gap:8px" });
+    if (c.connected) {
+      const cb = h("input", { type: "checkbox", "aria-label": "اعلان " + c.label }); cb.checked = !!c.notify;
+      cb.onchange = async () => { try { await chPost("/api/profile/channel/notify", { plat: c.key, on: cb.checked }); toast(`اعلان ${c.label} ${cb.checked ? "روشن" : "خاموش"} شد`); } catch (e) { cb.checked = !cb.checked; toast(e.message); } renderPfTg(); };
+      acts.append(h("label", { style: "display:flex;gap:6px;align-items:center;font-size:.88rem;cursor:pointer" }, cb, "🔔 اعلان"));
+      if (c.canUnlink) acts.append(h("button", { class: "btn ghost sm", type: "button", onclick: async () => {
+        if (!confirm(`${c.label} از حساب جدا شود؟ دیگر اعلان نمی‌گیرد و با آن وارد این حساب نمی‌شوی.`)) return;
+        try { await chPost("/api/profile/channel/unlink", { plat: c.key }); toast(c.label + " جدا شد"); } catch (e) { toast(e.message); } renderPfTg();
+      } }, "جدا کردن"));
+    }
+    head.append(acts);
+    kids.push(h("div", { style: "display:grid;gap:8px" }, head));
+  }
+  const u = me.user || {};
+  kids.push(h("div", { class: "muted", style: "font-size:.86rem" }, u.mobile
+    ? `برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (${fa(u.mobile)}) را تایید کن؛ همان لحظه به این حساب وصل می‌شود.`
+    : "اول شماره‌ی موبایلت را بالا ثبت و تایید کن؛ بعد در هر پلتفرم دیگر همان شماره را تایید کن تا به همین حساب وصل شود."));
+  box.replaceChildren(...kids);
+  const d = me.devices || {};
+  $("#pfDevices").textContent = `${d.app ? "✅" : "⬜"} اپ اندروید · ${d.web ? "✅" : "⬜"} اعلان مرورگر · ${d.email ? "✅" : "⬜"} ایمیل`;
 }
 /** هدیه‌ی تکمیل پروفایل: ثبت و تایید موبایل یا ایمیل برای حسابی که ندارد = اعتبار هدیه (فقط یک‌بار)؛ جمله‌ی کنارش از سرور می‌آید */
 function renderGift() {
@@ -1257,29 +1277,6 @@ $("#pfEmVerify").onclick = (ev) => {
   });
 };
 const normTg = (v) => { const s = String(v || "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\s/g, ""); return /^\d{5,15}$/.test(s) ? s : null; };
-$("#pfTgSend").onclick = (ev) => {
-  const msg = $("#pfMsg"); show(msg, false);
-  const t = normTg($("#pfTg").value);
-  if (!t) { msg.textContent = "آیدی تلگرام معتبر نیست؛ فقط عدد است. در ربات /id را بزن و عدد را کپی کن."; show(msg, true); return; }
-  return busy(ev.currentTarget, "در حال ارسال کد…", async () => {
-    try {
-      const r = await api("/api/profile/telegram/send", { method: "POST", body: { tgId: t } });
-      if (r.already) { me.telegram = r.telegram; renderPfTg(); toast("تلگرام قبلاً وصل شده است ✓"); return; }
-      show($("#pfTgCodeRow"), true); $("#pfTgCode").focus(); countdown($("#pfTgSend"), 60, "ارسال دوباره"); toast("کد در تلگرام ارسال شد");
-    } catch (e) { msg.textContent = e.message; show(msg, true); }
-  });
-};
-$("#pfTgVerify").onclick = (ev) => {
-  const msg = $("#pfMsg"); show(msg, false);
-  return busy(ev.currentTarget, "در حال اتصال…", async () => {
-    try {
-      const r = await api("/api/profile/telegram/verify", { method: "POST", body: { code: $("#pfTgCode").value } });
-      toast("تلگرام به حساب وصل شد ✓");
-      await boot(); // اعتبار/پلنِ منتقل‌شده از ربات هم به‌روز شود
-      if (me) { me.telegram = me.telegram || r.telegram; renderPfTg(); }
-    } catch (e) { msg.textContent = e.message; show(msg, true); }
-  });
-};
 $("#logout").onclick = async () => { $("#profileDlg").close(); try { await api("/api/auth/logout", { method: "POST" }); } catch {} tracking++; me = null; jobView(null); $("#go").disabled = false; await boot(); };
 
 // ---------- بخش کاربر واردشده ----------

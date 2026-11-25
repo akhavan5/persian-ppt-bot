@@ -251,6 +251,18 @@ object Api {
         return j.optInt("reward")
     }
 
+    // ------------------------------------------------------------ اتصال پلتفرم‌ها
+
+    /** اعلان یک پیام‌رسان (plat: tg | bale | eitaa | rubika | splus) را روشن/خاموش می‌کند. */
+    suspend fun channelNotify(plat: String, on: Boolean) {
+        call("POST", "/api/profile/channel/notify", JSONObject().put("plat", plat).put("on", on))
+    }
+
+    /** پیام‌رسان را از حساب جدا می‌کند (پیام‌رسانِ محل ساخت حساب جدا نمی‌شود؛ سرور پیام فارسی می‌دهد). */
+    suspend fun channelUnlink(plat: String) {
+        call("POST", "/api/profile/channel/unlink", JSONObject().put("plat", plat))
+    }
+
     // ------------------------------------------------------------ ویدئوی جایزه‌ای
 
     /** ثبت یک ویدئوی جایزه‌ای کامل‌دیده‌شده. خروجی: (پیشرفت تا اعتبار بعدی، اعتبار هدیه‌ای که همین حالا اضافه شد). خطا = ApiException با پیام فارسی (فاصله/سقف روزانه). */

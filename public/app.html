@@ -833,6 +833,7 @@ async function netFetch(url, init = {}) {
 }
 async function raw(path, { method = "GET", body } = {}) {
   const headers = {}; if (body) headers["content-type"] = "application/json"; if (token) headers.authorization = "Bearer " + token;
+  headers["x-plat"] = IS_EITAA ? "eitaa" : IS_BALE ? "bale" : IS_SPLUS ? "splus" : "tg"; // پیام‌رسانی که این Mini App در آن باز است (حساب می‌تواند چند پیام‌رسان داشته باشد؛ ارسال فایل/لینک به همین چت می‌رود)
   const timeout = /^\/api\/(config|me)$/.test(path) ? 15000 : 0;
   return netFetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, timeout });
 }
@@ -929,7 +930,7 @@ async function boot() {
     }
     me = await api("/api/me");
     // نشست نامعتبر، یا حسابِ تلگرامِ وصل‌شده با این کاربر نمی‌خواند (مثلاً دو حساب تلگرام روی یک دستگاه) ⇒ ورود تازه
-    if (!me.user || (me.telegram && myTg && me.telegram !== myTg)) { token = ""; keep.set(null); await login(); me = await api("/api/me"); }
+    if (!me.user || (myTg && (Array.isArray(me.linkedIds) ? me.linkedIds.length > 0 && !me.linkedIds.includes(myTg) : me.telegram && me.telegram !== myTg))) { token = ""; keep.set(null); await login(); me = await api("/api/me"); }
   } catch (e) { showFail(e); return; }
   show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
   show($("#go"), true); // دکمه‌ی داخل صفحه همیشه می‌ماند: اگر کلاینت تلگرام (یا نسخه‌های غیررسمی) رویداد دکمه‌ی اصلی را نرساند، ساخت باز هم کار کند
@@ -1766,6 +1767,38 @@ async function openBuy(btn) {
 let pf = null; // فرم باز: { kind: "mobile"|"email", step: "v"|"c", v, c }
 const toEn = (x) => String(x).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
 const pfValue = () => pf.kind === "mobile" ? toEn(pf.v).replace(/[\s-]/g, "") : toEn(pf.v).trim().toLowerCase();
+// ---------- اتصال پلتفرم‌ها (چند پیام‌رسان همزمان؛ سرور: link.ts) ----------
+// اتصال فقط با شماره‌ی موبایل است؛ اینجا وضعیت، اعلان هر پیام‌رسان و جدا کردن.
+const PLAT_KEY = IS_EITAA ? "eitaa" : IS_BALE ? "bale" : IS_SPLUS ? "splus" : "tg";
+const CH_BOT = { tg: "ربات تلگرام", bale: "ربات بله", eitaa: "برنامک ایتا", rubika: "ربات روبیکا", splus: "ربات سروش‌پلاس" };
+// شماره مال حساب دیگری بود و این پیام‌رسان به آن وصل شد: نشست این Mini App مال حساب قبلی است ⇒ دوباره وارد شو
+function afterMerge() { toast("پیام‌رسان به حساب دارنده‌ی این شماره وصل شد ✓"); keep.set(null); setTimeout(() => location.reload(), 900); }
+async function chPost(path, body) { const r = await api(path, { method: "POST", body }); if (r && r.channels) me.channels = r.channels; return r; }
+function channelsNode() {
+  const out = [h("div", { class: "muted", style: "margin-top:12px;margin-bottom:4px" }, "🔗 پلتفرم‌های متصل")];
+  for (const c of me.channels || []) {
+    if (!c.connected && !c.available) continue;
+    out.push(h("div", { class: "sw" },
+      h("span", {}, `${c.label}: `, c.connected ? `وصل است ✅${c.key === PLAT_KEY ? " (اینجا)" : ""}` : "وصل نیست"),
+      c.connected ? h("span", { style: "display:flex;gap:6px" },
+        h("button", { class: "btn ghost sm", type: "button", onclick: (e) => busy(e.currentTarget, "…", async () => {
+          try { await chPost("/api/profile/channel/notify", { plat: c.key, on: !c.notify }); toast(`اعلان ${c.label} ${c.notify ? "خاموش" : "روشن"} شد`); } catch (err) { toast(err.message); }
+          renderProfile();
+        }) }, c.notify ? "🔔 اعلان" : "🔕 اعلان"),
+        c.canUnlink ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => busy(e.currentTarget, "…", async () => {
+          if (!window.confirm(`${c.label} از حساب جدا شود؟`)) return;
+          try { await chPost("/api/profile/channel/unlink", { plat: c.key }); toast(c.label + " جدا شد"); } catch (err) { toast(err.message); }
+          renderProfile();
+        }) }, "جدا کردن") : null) : null));
+  }
+  const d = me.devices || {};
+  out.push(h("div", { class: "muted", style: "font-size:.85rem;margin-top:4px" }, `${d.app ? "✅" : "⬜"} اپ اندروید · ${d.web ? "✅" : "⬜"} اعلان مرورگر · ${d.email ? "✅" : "⬜"} ایمیل`));
+  const u = me.user || {};
+  out.push(h("div", { class: "muted", style: "font-size:.85rem;margin-top:6px;line-height:1.9" }, u.mobile
+    ? `برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (${fa(u.mobile)}) را تایید کن؛ همان لحظه به این حساب وصل می‌شود.`
+    : "اول شماره‌ی موبایلت را بالا ثبت و تایید کن؛ بعد در هر پلتفرم دیگر همان شماره را تایید کن تا به همین حساب وصل شود."));
+  return out;
+}
 function renderProfile() {
   const box = $("#pfBody"); if (!box || !me || !me.user) return;
   const u = me.user, cr = me.contactReward || {}, miss = cr.missing || [];
@@ -1778,6 +1811,7 @@ function renderProfile() {
             if (!data) { toast("شماره به اشتراک گذاشته نشد."); return done(); }
             try {
               const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
+              if (r.merged) { done(); return afterMerge(); }
               if (r.user) me.user = r.user;
               toast(r.reward > 0 ? `🎁 ${fa(r.reward)} اعتبار هدیه گرفتی` : "ثبت شد ✓");
               TG.haptic("select"); await refreshMe(); renderProfile();
@@ -1796,6 +1830,7 @@ function renderProfile() {
     kids.push(h("div", { class: "muted", style: "margin-top:8px;line-height:1.9" },
       (IS_EITAA ? `🎁 با ثبت و تأیید ایمیل، ${fa(cr.credits)} اعتبار هدیه می‌گیری (فقط یک‌بار).` : `🎁 با ثبت و تأیید هر مورد، ${fa(cr.credits)} اعتبار هدیه می‌گیری (برای هر مورد فقط یک‌بار).`), cr.note ? [h("br"), cr.note] : null));
   }
+  kids.push(...channelsNode());
   if (pf) {
     const isM = pf.kind === "mobile";
     const form = h("div", { style: "margin-top:10px;display:grid;gap:8px" });
@@ -1821,6 +1856,7 @@ function renderProfile() {
           if (code.length < 4) return toast("کد را وارد کن.");
           try {
             const r = await api("/api/profile/" + pf.kind, { method: "POST", body: { [pf.kind]: pfValue(), code } });
+            if (r.merged) return afterMerge();
             if (r.user) me.user = r.user;
             pf = null;
             toast(r.reward > 0 ? `🎁 ${fa(r.reward)} اعتبار هدیه گرفتی` : "ثبت شد ✓");

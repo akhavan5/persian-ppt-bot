@@ -167,6 +167,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: اتصال پلتفرم‌ها
+
+    func setChannelNotify(_ plat: String, _ on: Bool) async {
+        do { try await api.channelNotify(plat: plat, on: on); await refreshMe() } catch { report(error) }
+    }
+
+    func unlinkChannel(_ plat: String) async {
+        do { try await api.channelUnlink(plat: plat); await refreshMe(); toast("پیام‌رسان جدا شد") } catch { report(error) }
+    }
+
     // MARK: فایل‌ها
 
     func loadFiles() async {

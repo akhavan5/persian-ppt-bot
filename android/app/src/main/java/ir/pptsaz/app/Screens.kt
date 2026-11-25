@@ -1469,6 +1469,8 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 }
             }
 
+            ChannelsCard(me, vm)
+
             if (me.plans.isNotEmpty()) {
                 SectionTitle("اشتراک‌ها", Modifier.padding(top = 4.dp))
                 me.plans.forEach { p ->
@@ -1535,6 +1537,52 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
 /** سطح تصویر اسلایدها: ۰ = خیر، ۱ = نرمال، ۲ = زیاد (فقط پلن‌دارها؛ تعداد نرمال + ۱) */
 private fun imageLevel(s: Settings, premium: Boolean): Int = if (!s.images) 0 else if (s.imagesMany && premium) 2 else 1
 private fun imageLevelLabel(level: Int): String = when (level) { 0 -> "خیر"; 2 -> "زیاد"; else -> "نرمال" }
+
+/** اتصال پلتفرم‌ها: وضعیت هر پیام‌رسان (متصل یا نه)، روشن/خاموش‌کردن اعلان و جدا کردن؛ اتصال فقط با تأیید شماره‌ی موبایل است */
+@Composable
+private fun ChannelsCard(me: Me, vm: AppViewModel) {
+    val cs = MaterialTheme.colorScheme
+    var confirmUnlink by remember { mutableStateOf<ChannelInfo?>(null) }
+    val shown = me.channels.filter { it.connected || it.available }
+    if (shown.isEmpty()) return
+    SectionTitle("اتصال پلتفرم‌ها", Modifier.padding(top = 4.dp))
+    SurfaceCard {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("با تأیید شماره‌ی موبایل در هر پلتفرم، آن پلتفرم به همین حساب وصل می‌شود؛ اعتبار و ارائه‌ها یکی است و اعلان‌ها به همه‌ی پیام‌رسان‌های روشن می‌رسد.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            shown.forEach { c ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(c.label, style = MaterialTheme.typography.titleSmall)
+                        Text(if (c.connected) "✅ متصل" + (if (c.shown.isNotEmpty()) " (" + c.shown.faStr() + ")" else "") else "⬜ وصل نیست", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                    }
+                    if (c.connected) {
+                        TextButton(onClick = { vm.setChannelNotify(c.key, !c.notify) }) { Text(if (c.notify) "🔔 اعلان" else "🔕 اعلان") }
+                        if (c.canUnlink) TextButton(onClick = { confirmUnlink = c }) { Text("جدا کردن") }
+                    }
+                }
+            }
+            Text(
+                (if (me.devices.app) "✅" else "⬜") + " اپ اندروید · " + (if (me.devices.web) "✅" else "⬜") + " اعلان مرورگر · " + (if (me.devices.email) "✅" else "⬜") + " ایمیل",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+            )
+            Text(
+                if (me.mobile.isNotEmpty()) "برای وصل‌کردن پلتفرم دیگر، در ربات یا برنامک آن همین شماره (" + me.mobile.faStr() + ") را تأیید کن؛ همان لحظه به این حساب وصل می‌شود."
+                else "اول شماره‌ی موبایلت را در کارت پروفایل تأیید کن؛ بعد در هر پلتفرم دیگر همان شماره را تأیید کن تا به همین حساب وصل شود.",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+            )
+        }
+    }
+    confirmUnlink?.let { c ->
+        AlertDialog(
+            onDismissRequest = { confirmUnlink = null },
+            shape = RoundedCornerShape(28.dp),
+            title = { Text("جدا کردن " + c.label) },
+            text = { Text("دیگر اعلان نمی‌گیرد و با آن وارد این حساب نمی‌شوی؛ هر وقت خواستی دوباره وصل کن.") },
+            confirmButton = { TextButton(onClick = { vm.unlinkChannel(c.key); confirmUnlink = null }) { Text("جدا کن") } },
+            dismissButton = { TextButton(onClick = { confirmUnlink = null }) { Text("انصراف") } },
+        )
+    }
+}
 
 /** دکمه‌ی ثبت موبایل/ایمیل روی زمینه‌ی رنگی کارت پروفایل */
 @Composable

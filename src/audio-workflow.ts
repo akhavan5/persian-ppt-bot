@@ -15,7 +15,7 @@ import type { Uid } from "./settings";
 import { LlmError } from "./llm";
 import { loadFileDirect, loadPreview, saveFile } from "./files";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage } from "./telegram";
-import { getLinkedTg } from "./link";
+import { linkedFor } from "./link";
 import { withStore } from "./store";
 import type { BlobStore } from "./blobstore";
 import { refundCredit, type CreditSource } from "./settings";
@@ -160,7 +160,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ. خطایش نباید به «برگشت اعتبار» برسد (فایل ذخیره شده)
       if (web && event.payload.notify && out.ids.length) {
         await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
-          const tgChat = await getLinkedTg(this.env, String(uid));
+          const tgChat = await linkedFor(this.env, String(uid), event.payload.plat);
           if (!tgChat) return;
           await sendMessage(this.env, tgChat, `✅ ${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
             await appReadyMarkup(this.env, tgChat, out.ids[0]));

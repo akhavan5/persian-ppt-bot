@@ -5,11 +5,22 @@
  * (ثابت و بی‌تکرار). ربات برای همه‌ی کارها (اعتبار، پلن، تنظیمات، قفل، فایل) از شناسه‌ی همین پروفایل استفاده می‌کند.
  * دکمه‌های خرید در ربات لینک ورود یک‌بارمصرف دارند (createLoginToken ← /api/auth/tg)؛ مالکیت تلگرام را خود تلگرام ثابت می‌کند
  * چون لینک فقط به چت خود کاربر فرستاده می‌شود. مدیرها (ADMIN_IDS) پروفایل خودکار ندارند و شناسه‌ی عددی می‌مانند.
+ *
+ * چند پیام‌رسان همزمان: یک حساب می‌تواند به «هر پلتفرم یک هویت» وصل باشد (تلگرام + بله + ایتا + روبیکا + سروش‌پلاس).
+ *  - w2ids:<حساب> = آرایه‌ی JSON همه‌ی هویت‌های وصل‌شده؛ w2tg:<حساب> = «هویت اصلی» (اولین وصل‌شده) و برای کدهای قدیمی می‌ماند
+ *  - nto:<حساب> = آرایه‌ی کانال‌هایی که کاربر اعلان‌شان را خاموش کرده (پیش‌فرض: اعلان به همه‌ی پیام‌رسان‌های وصل‌شده می‌رسد)
+ *  - اتصال فقط با «شماره‌ی موبایل» است (profile.ts ← attachContact): کاربر در هر پیام‌رسان/اپ همان شماره را تأیید می‌کند و هویت آن به حسابِ دارنده‌ی شماره وصل می‌شود
  */
 import type { Env } from "./env";
 import { getUserById, hitLimit, randomToken, saveWebUser } from "./auth";
-import { getBonus, getSub, grantSignupCredit, isAdmin, isBanned, putSub, setBonus, type Uid } from "./settings";
+import { botPlatform, getBonus, getSub, grantSignupCredit, isAdmin, isBanned, putSub, setBonus, type Uid } from "./settings";
 import { sendMessage } from "./telegram";
+import { moveFiles } from "./files";
+import { fcmTokensOf } from "./push";
+import { WP_PREFIX, parseDevices, webPushEnabled } from "./webpush";
+import { fromBaleId } from "./bale-format";
+import { fromEitaaId } from "./eitaa-format";
+import { fromSplusId } from "./splus-format";
 
 const LOGIN_TTL = 3600; // ثانیه؛ لینک ورود از دکمه‌های ربات (یک‌بارمصرف)
 const WEB_ID = /^w_[0-9a-f]{16}$/;
@@ -58,115 +69,6 @@ export async function consumeLoginToken(env: Env, token: string): Promise<number
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
-// ---------- اتصال تلگرام از پروفایل وب (آیدی عددی + کد ۶ رقمی که ربات به چت تلگرام می‌فرستد) ----------
-// جریان: کاربر در ربات /id را می‌زند و آیدی را در پروفایل وب وارد می‌کند ← ربات یک کد ۶ رقمی به همان چت می‌فرستد ← کاربر کد را در وب وارد می‌کند.
-// مالکیت تلگرام را خود تلگرام ثابت می‌کند (کد فقط به چت صاحب آن آیدی می‌رسد). بعد از اتصال، ربات برای این تلگرام از حساب وب استفاده می‌کند.
-const TG_CODE_TTL = 300; // ثانیه
-const TG_MAX_TRIES = 5;
-const enc = new TextEncoder();
-const sha256hex = async (v: string) => hex(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(v))));
-const safeEq = (a: string, b: string) => {
-  if (a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return d === 0;
-};
-/** کد به حساب وب و آیدی تلگرام گره می‌خورد؛ پس کد یک حساب برای حساب دیگر یا آیدی دیگر کار نمی‌کند */
-const codeHash = (uid: string, tgId: number, code: string) => sha256hex(`tglink:${uid}:${tgId}:${code}`);
-const digitsEn = (v: unknown) => String(v ?? "").replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/\s/g, "");
-
-/** آیدی عددی تلگرام (ارقام فارسی هم پذیرفته می‌شود)؛ نامعتبر → null */
-export function normTgId(v: unknown): number | null {
-  const s = digitsEn(v);
-  if (!/^\d{5,15}$/.test(s)) return null;
-  const n = Number(s);
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
-}
-
-/** تلگرام وصل‌شده به این حساب وب (اگر باشد) */
-export async function getLinkedTg(env: Env, uid: string): Promise<number | null> {
-  const n = Number(await env.KV.get(`w2tg:${uid}`).catch(() => null));
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
-}
-
-type LinkErr = { error: string; status: number };
-
-/** null = قابل اتصال؛ {already} = همین حالا وصل است؛ وگرنه خطا */
-async function linkCheck(env: Env, uid: string, tgId: number): Promise<LinkErr | { already: true } | null> {
-  if (isAdmin(env, tgId)) return { error: "این آیدی مربوط به مدیر ربات است و به حساب وب وصل نمی‌شود.", status: 409 };
-  if (await isBanned(env, tgId)) return { error: "دسترسی این تلگرام مسدود شده است.", status: 403 };
-  const auto = await profileId(tgId);
-  const cur = await getLinkedTg(env, uid);
-  if (cur === tgId) return { already: true };
-  if (uid === auto) { // پروفایل خودکارِ همین تلگرام (ورود از دکمه‌ی ربات)؛ نگاشت معکوس برای حساب‌های قدیمی بازسازی می‌شود
-    await env.KV.put(`w2tg:${uid}`, String(tgId));
-    return { already: true };
-  }
-  if (cur) return { error: "یک تلگرام دیگر به حساب شما وصل است.", status: 409 };
-  const w = await env.KV.get(`tg2w:${tgId}`);
-  if (w && WEB_ID.test(w) && w !== auto && w !== uid) return { error: "این تلگرام به حساب وب دیگری وصل شده است.", status: 409 };
-  return null;
-}
-
-/** مرحله‌ی ۱: ارسال کد ۶ رقمی از طریق ربات به چت تلگرام صاحب آیدی */
-export async function startTgLink(env: Env, uid: string, ip: string, raw: unknown): Promise<LinkErr | { ok: true } | { already: true }> {
-  const tgId = normTgId(raw);
-  if (!tgId) return { error: "آیدی تلگرام معتبر نیست؛ فقط عدد است. در ربات دستور /id را بزن و عدد را کپی کن.", status: 400 };
-  const chk = await linkCheck(env, uid, tgId);
-  if (chk) return chk;
-
-  // محدودیت: ۶۰ ثانیه فاصله برای هر حساب و هر آیدی (جلوگیری از اسپم‌شدن چت دیگران)، ۵ کد در ساعت برای هر آیدی، ۱۰ برای هر حساب، ۱۵ برای هر شبکه
-  if (await hitLimit(env, `tgc:u:${uid}`, 1, 60) || await hitLimit(env, `tgc:t:${tgId}`, 1, 60)) return { error: "کد قبلاً ارسال شده است؛ تا یک دقیقه صبر کن و دوباره بخواه.", status: 429 };
-  if (await hitLimit(env, `tgs:t:${tgId}`, 5, 3600)) return { error: "تعداد درخواست کد برای این آیدی زیاد بود؛ یک ساعت بعد دوباره امتحان کن.", status: 429 };
-  if (await hitLimit(env, `tgs:u:${uid}`, 10, 3600) || await hitLimit(env, `tgs:ip:${ip}`, 15, 3600)) return { error: "تعداد درخواست کد زیاد بود؛ کمی بعد دوباره امتحان کن.", status: 429 };
-
-  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
-  const exp = Math.floor(Date.now() / 1000) + TG_CODE_TTL;
-  const h = await codeHash(uid, tgId, code);
-  await Promise.all([
-    env.KV.put(`tgk:${uid}`, JSON.stringify({ h, tg: tgId, exp }), { expiration: exp }),
-    env.KV.delete(`tgkf:${uid}`), // کد تازه ⇒ شمارنده‌ی تلاش ناموفق از صفر
-  ]);
-
-  try {
-    await sendMessage(env, tgId,
-      `🔐 <b>کد تایید اتصال تلگرام به حساب سایت</b>\n\n<code>${code}</code>\n\n` +
-      `این کد را در پروفایل سایت (pptsaz.ir) وارد کن. اعتبار کد ۵ دقیقه است.\n` +
-      `⚠️ اگر خودت درخواست نکرده‌ای، این پیام را نادیده بگیر و کد را به هیچ‌کس نده.`);
-  } catch (e) {
-    await env.KV.delete(`tgk:${uid}`).catch(() => {});
-    await env.KV.delete(`tgc:u:${uid}`).catch(() => {});
-    await env.KV.delete(`tgc:t:${tgId}`).catch(() => {});
-    console.error("tg link send", String(e).slice(0, 200));
-    const blocked = /chat not found|can't initiate|blocked|deactivated|Forbidden/i.test(String(e));
-    return blocked
-      ? { error: "ربات نتوانست به این آیدی پیام بدهد؛ اول ربات را در تلگرام Start کن (دستور /start) و آیدی را از /id دوباره بررسی کن.", status: 422 }
-      : { error: "ارسال کد در تلگرام ناموفق بود؛ چند دقیقه بعد دوباره امتحان کن.", status: 502 };
-  }
-  return { ok: true };
-}
-
-/** مرحله‌ی ۲: بررسی کد و اتصال. موفق ⇒ { tg } */
-export async function verifyTgLink(env: Env, uid: string, rawCode: unknown): Promise<LinkErr | { tg: number }> {
-  const code = digitsEn(rawCode);
-  if (!/^\d{6}$/.test(code)) return { error: "کد باید ۶ رقم باشد.", status: 400 };
-  const rec = (await env.KV.get(`tgk:${uid}`, "json")) as { h: string; tg: number; exp: number } | null;
-  if (!rec) return { error: "کد منقضی شده است؛ دوباره کد بگیر.", status: 401 };
-  // هر تلاش «قبل از» مقایسه، اتمی شمرده می‌شود (سقف ۵ تلاش برای هر کد)
-  if (await hitLimit(env, `tgkf:${uid}`, TG_MAX_TRIES, TG_CODE_TTL)) {
-    await env.KV.delete(`tgk:${uid}`);
-    return { error: "تعداد تلاش‌های ناموفق زیاد بود؛ دوباره کد بگیر.", status: 429 };
-  }
-  if (!safeEq(await codeHash(uid, rec.tg, code), rec.h)) return { error: "کد درست نیست.", status: 401 };
-  await env.KV.delete(`tgk:${uid}`);
-  await env.KV.delete(`tgkf:${uid}`);
-
-  const chk = await linkCheck(env, uid, rec.tg); // بین ارسال و تایید ممکن است وضعیت عوض شده باشد
-  if (chk && "error" in chk) return chk;
-  if (!chk) await performLink(env, uid, rec.tg);
-  return { tg: rec.tg };
-}
-
 /** تلگرام را به حساب وب وصل می‌کند؛ اعتبار هدیه/شارژ و پلنِ پروفایل خودکارِ قبلیِ این تلگرام (اگر بود) به حساب وب منتقل می‌شود تا چیزی از دست نرود */
 async function performLink(env: Env, uid: string, tgId: number) {
   const auto = await profileId(tgId);
@@ -181,9 +83,11 @@ async function performLink(env: Env, uid: string, tgId: number) {
       await putSub(env, uid, asub);
       await env.KV.delete(`sub:${auto}`);
     }
+    // فایل‌های ۲۴ ساعت اخیرِ همین پیام‌رسان هم به حساب اصلی می‌روند تا در همه‌ی پلتفرم‌ها در دسترس باشند
+    await moveFiles(env, auto, uid).catch((e) => console.error("link moveFiles", String(e).slice(0, 160)));
   }
   await env.KV.put(`tg2w:${tgId}`, uid);
-  await env.KV.put(`w2tg:${uid}`, String(tgId));
+  await addLinkedId(env, uid, tgId); // هویت اصلی (w2tg) فقط وقتی نبود ست می‌شود؛ پیام‌رسان‌های دیگر کنارش می‌مانند
 }
 
 /** وصل کردن هویت یک ربات (تلگرام/بله/روبیکا/ایتا) به یک حساب موجود، بعد از اینکه مالکیت موبایل/ایمیل آن حساب با کد یک‌بارمصرف ثابت شد.
@@ -193,4 +97,129 @@ export async function linkBotToAccount(env: Env, uid: string, botId: number): Pr
   if (chk && "error" in chk) return chk;
   if (!chk) await performLink(env, uid, botId);
   return { ok: true };
+}
+
+
+// =====================================================================================================================
+// چند پیام‌رسان همزمان
+// =====================================================================================================================
+export type Chan = "tg" | "bale" | "eitaa" | "rubika" | "splus";
+export const CHANS: Chan[] = ["tg", "bale", "eitaa", "rubika", "splus"];
+export const CHAN_LABEL: Record<Chan, string> = { tg: "تلگرام", bale: "بله", eitaa: "ایتا", rubika: "روبیکا", splus: "سروش‌پلاس" };
+export const isChan = (x: unknown): x is Chan => CHANS.includes(x as Chan);
+/** پیام‌رسانِ یک شناسه‌ی داخلی (بازه‌ی شناسه‌ها در settings.ts ← botPlatform) */
+export const chanOf = (id: unknown): Chan => botPlatform(id) as Chan;
+/** آیا ربات/برنامک این پیام‌رسان روی سرور تنظیم شده است؟ (مثل botReady در lifecycle.ts) */
+export function chanReady(env: Env, ch: Chan): boolean {
+  return ch === "tg" ? !!env.TELEGRAM_BOT_TOKEN : ch === "bale" ? !!env.BALE_BOT_TOKEN : ch === "rubika" ? !!env.RUBIKA_BOT_TOKEN : ch === "eitaa" ? !!env.EITAA_APP_TOKEN : !!env.SPLUS_BOT_TOKEN;
+}
+/** شناسه‌ی واقعیِ خود پیام‌رسان برای نمایش (روبیکا: شناسه‌اش هش است ⇒ null) */
+export function shownId(id: number): number | null {
+  const ch = chanOf(id);
+  return ch === "splus" ? fromSplusId(id) : ch === "eitaa" ? fromEitaaId(id) : ch === "rubika" ? null : ch === "bale" ? fromBaleId(id) : id;
+}
+const parseIds = (raw: string | null | undefined): number[] => {
+  try {
+    const a = JSON.parse(raw ?? "[]");
+    return Array.isArray(a) ? a.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : [];
+  } catch { return []; }
+};
+
+/** همه‌ی هویت‌های پیام‌رسانِ وصل‌شده به حساب (هویت اصلی اول)؛ حساب‌های قدیمی که فقط w2tg دارند هم کامل برمی‌گردند */
+export async function getLinkedIds(env: Env, uid: string): Promise<number[]> {
+  const [raw, prim] = await Promise.all([env.KV.get(`w2ids:${uid}`).catch(() => null), getLinkedTg(env, uid)]);
+  const out = parseIds(raw);
+  if (prim) { const i = out.indexOf(prim); if (i > 0) out.splice(i, 1); if (i !== 0) out.unshift(prim); }
+  return out;
+}
+
+/** یک هویت را به فهرست حساب اضافه می‌کند (idempotent)؛ اگر هویت اصلی نبود همین می‌شود هویت اصلی */
+export async function addLinkedId(env: Env, uid: string, id: number): Promise<void> {
+  const ids = await getLinkedIds(env, uid);
+  if (!ids.includes(id)) {
+    ids.push(id);
+    await env.KV.put(`w2ids:${uid}`, JSON.stringify(ids));
+  } else if (!parseIds(await env.KV.get(`w2ids:${uid}`).catch(() => null)).includes(id)) {
+    await env.KV.put(`w2ids:${uid}`, JSON.stringify(ids)); // حساب قدیمی: فهرست برای اولین بار نوشته می‌شود
+  }
+  if (!(await getLinkedTg(env, uid))) await env.KV.put(`w2tg:${uid}`, String(id));
+}
+
+/** شناسه‌ی پیام‌رسان برای یک کار: اگر hint (کلید پلتفرم، مثلاً از هدر X-Plat که Mini App می‌فرستد) بین هویت‌های وصل‌شده بود همان؛ وگرنه هویت اصلی.
+ *  hint فقط بین هویت‌های «خود کاربر» انتخاب می‌کند، پس جعل آن چیزی را باز نمی‌کند. */
+export async function linkedFor(env: Env, uid: string, hint?: unknown): Promise<number | null> {
+  const ids = await getLinkedIds(env, uid);
+  if (isChan(hint)) { const m = ids.find((i) => chanOf(i) === hint); if (m) return m; }
+  return ids[0] ?? null;
+}
+
+// ---------- اعلان: کدام پیام‌رسان‌ها ----------
+export async function getMuted(env: Env, uid: string): Promise<Chan[]> {
+  try { const a = JSON.parse((await env.KV.get(`nto:${uid}`)) ?? "[]"); return Array.isArray(a) ? a.filter(isChan) : []; } catch { return []; }
+}
+export async function setChannelNotify(env: Env, uid: string, ch: Chan, on: boolean): Promise<void> {
+  const cur = new Set(await getMuted(env, uid));
+  on ? cur.delete(ch) : cur.add(ch);
+  if (cur.size) await env.KV.put(`nto:${uid}`, JSON.stringify([...cur])); else await env.KV.delete(`nto:${uid}`);
+}
+/** هویت‌هایی که اعلان به آن‌ها می‌رسد: وصل‌شده، روشن و دارای ربات فعال. ترتیب: هویت اصلی اول. */
+export async function notifyIds(env: Env, uid: string): Promise<number[]> {
+  const [ids, muted] = await Promise.all([getLinkedIds(env, uid), getMuted(env, uid)]);
+  return ids.filter((i) => !muted.includes(chanOf(i)) && chanReady(env, chanOf(i)));
+}
+/** یک پیام را به همه‌ی پیام‌رسان‌های روشنِ حساب می‌فرستد (هر کدام جدا؛ خطای یکی بقیه را نمی‌گیرد). ok = تعداد رسیده. */
+export async function sendToChannels(env: Env, uid: string, send: (id: number) => Promise<unknown>, only?: number[]): Promise<{ ok: number; tried: number }> {
+  const ids = only ?? (await notifyIds(env, uid));
+  const r = await Promise.all(ids.map((id) => send(id).then(() => true, (e) => { console.error("channel send", chanOf(id), String(e).slice(0, 160)); return false; })));
+  return { ok: r.filter(Boolean).length, tried: ids.length };
+}
+
+// ---------- وضعیت اتصال (برای همه‌ی کلاینت‌ها: GET /api/me ← channels) ----------
+export interface ChannelInfo {
+  key: Chan; label: string;
+  connected: boolean;
+  /** شناسه‌ی واقعی پیام‌رسان (روبیکا: null) */ shown: number | string | null;
+  /** اعلان به این پیام‌رسان می‌رسد؟ */ notify: boolean;
+  /** ربات/برنامک روی سرور فعال است؟ (غیرفعال و وصل‌نشده در رابط نشان داده نمی‌شود) */ available: boolean;
+  /** هویت اصلی حساب */ primary: boolean;
+  /** قابل جدا کردن؟ (پیام‌رسانِ محل ساخت حساب جدا نمی‌شود) */ canUnlink: boolean;
+}
+export async function channelStatus(env: Env, uid: string): Promise<ChannelInfo[]> {
+  const [ids, muted] = await Promise.all([getLinkedIds(env, uid), getMuted(env, uid)]);
+  return Promise.all(CHANS.map(async (key): Promise<ChannelInfo> => {
+    const id = ids.find((i) => chanOf(i) === key);
+    return {
+      key, label: CHAN_LABEL[key], connected: !!id, shown: id ? shownId(id) : null,
+      notify: !!id && !muted.includes(key), available: chanReady(env, key),
+      primary: !!id && id === ids[0], canUnlink: !!id && (await profileId(id)) !== uid,
+    };
+  }));
+}
+
+/** پیام‌رسان را از حساب جدا می‌کند. پیام‌رسانِ محل ساخت حساب (پروفایل خودکارش) جدا نمی‌شود، چون با اولین پیام دوباره وصل می‌شد. */
+export async function unlinkChannel(env: Env, uid: string, ch: Chan): Promise<LinkErr | { ok: true }> {
+  const ids = await getLinkedIds(env, uid);
+  const id = ids.find((i) => chanOf(i) === ch);
+  if (!id) return { error: `${CHAN_LABEL[ch]} به حساب وصل نیست.`, status: 404 };
+  if ((await profileId(id)) === uid) return { error: `حساب تو با ${CHAN_LABEL[ch]} ساخته شده و این پیام‌رسان جدا نمی‌شود؛ می‌توانی فقط اعلانش را خاموش کنی.`, status: 409 };
+  const rest = ids.filter((i) => i !== id);
+  await env.KV.put(`w2ids:${uid}`, JSON.stringify(rest));
+  if (rest.length) await env.KV.put(`w2tg:${uid}`, String(rest[0])); else await env.KV.delete(`w2tg:${uid}`);
+  if ((await env.KV.get(`tg2w:${id}`)) === uid) await env.KV.delete(`tg2w:${id}`);
+  await setChannelNotify(env, uid, ch, true); // ترجیح اعلان این پیام‌رسان پاک می‌شود
+  return { ok: true };
+}
+
+/** اگر حساب `uid` همان «پروفایل خودکارِ» پیام‌رسان `plat` باشد (یعنی فقط با همین پیام‌رسان ساخته شده و هنوز به حساب دیگری وصل نیست) شناسه‌ی آن پیام‌رسان؛ وگرنه null.
+ *  اتصال با شماره (profile.ts ← attachContact) فقط برای چنین نشستی هویت را به حسابِ دارنده‌ی شماره منتقل می‌کند. */
+export async function autoBotId(env: Env, uid: string, plat: unknown): Promise<number | null> {
+  if (!isChan(plat)) return null;
+  const id = (await getLinkedIds(env, uid)).find((i) => chanOf(i) === plat);
+  return id && (await profileId(id)) === uid ? id : null;
+}
+
+/** مسیرهای اعلانِ غیرپیام‌رسان برای نمایش وضعیت «متصل است یا نه»: اپ اندروید (FCM)، اعلان مرورگر (PWA) و ایمیل */
+export async function deviceStatus(env: Env, uid: string, hasEmail: boolean): Promise<{ app: boolean; web: boolean; email: boolean }> {
+  const [fcm, wp] = await Promise.all([fcmTokensOf(env, uid), webPushEnabled(env) ? env.KV.get(`${WP_PREFIX}${uid}`).catch(() => null) : null]);
+  return { app: fcm.length > 0, web: parseDevices(wp).length > 0, email: hasEmail };
 }

@@ -1121,6 +1121,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ------------------------------------------------------------ اتصال پلتفرم‌ها
+
+    fun setChannelNotify(plat: String, on: Boolean) {
+        viewModelScope.launch {
+            try {
+                Api.channelNotify(plat, on)
+                reloadMe()
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+            }
+        }
+    }
+
+    fun unlinkChannel(plat: String) {
+        viewModelScope.launch {
+            try {
+                Api.channelUnlink(plat)
+                reloadMe()
+                toast("پیام‌رسان جدا شد")
+            } catch (e: ApiException) {
+                toast(e.message ?: "")
+            }
+        }
+    }
+
     // ------------------------------------------------------------ تنظیمات و خرید
 
     private fun applySetting(s: Settings, key: String, value: Any): Settings = when (key) {
