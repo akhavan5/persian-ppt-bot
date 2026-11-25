@@ -122,6 +122,7 @@ struct Me {
     var channels: [ChannelInfo] = []
     var devApp = false
     var devIos = false
+    var devSite = false
     var devWeb = false
     var devEmail = false
 
@@ -331,6 +332,7 @@ func parseMe(_ j: J) -> Me? {
     }
     m.devApp = j["devices"]["app"].bool
     m.devIos = j["devices"]["ios"].bool
+    m.devSite = j["devices"]["site"].bool
     m.devWeb = j["devices"]["web"].bool
     m.devEmail = j["devices"]["email"].bool
     return m

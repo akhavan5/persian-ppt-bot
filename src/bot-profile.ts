@@ -60,8 +60,8 @@ const PL_IOS: [string, string][] = [["سیبچه", "https://sibche.com/applicati
 const storeLinks = (l: [string, string][]) => l.map(([n, u]) => `<a href="${u}">${n}</a>`).join(" · ");
 const siteUrl = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
 
-/** splusWording (splus-format.ts) هر «تلگرام» را در پیام‌های سروش‌پلاس به «سروش‌پلاس» تبدیل می‌کند؛ نام خود پلتفرم تلگرام را با نیم‌فاصله می‌نویسیم تا دست نخورد */
-const labelFor = (label: string, here: Chan): string => (here === "splus" ? label.replace(/تلگرام/g, "تل\u200cگرام") : label);
+/** baleWording / eitaaWording / rubikaWording / splusWording هر «تلگرام» را در پیام‌های همان پیام‌رسان به نام خودش تبدیل می‌کنند؛ نام خود پلتفرم تلگرام را در همه‌ی پیام‌رسان‌ها با نیم‌فاصله می‌نویسیم تا دست نخورد */
+const labelFor = (label: string, _here?: Chan): string => label.replace(/تلگرام/g, "تل\u200cگرام");
 
 type ChanView = { key: Chan; label: string; connected: boolean; url: string };
 

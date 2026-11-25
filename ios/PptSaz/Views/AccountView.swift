@@ -258,8 +258,9 @@ struct AccountView: View {
             SectionHeader(title: "اتصال پلتفرم‌ها")
             Text("حسابت را به چند پلتفرم وصل کن؛ اعتبار و ارائه‌هایت همه‌جا یکی است و اعلان‌ها هم به همه‌ی آن‌ها می‌رسد.")
                 .font(.footnote).foregroundColor(.secondary)
-            platformCard("🌐", .blue, "سایت پاورپوینت‌ساز", desc: "ساخت پاورپوینت با هوش مصنوعی مستقیم در مرورگر، بدون نیاز به نصب برنامه.") {
-                linkChip("pptsaz.ir", .blue, "https://pptsaz.ir")
+            platformCard("🌐", .blue, "سایت پاورپوینت‌ساز", status: me.devSite ? "✅ متصل" : "⬜ هنوز وارد نشده‌ای", ok: me.devSite,
+                         desc: me.devSite ? "با همین حساب در مرورگر وارد سایت شده‌ای." : "سایت را در مرورگر باز کن و با همان شماره‌ی حسابت وارد شو؛ بعد از اولین ورود وصل می‌شود.") {
+                linkChip("pptsaz.ir", .blue, filled: !me.devSite, "https://pptsaz.ir")
             }
             platformCard("🤖", .green, "اپ اندروید", status: me.devApp ? "✅ وصل است" : "⬜ نصب نشده", ok: me.devApp,
                          desc: me.devApp ? "اپ روی گوشی‌ات وصل است." : "اپ را نصب کن و با همین شماره وارد شو.") {

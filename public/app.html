@@ -1837,7 +1837,7 @@ function channelsNode() {
           seen ? "با همین حساب وارد سایت شده‌ای." : "با یک لمس با همین حساب وارد سایت شو؛ بدون ثبت‌نام و بدون نیاز به شماره.",
           [h("button", { class: "pl-go" + (seen ? "" : " fill"), type: "button", onclick: (e) => openOnSite(null, e.currentTarget, "home") }, seen ? "باز کردن سایت" : "ورود به سایت با همین حساب")]));
       } else {
-        cards.push(plCard("site", "", false, "ساخت پاورپوینت با هوش مصنوعی مستقیم در مرورگر، بدون نیاز به نصب برنامه.", [plGo("https://pptsaz.ir", "باز کردن pptsaz.ir", true)]));
+        cards.push(plCard("site", "✅ متصل (اینجا)", true, "همین حالا از سایت استفاده می‌کنی.", [])); // خود سایت/وب‌اپ مرورگر: کاربر همین‌جاست
       }
     } else if (key === "android") {
       cards.push(plCard("android", d.app ? "✅ وصل است" : "⬜ نصب نشده", !!d.app, d.app ? "اپ روی گوشی‌ات وصل است." : "اپ را نصب کن و با همین شماره وارد شو.",

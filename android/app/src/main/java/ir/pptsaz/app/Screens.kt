@@ -1582,8 +1582,9 @@ private fun ChannelsCard(me: Me, vm: AppViewModel) {
     SurfaceCard {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("حسابت را به چند پلتفرم وصل کن؛ اعتبار و ارائه‌هایت همه‌جا یکی است و اعلان‌ها هم به همه‌ی آن‌ها می‌رسد.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-            if (!myket) PlatformRow("🌐", Color(0xFF2563EB), "سایت پاورپوینت‌ساز", "", false, "ساخت پاورپوینت با هوش مصنوعی مستقیم در مرورگر، بدون نیاز به نصب برنامه.") {
-                PlatformLinkButton("pptsaz.ir", Color(0xFF2563EB), false) { vm.openSite() }
+            if (!myket) PlatformRow("🌐", Color(0xFF2563EB), "سایت پاورپوینت‌ساز", if (me.devices.site) "✅ متصل" else "⬜ هنوز وارد نشده‌ای", me.devices.site,
+                if (me.devices.site) "با همین حساب در مرورگر وارد سایت شده‌ای." else "سایت را در مرورگر باز کن و با همان شماره‌ی حسابت وارد شو؛ بعد از اولین ورود وصل می‌شود.") {
+                PlatformLinkButton("pptsaz.ir", Color(0xFF2563EB), !me.devices.site) { vm.openSite() }
             }
             PlatformRow("🤖", Color(0xFF16A34A), "اپ اندروید", "✅ همین برنامه", true, "همین حالا از اپ اندروید استفاده می‌کنی.") {}
             for (key in listOf("bale", "eitaa", "apple", "splus", "tg")) {

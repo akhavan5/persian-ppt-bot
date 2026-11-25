@@ -45,7 +45,7 @@ data class Settings(val theme: String, val template: String, val tone: String, v
 data class ChannelInfo(val key: String, val label: String, val connected: Boolean, val shown: String, val notify: Boolean, val available: Boolean, val canUnlink: Boolean, val url: String = "")
 
 /** مسیرهای اعلانِ غیرپیام‌رسان: اپ اندروید، اعلان مرورگر، ایمیل */
-data class Devices(val app: Boolean = false, val web: Boolean = false, val email: Boolean = false, val ios: Boolean = false)
+data class Devices(val app: Boolean = false, val web: Boolean = false, val email: Boolean = false, val ios: Boolean = false, val site: Boolean = false)
 
 data class Me(
     val name: String,
@@ -180,7 +180,7 @@ fun parseMe(j: JSONObject): Me? {
         channels = j.optJSONArray("channels").objects().map {
             ChannelInfo(it.str("key"), it.str("label"), it.optBoolean("connected"), if (it.isNull("shown")) "" else it.optString("shown"), it.optBoolean("notify"), it.optBoolean("available"), it.optBoolean("canUnlink"), it.optString("url"))
         },
-        devices = j.optJSONObject("devices")?.let { Devices(it.optBoolean("app"), it.optBoolean("web"), it.optBoolean("email"), it.optBoolean("ios")) } ?: Devices(),
+        devices = j.optJSONObject("devices")?.let { Devices(it.optBoolean("app"), it.optBoolean("web"), it.optBoolean("email"), it.optBoolean("ios"), it.optBoolean("site")) } ?: Devices(),
     )
 }
 
