@@ -664,6 +664,19 @@ function makeSplus(W) {
     openTg(path) { openLink("https://t.me" + path); },
     openLink,
     share() {},
+    // شماره‌ی خود کاربر (فقط با کلیک کاربر): رویداد contactRequested با status=sent و response امضاشده؛ cb(رشته‌ی امضاشده | null).
+    // اگر پاسخ امضاشده نیامد null می‌شود و ربات سروش‌پلاس (در صورت دریافت پیام مخاطب) شماره را ثبت می‌کند.
+    requestContact(cb) {
+      let done = false;
+      const fin = (v) => { if (!done) { done = true; cb(v); } };
+      if (typeof W.requestContact !== "function") return fin(null);
+      const str = (d) => (typeof d === "string" ? d : d && typeof d.response === "string" ? d.response : "");
+      try {
+        on("contactRequested", (e) => { const s = str(e); fin(e && e.status === "sent" && s ? s : null); });
+        W.requestContact((ok, d) => { const s = str(d); if (!ok) fin(null); else if (s) fin(s); }); // ok بدون response: منتظر رویداد می‌ماند
+        setTimeout(() => fin(null), 60000);
+      } catch { fin(null); }
+    },
     askWrite() {},
   };
 }
@@ -1849,8 +1862,8 @@ function renderProfile() {
     !val && miss.includes(kind) && !(pf && pf.kind === kind)
       ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => {
           // ایتا: شماره فقط با requestContact داخلی (طبق مستند، فرم دستی مجاز نیست) و فقط بعد از کلیک کاربر
-          if (IS_EITAA && kind === "mobile") return busy(e.currentTarget, "…", () => new Promise((done) => TG.requestContact(async (data) => {
-            if (!data) { toast("شماره به اشتراک گذاشته نشد."); return done(); }
+          if ((IS_EITAA || IS_SPLUS) && kind === "mobile" && typeof TG.requestContact === "function") return busy(e.currentTarget, "…", () => new Promise((done) => TG.requestContact(async (data) => {
+            if (!data) { if (IS_SPLUS) { pf = { kind, step: "v", v: "", c: "" }; renderProfile(); return done(); } toast("شماره به اشتراک گذاشته نشد."); return done(); } // سروش‌پلاس: اگر خودکار نشد، ثبت دستی با کد پیامکی
             try {
               const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
               if (r.merged) { done(); return afterMerge(); }

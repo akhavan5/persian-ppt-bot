@@ -17,7 +17,7 @@ import { esc, sendAudio, sendDocument } from "./telegram";
 import { audioSeconds } from "./wav";
 import { fileNameWithSite, siteHost, siteLoginUrl } from "./deck-service";
 import { toBaleId } from "./bale-format";
-import { toSplusId } from "./splus-format";
+import { isSplusId, toSplusId } from "./splus-format";
 import { isEitaaId, toEitaaId, validEitaaRawId } from "./eitaa-format";
 import { eitaaWelcome } from "./eitaa";
 import { attachContact } from "./profile";
@@ -355,14 +355,16 @@ async function verifySigned(botToken: string, data: string, now = Date.now()): P
 /** POST /api/profile/mobile/eitaa {contact} — شماره‌ی تأییدشده‌ی خود ایتا (requestContact). کاربر باید خودش دکمه‌ی «ثبت شماره» را زده باشد.
  *  امضا سرور-ساید بررسی می‌شود؛ اگر user_id داخل داده باشد باید با کاربر فعلی یکی باشد. شماره با قانون پروفایل ثبت می‌شود؛ اما چون در ایتا اجباری است هدیه‌ی شماره ندارد (profile.ts ← attachContact). */
 export async function miniappContact(req: Request, env: Env, user: WebUser): Promise<Response> {
-  if (!env.EITAA_APP_TOKEN) return err("ثبت شماره از ایتا فعال نیست.", 503);
-  const id = await linkedFor(env, user.id, "eitaa");
-  if (!id || !isEitaaId(id)) return err("این روش فقط داخل برنامک ایتا کار می‌کند.", 403);
+  const plat: "eitaa" | "splus" = req.headers.get("x-plat") === "splus" ? "splus" : "eitaa"; // سروش‌پلاس: همان الگوی امضا با توکن بات (مستند اعتبارسنجی initData)
+  const token = plat === "splus" ? env.SPLUS_BOT_TOKEN : env.EITAA_APP_TOKEN;
+  if (!token) return err(plat === "splus" ? "ثبت شماره از سروش‌پلاس فعال نیست." : "ثبت شماره از ایتا فعال نیست.", 503);
+  const id = await linkedFor(env, user.id, plat);
+  if (!id || !(plat === "splus" ? isSplusId(id) : isEitaaId(id))) return err(plat === "splus" ? "این روش فقط داخل برنامک سروش‌پلاس کار می‌کند." : "این روش فقط داخل برنامک ایتا کار می‌کند.", 403);
   if (await hitLimit(env, `eic:${id}`, 10, 3600)) return err("تعداد تلاش زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
   const b = (await req.json().catch(() => null)) as { contact?: unknown } | null;
   const data = typeof b?.contact === "string" ? b.contact : "";
   if (data.length < 20 || data.length > 4_096) return err("اطلاعات شماره از ایتا نیامد.", 400);
-  const p = await verifySigned(env.EITAA_APP_TOKEN, data);
+  const p = await verifySigned(token, data);
   if (!p) return err("اعتبار اطلاعات شماره تأیید نشد؛ دوباره امتحان کن.", 401);
   // فرمت داده‌ی ایتا قطعی نیست (کلید شماره/ساختار JSON): همه‌ی فیلدها را می‌گردیم و اولین مقداری که شماره‌ی ایرانی معتبر باشد برمی‌دارد.
   const found: { mobile: string | null; uid: unknown } = { mobile: null, uid: undefined };
@@ -383,13 +385,13 @@ export async function miniappContact(req: Request, env: Env, user: WebUser): Pro
     if (k === "user_id" && /^\d+$/.test(v) && found.uid === undefined) found.uid = Number(v);
     walk(v, k);
   }
-  if (found.uid != null && toEitaaId(Number(found.uid)) !== id) return err("این شماره متعلق به حساب فعلی نیست.", 403);
+  if (found.uid != null && (plat === "splus" ? toSplusId(Number(found.uid)) : toEitaaId(Number(found.uid))) !== id) return err("این شماره متعلق به حساب فعلی نیست.", 403);
   const mobile = found.mobile;
   if (!mobile) {
-    console.error("eitaa contact: شماره پیدا نشد؛ کلیدها:", [...p.keys()].join(","), "| ساختار contact:", String(p.get("contact") ?? "").replace(/\d/g, "9").slice(0, 120));
+    console.error(plat + " contact: شماره پیدا نشد؛ کلیدها:", [...p.keys()].join(","), "| ساختار contact:", String(p.get("contact") ?? "").replace(/\d/g, "9").slice(0, 120));
     return err("شماره‌ی موبایل ایرانی معتبر نیامد.", 400);
   }
-  const r = await attachContact(env, user, "mobile", mobile, "", (await autoBotId(env, user.id, "eitaa")) ?? undefined, true); // شماره‌ی تأییدشده‌ی ایتا؛ اگر مال حساب دیگری بود ایتا به آن وصل می‌شود
+  const r = await attachContact(env, user, "mobile", mobile, "", (await autoBotId(env, user.id, plat)) ?? undefined, true); // شماره‌ی تأییدشده‌ی ایتا/سروش‌پلاس؛ اگر مال حساب دیگری بود ایتا به آن وصل می‌شود
   if ("error" in r) return err(r.error, r.status);
   // کاربر ایتایی که شماره‌اش را داده کدی نمی‌گیرد؛ پیام خوش‌آمد بله (سفیر، یک‌بار برای هر شماره؛ اگر بله ندارد بی‌صدا رد می‌شود)
   if (!r.merged) await sendWelcomeOnce(env, mobile).catch(() => {});

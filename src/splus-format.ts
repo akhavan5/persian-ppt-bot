@@ -50,8 +50,12 @@ export function splusMarkup(markup: unknown, siteUrl: string): unknown {
 
 // ---------- آپدیت ----------
 const mapUser = (u: any) => (u && typeof u.id === "number" ? { ...u, id: toSplusId(u.id) } : u);
+// contact.user_id هم جابه‌جا می‌شود تا شرط امنیتی «contact.user_id == from.id» (bot-profile.ts ← handleSharedContact) روی سروش‌پلاس درست کار کند
+const mapContact = (c: any) => (c && typeof c.user_id === "number" ? { ...c, user_id: toSplusId(c.user_id) } : c);
 const mapMessage = (m: any) =>
-  m && m.chat && typeof m.chat.id === "number" ? { ...m, from: mapUser(m.from), chat: { ...m.chat, id: toSplusId(m.chat.id) } } : m;
+  m && m.chat && typeof m.chat.id === "number"
+    ? { ...m, from: mapUser(m.from), chat: { ...m.chat, id: toSplusId(m.chat.id) }, ...(m.contact ? { contact: mapContact(m.contact) } : {}) }
+    : m;
 
 /** آپدیت سروش‌پلاس ← آپدیت هم‌شکل تلگرام با شناسه‌های جابه‌جاشده. آپدیت‌های بی‌ربط (edited_message و …) null می‌شوند */
 export function normalizeSplusUpdate(update: any): any | null {
