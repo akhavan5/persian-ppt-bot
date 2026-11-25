@@ -1615,10 +1615,10 @@ async function viewPdf(id, btn) {
 }
 
 // مشاهده‌ی فایل در سایت (ایتا): سرور لینک ورود یک‌بارمصرف می‌دهد و در مرورگر بیرونی باز می‌شود؛ سایت مستقیم روی همان فایل می‌رود
-async function openOnSite(id, btn) {
+async function openOnSite(id, btn, to) {
   return busy(btn, "در حال باز کردن سایت…", async () => {
     try {
-      const d = await api("/api/miniapp/site", { method: "POST", body: id ? { id } : {} });
+      const d = await api("/api/miniapp/site", { method: "POST", body: to === "home" ? { to } : id ? { id } : {} });
       TG.openLink(d.url); TG.haptic("success");
     } catch (e) { toast(e.message || "باز کردن سایت ممکن نشد؛ دوباره امتحان کن."); TG.haptic("error"); }
   });
@@ -1831,7 +1831,14 @@ function channelsNode() {
   const cards = [];
   for (const key of PL_ORDER) {
     if (key === "site") {
-      cards.push(plCard("site", "", false, "ساخت پاورپوینت با هوش مصنوعی مستقیم در مرورگر، بدون نیاز به نصب برنامه.", [plGo("https://pptsaz.ir", "باز کردن pptsaz.ir", true)]));
+      if (TG.initData) { // داخل برنامک پیام‌رسان: وضعیت واقعی (حداقل یک بار ورود در مرورگر) و ورود خودکار با لینک یک‌بارمصرف، نه آدرس ساده
+        const seen = !!d.site;
+        cards.push(plCard("site", seen ? "✅ متصل" : "⬜ هنوز وارد نشده‌ای", seen,
+          seen ? "با همین حساب وارد سایت شده‌ای." : "با یک لمس با همین حساب وارد سایت شو؛ بدون ثبت‌نام و بدون نیاز به شماره.",
+          [h("button", { class: "pl-go" + (seen ? "" : " fill"), type: "button", onclick: (e) => openOnSite(null, e.currentTarget, "home") }, seen ? "باز کردن سایت" : "ورود به سایت با همین حساب")]));
+      } else {
+        cards.push(plCard("site", "", false, "ساخت پاورپوینت با هوش مصنوعی مستقیم در مرورگر، بدون نیاز به نصب برنامه.", [plGo("https://pptsaz.ir", "باز کردن pptsaz.ir", true)]));
+      }
     } else if (key === "android") {
       cards.push(plCard("android", d.app ? "✅ وصل است" : "⬜ نصب نشده", !!d.app, d.app ? "اپ روی گوشی‌ات وصل است." : "اپ را نصب کن و با همین شماره وارد شو.",
         (d.app ? [] : PL_ANDROID).map(([n, url]) => plGo(url, "دانلود از " + n, true))));

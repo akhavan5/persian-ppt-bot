@@ -206,6 +206,7 @@ export async function miniappSite(env: Env, user: WebUser, body: Record<string, 
   if (await hitLimit(env, `msite:${user.id}`, 60, 3600)) return err("تعداد درخواست زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
   if (id && !(await loadFileDirect(env, user.id, id).catch(() => null))) id = ""; // فایل منقضی/ناپیدا: فقط بخش فایل‌ها
   const tgId = await linkedFor(env, user.id, plat);
+  if (body?.to === "home") return json({ url: await siteLoginUrl(env, tgId ?? undefined, "home") }); // کارت «سایت» در اتصال پلتفرم‌ها: صفحه‌ی اصلی با ورود خودکار
   return json({ url: await siteLoginUrl(env, tgId ?? undefined, "files", id || undefined) });
 }
 
