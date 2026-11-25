@@ -60,6 +60,9 @@ const PL_IOS: [string, string][] = [["سیبچه", "https://sibche.com/applicati
 const storeLinks = (l: [string, string][]) => l.map(([n, u]) => `<a href="${u}">${n}</a>`).join(" · ");
 const siteUrl = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
 
+/** splusWording (splus-format.ts) هر «تلگرام» را در پیام‌های سروش‌پلاس به «سروش‌پلاس» تبدیل می‌کند؛ نام خود پلتفرم تلگرام را با نیم‌فاصله می‌نویسیم تا دست نخورد */
+const labelFor = (label: string, here: Chan): string => (here === "splus" ? label.replace(/تلگرام/g, "تل\u200cگرام") : label);
+
 type ChanView = { key: Chan; label: string; connected: boolean; url: string };
 
 /** وضعیت هر پیام‌رسان به ترتیب سایت + لینک ربات/برنامک (همان channelOpenLink که سایت استفاده می‌کند) */
@@ -86,7 +89,8 @@ async function channelLines(env: Env, uid: string, user: { email?: string; oss?:
   const iosLine = `🍎 اپ iOS: ${hasIos ? "✅ وصل است" : `⬜️ نصب نشده · ${storeLinks(PL_IOS)}`}`;
   for (const c of views) {
     if (c.key === "splus" && !out.includes(iosLine)) out.push(iosLine); // ترتیب سایت: ... ایتا، iOS، سروش‌پلاس، تلگرام
-    const name = c.url ? `<a href="${esc(c.url)}">${esc(c.label)}</a>` : esc(c.label);
+    const lbl = labelFor(c.label, here);
+    const name = c.url ? `<a href="${esc(c.url)}">${esc(lbl)}</a>` : esc(lbl);
     out.push(`${PL_ICON[c.key]} ${name}: ${c.connected ? `✅ متصل${c.key === here ? " (اینجا)" : ""} · 🔔 اعلان روشن` : "⬜️ وصل نیست"}`);
   }
   if (!out.includes(iosLine)) out.push(iosLine);
@@ -100,7 +104,7 @@ async function channelButtons(env: Env, uid: string, userId: number): Promise<Bt
   const rows: Btn[][] = [];
   for (const c of await channelViews(env, uid)) {
     if (!c.url || (c.connected && c.key === here)) continue;
-    rows.push([{ text: c.connected ? `باز کردن ${c.label}` : `ورود به ${c.label} و تایید شماره`, url: c.url }]);
+    rows.push([{ text: c.connected ? `باز کردن ${labelFor(c.label, here)}` : `ورود به ${labelFor(c.label, here)} و تایید شماره`, url: c.url }]);
   }
   return rows;
 }
