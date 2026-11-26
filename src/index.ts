@@ -28,12 +28,22 @@ body{padding-bottom:calc(176px + var(--sab))}
 const ADLY_WIDGET_SCRIPT = `<script src="https://myadino.ir/widget/adly-widget.js"></script>
 <script>
 (function(){var n=document.getElementById('nav');function f(){if(n&&n.offsetHeight)document.documentElement.style.setProperty('--adly-nav',n.offsetHeight+'px')}f();addEventListener('resize',f);if(n&&window.ResizeObserver)new ResizeObserver(f).observe(n)})();
-AdlyWidget.init({
-  apiKey: '66bb7b1f66c2483097487ddee8de4628',
-  containerId: 'adly-container',
-  barnamk: 'pptsaz_app',
-  appRef: 186
-});
+// ادلی فقط در اپ موبایل ایتا کار می‌کند (platform==='web' را رد می‌کند و به‌جایش متن خطا می‌نویسد)؛ در وب ایتا/مرورگر بنر را اصلاً اجرا نکن
+(function(){
+  var ok=false;
+  try{
+    var w=window.Eitaa&&window.Eitaa.WebApp;
+    ok=!!(w&&String(w.platform||'').toLowerCase()!=='web'&&String(w.version||'')!=='0.0'&&(String(w.initData||'').length>20||(w.initDataUnsafe&&w.initDataUnsafe.user)));
+  }catch(e){}
+  var c=document.getElementById('adly-container');
+  if(!ok){if(c)c.remove();document.body.style.paddingBottom='';return;}
+  AdlyWidget.init({
+    apiKey: '66bb7b1f66c2483097487ddee8de4628',
+    containerId: 'adly-container',
+    barnamk: 'pptsaz_app',
+    appRef: 186
+  });
+})();
 </script>`;
 
 export { DeckWorkflow } from "./workflow";
