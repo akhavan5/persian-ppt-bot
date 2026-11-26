@@ -1969,7 +1969,7 @@ function channelsNode() {
     : "اول شماره‌ی موبایلت را بالا ثبت کن؛ بعد در هر پلتفرم همان شماره را تایید کن."));
   return out;
 }
-function renderProfile() {
+function renderProfile(focus) { // focus: فقط بعد از اقدام خود کاربر (زدن «ثبت»، ارسال کد…) فرم را به صفحه بیاور و فوکوس بده؛ نه در رندرهای خودکار (کیبورد ناخواسته باز نشود)
   const box = $("#pfBody"); if (!box || !me || !me.user) return;
   if (!pf && !pfRestored) { pfRestored = true; pf = pfLoad(); } // یک‌بار در هر بارگذاری: «انصراف» دوباره پیش‌نویس را برنمی‌گرداند
   const u = me.user, cr = me.contactReward || {}, miss = cr.missing || [];
@@ -1979,7 +1979,7 @@ function renderProfile() {
       ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => {
           // ایتا: شماره فقط با requestContact داخلی (طبق مستند، فرم دستی مجاز نیست) و فقط بعد از کلیک کاربر؛ سروش‌پلاس/بله/تلگرام: اول requestContact و اگر ثبت خودکار نشد فرم دستی
           if ((IS_EITAA || IS_SPLUS || IS_BALE || PLAT_KEY === "tg") && kind === "mobile" && typeof TG.requestContact === "function") return busy(e.currentTarget, "…", () => new Promise((done) => TG.requestContact(async (data) => {
-            if (!data) { if (IS_SPLUS || IS_BALE || PLAT_KEY === "tg") { if (contactSentNoData && (await awaitContactRegistered()) !== "none") return done(); pf = { kind, step: "v", v: "", c: "" }; pfSave(); renderProfile(); return done(); } toast("شماره به اشتراک گذاشته نشد."); return done(); } // سروش‌پلاس: اگر خودکار نشد، ثبت دستی با کد پیامکی
+            if (!data) { if (IS_SPLUS || IS_BALE || PLAT_KEY === "tg") { if (contactSentNoData && (await awaitContactRegistered()) !== "none") return done(); pf = { kind, step: "v", v: "", c: "" }; pfSave(); renderProfile(true); return done(); } toast("شماره به اشتراک گذاشته نشد."); return done(); } // سروش‌پلاس: اگر خودکار نشد، ثبت دستی با کد پیامکی
             try {
               const r = await api("/api/profile/mobile/eitaa", { method: "POST", body: { contact: data } });
               if (r.merged) { done(); return afterMerge(); }
@@ -1989,13 +1989,14 @@ function renderProfile() {
             } catch (err) { toast(err.message); }
             done();
           })));
-          pf = { kind, step: "v", v: "", c: "" }; pfSave(); renderProfile();
+          pf = { kind, step: "v", v: "", c: "" }; pfSave(); renderProfile(true);
         } }, "ثبت")
       : null);
+  const rows = { mobile: row("mobile", "📱", "موبایل", u.mobile), email: row("email", "✉️", "ایمیل", u.email) };
   const kids = [
     h("div", { class: "muted", style: "margin-bottom:4px" }, "نام: " + (u.name || "—")),
-    row("mobile", "📱", "موبایل", u.mobile),
-    row("email", "✉️", "ایمیل", u.email),
+    rows.mobile,
+    rows.email,
   ];
   if (cr.available && cr.credits > 0) {
     kids.push(h("div", { class: "muted", style: "margin-top:8px;line-height:1.9" },
@@ -2013,7 +2014,7 @@ function renderProfile() {
         h("button", { class: "btn", type: "button", onclick: (e) => busy(e.currentTarget, "در حال ارسال…", async () => {
           const v = pfValue();
           if (!v) return toast(isM ? "شماره‌ی موبایل را وارد کن." : "ایمیل را وارد کن.");
-          try { const sr = await api("/api/auth/otp/send", { method: "POST", body: { [pf.kind]: v } }); pf.step = "c"; pf.c = ""; pf.at = Date.now(); pfSave(); toast(isM ? (sr && sr.bale ? (sr.sms === false ? "ارسال پیامک ناموفق بود، اما کد در بله ارسال شد" : "کد پیامک شد و به بله هم ارسال شد") : "کد پیامک شد") : "کد به ایمیلت فرستاده شد"); renderProfile(); }
+          try { const sr = await api("/api/auth/otp/send", { method: "POST", body: { [pf.kind]: v } }); pf.step = "c"; pf.c = ""; pf.at = Date.now(); pfSave(); toast(isM ? (sr && sr.bale ? (sr.sms === false ? "ارسال پیامک ناموفق بود، اما کد در بله ارسال شد" : "کد پیامک شد و به بله هم ارسال شد") : "کد پیامک شد") : "کد به ایمیلت فرستاده شد"); renderProfile(true); }
           catch (err) { toast(err.message); }
         }) }, "ارسال کد"),
         h("button", { class: "btn ghost", type: "button", onclick: () => { pf = null; pfSave(); renderProfile(); } }, "انصراف"));
@@ -2035,11 +2036,16 @@ function renderProfile() {
             await refreshMe(); renderProfile();
           } catch (err) { toast(err.message); }
         }) }, "تأیید و ثبت"),
-        h("button", { class: "btn ghost", type: "button", onclick: () => { pf.step = "v"; pfSave(); renderProfile(); } }, "ویرایش " + (isM ? "شماره" : "ایمیل")));
+        h("button", { class: "btn ghost", type: "button", onclick: () => { pf.step = "v"; pfSave(); renderProfile(true); } }, "ویرایش " + (isM ? "شماره" : "ایمیل")));
     }
-    kids.push(form);
+    const at = kids.indexOf(rows[pf.kind]); // فرم ثبت زیر همان ردیفی که دکمه‌ی «ثبت» در آن زده شد (نه انتهای صفحه، پایین کارت‌های پلتفرم)
+    if (at >= 0) kids.splice(at + 1, 0, form); else kids.push(form);
   }
   box.replaceChildren(...kids);
+  if (focus && pf) {
+    const el = box.querySelector(pf.step === "v" ? "#pfV" : "#pfC");
+    if (el) { try { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus({ preventScroll: true }); } catch {} }
+  }
 }
 // دعوت دوستان: همه‌ی پلتفرم‌ها (تلگرام، بله، ایتا). لینک اختصاصی را سرور براساس پلتفرم حساب می‌سازد (/api/invite)؛ فقط لینک t.me پنجره‌ی اشتراک‌گذاری تلگرام دارد
 async function copyText(v) {
