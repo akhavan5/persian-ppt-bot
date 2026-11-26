@@ -3,7 +3,7 @@
  * جزئیات در rubika.ts و rubika-format.ts.
  */
 import type { Env } from "./env";
-import { mimeOfName, rubikaMsgHandle, rubikaUserId } from "./rubika-format";
+import { RUBIKA_SHARE_PHONE_ID, mimeOfName, rubikaMsgHandle, rubikaUserId } from "./rubika-format";
 import { callbackHandle, rubikaCall, saveChat, type ChatRec } from "./rubika-api";
 
 /** چت را اولین بار که دیده می‌شود ثبت می‌کند (نام از getChat)؛ بعدش فقط خواندن از KV */
@@ -77,6 +77,19 @@ export async function normalizeRubikaUpdate(env: Env, body: any): Promise<any | 
     chat: { id: n, type: "private" },
     from: fromOf(n, rec),
   };
+  // شماره‌ی اشتراک‌گذاری‌شده (دکمه‌ی AskMyPhoneNumber)؛ روبیکا شناسه‌ی صاحب شماره را نمی‌دهد، پس به‌جای شرط contact.user_id:
+  //  ۱) فقط وقتی پذیرفته می‌شود که همین الان دکمه‌ی اشتراک شماره برای این کاربر فرستاده شده باشد (rb:ask، یک ساعت)،
+  //  ۲) اگر روبیکا button_id را فرستاده باشد باید همان دکمه‌ی اشتراک شماره باشد (مخاطبِ دستی/فوروارد رد می‌شود).
+  const cm = m?.contact_message;
+  if (cm?.phone_number) {
+    const bid = m?.aux_data?.button_id;
+    const asked = !!(await env.KV.get(`rb:ask:${n}`).catch(() => null));
+    const own = asked && (bid === undefined || bid === null || bid === "" || String(bid) === RUBIKA_SHARE_PHONE_ID);
+    msg.contact = { phone_number: String(cm.phone_number), first_name: String(cm.first_name ?? ""), ...(own ? { user_id: n } : {}) };
+    return { update_id: 0, message: msg };
+  }
+  // دکمه‌ی «فعلاً نه» زیر درخواست شماره (Simple): اگر روبیکا متن دکمه را نفرستاد، از روی شناسه‌ی دکمه ساخته می‌شود
+  if (!text.trim() && !m?.file && /^k\d+$/.test(String(m?.aux_data?.button_id ?? "")) && (await env.KV.get(`rb:ask:${n}`).catch(() => null))) text = "⏭ فعلاً نه";
   const f = m?.file;
   if (f?.file_id) { // فایل (سند، عکس، ویس): به‌شکل document می‌رود؛ نوع از روی پسوند نام فایل فهمیده می‌شود (fileRefOf ویس/صوت را هم از پسوند می‌شناسد)
     const name = String(f.file_name ?? "file");

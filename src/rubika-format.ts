@@ -154,6 +154,30 @@ export function rubikaKeypad(markup: unknown, siteUrl: string): { keypad?: Rubik
   return { ...(rows.length ? { keypad: { rows } } : {}), links };
 }
 
+// ---------- کیبورد پایین چت: keyboard تلگرام ← chat_keypad روبیکا ----------
+export const RUBIKA_SHARE_PHONE_ID = "share_phone";
+interface RChatBtn { id: string; type: "Simple" | "AskMyPhoneNumber"; button_text: string }
+export interface RubikaChatKeypad { rows: { buttons: RChatBtn[] }[]; resize_keyboard: boolean; one_time_keyboard: boolean }
+
+/**
+ * reply_markup.keyboard (تلگرام) ← chat_keypad روبیکا: دکمه‌ی request_contact ← AskMyPhoneNumber (شماره‌ی خود کاربر)،
+ * بقیه Simple. remove_keyboard ← chat_keypad_type "Remove". askPhone: کیبورد دکمه‌ی اشتراک شماره دارد.
+ */
+export function rubikaChatKeypad(markup: unknown): { type?: "New" | "Remove"; keypad?: RubikaChatKeypad; askPhone: boolean } {
+  const mk = markup as { keyboard?: { text?: string; request_contact?: boolean }[][]; remove_keyboard?: boolean; one_time_keyboard?: boolean } | undefined;
+  if (mk?.remove_keyboard) return { type: "Remove", askPhone: false };
+  if (!mk || !Array.isArray(mk.keyboard)) return { askPhone: false };
+  let n = 0;
+  let askPhone = false;
+  const rows = mk.keyboard.map((row) => row.map((b): RChatBtn => {
+    const text = rubikaWording(String(b.text ?? "").replace(/<[^>]+>/g, "")).trim() || "•";
+    if (b.request_contact) { askPhone = true; return { id: RUBIKA_SHARE_PHONE_ID, type: "AskMyPhoneNumber", button_text: text }; }
+    return { id: `k${n++}`, type: "Simple", button_text: text };
+  })).filter((r) => r.length).map((buttons) => ({ buttons }));
+  if (!rows.length) return { askPhone: false };
+  return { type: "New", keypad: { rows, resize_keyboard: true, one_time_keyboard: mk.one_time_keyboard !== false }, askPhone };
+}
+
 // ---------- فایل ----------
 const MIME: Record<string, string> = {
   pdf: "application/pdf", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

@@ -15,6 +15,7 @@ import { siteLoginUrl } from "./deck-service";
 import { channelOpenLink } from "./invite-msg";
 import { isBaleId } from "./bale-format";
 import { isSplusId } from "./splus-format";
+import { isRubikaId } from "./rubika-format";
 import { sendWelcomeOnce } from "./safir";
 
 type Btn = { text: string; callback_data?: string; url?: string };
@@ -157,7 +158,7 @@ export async function handleProfileCallback(env: Env, cq: any, userId: number, c
   if (user[kind]) return void (await sendMessage(env, chatId, "این مورد قبلاً برای حسابت ثبت شده است. /profile"));
   await env.KV.delete(`fb:${userId}`).catch(() => {}); // حالت «ارسال نظر» با این ورودی قاطی نشود
   await env.KV.put(stKey(userId), JSON.stringify({ s: kind } satisfies State), { expirationTtl: ST_TTL });
-  if (kind === "mobile" && isSplusId(chatId)) { // سروش‌پلاس: شماره خودکار با دکمه‌ی اشتراک‌گذاری؛ تایپ دستی + کد پیامکی هم همچنان کار می‌کند
+  if (kind === "mobile" && (isSplusId(chatId) || isRubikaId(chatId))) { // سروش‌پلاس و روبیکا: شماره خودکار با دکمه‌ی اشتراک‌گذاری؛ تایپ دستی + کد پیامکی هم همچنان کار می‌کند
     await sendMessage(env, chatId, "📱 دکمه‌ی زیر را بزن تا شماره‌ات خودکار و بدون کد ثبت شود.\nیا شماره را تایپ کن (مثل <code>09123456789</code>) تا کد ۶ رقمی پیامک شود.",
       { reply_markup: { keyboard: [[{ text: "📱 اشتراک‌گذاری شماره‌ام", request_contact: true }], [{ text: SKIP_CONTACT_TEXT }]], resize_keyboard: true, one_time_keyboard: true } });
     return;
@@ -214,13 +215,13 @@ export async function handleProfileInput(env: Env, userId: number, chatId: numbe
 }
 
 
-// ---------- درخواست اختیاری شماره بعد از دکمه‌ی «ساخت» (ربات تلگرام، بله و سروش‌پلاس) ----------
+// ---------- درخواست اختیاری شماره بعد از دکمه‌ی «ساخت» (ربات تلگرام، بله، سروش‌پلاس و روبیکا) ----------
 // مثل مینی‌اپ: تا وقتی شماره ثبت نشده، بعد از هر شروع ساخت پرسیده می‌شود؛ ساخت ارائه هیچ‌وقت منتظر جواب نمی‌ماند.
 // دکمه‌ی request_contact در کیبورد پاسخ (تلگرام و بله هر دو پشتیبانی می‌کنند) شماره را به‌صورت پیام «مخاطب» می‌فرستد
 // و handleSharedContact بدون OTP ثبتش می‌کند (فقط اگر contact.user_id == from.id).
 export const SKIP_CONTACT_TEXT = "⏭ فعلاً نه";
 const REMOVE_KB = { reply_markup: { remove_keyboard: true } };
-const isTgOrBale = (env: Env, chatId: number): boolean => isBaleId(chatId) || isSplusId(chatId) || (env.PLATFORM !== "bale" && env.PLATFORM !== "rubika" && env.PLATFORM !== "splus" && chatId > 0 && chatId < 100_000_000_000_000); // سروش‌پلاس هم دکمه‌ی request_contact و contact.user_id دارد (مستند Bot API)
+const isTgOrBale = (env: Env, chatId: number): boolean => isBaleId(chatId) || isSplusId(chatId) || isRubikaId(chatId) || (env.PLATFORM !== "bale" && env.PLATFORM !== "rubika" && env.PLATFORM !== "splus" && chatId > 0 && chatId < 100_000_000_000_000); // روبیکا: دکمه‌ی AskMyPhoneNumber (rubika-format.ts) // سروش‌پلاس هم دکمه‌ی request_contact و contact.user_id دارد (مستند Bot API)
 
 export async function askShareContact(env: Env, chatId: number, uid: string | number): Promise<void> {
   try {

@@ -9,7 +9,7 @@
  *  rb:a:<دستگیره‌ی جدید>  ← دستگیره‌ی قبلی؛ وقتی ویرایش دکمه ممکن نبود و پیام حذف و دوباره فرستاده شد، کارت قدیمی همان دستگیره را نگه می‌دارد
  */
 import type { Env } from "./env";
-import { RUBIKA_API_DEFAULT, buildPlain, buildRich, htmlToRubika, rubikaKeypad, rubikaMsgHandle, rubikaText, type RubikaKeypad } from "./rubika-format";
+import { RUBIKA_API_DEFAULT, buildPlain, buildRich, htmlToRubika, rubikaChatKeypad, rubikaKeypad, rubikaMsgHandle, rubikaText, type RubikaKeypad } from "./rubika-format";
 
 export const rubikaEnabled = (env: Env): boolean => !!env.RUBIKA_BOT_TOKEN;
 const siteOf = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
@@ -103,14 +103,17 @@ async function staged<T>(rich: boolean, keypad: boolean, run: (m: Mode) => Promi
 /** پیام متنی با قالب‌بندی و دکمه (با سه مرحله‌ی بالا) */
 async function sendText(env: Env, chat: string, html: string, markup: unknown, replyTo?: string): Promise<{ mid: string; k: 0 | 1 }> {
   const { keypad, links } = rubikaKeypad(markup, siteOf(env));
+  const chatKp = rubikaChatKeypad(markup); // کیبورد پایین چت (دکمه‌ی اشتراک شماره / برداشتن کیبورد)
   const base = htmlToRubika(html);
-  return await staged(base.parts.length > 0 || links.length > 0, !!keypad, async (mode) => {
+  return await staged(base.parts.length > 0 || links.length > 0, !!keypad || !!chatKp.type, async (mode) => {
     const msg = mode === "rich" ? buildRich(base, links) : buildPlain(html, links);
     const kp = mode === "bare" ? undefined : keypad;
+    const ck = mode === "bare" ? undefined : chatKp;
     const d = await rubikaCall<{ message_id?: string | number }>(env, "sendMessage", {
       chat_id: chat, text: msg.text,
       ...(msg.parts.length ? { metadata: { meta_data_parts: msg.parts } } : {}),
       ...(kp ? { inline_keypad: kp } : {}), ...(replyTo ? { reply_to_message_id: replyTo } : {}),
+      ...(ck?.type === "New" ? { chat_keypad_type: "New", chat_keypad: ck.keypad } : ck?.type === "Remove" ? { chat_keypad_type: "Remove" } : {}),
     });
     return { mid: String(d.message_id ?? ""), k: (kp ? 1 : 0) as 0 | 1 };
   });
@@ -208,6 +211,10 @@ export async function rubikaTg(env: Env, method: string, body: Record<string, un
       const chat = await chatGuidOf(env, Number(body.chat_id));
       const replyTo = body.reply_to_message_id ? (await getMsg(env, Number(body.reply_to_message_id)))?.m : undefined;
       const s = await sendText(env, chat, String(body.text ?? ""), body.reply_markup, replyTo);
+      // درخواست شماره: فقط تا یک ساعت بعد از نمایش دکمه، پیام «مخاطب» پذیرفته می‌شود (rubika-update.ts)؛ با برداشتن کیبورد پاک می‌شود
+      const ck = rubikaChatKeypad(body.reply_markup);
+      if (ck.askPhone) await env.KV.put(`rb:ask:${Number(body.chat_id)}`, "1", { expirationTtl: 3600 }).catch(() => {});
+      else if (ck.type === "Remove") await env.KV.delete(`rb:ask:${Number(body.chat_id)}`).catch(() => {});
       return { message_id: await newHandle(env, chat, s.mid, s.k) };
     }
     case "editMessageText": {
