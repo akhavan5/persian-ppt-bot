@@ -16,6 +16,9 @@ const STYLE = ", professional presentation slide image, subject large and center
 
 /** سقف اندازه‌ی عکس واقعی: عکس بزرگ‌تر CPU ساخت فایل را بالا می‌برد؛ عکس بعدی یا ساخت با AI جایگزین می‌شود */
 const MAX_REAL_BYTES = 1_500_000;
+/** سقف اندازه‌ی تصویر ساخته‌شده با API: زمان CPU ساخت فایل تقریباً خطی با بایت‌های تصویر بالا می‌رود (حدود ۳۰ms برای هر مگابایت)،
+ *  و تصویر PNG بزرگ (چند مگابایت) می‌تواند گام ساخت را از سقف CPU رد کند. بزرگ‌تر از این ⇒ یک بار دیگر ساخته می‌شود. */
+const MAX_GEN_BYTES = 1_800_000;
 
 const PX_W = 1200;
 const PX_H = Math.round((PX_W * IMAGE_BOX.h) / IMAGE_BOX.w);
@@ -124,7 +127,13 @@ export async function fetchImages(env: Env, slides: Slide[], max = MAX_IMAGES, _
   const rest = idx.filter((i) => !out.has(i));
   const res = await Promise.all(rest.map(async (i, k) => {
     if (k) await new Promise((r) => setTimeout(r, k * IMAGE_STAGGER_MS));
-    return viaApi(env, slides[i].image_query!);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = await viaApi(env, slides[i].image_query!);
+      if (r && r.length <= MAX_GEN_BYTES) { console.log("image-gen", r.length); return r; }
+      if (r) console.log("image-gen-too-big", r.length, "attempt", attempt + 1);
+      else break; // API تصویر نداد: تلاش دوباره فایده ندارد
+    }
+    return null;
   }));
   rest.forEach((i, k) => { const r = res[k]; if (r) out.set(i, r); });
   return out;

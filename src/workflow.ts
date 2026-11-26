@@ -13,7 +13,7 @@ import { adminIds, botPlatform, bumpStat, getCredit, getUserSeen, noteDeckDone, 
 import { BUY_SITE_NOTE, appReadyMarkup, buyKbFor, fileNameWithSite } from "./deck-service";
 import { linkedFor } from "./link";
 import { deckKeyboard, extraButtons, extrasHint, isGammaAdmin, markExtra, type ExtraKind } from "./extras";
-import { logDeck, saveFile, savePreview } from "./files";
+import { loadFileDirect, logDeck, saveFile, savePreview } from "./files";
 import { fontCaption } from "./themes";
 import { generateImage } from "./images";
 import { IG_WIDTH, renderInfographicHtml } from "./infographic-html";
@@ -107,56 +107,69 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         ? await step.do("images", { retries: { limit: 1, delay: "5 seconds" }, timeout: "3 minutes" }, async () => {
             await status("🎨 ۳/۳ — تصویر اسلایدها…");
             const m = await fetchImages(this.env, deck.slides, maxImages, web, found.images);
-            for (const [i, b] of m) await this.env.FILES.put(imgKey(i), b, { expirationTtl: 3600 }); // FILES = BlobStore (باینری)؛ env.KV فقط رشته می‌پذیرد
+            for (const [i, b] of m) { console.log("image-bytes", i, b.length); await this.env.FILES.put(imgKey(i), b, { expirationTtl: 3600 }); } // FILES = BlobStore (باینری)؛ env.KV فقط رشته می‌پذیرد
             return [...m.keys()];
           }).catch((err): number[] => { console.error("images step", err); return []; }) // عکس شکست خورد ⇒ ارائه بدون عکس
         : [];
 
-      // ساخت فایل و ارسال در یک گام: خروجی باینری نباید از گام برگردانده شود (سقف ۱ مگابایت برای وضعیت گام)
-      built = await step.do("build-and-send",
-        // ساخت فایل CPU‌بر است و گاهی در isolate سرد از سقف CPU رد می‌شود؛ چند تلاش با فاصله‌ی افزایشی تا خطای گذرا به کاربر نرسد
-        { retries: { limit: 3, delay: "10 seconds", backoff: "exponential" }, timeout: "3 minutes" },
-        async () => {
-          await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
-          const images = new Map<number, Uint8Array>();
-          for (const i of imageIdx) {
-            const buf = await this.env.FILES.get(imgKey(i), "arrayBuffer");
-            if (buf) images.set(i, new Uint8Array(buf));
-          }
-          const tBuild = Date.now();
-          const bytes = await buildPptx(deck, {
-            theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images, site: this.env.SITE_URL || "https://pptsaz.ir", mark,
-          });
-          const filename = fileNameWithSite(this.env, deck.title, "pptx");
-          // متن اسلایدها برای پیش‌نمایش و PDF؛ خطا در ذخیره نباید ساخت ارائه را خراب کند
-          await savePreview(this.env, userId, event.instanceId, {
-            deck, theme: settings.theme, template: settings.template, font: settings.font, digits: settings.digits, images: [...images.keys()],
-          }).catch((err) => console.error("savePreview", err));
-          if (web) {
-            // وب: فایل فقط در KV ذخیره می‌شود و کاربر از صفحه دانلودش می‌کند؛ اگر ذخیره نشد گام باید شکست بخورد (تلاش مجدد/برگشت اعتبار)
-            if (!(await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length))) {
-              throw new Error("generated file is too large to store");
-            }
-          } else {
-            // دکمه‌های زیر ارائه: PDF + همراه‌هایی که همراه ارائه خواسته نشده‌اند (پوستر، جزوه، اسلاید صوتی، پادکست؛ هرکدام ۱ اعتبار جدا) + ارسال نظر
-            const hide = new Set<ExtraKind>([poster ? "poster" : null, handout ? "handout" : null, audio ? "audio" : null, podcast ? "podcast" : null].filter((k): k is ExtraKind => !!k));
-            await sendDocument(this.env, chatId, bytes, filename,
-              `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}${extrasHint(extraButtons(this.env, event.instanceId, hide))}`,
-              { reply_markup: deckKeyboard(this.env, event.instanceId, hide, { admin: isGammaAdmin(this.env, event.payload.tgId ?? chatId) }) }); // مدیر در تلگرام: دکمه‌های Gamma هم // نظر کاربر فقط برای مدیر فرستاده می‌شود (ذخیره نمی‌شود)
-            // نگه‌داری ۲۴ ساعته برای /files؛ خطا در ذخیره نباید گام را شکست بدهد (فایل قبلاً فرستاده شده)
-            await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length)
-              .catch((err) => console.error("saveFile", err));
-          }
-          // ثبت در گزارش مدیر (/decks)؛ خطا نباید گام را شکست بدهد
-          const seen = web
-            ? await getUserById(this.env, String(userId)).then((w) => (w ? { n: w.name || w.email || w.mobile || "", u: null } : null)).catch(() => null)
-            : await getUserSeen(this.env, (event.payload.tgId ?? userId) as number).catch(() => null);
-          await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now(), p: deckPlat, ...(event.payload.appv ? { av: event.payload.appv } : {}), ...(event.payload.andv ? { an: event.payload.andv } : {}), ...(event.payload.orig ? { o: event.payload.orig } : {}) })
-            .catch((err) => console.error("logDeck", err));
-          if (web) return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename };
-          if (!poster && !handout && !audio && !podcast) await finalStatus("");
-          return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename };
+      // ساخت فایل و ارسال در چند گام جدا: سقف CPU هر گام جدا حساب می‌شود، پس ساخت pptx (سنگین‌ترین بخش) تنها در گام خودش می‌ماند
+      // و ذخیره/ارسال/ثبت گزارش از بودجه‌ی CPU آن کم نمی‌کنند. خروجی باینری از گام برگردانده نمی‌شود (سقف ۱ مگابایت)؛ بایت‌ها در FILES ذخیره می‌شوند.
+      type BuildMeta = { title: string; slides: number; name: string; imgs: number[] };
+      const buildCfg = { retries: { limit: 3, delay: "10 seconds", backoff: "exponential" }, timeout: "3 minutes" } as const;
+      const buildFn = async (): Promise<BuildMeta> => {
+        await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
+        const images = new Map<number, Uint8Array>();
+        for (const i of imageIdx) {
+          const buf = await this.env.FILES.get(imgKey(i), "arrayBuffer");
+          if (buf) images.set(i, new Uint8Array(buf));
+        }
+        const bytes = await buildPptx(deck, {
+          theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images, site: this.env.SITE_URL || "https://pptsaz.ir", mark,
         });
+        const filename = fileNameWithSite(this.env, deck.title, "pptx");
+        // ذخیره‌ی ۲۴ ساعته (برای دانلود وب، /files و خواندن در گام ارسال)؛ id ثابت است پس تکرار گام بی‌خطر است. اگر ذخیره نشد گام باید شکست بخورد.
+        if (!(await saveFile(this.env, userId, event.instanceId, bytes, filename, deck.title, deck.slides.length))) {
+          throw new Error("generated file is too large to store");
+        }
+        return { title: deck.title.slice(0, 120), slides: deck.slides.length, name: filename, imgs: [...images.keys()] };
+      };
+      let meta: BuildMeta;
+      try {
+        meta = await step.do("build", buildCfg, buildFn);
+      } catch (err) {
+        // همه‌ی تلاش‌های ساخت کامل شکست خورد (معمولاً سقف CPU): یک گام تازه با نام جدید، isolate و بودجه‌ی تلاش مجدد خودش (با همان تصاویر)
+        console.error("build step failed, retrying in a fresh step", String(err).slice(0, 200));
+        if (err instanceof NonRetryableError) throw err;
+        await status("🎨 ۳/۳ — تلاش دوباره برای ساخت فایل…");
+        meta = await step.do("build-2", buildCfg, buildFn);
+      }
+
+      // تلگرام/بله/…: فایل از ذخیره‌گاه خوانده و فرستاده می‌شود (وب: کاربر از صفحه دانلود می‌کند و این گام لازم نیست)
+      if (!web) {
+        await step.do("send", { retries: { limit: 2, delay: "5 seconds", backoff: "exponential" }, timeout: "3 minutes" }, async () => {
+          const f = await loadFileDirect(this.env, userId, event.instanceId);
+          if (!f) throw new Error("built file not found in storage");
+          // دکمه‌های زیر ارائه: PDF + همراه‌هایی که همراه ارائه خواسته نشده‌اند (پوستر، جزوه، اسلاید صوتی، پادکست؛ هرکدام ۱ اعتبار جدا) + ارسال نظر
+          const hide = new Set<ExtraKind>([poster ? "poster" : null, handout ? "handout" : null, audio ? "audio" : null, podcast ? "podcast" : null].filter((k): k is ExtraKind => !!k));
+          await sendDocument(this.env, chatId, new Uint8Array(f.data), meta.name,
+            `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}${extrasHint(extraButtons(this.env, event.instanceId, hide))}`,
+            { reply_markup: deckKeyboard(this.env, event.instanceId, hide, { admin: isGammaAdmin(this.env, event.payload.tgId ?? chatId) }) }); // مدیر در تلگرام: دکمه‌های Gamma هم
+        });
+      }
+
+      // کارهای جانبی: پیش‌نمایش، گزارش مدیر و پیام پایانی؛ بدون تلاش مجدد و هر خطا فقط لاگ می‌شود (فایل قبلاً ساخته/فرستاده شده و نباید به «برگشت اعتبار» برسد)
+      await step.do("post", { retries: { limit: 0, delay: "1 second" }, timeout: "1 minute" }, async () => {
+        await savePreview(this.env, userId, event.instanceId, {
+          deck, theme: settings.theme, template: settings.template, font: settings.font, digits: settings.digits, images: meta.imgs,
+        }).catch((err) => console.error("savePreview", err));
+        const seen = web
+          ? await getUserById(this.env, String(userId)).then((w) => (w ? { n: w.name || w.email || w.mobile || "", u: null } : null)).catch(() => null)
+          : await getUserSeen(this.env, (event.payload.tgId ?? userId) as number).catch(() => null);
+        await logDeck(this.env, { id: event.instanceId, userId, n: seen?.n ?? "", u: seen?.u ?? null, title: deck.title, slides: deck.slides.length, t: Date.now(), p: deckPlat, ...(event.payload.appv ? { av: event.payload.appv } : {}), ...(event.payload.andv ? { an: event.payload.andv } : {}), ...(event.payload.orig ? { o: event.payload.orig } : {}) })
+          .catch((err) => console.error("logDeck", err));
+        if (!web && !poster && !handout && !audio && !podcast) await finalStatus("");
+      }).catch((err) => console.error("post step", String(err).slice(0, 200)));
+      built = { title: meta.title, slides: meta.slides, name: meta.name };
 
       // پوستر (اینفوگرافیک) همراه ارائه: ارائه تا اینجا تحویل شده؛ هر خطای پوستر فقط پیام هشدار می‌دهد و نه اعتبار برمی‌گردد نه کار شکست می‌خورد
       if (poster) {
