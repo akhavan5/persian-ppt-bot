@@ -159,3 +159,27 @@ func rateText(_ r: Float) -> String {
     let s = r == r.rounded() ? String(Int(r)) : String(r)
     return Fa.digits(s).replacingOccurrences(of: ".", with: "٫") + "×"
 }
+
+// MARK: - ستون خوانا روی iPad
+
+/// روی iPad (و iPhone بزرگ در حالت افقی) محتوا را در ستونی با عرض خوانا وسط می‌گذارد تا کارت‌ها و فرم‌ها کش نیایند.
+/// روی iPhone و حالت‌های فشرده هیچ تغییری ایجاد نمی‌کند.
+struct ReadableColumn: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var hSize
+    var maxWidth: CGFloat = 720
+
+    func body(content: Content) -> some View {
+        if hSize == .regular {
+            ZStack {
+                Color(.systemGroupedBackground).ignoresSafeArea()
+                content.frame(maxWidth: maxWidth)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func readableColumn(_ maxWidth: CGFloat = 720) -> some View { modifier(ReadableColumn(maxWidth: maxWidth)) }
+}

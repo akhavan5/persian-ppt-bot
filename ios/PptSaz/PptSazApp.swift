@@ -172,16 +172,20 @@ struct MainTabs: View {
     var body: some View {
         TabView(selection: $m.selectedTab) {
             CreateView()
+                .readableColumn()
                 .tabItem { Label("ساخت", systemImage: "wand.and.stars") }
                 .tag(0)
             FilesView()
+                .readableColumn()
                 .tabItem { Label("فایل‌ها", systemImage: "folder.fill") }
                 .badge(m.files.filter { !$0.sample }.count)
                 .tag(1)
             SettingsView()
+                .readableColumn()
                 .tabItem { Label("تنظیمات", systemImage: "slider.horizontal.3") }
                 .tag(2)
             AccountView()
+                .readableColumn()
                 .tabItem { Label("حساب", systemImage: "person.crop.circle.fill") }
                 .tag(3)
         }
