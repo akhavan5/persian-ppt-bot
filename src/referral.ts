@@ -78,7 +78,7 @@ export async function notifyInviterJoined(env: Env, inviterId: RefId): Promise<v
     const done = await refCount(env, inviterId);
     if (done >= REF_MAX) return;
     if (await hitLimit(env, `refjn:${inviterId}`, 3, 86_400)) return;
-    const left = REF_EVERY - ((done - await refPaid(env, inviterId, done)) % REF_EVERY); // بر پایه‌ی دعوت‌های تسویه‌نشده (نه صرفاً زوج/فرد بودن شمارنده)
+    const left = REF_EVERY - ((done - await refPaid(env, inviterId, done)) % REF_EVERY); // بر پایه‌ی دعوت‌های تسویه‌نشده (نه صرفاً باقی‌مانده‌ی شمارنده)
     await notifyInviter(env, inviterId, [
       "👋 <b>یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد</b>",
       "",
@@ -132,8 +132,8 @@ export async function referralState(env: Env, uid: Uid): Promise<{ id: RefId | n
   return { id, count, canClaim: counted === null && pend === null, banned };
 }
 
-/** تسویه‌ی یک‌باره‌ی دعوت‌های قبلی بعد از تغییر قانون (هر ۵ دعوت = ۱ پلاس ← هر ۲ دعوت = ۱ اعتبار معمولی).
- *  برای هر دعوت‌کننده: پلاس‌های قبلاً داده‌شده (floor(دعوت/۵)) دست‌نخورده می‌مانند و فقط دعوت‌های «تسویه‌نشده» (دعوت − مضرب ۵) جفت‌جفت اعتبار معمولی می‌شوند.
+/** تسویه‌ی یک‌باره‌ی دعوت‌های قبلی بعد از تغییر قانون (هر ۵ دعوت = ۱ پلاس ← هر ۳ دعوت = ۱ اعتبار معمولی).
+ *  برای هر دعوت‌کننده: پلاس‌های قبلاً داده‌شده (floor(دعوت/۵)) دست‌نخورده می‌مانند و فقط دعوت‌های «تسویه‌نشده» (دعوت − مضرب ۵) دسته‌دسته (سه‌تایی) اعتبار معمولی می‌شوند.
  *  idempotent است (refpaid: پیش می‌رود)، پس اجرای دوباره چیزی اضافه نمی‌دهد. به هر دعوت‌کننده‌ای که اعتبار گرفت پیام می‌رود.
  *  cursor/limit: برای جلوگیری از سقف درخواست‌های یک اجرا، هر بار حداکثر limit دعوت‌کننده پردازش می‌شود؛ done=false یعنی دوباره اجرا کن. */
 export interface SettleReport { inviters: number; granted: number; credits: number; errors: number; done: boolean; cursor: string }
@@ -154,7 +154,7 @@ export async function settleLegacyReferrals(env: Env, cursor = "", limit = 60): 
       if (n > 0) {
         rep.granted++; rep.credits += n;
         await notifyInviter(env, id, [
-          "🎁 <b>قانون دعوت دوستان آسان‌تر شد!</b>",
+          "🎁 <b>قانون دعوت دوستان به‌روز شد!</b>",
           "",
           `از حالا به ازای هر <b>${toFa(String(REF_EVERY))} دعوت موفق</b> ${toFa(String(REF_CREDITS))} اعتبار (یک ارائه‌ی رایگان) می‌گیری.`,
           `دعوت‌هایی که قبلاً پاداشی نگرفته بودند حساب شد و <b>${toFa(String(n))} اعتبار</b> به حسابت اضافه شد. برای دیدن اعتبار: /credit`,

@@ -183,8 +183,8 @@ final class Api {
         let link = j["webLink"].str.isEmpty ? j["link"].str : j["webLink"].str
         return InviteInfo(
             link: link, count: j["count"].int,
-            max: j["max"].exists ? j["max"].int : 50,
-            every: j["every"].exists ? j["every"].int : 2,
+            max: j["max"].exists ? j["max"].int : 51,
+            every: j["every"].exists ? j["every"].int : 3,
             canClaim: j["canClaim"].bool
         )
     }

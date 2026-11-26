@@ -272,7 +272,7 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
 
 /** GET|POST /api/invite (و POST /api/miniapp/invite برای نسخه‌های قدیمی) — دعوت دوستان برای همه‌ی کلاینت‌ها: سایت، اپ اندروید، Mini App تلگرام/بله و برنامک ایتا.
  *  link = لینک اختصاصی پلتفرم خودِ حساب (ربات تلگرام/بله/روبیکا یا برنامک ایتا)؛ webLink = لینک سایت (برای همه کار می‌کند: ثبت‌نام/ورود در سایت یا اپ، بعد کد خودکار ثبت می‌شود).
- *  هر ۲ دوست جدید که اولین ارائه‌شان را بسازند = ۱ اعتبار معمولی تا ۵۰ دعوت (مثل /invite ربات). */
+ *  هر ۳ دوست جدید که اولین ارائه‌شان را بسازند = ۱ اعتبار معمولی تا ۵۱ دعوت (مثل /invite ربات). */
 export async function inviteInfo(env: Env, user: WebUser): Promise<Response> {
   const st = await referralState(env, user.id);
   if (st.id === null) return err("حساب شما پیدا نشد؛ دوباره وارد شو.", 409);
