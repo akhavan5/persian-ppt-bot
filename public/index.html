@@ -1177,11 +1177,28 @@ $("#otpResend").onclick = (ev) => {
 $("#otpEdit").onclick = otpReset;
 
 // ---------- پروفایل ----------
+// پیش‌نویس تایید: بعد از «ارسال کد» مقدار (ایمیل/شماره) و مرحله‌ی کد روی دستگاه می‌ماند؛ اگر کاربر برای گرفتن کد پنجره/تب را ببندد یا از صفحه برود،
+// با باز کردن دوباره‌ی پروفایل همان مرحله‌ی «وارد کردن کد» برمی‌گردد و ایمیل/شماره دوباره پرسیده نمی‌شود. کد در سرور ۵ دقیقه اعتبار دارد (OTP_TTL)، پس پیش‌نویس هم ۵ دقیقه.
+const PFD_TTL = 300000;
+const pfdKey = (kind) => "pptsaz.pfd:" + kind + ":" + (me && me.user ? me.user.id : "");
+function pfdSave(kind, v) { try { localStorage.setItem(pfdKey(kind), JSON.stringify({ v, at: Date.now() })); } catch {} }
+function pfdClear(kind) { try { localStorage.removeItem(pfdKey(kind)); } catch {} }
+function pfdLoad(kind) {
+  try {
+    const d = JSON.parse(localStorage.getItem(pfdKey(kind)) || "null");
+    if (d && typeof d.v === "string" && d.v && Date.now() - d.at < PFD_TTL) return d;
+    localStorage.removeItem(pfdKey(kind));
+  } catch {}
+  return null;
+}
+const pfdLeft = (d) => Math.max(0, 60 - Math.floor((Date.now() - d.at) / 1000)); // زمان باقی‌مانده‌ی «ارسال دوباره»
 function renderPfEmail() {
   const u = me.user;
   $("#pfEmail").textContent = u.email || "—";
   show($("#pfEmAdd"), !u.email && !!cfg.emailOtp);
   show($("#pfEmCodeRow"), false); $("#pfEm").value = ""; $("#pfEmCode").value = ""; $("#pfEmSend").disabled = false; $("#pfEmSend").textContent = "ارسال کد";
+  const d = !u.email && pfdLoad("email");
+  if (d) { $("#pfEm").value = d.v; show($("#pfEmCodeRow"), true); countdown($("#pfEmSend"), pfdLeft(d), "ارسال دوباره"); }
 }
 function renderPfMobile() {
   const u = me.user;
@@ -1189,6 +1206,8 @@ function renderPfMobile() {
   show($("#pfMobAdd"), !u.mobile && !!cfg.otp);
   if (!u.mobile && !cfg.otp) { $("#pfMobSet").textContent = "—"; show($("#pfMobSet"), true); }
   show($("#pfCodeRow"), false); $("#pfMob").value = ""; $("#pfCode").value = ""; $("#pfMobSend").disabled = false; $("#pfMobSend").textContent = "ارسال کد";
+  const d = !u.mobile && pfdLoad("mobile");
+  if (d) { $("#pfMob").value = d.v; show($("#pfCodeRow"), true); countdown($("#pfMobSend"), pfdLeft(d), "ارسال دوباره"); }
 }
 // ---------- اتصال پلتفرم‌ها (چند پیام‌رسان همزمان) ----------
 // اتصال فقط با شماره‌ی موبایل است: کاربر در ربات/برنامک هر پلتفرم همان شماره را تأیید می‌کند و همان لحظه به این حساب وصل می‌شود (سرور: profile.ts ← attachContact).
@@ -1286,14 +1305,14 @@ $("#pfMobSend").onclick = (ev) => {
   const m = normMob($("#pfMob").value);
   if (!m) { msg.textContent = "شماره‌ی موبایل معتبر نیست؛ مثل ۰۹۱۲۳۴۵۶۷۸۹ وارد کن."; show(msg, true); return; }
   return busy(ev.currentTarget, "در حال ارسال پیامک…", async () => {
-    try { const sr = await sendCode(m); show($("#pfCodeRow"), true); $("#pfCode").focus(); countdown($("#pfMobSend"), 60, "ارسال دوباره"); toast("کد " + sentVia(sr)); }
+    try { const sr = await sendCode(m); pfdSave("mobile", m); show($("#pfCodeRow"), true); $("#pfCode").focus(); countdown($("#pfMobSend"), 60, "ارسال دوباره"); toast("کد " + sentVia(sr)); }
     catch (e) { msg.textContent = e.message; show(msg, true); }
   });
 };
 $("#pfMobVerify").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
   return busy(ev.currentTarget, "در حال بررسی…", async () => {
-    try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); me.user = r.user; renderPfMobile(); await afterContact("mobile", r, "شماره‌ی موبایل ثبت شد ✓");
+    try { const r = await api("/api/profile/mobile", { method: "POST", body: { mobile: normMob($("#pfMob").value), code: $("#pfCode").value } }); pfdClear("mobile"); me.user = r.user; renderPfMobile(); await afterContact("mobile", r, "شماره‌ی موبایل ثبت شد ✓");
       if (pendingPlan) { const id = pendingPlan; pendingPlan = null; $("#profileDlg").close(); buyPlan(id); } }
     catch (e) { msg.textContent = e.message; show(msg, true); }
   });
@@ -1303,14 +1322,14 @@ $("#pfEmSend").onclick = (ev) => {
   const e = normEmail($("#pfEm").value);
   if (!e) { msg.textContent = "ایمیل معتبر نیست؛ مثل name@example.com وارد کن."; show(msg, true); return; }
   return busy(ev.currentTarget, "در حال ارسال ایمیل…", async () => {
-    try { await sendCode(e); show($("#pfEmCodeRow"), true); $("#pfEmCode").focus(); countdown($("#pfEmSend"), 60, "ارسال دوباره"); toast("کد به ایمیلت فرستاده شد"); }
+    try { await sendCode(e); pfdSave("email", e); show($("#pfEmCodeRow"), true); $("#pfEmCode").focus(); countdown($("#pfEmSend"), 60, "ارسال دوباره"); toast("کد به ایمیلت فرستاده شد"); }
     catch (er) { msg.textContent = er.message; show(msg, true); }
   });
 };
 $("#pfEmVerify").onclick = (ev) => {
   const msg = $("#pfMsg"); show(msg, false);
   return busy(ev.currentTarget, "در حال بررسی…", async () => {
-    try { const r = await api("/api/profile/email", { method: "POST", body: { email: normEmail($("#pfEm").value), code: $("#pfEmCode").value } }); me.user = r.user; renderPfEmail(); await afterContact("email", r, "ایمیل ثبت شد ✓"); }
+    try { const r = await api("/api/profile/email", { method: "POST", body: { email: normEmail($("#pfEm").value), code: $("#pfEmCode").value } }); pfdClear("email"); me.user = r.user; renderPfEmail(); await afterContact("email", r, "ایمیل ثبت شد ✓"); }
     catch (er) { msg.textContent = er.message; show(msg, true); }
   });
 };
