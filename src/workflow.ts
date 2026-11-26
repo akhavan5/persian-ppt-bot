@@ -114,7 +114,8 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
 
       // ساخت فایل و ارسال در یک گام: خروجی باینری نباید از گام برگردانده شود (سقف ۱ مگابایت برای وضعیت گام)
       built = await step.do("build-and-send",
-        { retries: { limit: 1, delay: "5 seconds" }, timeout: "3 minutes" },
+        // ساخت فایل CPU‌بر است و گاهی در isolate سرد از سقف CPU رد می‌شود؛ چند تلاش با فاصله‌ی افزایشی تا خطای گذرا به کاربر نرسد
+        { retries: { limit: 3, delay: "10 seconds", backoff: "exponential" }, timeout: "3 minutes" },
         async () => {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
           const images = new Map<number, Uint8Array>();
