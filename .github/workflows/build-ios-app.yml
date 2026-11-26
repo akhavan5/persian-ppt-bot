@@ -14,6 +14,10 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 40
+    env:
+      # آنالیتیکس iOS (GA4)؛ خالی = خاموش. FIREBASE_SENDER_ID همان شماره‌ی پروژه‌ی اندروید است.
+      FIREBASE_IOS_APP_ID: ${{ secrets.FIREBASE_IOS_APP_ID || '1:201290040240:ios:686d3aa4c2fb96f0b84c75' }}
+      FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID || '201290040240' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +53,7 @@ jobs:
             -project PptSaz.xcodeproj -scheme PptSaz \
             -configuration Release \
             -destination "generic/platform=iOS" \
+            FIREBASE_IOS_APP_ID="$FIREBASE_IOS_APP_ID" FIREBASE_SENDER_ID="$FIREBASE_SENDER_ID" \
             -archivePath build/PptSaz.xcarchive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             | tail -n 40
@@ -70,6 +75,7 @@ jobs:
             -project PptSaz.xcodeproj -scheme PptSaz \
             -configuration Release \
             -destination "generic/platform=iOS" \
+            FIREBASE_IOS_APP_ID="$FIREBASE_IOS_APP_ID" FIREBASE_SENDER_ID="$FIREBASE_SENDER_ID" \
             -archivePath build/PptSazSib.xcarchive \
             PPTSAZ_STORE=sibapp \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
@@ -146,6 +152,7 @@ jobs:
           xcodebuild archive \
             -project PptSaz.xcodeproj -scheme PptSaz \
             -configuration Release -destination "generic/platform=iOS" \
+            FIREBASE_IOS_APP_ID="$FIREBASE_IOS_APP_ID" FIREBASE_SENDER_ID="$FIREBASE_SENDER_ID" \
             -archivePath build/PptSaz.xcarchive \
             DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" CODE_SIGN_IDENTITY="Apple Distribution"
