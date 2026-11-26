@@ -34,7 +34,9 @@ final class AppModel: ObservableObject {
     @Published var filesLoaded = false
     @Published var job: JobState?
     @Published var toastItem: ToastItem?
-    @Published var selectedTab = 0
+    @Published var selectedTab = 0 {
+        didSet { if selectedTab != oldValue { Stats.screen("tab_\(selectedTab)") } }
+    }
     /// پیام «به پلن نیاز داری / اعتبار تمام شد» که به‌صورت هشدار با دکمه‌ی «مشاهده‌ی پلن‌ها» نشان داده می‌شود
     @Published var upsell: String?
     @Published var extraBusy: Set<String> = []
@@ -97,6 +99,7 @@ final class AppModel: ObservableObject {
             UserDefaults.standard.set(cfg.dailyFree > 0, forKey: Pref.dailyFree)
             guard let m = try await api.me() else { toast("ورود کامل نشد؛ دوباره تلاش کنید."); return }
             applyMe(m)
+            Stats.log("login")
             phase = .ready
             afterLogin()
         } catch {
@@ -144,6 +147,7 @@ final class AppModel: ObservableObject {
     }
 
     func logout() async {
+        Stats.log("logout")
         jobTask?.cancel()
         await api.logout()
         me = nil
@@ -419,6 +423,7 @@ final class AppModel: ObservableObject {
                 return false
             }
             Haptic.light()
+            Stats.log("generate_deck", ["slides": String(slides), "handout": String(handout), "images": String(images), "audio": String(audio), "podcast": String(podcast)])
             job = JobState(id: id, message: "در صف ساخت…")
             watch(id, topic: topic)
             // مجوز اعلان در همین لحظه‌ی طبیعی («خبرت می‌کنیم») پرسیده می‌شود؛ بعدش اعلان پشتیبان زمان‌بندی می‌شود

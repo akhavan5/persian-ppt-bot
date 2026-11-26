@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Notify.shared.setup()
         BackgroundJobs.register()      // باید قبل از پایان راه‌اندازی صدا زده شود
         CrashReporter.shared.start()
+        Stats.start()
         return true
     }
 
