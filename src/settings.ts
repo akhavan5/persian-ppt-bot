@@ -1,4 +1,5 @@
 import { BALE_ID_BASE, isBaleId } from "./bale-format";
+import { track } from "./analytics";
 import { isRubikaId } from "./rubika-format";
 import { isEitaaId } from "./eitaa-format";
 import { isSplusId } from "./splus-format";
@@ -459,6 +460,7 @@ export const botPlatform = (id: unknown): Platform => (isSplusId(id) ? "splus" :
 /** شمارنده‌ی روزانه: همیشه کل (stat:نام:تاریخ) و، اگر پلتفرم معلوم باشد، شمارنده‌ی همان پلتفرم (pst:پلتفرم:نام:تاریخ).
  *  شمارنده‌ی کل از همه‌ی پلتفرم‌ها جداست تا آمار و نمای ماهانه‌ی قبلی دست‌نخورده بماند. */
 export async function bumpStat(env: Env, name: StatName, plat?: Platform) {
+  track(env, name, { plat }); // Analytics Engine: همان رویداد برای نمودار زمانی (۳ ماه)؛ شمارنده‌ی D1 زیر برای پنل مدیر می‌ماند
   const day = statDay();
   const keys = [`stat:${name}:${day}`, ...(plat ? [`pst:${plat}:${name}:${day}`] : [])];
   await Promise.all(keys.map(async (k) => {

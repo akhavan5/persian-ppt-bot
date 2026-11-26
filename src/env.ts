@@ -22,6 +22,8 @@ export interface Env {
   DB10?: D1Database;
   /** KV واقعی: فقط برای بایت‌های فایل pptx (یک نوشتن برای هر ارائه، با انقضای خودکار) */
   FILES: KVNamespace;
+  /** Analytics Engine (اختیاری؛ نبودنش بی‌خطر است): آمار خطا/زمان/رویدادها، فقط ۳ ماه. نگاه کنید به src/analytics.ts */
+  AE?: AnalyticsEngineDataset;
   /** KV واقعی بعد از withStore (فقط نمونه‌های دائمی)؛ در wrangler تعریف نمی‌شود */
   FILES_KV?: KVNamespace;
   /** نمای سازگار با KV روی D1؛ در index.ts و Workflowها با withStore ساخته می‌شود و در wrangler تعریف نمی‌شود */
