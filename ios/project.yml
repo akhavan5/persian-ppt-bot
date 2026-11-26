@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0.1"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "3"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
 targets:
   PptSaz:
@@ -41,6 +41,42 @@ targets:
           - CFBundleURLName: ir.pptsaz.app
             CFBundleURLSchemes: [pptsaz]
         LSApplicationQueriesSchemes: [sibapp]
+        # --- قابلیت‌های iOS که حساب Apple Developer نمی‌خواهند ---
+        # پیگیری ساخت در پس‌زمینه (BGTaskScheduler) و ادامه‌ی پخش صوت با قفل‌بودن گوشی
+        UIBackgroundModes: [audio, fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers:
+          - ir.pptsaz.app.refresh
+          - ir.pptsaz.app.poll
+        # میان‌برهای نگه‌داشتن آیکن
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: ir.pptsaz.app.new
+            UIApplicationShortcutItemTitle: ارائه‌ی جدید
+            UIApplicationShortcutItemIconSymbolName: wand.and.stars
+          - UIApplicationShortcutItemType: ir.pptsaz.app.files
+            UIApplicationShortcutItemTitle: فایل‌ها
+            UIApplicationShortcutItemIconSymbolName: folder.fill
+        # دیده‌شدن پوشه‌ی اپ در Files ← On My iPhone
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        # «Open in…» / «Copy to پاورپوینت‌ساز» برای فایل‌های منبع
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: اسناد منبع
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.adobe.pdf
+              - public.image
+              - public.plain-text
+              - public.html
+              - public.json
+              - public.comma-separated-values-text
+              - org.openxmlformats.wordprocessingml.document
+              - org.openxmlformats.presentationml.presentation
+              - org.openxmlformats.spreadsheetml.sheet
+              - public.audio
+        NSCameraUsageDescription: برای اسکن کتاب یا برگه و استخراج متن آن به‌عنوان منبع ارائه
+        NSMicrophoneUsageDescription: برای گفتن موضوع ارائه با صدا و تبدیل آن به متن
+        NSFaceIDUsageDescription: برای قفل اپ با Face ID
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ir.pptsaz.app

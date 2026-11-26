@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import PhotosUI
 import UniformTypeIdentifiers
 
@@ -17,6 +18,8 @@ struct CreateView: View {
     @State private var showSource = false
     @State private var busy = false
     @State private var didInit = false
+    @State private var voiceBusy = false
+    @StateObject private var recorder = VoiceRecorder()
     @FocusState private var topicFocused: Bool
 
     private let samples = ["هوش مصنوعی در آموزش", "برنامه‌ی بازاریابی دیجیتال", "اصول مدیریت زمان", "تغییرات اقلیمی و راه‌حل‌ها", "معرفی استارتاپ"]
@@ -25,6 +28,10 @@ struct CreateView: View {
     private var jobRunning: Bool { m.job?.running ?? false }
     private var canGenerate: Bool {
         topic.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 && !busy && !jobRunning
+    }
+
+    private var draft: DraftForm {
+        DraftForm(topic: topic, source: source, sourceName: sourceName, handout: handout, poster: poster, audio: audio, podcast: podcast)
     }
 
     var body: some View {
@@ -52,7 +59,15 @@ struct CreateView: View {
             .scrollDismissesKeyboard(.interactively)
             .background(Color(.systemGroupedBackground))
             .navigationTitle("ساخت ارائه")
-            .onAppear(perform: applyDefaults)
+            .onAppear {
+                applyDefaults()
+                consumePending()
+                if !m.pendingImports.isEmpty { showSource = true }
+                recorder.onAutoStop = { Task { await finishVoice() } }
+            }
+            .onChange(of: m.pendingTopic) { _ in consumePending() }
+            .onChange(of: m.pendingImports) { l in if !l.isEmpty { showSource = true } }
+            .onChange(of: draft) { d in if didInit && !m.isDemo { Draft.save(d) } }
             .sheet(isPresented: $showSource) {
                 SourceSheet(source: $source, sourceName: $sourceName).environmentObject(m)
             }
@@ -91,7 +106,11 @@ struct CreateView: View {
 
     private var topicCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("موضوع ارائه").font(.headline)
+            HStack {
+                Text("موضوع ارائه").font(.headline)
+                Spacer()
+                if m.cfg.voice { voiceButton }
+            }
             TextField("مثلاً: مزایای کار تیمی در سازمان‌ها", text: $topic, axis: .vertical)
                 .lineLimit(3...8)
                 .focused($topicFocused)
@@ -118,6 +137,27 @@ struct CreateView: View {
             }
         }
         .card()
+    }
+
+    /// ورودی صوتی: ضبط ← تبدیل به متن روی سرور (فقط وقتی سرور Deepgram دارد)
+    @ViewBuilder
+    private var voiceButton: some View {
+        if voiceBusy {
+            HStack(spacing: 6) { ProgressView(); Text("در حال تبدیل صدا…").font(.caption) }
+        } else if recorder.recording {
+            Button { Task { await finishVoice() } } label: {
+                Label("پایان • \(clockText(Double(recorder.seconds)))", systemImage: "stop.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.red)
+            }
+        } else {
+            Button {
+                Task { if let e = await recorder.start() { m.toast(e); Haptic.error() } else { Haptic.light() } }
+            } label: {
+                Label("بگو", systemImage: "mic.fill").font(.subheadline.weight(.semibold))
+            }
+            .disabled(jobRunning)
+        }
     }
 
     private var slidesCard: some View {
@@ -207,7 +247,7 @@ struct CreateView: View {
                 Button {
                     showSource = true
                 } label: {
-                    Label("افزودن متن، PDF، عکس یا لینک", systemImage: "paperclip")
+                    Label("افزودن متن، فایل، عکس، اسکن یا لینک", systemImage: "paperclip")
                 }
                 .buttonStyle(SoftButtonStyle())
             } else {
@@ -238,11 +278,55 @@ struct CreateView: View {
 
     private func applyDefaults() {
         guard !didInit, let me = m.me else { return }
-        didInit = true
         slides = m.cfg.slideChoices.contains(me.settings.slides) && me.settings.slides <= me.maxSlides ? me.settings.slides : (m.cfg.slideChoices.filter { $0 <= me.maxSlides }.last ?? 6)
         images = me.settings.images
         imagesMany = me.settings.imagesMany
-        if m.isDemo && m.job == nil { topic = "اصول مدیریت زمان برای دانشجویان" }
+        if m.isDemo {
+            if m.job == nil { topic = "اصول مدیریت زمان برای دانشجویان" }
+        } else {
+            // پیش‌نویس قبلی (اگر اپ وسط تایپ بسته شده بود)
+            let d = Draft.load()
+            topic = d.topic
+            source = d.source
+            sourceName = d.sourceName
+            handout = d.handout
+            poster = m.cfg.poster ? d.poster : ""
+            audio = m.cfg.audio && d.audio
+            podcast = m.cfg.audio && d.podcast
+        }
+        didInit = true
+    }
+
+    /// موضوعی که از اعلان، میان‌بر آیکن، Shortcuts یا لینک pptsaz://new آمده
+    private func consumePending() {
+        guard let t = m.pendingTopic else { return }
+        m.pendingTopic = nil
+        if !t.isEmpty { topic = t }
+        topicFocused = true
+    }
+
+    private func finishVoice() async {
+        guard recorder.recording else { return }
+        guard let data = recorder.stop() else {
+            m.toast("صدایی ضبط نشد؛ دوباره امتحان کن.")
+            return
+        }
+        voiceBusy = true
+        defer { voiceBusy = false }
+        do {
+            let t = try await Api.shared.extractText(data, mime: "audio/mp4")
+            let text = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.isEmpty { m.toast("صدا تشخیص داده نشد؛ دوباره امتحان کن."); return }
+            if topic.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= 400 {
+                topic = text
+            } else {
+                source = source.isEmpty ? text : source + "\n\n" + text
+                if sourceName.isEmpty { sourceName = "متن صوتی" }
+            }
+            Haptic.success()
+        } catch {
+            m.report(error)
+        }
     }
 
     private func start() async {
@@ -261,6 +345,9 @@ struct CreateView: View {
             poster = ""
             audio = false
             podcast = false
+            source = ""
+            sourceName = ""
+            Draft.clear()
         }
     }
 }
@@ -310,6 +397,18 @@ struct JobCard: View {
                 Text("می‌توانی از اپ بیرون بروی؛ ساخت روی سرور ادامه دارد.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                if m.notifyStatus == .denied {
+                    Button {
+                        Task { await m.enableNotifications() }
+                    } label: {
+                        Label("اعلان‌ها خاموش است؛ برای خبر گرفتن روشنشان کن", systemImage: "bell.slash")
+                            .font(.caption.weight(.semibold))
+                    }
+                } else if m.notifyStatus == .authorized {
+                    Text("آماده که شد اعلان می‌گیری (ممکن است iOS چند دقیقه دیرتر نشانش بدهد).")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .card()
@@ -329,12 +428,14 @@ struct SourceSheet: View {
     @Binding var sourceName: String
 
     @State private var text = ""
+    @State private var names: [String] = []
     @State private var link = ""
     @State private var busy = false
     @State private var busyMsg = ""
     @State private var error: String?
     @State private var showImporter = false
-    @State private var photoItem: PhotosPickerItem?
+    @State private var showScanner = false
+    @State private var photoItems: [PhotosPickerItem] = []
 
     private let maxChars = 120_000
 
@@ -343,13 +444,23 @@ struct SourceSheet: View {
             Form {
                 Section {
                     Button { showImporter = true } label: {
-                        Label("انتخاب فایل (PDF یا متن)", systemImage: "doc.badge.plus")
+                        Label("انتخاب فایل (PDF، Word، PowerPoint، Excel، متن…)", systemImage: "doc.badge.plus")
                     }
-                    PhotosPicker(selection: $photoItem, matching: .images) {
+                    PhotosPicker(selection: $photoItems, maxSelectionCount: 5, matching: .images) {
                         Label("انتخاب عکس از گالری (استخراج متن)", systemImage: "photo")
                     }
+                    if DocumentScanner.supported {
+                        Button { showScanner = true } label: {
+                            Label("اسکن کتاب یا برگه با دوربین", systemImage: "doc.viewfinder")
+                        }
+                    }
+                    PasteButton(payloadType: String.self) { strings in
+                        if let s = strings.first, !s.isEmpty { append(s, name: "متن چسبانده‌شده") }
+                    }
                 } header: {
-                    Text("از فایل")
+                    Text("از فایل و دوربین")
+                } footer: {
+                    Text(m.cfg.voice ? "فایل صوتی (mp3، m4a، wav…) هم پشتیبانی می‌شود و به متن تبدیل می‌شود. چند فایل را می‌توانی با هم انتخاب کنی." : "چند فایل را می‌توانی با هم انتخاب کنی؛ متن همه پشت‌سرهم اضافه می‌شود.")
                 }
                 if m.cfg.link {
                     Section {
@@ -393,77 +504,105 @@ struct SourceSheet: View {
                     Button("تأیید") {
                         let t = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxChars))
                         source = t
-                        if t.isEmpty { sourceName = "" } else if sourceName.isEmpty { sourceName = "متن منبع" }
+                        if t.isEmpty { sourceName = "" }
+                        else if !names.isEmpty { sourceName = names.joined(separator: "، ") }
+                        else if sourceName.isEmpty { sourceName = "متن منبع" }
                         dismiss()
                     }
                     .disabled(busy)
                 }
             }
-            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.pdf, .plainText, .text, .image]) { result in
-                Task { await handleFile(result) }
+            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+                if case .success(let urls) = result { Task { await importURLs(urls) } }
             }
-            .onChange(of: photoItem) { item in
-                guard let item = item else { return }
-                Task { await handlePhoto(item) }
+            .fullScreenCover(isPresented: $showScanner) {
+                DocumentScanner(onFinish: { pages in
+                    showScanner = false
+                    Task { await extractPages(pages) }
+                }, onCancel: { showScanner = false })
+                .ignoresSafeArea()
+            }
+            .onChange(of: photoItems) { items in
+                guard !items.isEmpty else { return }
+                Task { await handlePhotos(items) }
             }
             .onAppear {
                 text = source
+                let urls = m.takeImports()
+                if !urls.isEmpty { Task { await importURLs(urls) } }
             }
         }
     }
 
-    private func setText(_ t: String, name: String) {
-        text = String(t.prefix(maxChars))
-        sourceName = name
+    private func append(_ t: String, name: String) {
+        let clean = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        let joined = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? clean : text.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" + clean
+        text = String(joined.prefix(maxChars))
+        if !name.isEmpty { names.append(name) }
         error = nil
     }
 
-    private func handleFile(_ result: Result<URL, Error>) async {
-        guard case .success(let url) = result else { return }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else {
-            error = "خواندن فایل ممکن نشد."
-            return
-        }
-        let ext = url.pathExtension.lowercased()
-        if ext == "txt" || ext == "md" || ext == "text" {
-            let t = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
-            setText(t, name: url.lastPathComponent)
-            return
-        }
-        if ext == "pdf" {
-            await extract(data, mime: "application/pdf", name: url.lastPathComponent)
-        } else if let img = UIImage(data: data), let jpg = img.jpegData(compressionQuality: 0.85) {
-            await extract(jpg, mime: "image/jpeg", name: url.lastPathComponent)
-        } else {
-            error = "این نوع فایل پشتیبانی نمی‌شود؛ PDF، عکس یا متن انتخاب کن."
-        }
-    }
-
-    private func handlePhoto(_ item: PhotosPickerItem) async {
-        defer { photoItem = nil }
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let img = UIImage(data: data), let jpg = img.jpegData(compressionQuality: 0.85) else {
-            error = "خواندن عکس ممکن نشد."
-            return
-        }
-        await extract(jpg, mime: "image/jpeg", name: "عکس")
-    }
-
-    private func extract(_ data: Data, mime: String, name: String) async {
-        if data.count > 15_000_000 { error = "حجم فایل زیاد است؛ فایل کوچک‌تری انتخاب کن."; return }
+    private func importURLs(_ urls: [URL]) async {
         busy = true
-        busyMsg = "در حال استخراج متن…"
         error = nil
         defer { busy = false }
-        do {
-            let t = try await Api.shared.extractText(data, mime: mime)
-            if t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { error = "متنی در فایل پیدا نشد." }
-            else { setText(t, name: name) }
-        } catch {
-            self.error = (error as? ApiError)?.message ?? error.localizedDescription
+        var firstError: String?
+        var added = false
+        for (i, u) in urls.enumerated() {
+            busyMsg = urls.count > 1 ? "فایل \((i + 1).fa) از \(urls.count.fa)…" : "در حال خواندن فایل…"
+            do {
+                let t = try await SourceImporter.read(url: u, voiceEnabled: m.cfg.voice) { s in busyMsg = s }
+                append(t, name: u.lastPathComponent)
+                added = true
+            } catch {
+                if firstError == nil { firstError = (error as? ApiError)?.message ?? error.localizedDescription }
+            }
         }
+        if let e = firstError { error = added ? "بعضی فایل‌ها خوانده نشد: \(e)" : e }
+    }
+
+    private func handlePhotos(_ items: [PhotosPickerItem]) async {
+        defer { photoItems = [] }
+        busy = true
+        error = nil
+        defer { busy = false }
+        var firstError: String?
+        for (i, item) in items.enumerated() {
+            busyMsg = items.count > 1 ? "عکس \((i + 1).fa) از \(items.count.fa)…" : "در حال استخراج متن…"
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let jpg = ImageTools.normalizedJPEG(data) else {
+                if firstError == nil { firstError = "خواندن عکس ممکن نشد." }
+                continue
+            }
+            do {
+                let t = try await Api.shared.extractText(jpg, mime: "image/jpeg")
+                if t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { if firstError == nil { firstError = "متنی در عکس پیدا نشد." } }
+                else { append(t, name: "عکس") }
+            } catch {
+                if firstError == nil { firstError = (error as? ApiError)?.message ?? error.localizedDescription }
+            }
+        }
+        if let e = firstError { error = e }
+    }
+
+    private func extractPages(_ pages: [UIImage]) async {
+        busy = true
+        error = nil
+        defer { busy = false }
+        var firstError: String?
+        for (i, img) in pages.enumerated() {
+            busyMsg = "صفحه \((i + 1).fa) از \(pages.count.fa)…"
+            guard let jpg = ImageTools.normalizedJPEG(img) else { continue }
+            do {
+                let t = try await Api.shared.extractText(jpg, mime: "image/jpeg")
+                if !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { append(t, name: "اسکن") }
+                else if firstError == nil { firstError = "متنی در یکی از صفحه‌ها پیدا نشد." }
+            } catch {
+                if firstError == nil { firstError = (error as? ApiError)?.message ?? error.localizedDescription }
+            }
+        }
+        if let e = firstError { error = e }
     }
 
     private func fetchLink() async {
@@ -474,7 +613,7 @@ struct SourceSheet: View {
         do {
             let t = try await Api.shared.linkSource(link.trimmingCharacters(in: .whitespaces))
             if t.isEmpty { error = "متنی از این لینک گرفته نشد." }
-            else { setText(t, name: link) }
+            else { append(t, name: link) }
         } catch {
             self.error = (error as? ApiError)?.message ?? error.localizedDescription
         }

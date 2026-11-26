@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 struct ModeInfo: Identifiable {
     let id: String
@@ -16,6 +17,11 @@ private let modes: [ModeInfo] = [
 
 struct SettingsView: View {
     @EnvironmentObject var m: AppModel
+    @AppStorage(Pref.jobNotify) private var jobNotify = true
+    @AppStorage(Pref.reminders) private var reminders = true
+    @AppStorage(Pref.autoSave) private var autoSave = true
+    @AppStorage(Pref.lock) private var lockOn = false
+    @State private var confirmClear = false
 
     var body: some View {
         NavigationStack {
@@ -113,11 +119,85 @@ struct SettingsView: View {
                             Text("مدل هوش مصنوعی")
                         }
                     }
+
+                    notificationsSection
+                    storageSection
+                    securitySection
                 }
                 .navigationTitle("تنظیمات")
+                .task { await m.refreshNotifyStatus(); m.refreshLibrary() }
+                .confirmationDialog("همه‌ی فایل‌های ذخیره‌شده روی گوشی پاک شود؟", isPresented: $confirmClear, titleVisibility: .visible) {
+                    Button("پاک کردن همه", role: .destructive) {
+                        LocalLibrary.shared.removeAll()
+                        m.refreshLibrary()
+                        m.toast("فایل‌های ذخیره‌شده پاک شد.")
+                    }
+                    Button("انصراف", role: .cancel) {}
+                }
             } else {
                 ProgressView()
             }
+        }
+    }
+
+    // MARK: اعلان‌ها، ذخیره‌سازی و امنیت
+
+    private var notifyStatusText: String {
+        switch m.notifyStatus {
+        case .authorized, .provisional, .ephemeral: return "روشن"
+        case .denied: return "خاموش (در تنظیمات iOS)"
+        default: return "هنوز پرسیده نشده"
+        }
+    }
+
+    private var notificationsSection: some View {
+        Section {
+            LabeledContent("اعلان‌های اپ", value: notifyStatusText)
+            if m.notifyStatus == .notDetermined {
+                Button("روشن کردن اعلان‌ها") { Task { await m.enableNotifications() } }
+            } else if m.notifyStatus == .denied {
+                Button("باز کردن تنظیمات iOS") { Notify.shared.openSystemSettings() }
+            }
+            Toggle("آماده شدن ارائه و فایل‌ها", isOn: $jobNotify)
+            Toggle("یادآورهای هوشمند", isOn: $reminders)
+                .onChange(of: reminders) { _ in ReminderCenter.shared.refresh() }
+        } header: {
+            Text("اعلان‌ها")
+        } footer: {
+            Text("اعلان‌ها محلی‌اند و از سرور خارجی نمی‌آیند. iOS اجازه نمی‌دهد اپ بسته‌شده بی‌وقفه کار کند، پس اگر اپ را کامل ببندی ممکن است اعلان «آماده شد» چند دقیقه دیرتر برسد؛ نتیجه همیشه در «فایل‌ها» هست. یادآورها فقط ساعت ۹ تا ۲۱ و حداکثر روزی یکی می‌آیند.")
+        }
+    }
+
+    private var storageSection: some View {
+        Section {
+            Toggle("ذخیره‌ی خودکار روی گوشی", isOn: $autoSave)
+            LabeledContent("ذخیره‌شده", value: "\(m.library.count.fa) فایل • \(formatBytes(m.library.reduce(0) { $0 + $1.size }))")
+            if !m.library.isEmpty {
+                Button("پاک کردن فایل‌های ذخیره‌شده", role: .destructive) { confirmClear = true }
+            }
+        } header: {
+            Text("ذخیره‌سازی")
+        } footer: {
+            Text("فایل‌ها روی سرور فقط ۲۴ ساعت می‌مانند؛ با این گزینه یک نسخه (تا ۴۰ فایل اخیر) روی گوشی می‌ماند و در برنامه‌ی Files ← On My iPhone ← پاورپوینت‌ساز هم دیده می‌شود. با خروج از حساب این فایل‌ها پاک می‌شوند.")
+        }
+    }
+
+    private var securitySection: some View {
+        Section {
+            Toggle("قفل اپ با \(AppLock.methodName())", isOn: Binding(
+                get: { lockOn },
+                set: { on in
+                    if on && !AppLock.available() {
+                        m.toast("برای قفل اپ، اول در تنظیمات iOS رمز گوشی بگذار.")
+                        return
+                    }
+                    lockOn = on
+                }
+            ))
+        } header: {
+            Text("امنیت")
+        } footer: {
+            Text("با روشن بودن، هر بار که به اپ برمی‌گردی باید هویتت را تأیید کنی و محتوای اپ در نمای چندوظیفگی پنهان می‌شود.")
         }
     }
 

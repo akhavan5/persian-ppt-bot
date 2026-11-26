@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 struct ToastItem: Identifiable, Equatable {
     let id = UUID()
@@ -10,6 +11,13 @@ enum PollResult {
     case done(J)
     case failed(String)
     case cancelled
+}
+
+/// درخواست باز کردن جزئیات یک فایل (از اعلان یا Spotlight)؛ action: open | download | preview
+struct FocusRequest: Identifiable, Equatable {
+    let id: String
+    let action: String
+    let token = UUID()
 }
 
 @MainActor
@@ -35,11 +43,24 @@ final class AppModel: ObservableObject {
     @Published var payURL: IdentURL?
     @Published var needMobile = false
 
+    /// فایل‌های ذخیره‌شده روی گوشی
+    @Published var library: [LocalFile] = []
+    /// موضوعی که از اعلان / میان‌بر / Shortcuts آمده و باید در فرم ساخت گذاشته شود (رشته‌ی خالی = فقط فرم را باز کن)
+    @Published var pendingTopic: String?
+    /// فایل‌هایی که از «Open in…» آمده‌اند و باید به منبع ارائه اضافه شوند
+    @Published var pendingImports: [URL] = []
+    @Published var focusFile: FocusRequest?
+    @Published var focusLocal: String?
+    @Published var notifyStatus: UNAuthorizationStatus = .notDetermined
+
     /// فقط برای اسکرین‌شات‌های معرفی (آرگومان اجرای -demo YES)
     var isDemo = false
 
     private var jobTask: Task<Void, Never>?
     private var lastResume = Date.distantPast
+    private var pendingRoute: NotifyRoute?
+    private var lastURL: (String, Date)?
+    private var lastIndexed: [String] = []
     private let api = Api.shared
 
     // MARK: راه‌اندازی
@@ -47,15 +68,23 @@ final class AppModel: ObservableObject {
     func bootstrap() async {
         if UserDefaults.standard.bool(forKey: "demo") { loadDemo(); return }
         phase = .loading
+        refreshLibrary()
+        if files.isEmpty {
+            let cached = FileCache.load()
+            if !cached.isEmpty { files = cached; filesLoaded = true }
+        }
         do {
             cfg = try await api.config()
-            me = try await api.me()
-            if me == nil {
-                phase = .loggedOut
-            } else {
+            UserDefaults.standard.set(cfg.dailyFree > 0, forKey: Pref.dailyFree)
+            let m = try await api.me()
+            if let m = m {
+                applyMe(m)
                 api.persistCookies()
                 phase = .ready
                 afterLogin()
+            } else {
+                me = nil
+                phase = .loggedOut
             }
         } catch {
             phase = .failed((error as? ApiError)?.message ?? error.localizedDescription)
@@ -65,8 +94,9 @@ final class AppModel: ObservableObject {
     func loginSucceeded() async {
         do {
             if cfg.templates.isEmpty { cfg = try await api.config() }
-            me = try await api.me()
-            if me == nil { toast("ورود کامل نشد؛ دوباره تلاش کنید."); return }
+            UserDefaults.standard.set(cfg.dailyFree > 0, forKey: Pref.dailyFree)
+            guard let m = try await api.me() else { toast("ورود کامل نشد؛ دوباره تلاش کنید."); return }
+            applyMe(m)
             phase = .ready
             afterLogin()
         } catch {
@@ -74,24 +104,42 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func applyMe(_ m: Me) {
+        me = m
+        ReminderCenter.shared.onMe(m, dailyFreeOn: cfg.dailyFree > 0)
+    }
+
     private func afterLogin() {
         Task { await loadFiles() }
         if let a = me?.activeJob, job == nil { watch(a) }
+        Notify.shared.clearDelivered()
+        refreshLibrary()
+        consumeExternalRequests()
+        if let r = pendingRoute { pendingRoute = nil; apply(r) }
+        Task {
+            await refreshNotifyStatus()
+            await flushPendingSaves()
+        }
     }
 
-    func onResume() async {
-        guard !isDemo, phase == .ready, Date().timeIntervalSince(lastResume) > 5 else { return }
+    func onResume(force: Bool = false) async {
+        guard !isDemo, phase == .ready, force || Date().timeIntervalSince(lastResume) > 5 else { return }
         lastResume = Date()
+        Notify.shared.clearDelivered()
         await refreshMe()
         await loadFiles()
         if job == nil, let a = me?.activeJob { watch(a) }
+        refreshLibrary()
+        consumeExternalRequests()
+        await refreshNotifyStatus()
+        await flushPendingSaves()
     }
 
     func refreshMe() async {
         if isDemo { return }
         do {
             let m = try await api.me()
-            if let m = m { me = m } else if phase == .ready { sessionExpired() }
+            if let m = m { applyMe(m) } else if phase == .ready { sessionExpired() }
         } catch {}
     }
 
@@ -103,11 +151,24 @@ final class AppModel: ObservableObject {
         filesLoaded = false
         job = nil
         selectedTab = 0
+        pendingTopic = nil
+        pendingImports = []
+        BackgroundJobs.shared.clear()
+        PendingSaves.clear()
+        Draft.clear()
+        FileCache.clear()
+        LocalLibrary.shared.removeAll()
+        SpotlightIndex.clear()
+        library = []
+        lastIndexed = []
+        ReminderCenter.shared.onLogout()
+        await Notify.shared.cancelAll()
         phase = .loggedOut
     }
 
     private func sessionExpired() {
         jobTask?.cancel()
+        BackgroundJobs.shared.clear()
         api.clearSession()
         me = nil
         job = nil
@@ -135,6 +196,77 @@ final class AppModel: ObservableObject {
             toast(e.message)
         } else {
             toast(error.localizedDescription)
+        }
+    }
+
+    // MARK: اعلان‌ها
+
+    func refreshNotifyStatus() async {
+        notifyStatus = await Notify.shared.status()
+    }
+
+    func enableNotifications() async {
+        if notifyStatus == .notDetermined {
+            await Notify.shared.askIfNeeded()
+        } else {
+            Notify.shared.openSystemSettings()
+        }
+        await refreshNotifyStatus()
+        ReminderCenter.shared.refresh()
+    }
+
+    // MARK: مسیر‌یابی (اعلان، میان‌بر، Shortcuts، Spotlight، لینک)
+
+    func handleRoute(_ r: NotifyRoute) {
+        guard phase == .ready else { pendingRoute = r; return }
+        apply(r)
+    }
+
+    private func apply(_ r: NotifyRoute) {
+        if let u = r.url { UIApplication.shared.open(u) }
+        if let t = r.topic, !t.isEmpty {
+            selectedTab = 0
+            pendingTopic = t
+        } else if let tab = r.tab {
+            selectedTab = tab
+        }
+        if let id = r.jobId, !id.isEmpty {
+            selectedTab = 1
+            Task {
+                await loadFiles()
+                focusFile = FocusRequest(id: id, action: r.action ?? "open")
+            }
+        }
+    }
+
+    func applyQuickAction(_ type: String?) {
+        guard phase == .ready, let t = type else { return }
+        QuickAction.pending = nil
+        switch t {
+        case QuickAction.new:
+            selectedTab = 0
+            pendingTopic = ""
+        case QuickAction.files, QuickAction.library:
+            selectedTab = 1
+        default:
+            break
+        }
+    }
+
+    func openSpotlight(_ identifier: String) {
+        guard identifier.hasPrefix(SpotlightIndex.prefix) else { return }
+        focusLocal = String(identifier.dropFirst(SpotlightIndex.prefix.count))
+        selectedTab = 1
+    }
+
+    /// میان‌بر باز شده از روی آیکن یا برنامه‌ی Shortcuts
+    private func consumeExternalRequests() {
+        if let a = QuickAction.pending { applyQuickAction(a) }
+        let i = IntentBridge.consume()
+        if i.openFiles { selectedTab = 1 }
+        if let t = i.topic {
+            selectedTab = 0
+            pendingTopic = t
         }
     }
 
@@ -184,12 +316,29 @@ final class AppModel: ObservableObject {
         do {
             files = try await api.files()
             filesLoaded = true
+            FileCache.save(files)
         } catch {
             if let e = error as? ApiError, e.status == 401, phase == .ready { sessionExpired() }
+            else if files.isEmpty {
+                let cached = FileCache.load()
+                if !cached.isEmpty { files = cached; filesLoaded = true }
+            }
         }
     }
 
-    /// فایل را می‌گیرد و در پوشه‌ی موقت می‌گذارد تا QuickLook/اشتراک‌گذاری باز کند
+    private func libKind(_ item: FileItem, pdf: Bool) -> String {
+        if pdf { return "pdf" }
+        switch FileKind(item) {
+        case .deck: return "deck"
+        case .poster: return "poster"
+        case .handout: return "handout"
+        case .audio: return "audio"
+        case .podcast: return "podcast"
+        case .pdf: return "pdf"
+        }
+    }
+
+    /// فایل را می‌گیرد و در پوشه‌ی موقت می‌گذارد تا QuickLook/اشتراک‌گذاری/پخش باز کند؛ اگر «ذخیره‌ی خودکار» روشن باشد یک نسخه هم روی گوشی می‌ماند
     func download(_ item: FileItem, pdf: Bool = false) async -> URL? {
         do {
             let f: Fetched
@@ -204,6 +353,9 @@ final class AppModel: ObservableObject {
             if name.isEmpty { name = pdf ? "presentation.pdf" : "presentation.pptx" }
             let url = dir.appendingPathComponent(name)
             try f.data.write(to: url, options: .atomic)
+            if LocalLibrary.shared.autoSave && !item.sample {
+                keep(item, data: f.data, name: name, pdf: pdf)
+            }
             return url
         } catch {
             report(error)
@@ -211,7 +363,51 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// نسخه‌ی محلی (دستی یا خودکار)
+    func keep(_ item: FileItem, data: Data, name: String, pdf: Bool) {
+        let kind = libKind(item, pdf: pdf)
+        LocalLibrary.shared.save(id: "\(item.id)|\(kind)", title: item.title, kind: kind, slides: item.slides, data: data, fileName: name)
+        refreshLibrary()
+    }
+
     func previewURL(_ id: String) -> URL? { api.previewURL(id) }
+
+    func refreshLibrary() {
+        library = LocalLibrary.shared.all()
+        let ids = library.map { $0.id }
+        if ids != lastIndexed {
+            lastIndexed = ids
+            SpotlightIndex.update(library)
+        }
+    }
+
+    private func libName(_ title: String, _ suffix: String, _ f: Fetched) -> String {
+        let ext = (f.name as NSString).pathExtension
+        let base = title.isEmpty ? (f.name as NSString).deletingPathExtension : title
+        return ext.isEmpty ? base + suffix : base + suffix + "." + ext
+    }
+
+    /// بعد از ساخت: ارائه، جزوه و پوستر را بی‌صدا روی گوشی ذخیره می‌کند (فایل‌های سرور بعد از ۲۴ ساعت پاک می‌شوند)
+    func autoSave(_ p: PendingSave) async {
+        guard LocalLibrary.shared.autoSave, !isDemo else { return }
+        if let f = try? await api.fetchFile(p.id, maxRetries: 6) {
+            LocalLibrary.shared.save(id: "\(p.id)|deck", title: p.title, kind: "deck", slides: p.slides, data: f.data, fileName: libName(p.title, "", f))
+        }
+        if !p.handoutId.isEmpty, let f = try? await api.fetchFile(p.handoutId, fallbackName: "handout.docx", maxRetries: 6) {
+            LocalLibrary.shared.save(id: "\(p.handoutId)|handout", title: p.title, kind: "handout", slides: 0, data: f.data, fileName: libName(p.title, " - جزوه", f))
+        }
+        if !p.posterId.isEmpty, let f = try? await api.fetchFile(p.posterId, fallbackName: "poster.png", maxRetries: 6) {
+            LocalLibrary.shared.save(id: "\(p.posterId)|poster", title: p.title, kind: "poster", slides: 0, data: f.data, fileName: libName(p.title, " - پوستر", f))
+        }
+        refreshLibrary()
+    }
+
+    private func flushPendingSaves() async {
+        for p in PendingSaves.all() {
+            PendingSaves.remove(id: p.id)
+            await autoSave(p)
+        }
+    }
 
     // MARK: ساخت
 
@@ -224,7 +420,13 @@ final class AppModel: ObservableObject {
             }
             Haptic.light()
             job = JobState(id: id, message: "در صف ساخت…")
-            watch(id)
+            watch(id, topic: topic)
+            // مجوز اعلان در همین لحظه‌ی طبیعی («خبرت می‌کنیم») پرسیده می‌شود؛ بعدش اعلان پشتیبان زمان‌بندی می‌شود
+            Task {
+                await Notify.shared.askIfNeeded()
+                await Notify.shared.scheduleWait(id: id, kind: "deck", afterSeconds: 240)
+                await refreshNotifyStatus()
+            }
             await refreshMe()
             return true
         } catch {
@@ -264,10 +466,15 @@ final class AppModel: ObservableObject {
         return .cancelled
     }
 
-    func watch(_ id: String) {
+    private var nowMs: Double { Date().timeIntervalSince1970 * 1000 }
+
+    func watch(_ id: String, topic: String = "") {
         if isDemo { return }
         jobTask?.cancel()
         if job?.id != id { job = JobState(id: id, message: "در حال ساخت…") }
+        if !BackgroundJobs.shared.list().contains(where: { $0.id == id }) {
+            BackgroundJobs.shared.track(TrackedJob(id: id, kind: "deck", deckId: id, title: topic, t: nowMs))
+        }
         jobTask = Task { [weak self] in
             guard let self = self else { return }
             let r = await self.pollJob(id) { msg, pct in
@@ -291,13 +498,24 @@ final class AppModel: ObservableObject {
                 s.podcastWaiting = !podcastJob.isEmpty
                 self.job = s
                 Haptic.success()
+                BackgroundJobs.shared.untrack(id: id)
+                Notify.shared.cancelWait(id)
+                PendingSaves.remove(id: id)
+                if Handled.first("done.\(id)") { ReminderCenter.shared.onDeckDone() }
+                await Notify.shared.jobDone(id: id, title: s.title)
                 await self.loadFiles()
                 await self.refreshMe()
-                if !audioJob.isEmpty { self.watchCompanion(audioJob, kind: "audio") }
-                if !podcastJob.isEmpty { self.watchCompanion(podcastJob, kind: "podcast") }
+                if !audioJob.isEmpty { self.watchCompanion(audioJob, kind: "audio", deckId: id, title: s.title) }
+                if !podcastJob.isEmpty { self.watchCompanion(podcastJob, kind: "podcast", deckId: id, title: s.title) }
+                await self.autoSave(PendingSave(
+                    id: id, title: s.title, slides: j["slides"].int,
+                    handoutId: j["handout"].str == "ok" ? j["handoutId"].str : "",
+                    posterId: j["poster"].str == "ok" ? j["posterId"].str : ""))
             case .failed(let msg):
                 self.job = JobState(id: id, message: msg, failed: true)
                 Haptic.error()
+                BackgroundJobs.shared.untrack(id: id)
+                await Notify.shared.jobFailed(id: id, message: msg)
                 await self.refreshMe()
             case .cancelled:
                 break
@@ -306,21 +524,33 @@ final class AppModel: ObservableObject {
     }
 
     /// اسلاید صوتی / پادکستِ همراه ارائه که در کار جدا ساخته می‌شود
-    private func watchCompanion(_ jobId: String, kind: String) {
+    private func watchCompanion(_ jobId: String, kind: String, deckId: String, title: String) {
+        if !BackgroundJobs.shared.list().contains(where: { $0.id == jobId }) {
+            BackgroundJobs.shared.track(TrackedJob(id: jobId, kind: kind, deckId: deckId, title: title, t: nowMs))
+        }
         Task { [weak self] in
             guard let self = self else { return }
+            await Notify.shared.scheduleWait(id: "\(deckId)|\(kind)", kind: kind, afterSeconds: 420)
             let r = await self.pollJob(jobId) { _, _ in }
+            BackgroundJobs.shared.untrack(id: jobId)
             switch r {
             case .done(let j):
                 let ok = !j["ids"].arr.filter { !$0.str.isEmpty }.isEmpty
                 if kind == "audio" { self.job?.audioWaiting = false; self.job?.audioFailed = !ok }
                 else { self.job?.podcastWaiting = false; self.job?.podcastFailed = !ok }
-                if ok { self.toast("✅ \(extraName(kind)) آماده شد؛ در «فایل‌ها» هست.") }
+                if ok {
+                    self.toast("✅ \(extraName(kind)) آماده شد؛ در «فایل‌ها» هست.")
+                    if Handled.first("extra.\(jobId)") { ReminderCenter.shared.onExtraMade() }
+                    await Notify.shared.extraDone(deckId: deckId, kind: kind, title: title)
+                } else {
+                    await Notify.shared.extraFailed(deckId: deckId, kind: kind, message: "")
+                }
                 await self.loadFiles()
-            case .failed:
+            case .failed(let msg):
                 if kind == "audio" { self.job?.audioWaiting = false; self.job?.audioFailed = true }
                 else { self.job?.podcastWaiting = false; self.job?.podcastFailed = true }
                 self.toast("ساخت \(extraName(kind)) ناموفق بود؛ اعتبارش برگشت.")
+                await Notify.shared.extraFailed(deckId: deckId, kind: kind, message: msg)
                 await self.refreshMe()
             case .cancelled:
                 break
@@ -342,20 +572,29 @@ final class AppModel: ObservableObject {
             let jid = try await api.startExtra(deckId: deckId, kind: kind, layout: layout)
             guard !jid.isEmpty else { toast("شروع ساخت ممکن نشد."); return }
             Haptic.light()
+            let title = files.first { $0.id == deckId }?.title ?? ""
+            BackgroundJobs.shared.track(TrackedJob(id: jid, kind: kind, deckId: deckId, title: title, t: nowMs))
+            await Notify.shared.askIfNeeded()
+            await Notify.shared.scheduleWait(id: key, kind: kind, afterSeconds: 300)
             let r = await pollJob(jid) { msg, _ in
                 if !msg.isEmpty { self.extraMsg[key] = msg }
             }
+            BackgroundJobs.shared.untrack(id: jid)
             switch r {
             case .done(let j):
                 let ok = !j["ids"].arr.filter { !$0.str.isEmpty }.isEmpty
                 if ok {
                     Haptic.success()
                     toast("✅ \(extraName(kind)) آماده شد؛ در فهرست فایل‌ها هست.")
+                    if Handled.first("extra.\(jid)") { ReminderCenter.shared.onExtraMade() }
+                    await Notify.shared.extraDone(deckId: deckId, kind: kind, title: title)
                 } else {
                     toast("ساخت \(extraName(kind)) ناموفق بود؛ اعتبارش برگشت.")
+                    await Notify.shared.extraFailed(deckId: deckId, kind: kind, message: "")
                 }
             case .failed(let msg):
                 toast(msg.isEmpty ? "ساخت \(extraName(kind)) ناموفق بود؛ اعتبارش برگشت." : msg)
+                await Notify.shared.extraFailed(deckId: deckId, kind: kind, message: msg)
             case .cancelled:
                 break
             }
@@ -366,19 +605,59 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: پرداخت
+    // MARK: لینک‌ها، «Open in…» و پرداخت
 
     /// نسخه‌ی سیب‌اپ اپ؟ (کلید PptSazStore در Info.plist؛ در ساخت با PPTSAZ_STORE=sibapp)
     static let isSibappBuild = (Bundle.main.object(forInfoDictionaryKey: "PptSazStore") as? String) == "sibapp"
     private static let pendingKey = "sibappPending"
 
-    /// pptsaz://?purchase_id=… (برگشت از سیب‌اپ). شناسه تا تایید سرور ذخیره می‌ماند تا اگر شبکه قطع بود دوباره تلاش شود.
+    /// pptsaz://?purchase_id=… (برگشت از سیب‌اپ)، pptsaz://new?topic=…، pptsaz://files و فایل‌های بازشده با «Open in…»
     func handleURL(_ url: URL) {
-        guard url.scheme == "pptsaz",
-              let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "purchase_id" })?.value,
-              id.range(of: "^[A-Za-z0-9_-]{4,100}$", options: .regularExpression) != nil else { return }
-        UserDefaults.standard.set(id, forKey: Self.pendingKey)
-        Task { await claimSibappPending() }
+        let key = url.absoluteString
+        if let l = lastURL, l.0 == key, Date().timeIntervalSince(l.1) < 3 { return } // هم SwiftUI و هم SceneDelegate خبر می‌دهند
+        lastURL = (key, Date())
+
+        if url.isFileURL { importFile(url); return }
+        guard url.scheme == "pptsaz" else { return }
+        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let query: (String) -> String? = { name in comps?.queryItems?.first(where: { $0.name == name })?.value }
+
+        if let id = query("purchase_id") {
+            guard id.range(of: "^[A-Za-z0-9_-]{4,100}$", options: .regularExpression) != nil else { return }
+            UserDefaults.standard.set(id, forKey: Self.pendingKey)
+            Task { await claimSibappPending() }
+            return
+        }
+        switch url.host ?? "" {
+        case "new":
+            handleRoute(NotifyRoute(tab: 0, topic: query("topic") ?? ""))
+            if phase == .ready, (query("topic") ?? "").isEmpty { selectedTab = 0; pendingTopic = "" }
+        case "files", "library":
+            handleRoute(NotifyRoute(tab: 1))
+        default:
+            break
+        }
+    }
+
+    private func importFile(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("in-\(UUID().uuidString)", isDirectory: true)
+        let dst = dir.appendingPathComponent(url.lastPathComponent)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: url, to: dst)
+            pendingImports.append(dst)
+            selectedTab = 0
+        } catch {
+            toast("باز کردن فایل ممکن نشد.")
+        }
+    }
+
+    func takeImports() -> [URL] {
+        let l = pendingImports
+        pendingImports = []
+        return l
     }
 
     func claimSibappPending() async {
