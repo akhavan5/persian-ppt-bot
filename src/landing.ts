@@ -28,6 +28,13 @@ export function siteNodes(SITE: string) {
   ];
 }
 
+/** Google Analytics 4 (gtag.js) برای pptsaz.ir؛ Measurement ID: G-7W4KTFJGE9. اول head قرار می‌گیرد. */
+export const GA_SCRIPT = `<script async src="https://www.googletagmanager.com/gtag/js?id=G-7W4KTFJGE9"></script>
+<script>
+window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}
+gtag('js',new Date());gtag('config','G-7W4KTFJGE9');
+</script>`;
+
 /** اسکریپت یکتانت (نوتیفیکیشن شناور همسان). طبق قوانین یکتانت باید بدون هیچ تغییری و داخل head قرار بگیرد؛ این متن را دست‌کاری نکنید. */
 export const YEKTANET_SCRIPT = `<script>
         !function(e,t,n){
@@ -522,6 +529,7 @@ ${heroPreload("landing", p.slug)}
 <link rel="preload" href="/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <script type="application/ld+json">${jsonLd(ld)}</script>
 <style>${CSS}${IMG_CSS}</style>
+${GA_SCRIPT}
 ${YEKTANET_SCRIPT}
 ${MEDIAAD_SCRIPT}
 </head>
