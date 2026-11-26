@@ -1,5 +1,6 @@
 /** ساخت فایل PPTX فارسی (راست‌به‌چپ) با PptxGenJS؛ بازنویسی pptx_builder.py. */
 import PptxGenJS from "pptxgenjs";
+import { b64encode } from "./b64";
 import type { Deck, Slide } from "./types";
 import { THEMES, iconOf, isBFont, type Theme } from "./themes";
 import { faText } from "./util";
@@ -39,11 +40,7 @@ export function fitSize(paras: string[], w: number, h: number, mx: number, mn: n
   return mn;
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
+const toBase64 = b64encode;
 
 /** نویسه‌هایی که در فونت‌های B Nazanin / B Titr نیستند (حروف لاتین و چند علامت مثل ; & # @ _ ' " ? < > $ ~ ^ | → ←) و در PowerPoint «مربع» دیده می‌شوند؛ این تکه‌ها با فونت جایگزین نوشته می‌شوند */
 const B_MISSING = /([0-9]*[A-Za-z](?:[A-Za-z0-9 .,:\-+\/()%&#@_'’"]*[A-Za-z0-9)%"'])?|[;&#@_'"?<>$~^|\\…–—→←`]+)/;

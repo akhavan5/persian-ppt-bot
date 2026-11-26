@@ -100,12 +100,28 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           return makeDeck(this.env, topic, outline.title, outline.slides, settings.tone, contentOpts);
         }));
 
+      // دریافت/ساخت عکس‌ها در گام جدا: سقف CPU هر گام جدا حساب می‌شود، و با تلاش مجدد ساخت فایل، عکس‌ها دوباره ساخته نمی‌شوند.
+      // بایت‌ها در KV می‌مانند (خروجی گام فقط فهرست شماره‌ی اسلایدهاست)
+      const imgKey = (i: number) => `dimg:${event.instanceId}:${i}`;
+      const imageIdx: number[] = settings.images
+        ? await step.do("images", { retries: { limit: 1, delay: "5 seconds" }, timeout: "3 minutes" }, async () => {
+            await status("🎨 ۳/۳ — تصویر اسلایدها…");
+            const m = await fetchImages(this.env, deck.slides, maxImages, web, found.images);
+            for (const [i, b] of m) await this.env.KV.put(imgKey(i), b, { expirationTtl: 3600 });
+            return [...m.keys()];
+          }).catch((err): number[] => { console.error("images step", err); return []; }) // عکس شکست خورد ⇒ ارائه بدون عکس
+        : [];
+
       // ساخت فایل و ارسال در یک گام: خروجی باینری نباید از گام برگردانده شود (سقف ۱ مگابایت برای وضعیت گام)
       built = await step.do("build-and-send",
         { retries: { limit: 1, delay: "5 seconds" }, timeout: "3 minutes" },
         async () => {
           await status("🎨 ۳/۳ — ساخت فایل پاورپوینت…");
-          const images = settings.images ? await fetchImages(this.env, deck.slides, maxImages, web, found.images) : new Map();
+          const images = new Map<number, Uint8Array>();
+          for (const i of imageIdx) {
+            const buf = await this.env.KV.get(imgKey(i), "arrayBuffer");
+            if (buf) images.set(i, new Uint8Array(buf));
+          }
           const bytes = await buildPptx(deck, {
             theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images, site: this.env.SITE_URL || "https://pptsaz.ir", mark,
           });

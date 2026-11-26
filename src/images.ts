@@ -4,6 +4,7 @@
 import type { Env } from "./env";
 import type { Slide } from "./types";
 import { IMAGE_BOX, imageSize } from "./pptx";
+import { b64decode } from "./b64";
 import { fetchWithAccounts, parseAccounts } from "./accounts";
 import type { FoundImage } from "./research";
 
@@ -13,10 +14,13 @@ const IMAGE_STAGGER_MS = 3000;
 const MODEL_MAIN = "@cf/black-forest-labs/flux-1-schnell";
 const STYLE = ", professional presentation slide image, subject large and centered filling the frame, detailed, vivid colors, high quality, no text, no letters, no watermark";
 
+/** سقف اندازه‌ی عکس واقعی: عکس بزرگ‌تر CPU ساخت فایل را بالا می‌برد؛ عکس بعدی یا ساخت با AI جایگزین می‌شود */
+const MAX_REAL_BYTES = 1_500_000;
+
 const PX_W = 1200;
 const PX_H = Math.round((PX_W * IMAGE_BOX.h) / IMAGE_BOX.w);
 
-const fromBase64 = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const fromBase64 = b64decode;
 
 /** مدل‌های مختلف خروجی را متفاوت برمی‌گردانند: {image: base64}، جریان باینری یا بایت خام */
 async function toBytes(out: unknown): Promise<Uint8Array | null> {
@@ -89,7 +93,7 @@ async function downloadReal(url: string): Promise<Uint8Array | null> {
     if (!r.ok) return null;
     const b = new Uint8Array(await r.arrayBuffer());
     const png = b[0] === 0x89 && b[1] === 0x50, jpg = b[0] === 0xff && b[1] === 0xd8;
-    if (!(png || jpg) || b.length < 15_000 || b.length > 6_000_000) return null;
+    if (!(png || jpg) || b.length < 15_000 || b.length > MAX_REAL_BYTES) return null;
     const d = imageSize(b);
     return d && d.w >= 400 && d.h >= 250 ? b : null; // بندانگشتی/آیکن نه
   } catch { return null; }

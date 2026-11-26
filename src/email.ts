@@ -3,6 +3,7 @@
  *  بدون هیچ‌کدام از کلیدها هیچ ایمیلی فرستاده نمی‌شود و بقیه‌ی برنامه بدون تغییر کار می‌کند.
  *  ارسال هرگز نباید ثبت‌نام یا پرداخت را خراب کند؛ پس خطاها فقط لاگ می‌شوند و false برمی‌گردد. */
 import type { Env } from "./env";
+import { b64encode } from "./b64";
 
 export const BRAND = "پاورپوینت‌ساز فارسی";
 
@@ -116,7 +117,5 @@ export async function sendEmail(env: Env, m: EmailMsg): Promise<boolean> {
 
 /** بایت‌ها → base64 (تکه‌تکه تا حافظه‌ی رشته‌ی میانی بزرگ نشود) */
 export function toBase64(buf: ArrayBuffer): string {
-  const u = new Uint8Array(buf), parts: string[] = [];
-  for (let i = 0; i < u.length; i += 0x8000) parts.push(String.fromCharCode(...u.subarray(i, i + 0x8000)));
-  return btoa(parts.join(""));
+  return b64encode(new Uint8Array(buf));
 }
