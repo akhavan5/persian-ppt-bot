@@ -17,6 +17,23 @@ import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from 
 import { HOME_IMAGES, imageTags } from "./seo-images";
 import { blogFeed, blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
 
+/** ویجت تبلیغات ادلی برای برنامک ایتا (barnamk: pptsaz_app). فقط در پاسخ /eitaa تزریق می‌شود؛ المنت #adly-container داخل #app و به‌صورت ثابت (fixed) بالای نوار تب‌ها قرار می‌گیرد. */
+const ADLY_WIDGET_STYLE = `<style>
+/* تبلیغ ثابت پایین صفحه، بالای نوار تب‌ها (مثل اپ اندروید) */
+#adly-container{position:fixed;left:0;right:0;bottom:calc(64px + var(--sab));z-index:4;max-width:560px;margin:0 auto;padding:0 12px;box-sizing:border-box}
+#adly-container:empty{display:none}
+body{padding-bottom:calc(176px + var(--sab))}
+</style>`;
+const ADLY_WIDGET_SCRIPT = `<script src="https://myadino.ir/widget/adly-widget.js"></script>
+<script>
+AdlyWidget.init({
+  apiKey: '66bb7b1f66c2483097487ddee8de4628',
+  containerId: 'adly-container',
+  barnamk: 'pptsaz_app',
+  appRef: 186
+});
+</script>`;
+
 export { DeckWorkflow } from "./workflow";
 export { BroadcastWorkflow } from "./broadcast";
 export { OcrWorkflow } from "./ocr-workflow";
@@ -287,7 +304,10 @@ export default {
     if (url.pathname === "/eitaa" && (req.method === "GET" || req.method === "HEAD")) {
       const res = await env.ASSETS.fetch(new Request(`${url.origin}/app`, { headers: req.headers }));
       if (!res.ok) return res;
-      const html = (await res.text()).replace(/<head[^>]*>/i, (m) => `${m}\n<script src="https://developer.eitaa.com/eitaa-web-app.js"></script>`);
+      const html = (await res.text())
+        .replace(/<head[^>]*>/i, (m) => `${m}\n<script src="https://developer.eitaa.com/eitaa-web-app.js"></script>`)
+        // ویجت تبلیغات ادلی (فقط برنامک ایتا): کانتینر انتهای #app (تا بعد از ورود دیده نشود) و اسکریپت بلافاصله بعد از </main>
+        .replace(/(\s*<\/div>\s*)(<\/main>)/i, (_m, a, b) => `\n    <div id="adly-container"></div>${a}${b}\n${ADLY_WIDGET_STYLE}\n${ADLY_WIDGET_SCRIPT}`);
       const h = new Headers(res.headers);
       for (const k of ["content-length", "content-encoding", "etag", "x-frame-options"]) h.delete(k);
       h.set("content-type", "text/html; charset=utf-8");
