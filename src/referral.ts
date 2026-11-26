@@ -6,7 +6,7 @@
  *  idempotent: rewardReferral برای هر دعوت‌شده فقط یک‌بار می‌شمارد (ref:<دعوت‌شده>)؛ پس اجرای دوباره (تکرار گام یا تلاش مجدد) بی‌اثر است.
  *  هرگز خطا پرتاب نمی‌کند (جز claimReferral که پیام خطای قابل‌نمایش برمی‌گرداند)؛ فراخواننده هم `.catch` می‌گذارد. */
 import type { Env } from "./env";
-import { REF_EVERY, REF_MAX, clearPendingReferral, holdReferral, isBanned, isWebId, parseRefId, pendingInviter, referralMsg, rewardReferral, type RefId, type Uid } from "./settings";
+import { REF_CREDITS, REF_EVERY, REF_MAX, clearPendingReferral, holdReferral, isBanned, isWebId, parseRefId, pendingInviter, refPaid, referralMsg, rewardReferral, settleReferralCredits, type RefId, type Uid } from "./settings";
 import { hitLimit } from "./auth";
 import { toFa } from "./util";
 import { getLinkedTg, resolveUid } from "./link";
@@ -78,13 +78,13 @@ export async function notifyInviterJoined(env: Env, inviterId: RefId): Promise<v
     const done = await refCount(env, inviterId);
     if (done >= REF_MAX) return;
     if (await hitLimit(env, `refjn:${inviterId}`, 3, 86_400)) return;
-    const left = REF_EVERY - (done % REF_EVERY);
+    const left = REF_EVERY - ((done - await refPaid(env, inviterId, done)) % REF_EVERY); // بر پایه‌ی دعوت‌های تسویه‌نشده (نه صرفاً زوج/فرد بودن شمارنده)
     await notifyInviter(env, inviterId, [
       "👋 <b>یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد</b>",
       "",
       "وقتی <b>اولین ارائه‌اش</b> را بسازد، دعوتت شمرده می‌شود.",
       `📊 دعوت‌های موفق تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}`,
-      `🎁 ${toFa(String(left))} دعوت موفق دیگر تا ۱ اعتبار پلن پلاس`,
+      `🎁 ${toFa(String(left))} دعوت موفق دیگر تا ${toFa(String(REF_CREDITS))} اعتبار`,
     ].join("\n"));
   } catch (e) {
     console.error("notifyInviterJoined", String(e).slice(0, 200));
@@ -130,4 +130,38 @@ export async function referralState(env: Env, uid: Uid): Promise<{ id: RefId | n
     isBanned(env, id),
   ]);
   return { id, count, canClaim: counted === null && pend === null, banned };
+}
+
+/** تسویه‌ی یک‌باره‌ی دعوت‌های قبلی بعد از تغییر قانون (هر ۵ دعوت = ۱ پلاس ← هر ۲ دعوت = ۱ اعتبار معمولی).
+ *  برای هر دعوت‌کننده: پلاس‌های قبلاً داده‌شده (floor(دعوت/۵)) دست‌نخورده می‌مانند و فقط دعوت‌های «تسویه‌نشده» (دعوت − مضرب ۵) جفت‌جفت اعتبار معمولی می‌شوند.
+ *  idempotent است (refpaid: پیش می‌رود)، پس اجرای دوباره چیزی اضافه نمی‌دهد. به هر دعوت‌کننده‌ای که اعتبار گرفت پیام می‌رود.
+ *  cursor/limit: برای جلوگیری از سقف درخواست‌های یک اجرا، هر بار حداکثر limit دعوت‌کننده پردازش می‌شود؛ done=false یعنی دوباره اجرا کن. */
+export interface SettleReport { inviters: number; granted: number; credits: number; errors: number; done: boolean; cursor: string }
+export async function settleLegacyReferrals(env: Env, cursor = "", limit = 60): Promise<SettleReport> {
+  const rep: SettleReport = { inviters: 0, granted: 0, credits: 0, errors: 0, done: true, cursor };
+  await env.KV.ready();
+  const rows = (await env.DB.prepare("SELECT k, v FROM kv WHERE k > ?1 AND k < ?2 AND (exp IS NULL OR exp > ?3) AND CAST(v AS INTEGER) > 0 ORDER BY k LIMIT ?4")
+    .bind(cursor || "refc:", "refc:\uffff", Math.floor(Date.now() / 1000), limit).all<{ k: string; v: string }>()).results ?? [];
+  for (const r of rows) {
+    rep.cursor = r.k;
+    const id = parseRefId(r.k.slice(5));
+    if (id === null) continue;
+    rep.inviters++;
+    try {
+      const count = Math.min(REF_MAX, Number(r.v) || 0);
+      const creditTo: Uid = typeof id === "number" ? await resolveUid(env, id) : id;
+      const n = await settleReferralCredits(env, id, count, creditTo, count);
+      if (n > 0) {
+        rep.granted++; rep.credits += n;
+        await notifyInviter(env, id, [
+          "🎁 <b>قانون دعوت دوستان آسان‌تر شد!</b>",
+          "",
+          `از حالا به ازای هر <b>${toFa(String(REF_EVERY))} دعوت موفق</b> ${toFa(String(REF_CREDITS))} اعتبار (یک ارائه‌ی رایگان) می‌گیری.`,
+          `دعوت‌هایی که قبلاً پاداشی نگرفته بودند حساب شد و <b>${toFa(String(n))} اعتبار</b> به حسابت اضافه شد. برای دیدن اعتبار: /credit`,
+        ].join("\n"));
+      }
+    } catch (e) { rep.errors++; console.error("settleLegacyReferrals", r.k, String(e).slice(0, 200)); }
+  }
+  rep.done = rows.length < limit;
+  return rep;
 }

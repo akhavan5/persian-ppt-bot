@@ -533,14 +533,16 @@ export async function noteActive(env: Env, userId: Uid, username?: string, name?
 }
 
 // ---------- دعوت دوستان ----------
-// قانون: به ازای هر REF_EVERY (۵) دوستِ جدید که با لینک دعوت وارد شوند و «اولین ارائه‌شان را بسازند»، ۱ اعتبار «پلن پلاس» به دعوت‌کننده داده می‌شود؛ حداکثر تا REF_MAX (۵۰) دعوت (= ۱۰ اعتبار پلاس).
+// قانون: به ازای هر REF_EVERY (۲) دوستِ جدید که با لینک دعوت وارد شوند و «اولین ارائه‌شان را بسازند»، ۱ اعتبار معمولی (= ۱ ارائه؛ همان bonus) به دعوت‌کننده داده می‌شود؛ حداکثر تا REF_MAX (۵۰) دعوت (= ۲۵ اعتبار).
+// قانون قدیمی (تا پیش از این تغییر): هر ۵ دعوت = ۱ اعتبار «پلن پلاس». پلاس‌هایی که قبلاً داده شده دست‌نخورده می‌مانند؛ دعوت‌های تسویه‌نشده‌ی قبلی با settleReferralCredits (و تسویه‌ی یک‌باره‌ی مدیر) به اعتبار معمولی تبدیل می‌شوند.
 /** حداکثر تعداد دعوت‌هایی که شمرده می‌شوند (جلوگیری از سوءاستفاده با حساب‌های ساختگی) */
 export const REF_MAX = 50;
-/** هر چند دعوتِ موفق یک اعتبار پلن پلاس می‌دهد */
-export const REF_EVERY = 5;
-/** پلن و مدت پلنِ جدید وقتی دعوت‌کننده پلن فعال ندارد (با PLANS در payment.ts هم‌خوان؛ این‌جا تکرار شده تا وابستگی دایره‌ای نشود) */
-const REF_PLAN = "plus";
-const REF_PLAN_DAYS = 30;
+/** هر چند دعوتِ موفق یک اعتبار معمولی می‌دهد */
+export const REF_EVERY = 2;
+/** اعتبار معمولی‌ای که به ازای هر REF_EVERY دعوت داده می‌شود */
+export const REF_CREDITS = 1;
+/** قانون قدیمی: هر چند دعوت یک اعتبار پلاس می‌داد (فقط برای محاسبه‌ی دعوت‌هایی که قبلاً تسویه شده‌اند) */
+const REF_LEGACY_EVERY = 5;
 
 /** n اعتبار به پلنِ فعالِ کاربر اضافه می‌کند (انقضای پلن دست‌نخورده)؛ اگر پلن فعال ندارد، پلنِ planId را از همین الان برای days روز با n اعتبار می‌سازد.
  *  افزودن اعتبار به پلن فعال یک دستور SQL اتمی است (مثل کسر اعتبار). */
@@ -556,7 +558,10 @@ export async function grantPlanCredit(env: Env, userId: Uid, planId: string, day
   return "new";
 }
 
-export interface RefResult { /** تعداد کل دعوت‌های موفق (بعد از این دعوت) */ count: number; /** با همین دعوت به مضرب REF_EVERY رسید و اعتبار پلاس داده شد */ plusGranted: boolean }
+export interface RefResult {
+  /** تعداد کل دعوت‌های موفق (بعد از این دعوت) */ count: number;
+  /** با همین دعوت یک جفت کامل شد و اعتبار معمولی به دعوت‌کننده داده شد */ creditGranted: boolean;
+  /** چند دعوت دیگر تا اعتبار بعدی (۱ تا REF_EVERY؛ در سقف بی‌معنی است) */ left: number }
 
 // ورود با لینک دعوت فقط یک «دعوت در انتظار» ثبت می‌کند (holdReferral: refp:<دعوت‌شده> = <دعوت‌کننده>، ۳۰ روز اعتبار)؛ وقتی دوست اولین ارائه‌اش را ساخت،
 // referral.ts ← completeReferral آن را با rewardReferral به دعوتِ شمرده‌شده تبدیل می‌کند. حساب‌های ساختگی که هیچ ارائه‌ای نمی‌سازند چیزی نمی‌شمارند.
@@ -614,23 +619,62 @@ export async function rewardReferral(env: Env, inviterId: RefId, newUserId: RefI
   if (!row) return null; // به سقف رسیده
   await env.KV.put(`ref:${newUserId}`, String(inviterId));
   const count = Number(row.v) || 1;
-  let plusGranted = false;
-  if (count % REF_EVERY === 0) {
-    try { await grantPlanCredit(env, creditTo, REF_PLAN, REF_PLAN_DAYS, 1); plusGranted = true; }
-    catch (e) { console.error("referralPlusCredit", inviterId, count, e); }
+  // دعوت‌های قبل از این یکی (count-1) با قانون قدیمی تسویه شده‌اند؛ اگر این دعوت‌کننده هنوز refpaid: ندارد از همان پایه شروع می‌کنیم
+  const n = await settleReferralCredits(env, inviterId, count, creditTo, count - 1).catch((e) => { console.error("referralCredit", inviterId, count, e); return 0; });
+  const paid = await refPaid(env, inviterId, count);
+  return { count, creditGranted: n > 0, left: REF_EVERY - (Math.min(count, REF_MAX) - paid) % REF_EVERY };
+}
+
+// ---- تسویه‌ی اعتبار دعوت: refpaid:<دعوت‌کننده> = تعداد دعوت‌هایی که پاداششان (اعتبار معمولی یا پلاسِ قانون قدیمی) پرداخت/تسویه شده ----
+const refPaidKey = (id: RefId) => `refpaid:${id}`;
+/** پایه‌ی تسویه برای کسی که هنوز refpaid: ندارد = دعوت‌هایی که قانون قدیمی (هر ۵ دعوت = ۱ پلاس) پاداششان را داده */
+const legacyPaid = (legacyCount: number) => Math.floor(Math.min(Math.max(0, legacyCount), REF_MAX) / REF_LEGACY_EVERY) * REF_LEGACY_EVERY;
+
+/** تعداد دعوت‌های تسویه‌شده‌ی یک دعوت‌کننده (بدون نوشتن). count = دعوت‌های موفق فعلی او. */
+export async function refPaid(env: Env, inviterId: RefId, count: number): Promise<number> {
+  const v = await env.KV.get(refPaidKey(inviterId)).catch(() => null);
+  return v === null ? legacyPaid(count) : Math.max(0, Math.floor(Number(v) || 0));
+}
+
+/** اعتبار معمولیِ دعوت را برای همه‌ی جفت‌های تسویه‌نشده می‌دهد و تعداد اعتبارِ داده‌شده را برمی‌گرداند (۰ = چیزی نبود).
+ *  - count: دعوت‌های موفق فعلی (حداکثر REF_MAX شمرده می‌شود)؛ legacyCount: تعدادی که قانون قدیمی تا قبل از این تغییر برایش تسویه کرده بود
+ *    (فقط وقتی refpaid: هنوز نیست استفاده می‌شود؛ برای دعوت تازه count-1، برای تسویه‌ی یک‌باره‌ی مدیر همان count).
+ *  - هم‌زمانی: پیشروی refpaid: با «مقایسه و جایگزینی» (CAS) انجام می‌شود؛ فقط برنده‌ی CAS اعتبار می‌دهد، پس دوبار پرداخت نمی‌شود.
+ *    اگر اعطای اعتبار خطا بدهد، refpaid: به مقدار قبل برمی‌گردد تا بار بعد دوباره تلاش شود. */
+export async function settleReferralCredits(env: Env, inviterId: RefId, count: number, creditTo: Uid = inviterId, legacyCount: number = count): Promise<number> {
+  const db = await rawDb(env);
+  const key = refPaidKey(inviterId);
+  await db.prepare("INSERT OR IGNORE INTO kv (k, v, exp) VALUES (?1, ?2, NULL)").bind(key, String(legacyPaid(legacyCount))).run();
+  const target = Math.min(Math.max(0, Math.floor(count)), REF_MAX);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const row = await db.prepare("SELECT v FROM kv WHERE k = ?1").bind(key).first<{ v: string }>();
+    const paid = Math.max(0, Math.floor(Number(row?.v) || 0));
+    const pairs = Math.floor((target - paid) / REF_EVERY);
+    if (pairs <= 0) return 0;
+    const next = paid + pairs * REF_EVERY;
+    const cas = await db.prepare("UPDATE kv SET v = ?3 WHERE k = ?1 AND CAST(v AS INTEGER) = ?2").bind(key, paid, String(next)).run();
+    if (!changed(cas)) continue; // هم‌زمان کس دیگری پیش برد؛ دوباره می‌خوانیم
+    try {
+      await db.prepare(
+        "INSERT INTO kv (k, v, exp) VALUES (?1, ?2, NULL) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + ?2 AS TEXT), exp = NULL")
+        .bind(bonusKey(creditTo), String(pairs * REF_CREDITS)).run();
+    } catch (e) {
+      await db.prepare("UPDATE kv SET v = ?3 WHERE k = ?1 AND CAST(v AS INTEGER) = ?2").bind(key, next, String(paid)).run().catch(() => {});
+      throw e;
+    }
+    return pairs * REF_CREDITS;
   }
-  return { count, plusGranted };
+  return 0;
 }
 
 /** پیام تلگرام به دعوت‌کننده بعد از هر دعوتِ موفق (دوست اولین ارائه‌اش را ساخته) */
 export function referralMsg(r: RefResult): string {
-  const c = toFa(String(r.count)), max = toFa(String(REF_MAX)), every = toFa(String(REF_EVERY));
-  if (r.plusGranted) {
-    return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت؛ دعوت‌های موفقت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa("1")} اعتبار پلن پلاس</b> به‌خاطر هر ${every} دعوت به حسابت اضافه شد؛ با آن تا ${toFa(String(PLAN_MAX_SLIDES.plus))} اسلاید و مدل‌های ویژه را هم داری. برای دیدن اعتبار: /credit` +
+  const c = toFa(String(r.count)), max = toFa(String(REF_MAX));
+  if (r.creditGranted) {
+    return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت؛ دعوت‌های موفقت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa(String(REF_CREDITS))} اعتبار</b> (یک ارائه‌ی رایگان) به‌خاطر هر ${toFa(String(REF_EVERY))} دعوت به حسابت اضافه شد. برای دیدن اعتبار: /credit` +
       (r.count >= REF_MAX ? `\n\n✅ به سقف ${max} دعوت رسیدی و تمام پاداش‌ها را گرفتی. ممنون که پاورپوینت‌ساز را معرفی کردی! 🙏` : "");
   }
-  const left = REF_EVERY - (r.count % REF_EVERY);
-  return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت. دعوت‌های موفق تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(left))} دعوت دیگر تا ${toFa("1")} اعتبار پلن پلاس.`;
+  return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت. دعوت‌های موفق تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(r.left))} دعوت دیگر تا ${toFa(String(REF_CREDITS))} اعتبار.`;
 }
 
 export async function getUserSeen(env: Env, userId: Uid): Promise<SeenUser | null> {

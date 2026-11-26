@@ -87,7 +87,7 @@ object InviteCache {
         val p = p(ctx)
         val link = p.getString("link", "").orEmpty()
         if (link.isEmpty()) return null
-        return InviteInfo(link, p.getInt("count", 0), p.getInt("max", 50), p.getInt("every", 5), p.getBoolean("canClaim", false))
+        return InviteInfo(link, p.getInt("count", 0), p.getInt("max", 50), p.getInt("every", 2), p.getBoolean("canClaim", false))
     }
 
     fun clear(ctx: Context) {

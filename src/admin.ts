@@ -7,10 +7,11 @@ import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./te
 import { audioSeconds, isAudioName } from "./wav";
 import {
   PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, FREE_MAX_IMAGES, FREE_MAX_SLIDES, getBonus, getCredit, adminIds, botPlatform, getStats, getSub, getUserSeen, isAdmin, isBanned, isLocked, releaseLock,
-  setBanned, setBonus, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, statDay, type Platform, type Uid,
+  setBanned, setBonus, REF_CREDITS, REF_MAX, REF_EVERY, ABS_MAX_SLIDES, ABS_MAX_IMAGES, PLATFORMS, isPlatform, statDay, type Platform, type Uid,
 } from "./settings";
 import { getUserById, googleEnabled, otpEnabled, type WebUser } from "./auth";
 import { resolveUid } from "./link";
+import { settleLegacyReferrals } from "./referral";
 import { ADMIN_REPLY_MAX, DAILY_LIMIT, addAdminReply, loadSupportConv, notifyUserOfReply, supportOverview, supportUsers } from "./support-chat";
 import { getDeckLog, listFiles, loadFile, type DeckLog } from "./files";
 import { SAMPLE_BADGE, addSample, listSamples, removeSample, sampleLabel } from "./samples";
@@ -555,7 +556,7 @@ async function referralScreen(env: Env, tab: "t" | "r", page: number): Promise<S
   const avg = inviters ? Math.round((total / inviters) * 10) / 10 : 0;
   const summary =
     "🎁 <b>گزارش دعوت دوستان</b>\n\n" +
-    `✅ دعوت موفق: <b>${fa(total)}</b> (هر ${fa(REF_EVERY)} دعوت = ۱ اعتبار پلن پلاس برای دعوت‌کننده)\n` +
+    `✅ دعوت موفق: <b>${fa(total)}</b> (هر ${fa(REF_EVERY)} دعوت = ${fa(REF_CREDITS)} اعتبار معمولی برای دعوت‌کننده)\n` +
     `🙋 دعوت‌کننده: <b>${fa(inviters)}</b> نفر · میانگین ${fa(avg)} دعوت برای هر نفر\n` +
     `🚧 رسیده به سقف (${fa(REF_MAX)} دعوت): ${fa(capped)} نفر\n` +
     `🕒 ۲۴ ساعت اخیر: ${fa(last24)} · ۷ روز اخیر: ${fa(last7)}\n\n`;
@@ -574,7 +575,8 @@ async function referralScreen(env: Env, tab: "t" | "r", page: number): Promise<S
     const list = items.filter((x): x is NonNullable<typeof x> => x !== null);
     return {
       text: summary + "🏆 <b>برترین دعوت‌کننده‌ها</b>\n\n" + (list.length ? list.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.line}`).join("\n") : "هنوز دعوتی ثبت نشده است.") + "\n\n<i>برای مدیریت، روی نام بزن.</i>",
-      kb: [tabs, ...list.map((x, i) => [cb(`${fa(page * PAGE + i + 1)}. ${x.label.slice(0, 40)}`, `ad:u:${x.id}`)]), pager("ad:iv:t", page, (page + 1) * PAGE < inviters), [cb("🔄 تازه‌سازی", `ad:iv:${tab}:${page}`), ...backHome]].filter((r) => r.length),
+      kb: [tabs, ...list.map((x, i) => [cb(`${fa(page * PAGE + i + 1)}. ${x.label.slice(0, 40)}`, `ad:u:${x.id}`)]), pager("ad:iv:t", page, (page + 1) * PAGE < inviters), [cb("🔄 تازه‌سازی", `ad:iv:${tab}:${page}`), ...backHome],
+      [cb("🔁 تسویه‌ی دعوت‌های قبلی", "ad:iv:m:0")]].filter((r) => r.length),
     };
   }
 
@@ -593,7 +595,8 @@ async function referralScreen(env: Env, tab: "t" | "r", page: number): Promise<S
   const list = items.filter((x): x is NonNullable<typeof x> => x !== null);
   return {
     text: summary + "🕒 <b>آخرین دعوت‌شده‌ها</b> (به وقت ایران)\n\n" + (list.length ? list.map((x, i) => `${fa(page * PAGE + i + 1)}. ${x.line}`).join("\n") : "هنوز دعوتی ثبت نشده است.") + "\n\n<i>دکمه‌ها: 👤 دعوت‌شده · 🎁 دعوت‌کننده</i>",
-    kb: [tabs, ...list.map((x) => [cb(`👤 ${x.gl.slice(0, 18)}`, `ad:u:${x.guest}`), cb(`🎁 ${x.hl.slice(0, 18)}`, `ad:u:${x.host}`)]), pager("ad:iv:r", page, (page + 1) * PAGE < total), [cb("🔄 تازه‌سازی", `ad:iv:${tab}:${page}`), ...backHome]].filter((r) => r.length),
+    kb: [tabs, ...list.map((x) => [cb(`👤 ${x.gl.slice(0, 18)}`, `ad:u:${x.guest}`), cb(`🎁 ${x.hl.slice(0, 18)}`, `ad:u:${x.host}`)]), pager("ad:iv:r", page, (page + 1) * PAGE < total), [cb("🔄 تازه‌سازی", `ad:iv:${tab}:${page}`), ...backHome],
+      [cb("🔁 تسویه‌ی دعوت‌های قبلی", "ad:iv:m:0")]].filter((r) => r.length),
   };
 }
 
@@ -1241,7 +1244,27 @@ export async function handlePanelCallback(env: Env, cq: any) {
       case "pm": return await show(await paymentScreen(env, b === "l" ? "l" : b === "p" ? "p" : "s", Math.max(0, Math.min(2000, Number(c) || 0))));
       case "fn": return await show(await funnelScreen(env, [7, 30, 90, 0].includes(Number(b)) ? Number(b) : 30));
       case "mo": return await show(await monthlyScreen(env));
-      case "iv": return await show(await referralScreen(env, b === "r" ? "r" : "t", Math.max(0, Math.min(2000, Number(c) || 0))));
+      case "iv": {
+        if (b === "m") return await show({
+          text: `🔁 <b>تسویه‌ی دعوت‌های قبلی</b>\n\nقانون جدید: هر ${fa(REF_EVERY)} دعوت موفق = ${fa(REF_CREDITS)} اعتبار معمولی.\nپلاس‌هایی که با قانون قدیمی (هر ۵ دعوت) داده شده‌اند دست‌نخورده می‌مانند؛ فقط دعوت‌هایی که هنوز پاداشی نگرفته‌اند جفت‌جفت اعتبار معمولی می‌شوند و به هر دعوت‌کننده‌ی مشمول پیام می‌رود.\nاجرای دوباره بی‌خطر است (چیزی دوباره داده نمی‌شود).`,
+          kb: [[cb("✅ تسویه کن", "ad:iv:go:0"), cb("↩️ برگشت", "ad:iv:t:0")]],
+        });
+        if (b === "go") {
+          let cursor = "", tot = { inviters: 0, granted: 0, credits: 0, errors: 0 }, done = false;
+          for (let round = 0; round < 4 && !done; round++) {
+            const r = await settleLegacyReferrals(env, cursor);
+            cursor = r.cursor; done = r.done;
+            tot = { inviters: tot.inviters + r.inviters, granted: tot.granted + r.granted, credits: tot.credits + r.credits, errors: tot.errors + r.errors };
+          }
+          await logAction(env, adminId, `تسویه‌ی دعوت‌های قبلی: ${tot.inviters} دعوت‌کننده، ${tot.granted} نفر اعتبار گرفتند (جمعاً ${tot.credits})، ${tot.errors} خطا`);
+          return await show({
+            text: `✅ <b>تسویه انجام شد</b>\n\n🙋 دعوت‌کننده‌ی بررسی‌شده: <b>${fa(tot.inviters)}</b>\n🎁 دریافت‌کننده‌ی اعتبار: <b>${fa(tot.granted)}</b> نفر · جمعاً <b>${fa(tot.credits)}</b> اعتبار\n` +
+              (tot.errors ? `⚠️ خطا: ${fa(tot.errors)} (دوباره اجرا کن؛ فقط موارد باقی‌مانده پردازش می‌شوند)\n` : "") + (done ? "" : "⏳ هنوز دعوت‌کننده‌ی باقی‌مانده هست؛ دوباره اجرا کن.\n"),
+            kb: [[cb("🔁 اجرای دوباره", "ad:iv:go:0"), cb("🎁 گزارش دعوت‌ها", "ad:iv:t:0")], backHome],
+          });
+        }
+        return await show(await referralScreen(env, b === "r" ? "r" : "t", Math.max(0, Math.min(2000, Number(c) || 0))));
+      }
       case "sy": return await show(await systemScreen(env));
       case "lg": return await show(await logScreen(env));
       case "pg": {

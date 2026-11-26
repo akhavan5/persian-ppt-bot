@@ -278,7 +278,7 @@ object Api {
         val j = call("GET", "/api/invite")
         return InviteInfo(
             link = j.optString("webLink").ifEmpty { j.optString("link") },
-            count = j.optInt("count"), max = j.optInt("max", 50), every = j.optInt("every", 5),
+            count = j.optInt("count"), max = j.optInt("max", 50), every = j.optInt("every", 2),
             canClaim = j.optBoolean("canClaim"),
         )
     }

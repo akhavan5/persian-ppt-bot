@@ -184,7 +184,7 @@ final class Api {
         return InviteInfo(
             link: link, count: j["count"].int,
             max: j["max"].exists ? j["max"].int : 50,
-            every: j["every"].exists ? j["every"].int : 5,
+            every: j["every"].exists ? j["every"].int : 2,
             canClaim: j["canClaim"].bool
         )
     }
