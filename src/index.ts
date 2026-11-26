@@ -36,7 +36,32 @@ const ADLY_WIDGET_SCRIPT = `<script src="https://myadino.ir/widget/adly-widget.j
     ok=!!(w&&String(w.platform||'').toLowerCase()!=='web'&&String(w.version||'')!=='0.0'&&(String(w.initData||'').length>20||(w.initDataUnsafe&&w.initDataUnsafe.user)));
   }catch(e){}
   var c=document.getElementById('adly-container');
-  if(!ok){if(c)c.remove();document.body.style.paddingBottom='';return;}
+  if(!ok){
+    if(c)c.remove();document.body.style.paddingBottom='';
+    // وب ایتا: تبلیغ بومی یکتانت (کد رسمی یکتانت، بدون تغییر در منطق)
+    var wb=window.Eitaa&&window.Eitaa.WebApp;
+    if(wb&&String(wb.platform||'').toLowerCase()==='web'){
+      !function(e,t,n){
+        e.yektanetAnalyticsObject=n,
+        e[n]=e[n]||function(){e[n].q.push(arguments)},
+        e[n].q=e[n].q||[];
+        var a=t.getElementsByTagName("head")[0],
+            r=new Date,
+            c="https://cdn.yektanet.ir/superscript-v2/Pq312DDt/native-49323/yn_pub.js?v="
+                +r.getFullYear().toString()+"0"+r.getMonth()+"0"+r.getDate()+"0"+r.getHours(),
+            s=t.createElement("link");
+        s.rel="preload",
+        s.as="script",
+        s.href=c,
+        a.appendChild(s);
+        var l=t.createElement("script");
+        l.async=!0,
+        l.src=c,
+        a.appendChild(l);
+      }(window,document,"yektanet");
+    }
+    return;
+  }
   AdlyWidget.init({
     apiKey: '66bb7b1f66c2483097487ddee8de4628',
     containerId: 'adly-container',
