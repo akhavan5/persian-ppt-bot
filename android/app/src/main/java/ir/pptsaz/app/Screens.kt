@@ -1470,7 +1470,8 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                 }
             }
 
-            ChannelsCard(me, vm)
+            // نسخه‌ی مایکت: بخش «اتصال پلتفرم‌ها» نمایش داده نمی‌شود
+            if (BuildConfig.STORE != "myket") ChannelsCard(me, vm)
 
             if (me.plans.isNotEmpty()) {
                 SectionTitle("اشتراک‌ها", Modifier.padding(top = 4.dp))
