@@ -1,5 +1,4 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { track } from "./analytics";
 import { NonRetryableError } from "cloudflare:workflows";
 import type { Env } from "./env";
 import type { DeckParams } from "./types";
@@ -127,7 +126,6 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           const bytes = await buildPptx(deck, {
             theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images, site: this.env.SITE_URL || "https://pptsaz.ir", mark,
           });
-          track(this.env, "deck_build", { plat: deckPlat, model: settings.model, template: settings.template, theme: settings.theme, ms: Date.now() - tBuild, n: images.size });
           const filename = fileNameWithSite(this.env, deck.title, "pptx");
           // متن اسلایدها برای پیش‌نمایش و PDF؛ خطا در ذخیره نباید ساخت ارائه را خراب کند
           await savePreview(this.env, userId, event.instanceId, {
@@ -294,7 +292,6 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       }).catch(() => {});
       await step.do("fail-cleanup", async () => {
         await releaseLock(this.env, userId);
-        track(this.env, "deck_fail", { plat: deckPlat, model: settings.model, err: e, template: settings.template, theme: settings.theme, ms: Date.now() - event.timestamp.getTime() });
         await bumpStat(this.env, "fail", deckPlat).catch(() => {});
       });
       throw e;
@@ -303,7 +300,6 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     // خارج از try: خطا در این گام نباید باعث «برگشت اعتبار» بعد از ارسال موفق فایل شود
     await step.do("finish", async () => {
       await releaseLock(this.env, userId);
-      track(this.env, "deck_ok", { plat: deckPlat, model: settings.model, template: settings.template, theme: settings.theme, ms: Date.now() - event.timestamp.getTime(), n: built?.slides });
       await bumpStat(this.env, "ok", deckPlat).catch(() => {});
       const decks = await noteDeckDone(this.env, userId, event.instanceId).catch((e) => { console.error("noteDeckDone", e); return 0; }); // قیف کاربران پنل مدیر
       // دعوت دوستان: پاداش دعوت‌کننده با اولین ارائه‌ی دوستِ دعوت‌شده ثبت می‌شود (تا ارائه‌ی دوم: اگر این گام تکرار شد یا تکمیل بار قبل شکست خورد، دوباره تلاش می‌شود؛ تکمیل idempotent است)

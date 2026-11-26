@@ -1,5 +1,4 @@
 import { BALE_ID_BASE, isBaleId } from "./bale-format";
-import { track } from "./analytics";
 import { isRubikaId } from "./rubika-format";
 import { isEitaaId } from "./eitaa-format";
 import { isSplusId } from "./splus-format";
@@ -460,17 +459,20 @@ export const botPlatform = (id: unknown): Platform => (isSplusId(id) ? "splus" :
 /** شمارنده‌ی روزانه: همیشه کل (stat:نام:تاریخ) و، اگر پلتفرم معلوم باشد، شمارنده‌ی همان پلتفرم (pst:پلتفرم:نام:تاریخ).
  *  شمارنده‌ی کل از همه‌ی پلتفرم‌ها جداست تا آمار و نمای ماهانه‌ی قبلی دست‌نخورده بماند. */
 export async function bumpStat(env: Env, name: StatName, plat?: Platform) {
-  track(env, name, { plat }); // Analytics Engine: همان رویداد برای نمودار زمانی (۳ ماه)؛ شمارنده‌ی D1 زیر برای پنل مدیر می‌ماند
   const day = statDay();
   const keys = [`stat:${name}:${day}`, ...(plat ? [`pst:${plat}:${name}:${day}`] : [])];
-  await Promise.all(keys.map(async (k) => {
-    const n = Number(await env.KV.get(k)) || 0;
-    await env.KV.put(k, String(n + 1), { expirationTtl: STAT_TTL });
-  }));
+  // یک batch با افزایش اتمی داخل خود SQL: پیش‌تر هر کلید یک خواندن + یک نوشتن جدا بود (۴ رفت‌وبرگشت به D1) و
+  // دو رویداد هم‌زمان می‌توانستند یک شمارش را گم کنند (خواندن → +۱ → نوشتن). حالا یک رفت‌وبرگشت و بدون گم‌شدن شمارش.
+  const db = await rawDb(env);
+  const exp = nowSec() + STAT_TTL;
+  await db.batch(keys.map((k) => db.prepare(
+    "INSERT INTO kv (k, v, exp) VALUES (?1, '1', ?2) ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT), exp = excluded.exp",
+  ).bind(k, exp)));
 }
 
-/** آمار روزانه ۴۰۰ روز نگه داشته می‌شود (برای نمای ماهانه‌ی پنل مدیر؛ پیش‌تر ۶۰ روز بود) */
-const STAT_TTL = 60 * 60 * 24 * 400;
+/** آمار روزانه ۱۰۰ روز (≈ ۳ ماه) نگه داشته می‌شود؛ پیش‌تر ۴۰۰ روز بود.
+ *  ردیف‌های قدیمی‌تر خودبه‌خود با purgeExpired پاک می‌شوند و پرس‌وجوهای پنل مدیر روی ردیف‌های کمتری اجرا می‌شوند. */
+const STAT_TTL = 60 * 60 * 24 * 100;
 
 /** ثبت یک ارائه‌ی موفق برای «قیف کاربران» پنل مدیر: act:<حساب> = {f: اولین ارائه، l: آخرین، n: تعداد} (ms).
  *  یک نوشتن اتمی؛ بدون TTL (یک ردیف کوچک برای هر حسابی که ارائه ساخته).
