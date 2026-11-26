@@ -241,6 +241,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <button class="btn ghost" id="donePoster" type="button" style="margin-top:8px" hidden>🖼 ارسال پوستر به چت</button>
         <button class="btn ghost" id="doneAudio" type="button" style="margin-top:8px" hidden>🔊 ارسال اسلاید صوتی به چت</button>
         <button class="btn ghost" id="donePodcast" type="button" style="margin-top:8px" hidden>🎙 ارسال پادکست به چت</button>
+        <div class="muted eitaaDlHint" style="margin-top:10px;line-height:1.9" hidden>💡 بعد از زدن دانلود، فایل در پوشه‌ی «دانلودها»ی گوشی (برنامه‌ی «فایل‌ها» ← Download) ذخیره می‌شود. چند لحظه صبر کن تا کامل شود، بعد از همان‌جا بازش کن. برای باز کردن ارائه، PowerPoint یا WPS Office لازم است.</div>
         <div id="doneAudioMore" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
         <div id="doneAudioWait" hidden style="margin-top:8px">
           <div class="muted" id="doneAudioWaitTxt">🔊 اسلاید صوتی در حال ساخت است (چند دقیقه)…</div>
@@ -277,7 +278,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
 
     <!-- فایل‌ها -->
     <section id="t-files" role="tabpanel" aria-labelledby="tb-files" hidden>
-      <div class="card"><h2>فایل‌های ۲۴ ساعت اخیر</h2><div id="extraJobs" aria-live="polite"></div><div id="files"></div>
+      <div class="card"><h2>فایل‌های ۲۴ ساعت اخیر</h2><div class="muted eitaaDlHint" style="margin-bottom:8px;line-height:1.9" hidden>💡 بعد از زدن دانلود، فایل در پوشه‌ی «دانلودها»ی گوشی (برنامه‌ی «فایل‌ها» ← Download) ذخیره می‌شود. چند لحظه صبر کن تا کامل شود، بعد از همان‌جا بازش کن.</div><div id="extraJobs" aria-live="polite"></div><div id="files"></div>
         <div class="fbBox" id="filesReview" hidden>
           <h3>💬 نظرت درباره‌ی برنامک چیست؟</h3>
           <div class="muted">اگر از برنامک راضی بودی، لطفاً در صفحه‌ی برنامک‌های ایتا برای ما نظر بده.</div>
@@ -1027,7 +1028,7 @@ async function boot() {
   show($("#boot"), false); show($("#app"), true); show($("#nav"), true);
   show($("#go"), true); // دکمه‌ی داخل صفحه همیشه می‌ماند: اگر کلاینت تلگرام (یا نسخه‌های غیررسمی) رویداد دکمه‌ی اصلی را نرساند، ساخت باز هم کار کند
   show($("#pasteTopic"), TG.canPaste);
-  if (IS_EITAA) { show($("#filesReview"), true); eitaaTexts(); askEitaaWrite(); }
+  if (IS_EITAA) { show($("#filesReview"), true); document.querySelectorAll(".eitaaDlHint").forEach((x) => show(x, true)); eitaaTexts(); askEitaaWrite(); }
   renderAll();
   claimStartRef().then(loadInvite);
   if (!applyStart()) restoreDraft();
@@ -1637,6 +1638,19 @@ async function sendToChat(id, btn, kind = "send") {
   });
 }
 
+// ایتا: دانلود بی‌صدا در پس‌زمینه شروع می‌شود و خودِ ایتا چیزی نشان نمی‌دهد؛ کاربر گیج می‌شود و فکر می‌کند اتفاقی نیفتاده.
+// پاپ‌آپ بومی ایتا (showPopup؛ title ≤ ۶۴ و message ≤ ۲۵۶ کاراکتر) فقط ۳ دانلود اول نشان داده می‌شود؛ بعدش همان toast کوتاه. راهنمای ثابت هم زیر دکمه‌ها و در تب «فایل‌ها» هست.
+const EDL_KEY = "pptsaz.edl";
+function eitaaDlGuide(name) {
+  if (!IS_EITAA) return;
+  let n = 0; try { n = Number(localStorage.getItem(EDL_KEY) || 0) || 0; localStorage.setItem(EDL_KEY, String(n + 1)); } catch {}
+  if (n >= 3) return;
+  const nm = String(name || "").slice(0, 40);
+  const opener = /\.pdf$/i.test(nm) ? "یک برنامه‌ی PDF‌خوان" : "PowerPoint یا WPS Office";
+  const message = `فایل ${nm ? "«" + nm + "» " : ""}در پس‌زمینه دانلود می‌شود و ایتا ممکن است چیزی نشان ندهد. چند لحظه صبر کن؛ فایل در پوشه‌ی «دانلودها»ی گوشی (برنامه‌ی «فایل‌ها» ← Download) ذخیره می‌شود. برای باز کردنش ${opener} لازم است.`.slice(0, 256);
+  try { EW.showPopup({ title: "⬇️ دانلود شروع شد", message, buttons: [{ type: "ok", id: "ok" }] }); } catch {}
+}
+
 // دانلود مستقیم با web_app_request_file_download: سرور لینک ۵ دقیقه‌ای می‌دهد (تلگرام هدر Authorization نمی‌فرستد)
 async function dlFile(id, btn) {
   return busy(btn, "در حال آماده‌سازی…", async () => {
@@ -1645,7 +1659,7 @@ async function dlFile(id, btn) {
       try {
         const d = await api("/api/miniapp/dl", { method: "POST", body: { id } });
         const st = await TG.download(location.origin + d.path, d.name);
-        if (st === "downloading") { TG.haptic("success"); toast("⬇️ دانلود شروع شد"); }
+        if (st === "downloading") { TG.haptic("success"); toast(IS_EITAA ? "⬇️ دانلود شروع شد؛ فایل در «دانلودها»ی گوشی ذخیره می‌شود" : "⬇️ دانلود شروع شد"); eitaaDlGuide(d.name); }
         else if (st === "cancelled") toast("دانلود لغو شد");
         else toast(IS_EITAA ? "دانلود شروع نشد؛ دوباره امتحان کن." : "دانلود مستقیم ممکن نشد؛ «ارسال به چت» را بزن.");
         return;
@@ -1662,7 +1676,7 @@ async function dlPdf(id, btn) {
       try {
         const d = await api("/api/miniapp/pdf-dl", { method: "POST", body: { id } });
         const st = await TG.download(location.origin + d.path, d.name);
-        if (st === "downloading") { TG.haptic("success"); toast("⬇️ دانلود شروع شد"); }
+        if (st === "downloading") { TG.haptic("success"); toast(IS_EITAA ? "⬇️ دانلود شروع شد؛ فایل در «دانلودها»ی گوشی ذخیره می‌شود" : "⬇️ دانلود شروع شد"); eitaaDlGuide(d.name); }
         else toast("دانلود شروع نشد؛ دوباره امتحان کن.");
         return;
       } catch (e) { if (e.status !== 404 || i === 9) { toast(e.message); TG.haptic("error"); return; } await sleep(3000); }
