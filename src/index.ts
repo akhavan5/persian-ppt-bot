@@ -20,12 +20,14 @@ import { blogFeed, blogSitemapEntries, findBlog, renderBlogIndex, renderPost } f
 /** ویجت تبلیغات ادلی برای برنامک ایتا (barnamk: pptsaz_app). فقط در پاسخ /eitaa تزریق می‌شود؛ المنت #adly-container داخل #app و به‌صورت ثابت (fixed) بالای نوار تب‌ها قرار می‌گیرد. */
 const ADLY_WIDGET_STYLE = `<style>
 /* تبلیغ ثابت پایین صفحه، بالای نوار تب‌ها (مثل اپ اندروید) */
-#adly-container{position:fixed;left:0;right:0;bottom:calc(64px + var(--sab));z-index:4;max-width:560px;margin:0 auto;padding:0 12px;box-sizing:border-box}
+/* !important: ویجت ادلی روی کانتینر استایل inline می‌گذارد (position:relative و width/max-width:100% در init) و بنر را وسط محتوا می‌انداخت */
+#adly-container{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:calc(var(--adly-nav,64px) + var(--sab))!important;z-index:4;width:auto!important;max-width:560px!important;margin:0 auto!important;padding:0 12px;box-sizing:border-box}
 #adly-container:empty{display:none}
 body{padding-bottom:calc(176px + var(--sab))}
 </style>`;
 const ADLY_WIDGET_SCRIPT = `<script src="https://myadino.ir/widget/adly-widget.js"></script>
 <script>
+(function(){var n=document.getElementById('nav');function f(){if(n&&n.offsetHeight)document.documentElement.style.setProperty('--adly-nav',n.offsetHeight+'px')}f();addEventListener('resize',f);if(n&&window.ResizeObserver)new ResizeObserver(f).observe(n)})();
 AdlyWidget.init({
   apiKey: '66bb7b1f66c2483097487ddee8de4628',
   containerId: 'adly-container',
