@@ -1,6 +1,8 @@
-// صفحه‌ی حمایت «یک قهوه مهمانم کن» (public/support.html) با درگاه آقای پرداخت (API v2).
-// جریان: POST /api/support/start ← create ← کاربر به startpay می‌رود ← GET /api/support/callback ← verify ← /support?thanks=n
-// بدون ورود به حساب کار می‌کند. رکورد sup:<transid>؛ پرداخت‌شده‌ها بدون انقضا نگه داشته می‌شوند.
+// صفحه‌ی حمایت «یک قهوه مهمانم کن» (public/support.html) با درگاه نکس‌پال (NexPal IPG v1).
+// جریان: POST /api/support/start ← create (token + payUrl) ← کاربر به payUrl می‌رود ← GET /api/support/callback?invoiceId&status ← verify (با token ذخیره‌شده) ← /support?thanks=1
+// callback مرورگر فقط نشانه است؛ تایید نهایی با verify (و در صورت «already verified» با transaction) انجام می‌شود. مبلغ‌ها در سایت تومان و در نکس‌پال ریال‌اند (×۱۰).
+// درگاه قبلی (آقای پرداخت) کامل در همین فایل مانده ولی استفاده نمی‌شود؛ فقط اگر SUPPORT_GATEWAY=aqaye تنظیم شود فعال می‌شود.
+// بدون ورود به حساب کار می‌کند. رکورد sup:<invoiceId|transid>؛ پرداخت‌شده‌ها بدون انقضا نگه داشته می‌شوند.
 import type { Env } from "./env";
 import { hitLimit } from "./auth";
 
@@ -13,13 +15,100 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const TTL = 60 * 60 * 24 * 14;
 const WALL_PAGE = 8;
 
-interface SupRec { amount: number; name: string; note: string; hide: boolean; state: "pending" | "paid"; t: number; paidAt?: number }
+interface SupRec { amount: number; name: string; note: string; hide: boolean; state: "pending" | "paid"; t: number; paidAt?: number; token?: string }
 
 const jres = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 const clean = (s: unknown, max: number) => String(s ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 
-/** pin = کد پین درگاه؛ مقدار «sandbox» برای آزمایش (بدون پول واقعی) */
-export const supportEnabled = (env: Env) => !!(env.AQAYE_PIN ?? "").trim();
+/** درگاه فعال صفحه‌ی حمایت: پیش‌فرض نکس‌پال؛ «aqaye» فقط با تنظیم صریح SUPPORT_GATEWAY (درگاه قبلی، استفاده‌نشده) */
+const useAqaye = (env: Env) => (env.SUPPORT_GATEWAY ?? "").trim().toLowerCase() === "aqaye";
+/** نکس‌پال: NEXPAL_API_KEY (فقط روی سرور)؛ NEXPAL_SANDBOX=1 برای محیط آزمایشی بدون پول واقعی */
+const nexpalKey = (env: Env) => (env.NEXPAL_API_KEY ?? "").trim();
+const nexpalSandbox = (env: Env) => /^(1|true|yes)$/i.test((env.NEXPAL_SANDBOX ?? "").trim());
+export const supportEnabled = (env: Env) => (useAqaye(env) ? !!(env.AQAYE_PIN ?? "").trim() : !!nexpalKey(env));
+
+/** ادعای اتمی: فقط یک درخواست «paid» می‌کند؛ رکورد پرداخت‌شده دیگر منقضی نمی‌شود */
+async function markPaid(env: Env, id: string, rec: SupRec): Promise<void> {
+  await env.KV.ready();
+  await env.DB.prepare("UPDATE kv SET v=?2, exp=NULL WHERE k=?1 AND json_extract(v,'$.state') != 'paid'")
+    .bind(`sup:${id}`, JSON.stringify({ ...rec, token: undefined, state: "paid", paidAt: Date.now() })).run();
+}
+
+// ───────────────────────── نکس‌پال (درگاه فعال) ─────────────────────────
+const NP_BASE = "https://api.nexpal.io/v1/payment";
+const INVOICE_RE = /^sup_[a-f0-9]{32}$/;
+const rial = (toman: number) => toman * 10;
+
+/** کدهای خطای create نکس‌پال (مستندات رسمی) */
+const NP_ERR: Record<string, string> = {
+  "13": "مبلغ نامعتبر است", "14": "شناسه فاکتور نامعتبر است", "15": "شماره موبایل نامعتبر است", "17": "کد ملی نامعتبر است",
+  "18": "آدرس بازگشت با دامنه‌ی تاییدشده‌ی درگاه نمی‌خواند", "19": "شناسه فاکتور تکراری است", "20": "کلید تکراری است",
+  "21": "ترمینال فعال پیدا نشد", "30": "کلید API معتبر نیست", "33": "خطای عمومی درگاه", "34": "اعتبار کارمزد درگاه کافی نیست",
+};
+
+interface NpRes { code?: number | string; message?: string; description?: string; token?: string; payUrl?: string; invoice?: string; invoiceId?: string; amount?: number | string }
+
+/** apiKey فقط در بدنه‌ی درخواست سمت سرور می‌رود؛ null = خطای شبکه */
+async function np(env: Env, path: "create" | "verify" | "transaction", body: Record<string, unknown>): Promise<{ http: number; d: NpRes | null } | null> {
+  try {
+    const r = await fetch(`${NP_BASE}${nexpalSandbox(env) ? "/sandbox" : ""}/${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ apiKey: nexpalKey(env), ...body }),
+    });
+    return { http: r.status, d: (await r.json().catch(() => null)) as NpRes | null };
+  } catch (e) { console.error("nexpal", path, e); return null; }
+}
+
+async function startNexpal(env: Env, url: URL, b: Record<string, unknown> | null, amount: number, email: string, mobile: string): Promise<Response> {
+  const name = clean(b?.name, 40), note = clean(b?.note, 200), hide = b?.hide === true;
+  const invoiceId = `sup_${crypto.randomUUID().replace(/-/g, "")}`;
+  const r = await np(env, "create", {
+    idempotencyKey: invoiceId, amount: rial(amount), invoiceId,
+    callbackUrl: `${url.origin}/api/support/callback`, description: "حمایت از پاورپوینت‌ساز",
+    ...(email ? { email } : {}), ...(mobile ? { mobile } : {}),
+  });
+  const d = r?.d;
+  const payUrl = typeof d?.payUrl === "string" && /^https:\/\//i.test(d.payUrl) ? d.payUrl : "";
+  if (!r || Number(d?.code) !== 100 || typeof d?.token !== "string" || !d.token || !payUrl) {
+    console.error("support create failed (nexpal)", r?.http, d?.code, nexpalSandbox(env) ? "sandbox" : "live");
+    const why = d?.code != null ? NP_ERR[String(d.code)] ?? `کد ${d.code}` : "";
+    return jres({ error: `ساخت تراکنش ممکن نشد${why ? ` (${why})` : ""}؛ دوباره امتحان کن.` }, 502);
+  }
+  const rec: SupRec = { amount, name, note, hide, state: "pending", t: Date.now(), token: d.token }; // token در callback نمی‌آید؛ فقط سمت سرور نگه داشته می‌شود
+  await env.KV.put(`sup:${invoiceId}`, JSON.stringify(rec), { expirationTtl: TTL });
+  return jres({ url: payUrl });
+}
+
+async function callbackNexpal(env: Env, url: URL, back: (q: string) => Response): Promise<Response> {
+  const invoiceId = url.searchParams.get("invoiceId") ?? "";
+  if (!INVOICE_RE.test(invoiceId)) return back("pay=fail");
+  const rec = (await env.KV.get(`sup:${invoiceId}`, "json")) as SupRec | null;
+  if (!rec) return back("pay=fail");
+  if (rec.state === "paid") return back("thanks=1");
+  if (url.searchParams.get("status") !== "true") return back("pay=cancel"); // انصراف/انقضا؛ verify لازم نیست
+  const want = rial(rec.amount);
+  const cb = Number(url.searchParams.get("amount"));
+  if (!rec.token || (Number.isFinite(cb) && cb !== want)) return back("pay=fail");
+
+  const same = (d: NpRes | null | undefined) => !!d && String(d.invoice ?? d.invoiceId) === invoiceId && Number(d.amount) === want;
+  const v = await np(env, "verify", { token: rec.token });
+  if (!v) return back("pay=error"); // خطای شبکه: رکورد pending می‌ماند و کاربر می‌تواند دوباره از لینک بانک برگردد
+  let ok = Number(v.d?.code) === 100 && same(v.d);
+  if (!ok && Number(v.d?.code) === 13) { // «already verified»: رفرش callback یا درخواست هم‌زمان ⇒ وضعیت را از استعلام می‌گیریم
+    const t = await np(env, "transaction", { token: rec.token });
+    if (!t) return back("pay=error");
+    ok = (Number(t.d?.code) === 100 || Number(t.d?.code) === 200) && same(t.d);
+    if (!ok && Number(t.d?.code) === 12) return back("pay=error"); // هنوز در حال تایید
+  }
+  if (!ok) { console.error("support verify failed (nexpal)", v.http, v.d?.code); return back("pay=fail"); }
+
+  await markPaid(env, invoiceId, rec);
+  console.log("support payment ok (nexpal)", invoiceId, rec.amount);
+  return back("thanks=1");
+}
+
+// ───────────────────── آقای پرداخت (درگاه قبلی؛ استفاده نمی‌شود) ─────────────────────
 const isSandbox = (env: Env) => (env.AQAYE_PIN ?? "").trim() === "sandbox";
 
 /** کدهای خطای create/verify آقای پرداخت (مستندات رسمی) */
@@ -55,6 +144,8 @@ export async function startSupport(env: Env, url: URL, req: Request, b: Record<s
   if (mobile && !/^09\d{9}$/.test(mobile)) return jres({ error: "شماره‌ی موبایل باید به شکل ۰۹۱۲۳۴۵۶۷۸۹ باشد." }, 400);
   const ip = req.headers.get("x-trusted-ip") ?? req.headers.get("cf-connecting-ip") ?? "unknown";
   if (await hitLimit(env, `suprl:${ip}`, 10, 3600)) return jres({ error: "درخواست‌ها زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
+
+  if (!useAqaye(env)) return startNexpal(env, url, b, amount, email, mobile);
 
   const name = clean(b?.name, 40), note = clean(b?.note, 200), hide = b?.hide === true;
   const r = await ap(env, "create", {
@@ -93,8 +184,10 @@ export async function supportWall(env: Env, url: URL): Promise<Response> {
 /** GET /api/support/callback?transid=…&status=1|0 — بازگشت از درگاه؛ تایید با verify و ثبت دائمی */
 export async function supportCallback(env: Env, url: URL): Promise<Response> {
   const back = (q: string) => new Response(null, { status: 303, headers: { location: `${url.origin}/support?${q}`, "cache-control": "no-store" } });
+  if (!supportEnabled(env)) return back("pay=fail");
+  if (!useAqaye(env)) return callbackNexpal(env, url, back);
   const transid = url.searchParams.get("transid") ?? "";
-  if (!supportEnabled(env) || !TRANSID_RE.test(transid)) return back("pay=fail");
+  if (!TRANSID_RE.test(transid)) return back("pay=fail");
   const rec = (await env.KV.get(`sup:${transid}`, "json")) as SupRec | null;
   if (!rec) return back("pay=fail");
   if (rec.state === "paid") return back("thanks=1");
@@ -104,10 +197,7 @@ export async function supportCallback(env: Env, url: URL): Promise<Response> {
   if (!v) return back("pay=error"); // خطای شبکه: رکورد pending می‌ماند و کاربر می‌تواند دوباره از لینک بانک برگردد
   if (v.status !== "success" || v.code !== "1") return back("pay=fail");
 
-  await env.KV.ready();
-  // ادعای اتمی: فقط یک درخواست «paid» می‌کند؛ رکورد پرداخت‌شده دیگر منقضی نمی‌شود
-  await env.DB.prepare("UPDATE kv SET v=?2, exp=NULL WHERE k=?1 AND json_extract(v,'$.state') != 'paid'")
-    .bind(`sup:${transid}`, JSON.stringify({ ...rec, state: "paid", paidAt: Date.now() })).run();
+  await markPaid(env, transid, rec);
   console.log("support payment ok", transid, rec.amount);
   return back("thanks=1");
 }
