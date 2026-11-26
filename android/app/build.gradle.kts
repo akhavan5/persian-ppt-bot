@@ -72,6 +72,9 @@ android {
         versionName = "1.1.0"
         manifestPlaceholders["TapsellMediationAppKey"] = if (tapsellReal) tapsellKeyEnv else tapsellTestKey
         // اعلان FCM: از متغیرهای محیطی (GitHub Secrets) می‌آید؛ خالی = اعلان خاموش. فایل google-services.json لازم نیست.
+        // آنالیتیکس (GA4/Firebase): SDK شناسه‌ی اپ را از منبع google_app_id می‌خواند؛ چون پلاگین google-services نداریم، از همان FIREBASE_APP_ID می‌سازیم
+        val fbAppId = (System.getenv("FIREBASE_APP_ID") ?: "").trim().replace("\"", "")
+        if (fbAppId.isNotEmpty()) resValue("string", "google_app_id", fbAppId)
         for (k in listOf("FIREBASE_APP_ID", "FIREBASE_API_KEY", "FIREBASE_PROJECT_ID", "FIREBASE_SENDER_ID")) {
             buildConfigField("String", k, "\"" + (System.getenv(k) ?: "").trim().replace("\"", "") + "\"")
         }
@@ -209,6 +212,8 @@ dependencies {
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
     // اعلان تبلیغاتی (FCM)؛ بدون Google Play Services بی‌اثر است و اپ مثل قبل کار می‌کند
     implementation("com.google.firebase:firebase-messaging:24.1.2")
+    // آمار استفاده‌ی اپ (Google Analytics 4)؛ بدون FIREBASE_* خاموش است. نسخه‌ی هم‌خانواده با firebase-messaging 24.1.2
+    implementation("com.google.firebase:firebase-analytics:22.1.2")
     implementation("androidx.browser:browser:1.9.0")
     // ویجت صفحه‌ی اصلی (Jetpack Glance)
     implementation("androidx.glance:glance-appwidget:1.1.1")

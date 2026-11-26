@@ -155,6 +155,7 @@
         </receiver>
         <!-- شروع خودکار فایربیس را خاموش می‌کنیم؛ Push.init با مقدارهای بیلد آن را دستی راه می‌اندازد -->
         <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
+        <!-- جمع‌آوری آنالیتیکس پیش‌فرض خاموش است؛ Analytics.init فقط وقتی FIREBASE_* ست شده باشد آن را روشن می‌کند -->
         <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
 
         <provider

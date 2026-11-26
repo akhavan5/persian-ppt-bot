@@ -220,6 +220,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setTab(i: Int) {
         _state.update { it.copy(tab = i) }
+        Analytics.screen("tab_$i")
         if (i == 1) loadFiles()
     }
 
@@ -342,6 +343,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // تا آماده‌شدن صفحه‌ی اصلی روی همان صفحه‌ی کد با حالت «در حال ورود» می‌مانیم؛
                 // قبلاً otpSent زودتر false می‌شد و چند ثانیه صفحه‌ی شماره دوباره دیده می‌شد
                 load()
+                Analytics.log("login", "method" to "sms")
                 _state.update { it.copy(busy = false, otpSent = false) }
             } catch (e: ApiException) {
                 _state.update { it.copy(busy = false) }
@@ -394,6 +396,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun logout() {
+        Analytics.log("logout")
         viewModelScope.launch {
             pollJob?.cancel()
             Reminders.onLogout(getApplication())
@@ -417,6 +420,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             toast("موضوع ارائه را بنویسید")
             return
         }
+        Analytics.log("generate_deck", "slides" to slides.toString(), "handout" to handout.toString(), "images" to images.toString(), "audio" to audio.toString(), "podcast" to podcast.toString())
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             try {
@@ -1335,6 +1339,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun buy(planId: String) {
         if (buyJob?.isActive == true) return
         val sku = "plan_$planId"
+        Analytics.log("begin_checkout", "plan" to planId)
         buyJob = viewModelScope.launch {
             if (_state.value.config?.bazaar != true) {
                 for (i in 1..3) {

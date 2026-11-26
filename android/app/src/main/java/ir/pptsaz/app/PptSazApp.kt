@@ -8,5 +8,6 @@ class PptSazApp : Application() {
         CrashReporter.install(this)
         Notifier.ensureChannel(this)
         Push.init(this)
+        Analytics.init(this)
     }
 }
