@@ -17,17 +17,18 @@ import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from 
 import { HOME_IMAGES, imageTags } from "./seo-images";
 import { blogFeed, blogSitemapEntries, findBlog, renderBlogIndex, renderPost } from "./blog";
 
-/** ویجت تبلیغات ادلی برای برنامک ایتا (barnamk: pptsaz_app). فقط در پاسخ /eitaa تزریق می‌شود؛ المنت #adly-container داخل #app و به‌صورت ثابت (fixed) بالای نوار تب‌ها قرار می‌گیرد. */
+/** ویجت تبلیغات ادلی برای برنامک ایتا (barnamk: pptsaz_app). فقط در پاسخ /eitaa تزریق می‌شود؛ المنت #adly-container داخل #app و به‌صورت ثابت (fixed) زیر نوار تب‌ها (ته صفحه) قرار می‌گیرد. */
 const ADLY_WIDGET_STYLE = `<style>
-/* تبلیغ ثابت پایین صفحه، بالای نوار تب‌ها (مثل اپ اندروید) */
-/* !important: ویجت ادلی روی کانتینر استایل inline می‌گذارد (position:relative و width/max-width:100% در init) و بنر را وسط محتوا می‌انداخت */
-#adly-container{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:calc(var(--adly-nav,64px) + var(--sab))!important;z-index:4;width:auto!important;max-width:560px!important;margin:0 auto!important;padding:0 12px;box-sizing:border-box}
+/* تبلیغ ثابت در ته صفحه، «زیر» نوار تب‌ها؛ نوار تب‌ها به اندازه‌ی ارتفاع تبلیغ بالا می‌آید (--adly-h از اسکریپت) */
+/* !important: ویجت ادلی روی کانتینر استایل inline می‌گذارد (position:relative و width/max-width:100% در init) */
+#adly-container{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;z-index:6;width:auto!important;max-width:none!important;margin:0!important;padding:6px 12px calc(6px + var(--sab));box-sizing:border-box;border-radius:0!important;background:var(--card,#fff)!important;border-top:1px solid var(--line,#e5e5e5)}
 #adly-container:empty{display:none}
-body{padding-bottom:calc(176px + var(--sab))}
+nav{bottom:var(--adly-h,0px)!important;padding-bottom:6px!important}
+nav.noad{padding-bottom:calc(6px + var(--sab))!important}
+body{padding-bottom:calc(76px + var(--adly-h,0px) + var(--sab))}
 </style>`;
 const ADLY_WIDGET_SCRIPT = `<script src="https://myadino.ir/widget/adly-widget.js"></script>
 <script>
-(function(){var n=document.getElementById('nav');function f(){if(n&&n.offsetHeight)document.documentElement.style.setProperty('--adly-nav',n.offsetHeight+'px')}f();addEventListener('resize',f);if(n&&window.ResizeObserver)new ResizeObserver(f).observe(n)})();
 // ادلی فقط در اپ موبایل ایتا کار می‌کند (platform==='web' را رد می‌کند و به‌جایش متن خطا می‌نویسد)؛ در وب ایتا/مرورگر بنر را اصلاً اجرا نکن
 (function(){
   var ok=false;
@@ -61,6 +62,17 @@ const ADLY_WIDGET_SCRIPT = `<script src="https://myadino.ir/widget/adly-widget.j
       }(window,document,"yektanet");
     }
     return;
+  }
+  var nv=document.getElementById('nav');
+  function sync(){
+    var h=(c&&c.style.display!=='none'&&c.offsetHeight)||0;
+    document.documentElement.style.setProperty('--adly-h',h+'px');
+    if(nv)nv.classList.toggle('noad',!h);
+  }
+  if(c){
+    if(window.ResizeObserver)new ResizeObserver(sync).observe(c);
+    new MutationObserver(sync).observe(c,{attributes:true,childList:true,attributeFilter:['style']});
+    addEventListener('resize',sync);
   }
   AdlyWidget.init({
     apiKey: '66bb7b1f66c2483097487ddee8de4628',
