@@ -307,19 +307,20 @@ ORDER BY x.k LIMIT ?3`,
   extra: (now) => [now - 30 * MIN, now - 24 * HOUR],
   marker: (r) => `lc:pay:${r.k.slice(4)}`,
   note: (c, r, k) => {
-    let plan = "", price = 0, credits = 0, slides = 0;
+    let plan = "", price = 0, oldPrice = 0, off = 0, credits = 0, slides = 0;
     try {
       const j = JSON.parse(r.v); const p = PLANS.find((x) => x.id === j.plan);
       if (!p) return null;
-      plan = p.name; price = p.price; credits = p.credits; slides = p.maxSlides;
+      plan = p.name; price = p.price; oldPrice = p.oldPrice; off = p.off; credits = p.credits; slides = p.maxSlides;
     } catch { return null; }
     const price_fa = toFa(price.toLocaleString("en-US")).replace(/,/g, "٬");
+    const old_fa = toFa(oldPrice.toLocaleString("en-US")).replace(/,/g, "٬");
     return {
       tag: "payment-recovery",
       tg: [
         `🛒 <b>پرداخت پلن ${tgEsc(plan)} کامل نشد</b>`,
         "",
-        `اگر در درگاه مشکلی پیش آمد یا وقت نشد، می‌توانی همین حالا دوباره امتحان کنی: پلن ${tgEsc(plan)} ${price_fa} هزار تومان، ${toFa(String(credits))} ارائه در ماه و تا ${toFa(String(slides))} اسلاید.`,
+        `اگر در درگاه مشکلی پیش آمد یا وقت نشد، می‌توانی همین حالا دوباره امتحان کنی: پلن ${tgEsc(plan)} <s>${old_fa}</s> ⟵ ${price_fa} هزار تومان 🔥 (${toFa(String(off))}٪ تخفیف)، ${toFa(String(credits))} ارائه در ماه و تا ${toFa(String(slides))} اسلاید.`,
         "",
         "اگر پولی از حسابت کم شده ولی پلن فعال نشده، به پشتیبانی پیام بده تا همان لحظه بررسی کنیم.",
       ].join("\n"),
@@ -329,7 +330,7 @@ ORDER BY x.k LIMIT ?3`,
         m: {
           href: utm(c.env, "pay", "/?buy=1"), head: "پرداختت کامل نشد 🛒", sub: `${firstName(k.name)}، پلن ${plan} هنوز فعال نشده است.`,
           paras: ["اگر در درگاه مشکلی پیش آمد یا وقت نشد، می‌توانی همین حالا دوباره امتحان کنی.", "اگر پولی از حسابت کم شده ولی پلن فعال نشده، همین ایمیل را پاسخ بده تا همان لحظه بررسی کنیم."],
-          rows: [["پلن", `پلن ${plan}`], ["قیمت", `${price_fa} هزار تومان`], ["اعتبار ماهانه", `${toFa(String(credits))} ارائه`]],
+          rows: [["پلن", `پلن ${plan}`], ["قیمت", `${price_fa} هزار تومان (به‌جای ${old_fa}؛ ${toFa(String(off))}٪ تخفیف)`], ["اعتبار ماهانه", `${toFa(String(credits))} ارائه`]],
           cta: "ادامه‌ی خرید ←", color: "#2563eb", foot: "این یادآوری فقط یک‌بار برای هر تلاش پرداخت فرستاده می‌شود.", preview: `پرداخت پلن ${plan} کامل نشد؛ همین حالا دوباره امتحان کن.`,
         },
       },

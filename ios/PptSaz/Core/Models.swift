@@ -17,6 +17,8 @@ struct PlanInfo: Identifiable, Hashable {
     var maxSlides: Int
     var maxImages: Int
     var url: String
+    var oldPrice: Int = 0 // قیمت خط‌خورده (هزار تومان)؛ از سرور (payment.ts ← PRICE_MARKUP_PCT)
+    var off: Int = 0      // درصد تخفیف نمایشی
 }
 
 struct ModelOpt: Identifiable, Hashable {
@@ -318,7 +320,8 @@ func parseMe(_ j: J) -> Me? {
     m.activeJob = aj.isEmpty ? nil : aj
     m.plans = j["plans"].arr.map {
         PlanInfo(id: $0["id"].str, name: $0["name"].str, price: $0["price"].int, credits: $0["credits"].int,
-                 days: $0["days"].int, maxSlides: $0["maxSlides"].int, maxImages: $0["maxImages"].int, url: $0["url"].str)
+                 days: $0["days"].int, maxSlides: $0["maxSlides"].int, maxImages: $0["maxImages"].int, url: $0["url"].str,
+                 oldPrice: $0["oldPrice"].int, off: $0["off"].int)
     }
     m.support = j["support"].str
     m.decks = j["decks"].int

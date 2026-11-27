@@ -9,10 +9,19 @@ import { sendReceipt } from "./email-receipt";
  * مدل‌های کلودفلر برای همه رایگان است؛ مدل‌های ویژه‌ی ارائه‌دهنده‌ی دوم (EXTRA_LLM_*) فقط برای دارندگان پلن فعال است. پلن‌ها اعتبار می‌فروشند و سقف اسلاید هر ارائه را بالا می‌برند
  * (رایگان ۶، پلاس ۲۰، پرو ۳۵ اسلاید) و تعداد تصویر هر ارائه را (رایگان ۱، پلاس ۳، پرو ۶).
  */
-export interface Plan { id: string; name: string; price: number; credits: number; days: number; maxSlides: number; maxImages: number }
+export interface Plan { id: string; name: string; price: number; /** قیمت خط‌خورده (هزار تومان) = price + PRICE_MARKUP_PCT درصد؛ فقط نمایشی است و هیچ‌جای پرداخت از آن استفاده نمی‌شود */ oldPrice: number; /** درصد تخفیف واقعیِ نمایشی نسبت به oldPrice */ off: number; credits: number; days: number; maxSlides: number; maxImages: number }
+
+/** درصد افزایشِ «قیمت قبل از تخفیف» نسبت به قیمت فعلی. منبع واحد برای همه‌ی پلتفرم‌ها (ربات‌ها، وب، اپ‌ها، ایمیل)؛ فقط همین عدد را عوض کن. */
+export const PRICE_MARKUP_PCT = 40;
+/** قیمت خط‌خورده‌ی نمایشی (هزار تومان) برای یک قیمت فعلی */
+export const oldPriceOf = (price: number): number => Math.round(price * (1 + PRICE_MARKUP_PCT / 100));
+/** درصد تخفیفِ دقیق بین قیمت خط‌خورده و قیمت فعلی (۴۰٪ افزایش ⇒ ≈۲۹٪ تخفیف) */
+export const offPctOf = (price: number): number => Math.round((1 - price / oldPriceOf(price)) * 100);
+
+const planOf = (p: Omit<Plan, "oldPrice" | "off">): Plan => ({ ...p, oldPrice: oldPriceOf(p.price), off: offPctOf(p.price) });
 export const PLANS: Plan[] = [
-  { id: "plus", name: "پلاس", price: 790, credits: 5, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus },
-  { id: "pro", name: "پرو", price: 1340, credits: 11, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro },
+  planOf({ id: "plus", name: "پلاس", price: 790, credits: 5, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus }),
+  planOf({ id: "pro", name: "پرو", price: 1340, credits: 11, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro }),
 ];
 
 /**

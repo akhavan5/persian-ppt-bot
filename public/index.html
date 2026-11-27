@@ -350,6 +350,15 @@ address{font-style:normal}
 .btn.gold:hover{box-shadow:0 10px 22px rgba(234,88,12,.36)}
 .ribbon{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff;font-size:.74rem;font-weight:800;line-height:1;padding:5px 12px;border-radius:99px;white-space:nowrap}
 .price{position:relative}
+/* قیمت خط‌خورده + برچسب تخفیف (پلن‌ها) */
+.old{display:inline-block;position:relative;color:var(--muted);font-size:.62em;font-weight:600;opacity:.85;line-height:1.2}
+.old::after{content:"";position:absolute;inset:50% -4px auto -4px;height:2px;background:#ef4444;border-radius:2px;transform:rotate(-8deg);transform-origin:center;transform-box:fill-box;animation:strikein .7s .25s cubic-bezier(.22,.8,.3,1) both}
+@keyframes strikein{from{clip-path:inset(0 0 0 100%)}to{clip-path:inset(0 0 0 0)}}
+.off{display:inline-block;margin-inline-start:6px;vertical-align:middle;background:linear-gradient(135deg,#ef4444,#f97316);color:#fff;font-size:.62em;font-weight:800;line-height:1;padding:4px 9px;border-radius:99px;box-shadow:0 3px 10px rgba(239,68,68,.32);animation:offpulse 2.4s ease-in-out infinite}
+@keyframes offpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+.pricebox{display:flex;flex-direction:column;align-items:center;gap:2px}
+.pricebox .now{display:block}
+@media(prefers-reduced-motion:reduce){.old::after,.off{animation:none}}
 /* پنجره‌ی پلن‌ها */
 #buy,#tgBuy{max-width:580px}
 .dp-banner{display:block;width:100%;max-width:520px;height:auto;margin:22px auto 0}
@@ -675,8 +684,8 @@ address{font-style:normal}
     <div class="sec-head"><h2 id="ph">تعرفه‌ها</h2><p class="muted">با ثبت‌نام ۱ ارائه‌ی رایگان هدیه می‌گیری و وقتی اعتبارت تمام شود هر روز ۱ اعتبار رایگان دیگر؛ مدل‌های رایگان برای همه‌اند و مدل‌های ویژه فقط برای دارندگان پلن؛ برای اعتبار بیشتر، اسلاید بیشتر در هر ارائه و دسترسی به مدل‌های ویژه، یکی از پلن‌های ماهانه را بگیر.</p></div>
     <div class="grid3">
       <div class="card price"><h3>رایگان</h3><div class="big">۰ <small>تومان</small></div><ul><li>۱ ارائه‌ی رایگان هدیه‌ی ثبت‌نام</li><li>۱ اعتبار رایگان در روز، وقتی اعتبارت تمام شود</li><li>تا ۶ اسلاید در هر ارائه</li><li>۱ تصویر در هر ارائه</li><li>حالت ساخت «عادی»</li><li>مدل‌های رایگان هوش مصنوعی</li><li>با واترمارک کوچک سایت</li></ul><button class="btn ghost block" type="button" data-auth="register">ثبت‌نام رایگان</button></div>
-      <div class="card price"><h3>👑 پلاس</h3><div class="big">۷۹۰ هزار <small>تومان / ماه</small></div><ul><li>۵ اعتبار ماهانه</li><li>تا ۲۰ اسلاید در هر ارائه</li><li>تا ۴ تصویر در هر ارائه</li><li>حالت‌های دانشجویی، کسب‌وکار، معلم و دفاع پایان‌نامه</li><li>دسترسی به مدل‌های ویژه‌ی هوش مصنوعی</li><li>بدون واترمارک</li></ul><button class="btn ghost block" type="button" data-plan="plus">خرید پلن پلاس</button></div>
-      <div class="card price hot"><span class="ribbon">به‌صرفه‌ترین</span><h3>👑 پرو</h3><div class="big">۱٬۳۴۰ هزار <small>تومان / ماه</small></div><ul><li>۱۱ اعتبار ماهانه</li><li>تا ۳۵ اسلاید در هر ارائه</li><li>تا ۷ تصویر در هر ارائه</li><li>حالت‌های دانشجویی، کسب‌وکار، معلم و دفاع پایان‌نامه</li><li>دسترسی به مدل‌های ویژه‌ی هوش مصنوعی</li><li>بدون واترمارک</li></ul><button class="btn block" type="button" data-plan="pro">خرید پلن پرو</button></div>
+      <div class="card price"><h3>👑 پلاس</h3><div class="big pricebox"><div><span class="old">۱٬۱۰۶ هزار</span><span class="off">۲۹٪ تخفیف</span></div><div class="now">۷۹۰ هزار <small>تومان / ماه</small></div></div><ul><li>۵ اعتبار ماهانه</li><li>تا ۲۰ اسلاید در هر ارائه</li><li>تا ۴ تصویر در هر ارائه</li><li>حالت‌های دانشجویی، کسب‌وکار، معلم و دفاع پایان‌نامه</li><li>دسترسی به مدل‌های ویژه‌ی هوش مصنوعی</li><li>بدون واترمارک</li></ul><button class="btn ghost block" type="button" data-plan="plus">خرید پلن پلاس</button></div>
+      <div class="card price hot"><span class="ribbon">به‌صرفه‌ترین</span><h3>👑 پرو</h3><div class="big pricebox"><div><span class="old">۱٬۸۷۶ هزار</span><span class="off">۲۹٪ تخفیف</span></div><div class="now">۱٬۳۴۰ هزار <small>تومان / ماه</small></div></div><ul><li>۱۱ اعتبار ماهانه</li><li>تا ۳۵ اسلاید در هر ارائه</li><li>تا ۷ تصویر در هر ارائه</li><li>حالت‌های دانشجویی، کسب‌وکار، معلم و دفاع پایان‌نامه</li><li>دسترسی به مدل‌های ویژه‌ی هوش مصنوعی</li><li>بدون واترمارک</li></ul><button class="btn block" type="button" data-plan="pro">خرید پلن پرو</button></div>
     </div>
     <img class="dp-banner" src="/digipay-banner.png" width="1284" height="274" alt="با دیجی‌پی قسطی خرید کن؛ خریدت را دیجی‌پی حساب می‌کند" loading="lazy" decoding="async">
   </section>
@@ -1509,7 +1518,9 @@ function renderBuy() {
     return h("div", { class: "plan" + (best ? " best" : "") },
       best ? h("span", { class: "ribbon" }, "به‌صرفه‌ترین") : null,
       h("h3", {}, `👑 پلن ${p.name}`),
-      h("div", { class: "pp" }, fa(p.price.toLocaleString("en-US")).replace(/,/g, "٬"), h("small", {}, " هزار تومان / ماه")),
+      h("div", { class: "pp pricebox" },
+        p.oldPrice ? h("div", {}, h("span", { class: "old" }, fa(p.oldPrice.toLocaleString("en-US")).replace(/,/g, "٬") + " هزار"), p.off ? h("span", { class: "off" }, fa(p.off) + "٪ تخفیف") : null) : null,
+        h("div", { class: "now" }, fa(p.price.toLocaleString("en-US")).replace(/,/g, "٬"), h("small", {}, " هزار تومان / ماه"))),
       h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, `تا ${fa(p.maxSlides)} اسلاید در هر ارائه`), h("li", {}, `تا ${fa(p.maxImages)} تصویر در هر ارائه`), h("li", {}, "حالت‌های دانشجویی، کسب‌وکار، معلم و دفاع پایان‌نامه")),
       h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: (ev) => buyPlan(p.id, ev.currentTarget) }, mine ? `تمدید ${fa(p.days)} روزه` : `خرید پلن ${p.name}`));
   }));
@@ -1621,7 +1632,9 @@ function handleTgBuy() {
     return h("div", { class: "plan" + (best ? " best" : "") },
       best ? h("span", { class: "ribbon" }, "به‌صرفه‌ترین") : null,
       h("h3", {}, `👑 پلن ${p.name}`),
-      h("div", { class: "pp" }, fa(p.price.toLocaleString("en-US")).replace(/,/g, "٬"), h("small", {}, " هزار تومان / ماه")),
+      h("div", { class: "pp pricebox" },
+        p.oldPrice ? h("div", {}, h("span", { class: "old" }, fa(p.oldPrice.toLocaleString("en-US")).replace(/,/g, "٬") + " هزار"), p.off ? h("span", { class: "off" }, fa(p.off) + "٪ تخفیف") : null) : null,
+        h("div", { class: "now" }, fa(p.price.toLocaleString("en-US")).replace(/,/g, "٬"), h("small", {}, " هزار تومان / ماه"))),
       h("ul", {}, h("li", {}, `${fa(p.credits)} اعتبار ماهانه`), h("li", {}, `تا ${fa(p.maxSlides)} اسلاید در هر ارائه`), h("li", {}, `تا ${fa(p.maxImages)} تصویر در هر ارائه`), h("li", {}, "حالت‌های دانشجویی، کسب‌وکار، معلم و دفاع پایان‌نامه")),
       h("button", { class: "btn block" + (best ? "" : " ghost"), type: "button", onclick: (ev) => tgPay(p.id, ev.currentTarget) }, `خرید پلن ${p.name}`));
   }));

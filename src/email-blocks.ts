@@ -66,6 +66,7 @@ export function plansCard(env: Env, campaign: string, title = "پلن‌هایی
         <td dir="rtl" align="center" bgcolor="#ffffff" style="background:#ffffff;border:2px solid ${isBest ? BLUE : LINE};border-radius:16px;padding:14px 8px 16px;font-family:${FONT};">
           ${badge}
           <div style="font:700 15px/1.8 ${FONT};color:${INK};">پلن ${esc(p.name)}</div>
+          <div style="font:400 14px/1.6 ${FONT};color:${MUTED};"><span style="text-decoration:line-through;text-decoration-color:#ef4444;">${faPrice(p.oldPrice)}</span> <span style="display:inline-block;background:#ef4444;color:#ffffff;border-radius:20px;padding:0 8px;font:700 11px/1.8 ${FONT};">${toFa(String(p.off))}٪ تخفیف</span></div>
           <div style="font:800 24px/1.5 ${FONT};color:${BLUE};">${faPrice(p.price)}</div>
           <div style="font:400 12px/1.8 ${FONT};color:${MUTED};padding-bottom:6px;">هزار تومان برای ${toFa(String(p.days))} روز</div>
           <div style="font:700 13px/2 ${FONT};color:${INK};">${toFa(String(p.credits))} ارائه، تا ${toFa(String(p.maxSlides))} اسلاید</div>
@@ -81,7 +82,7 @@ export function plansCard(env: Env, campaign: string, title = "پلن‌هایی
   </td></tr></table>`;
 }
 export function plansText(env: Env, campaign: string): string[] {
-  return ["", "پلن‌ها:", ...PLANS.map((p) => `• پلن ${p.name}: ${faPrice(p.price)} هزار تومان، ${toFa(String(p.credits))} ارائه در ماه، تا ${toFa(String(p.maxSlides))} اسلاید`), `دیدن پلن‌ها: ${mailUrl(env, "/?buy=1", campaign, "promo")}`];
+  return ["", "پلن‌ها:", ...PLANS.map((p) => `• پلن ${p.name}: ${faPrice(p.price)} هزار تومان (به‌جای ${faPrice(p.oldPrice)}، ${toFa(String(p.off))}٪ تخفیف)، ${toFa(String(p.credits))} ارائه در ماه، تا ${toFa(String(p.maxSlides))} اسلاید`), `دیدن پلن‌ها: ${mailUrl(env, "/?buy=1", campaign, "promo")}`];
 }
 
 /** امکانات سرویس که هر کدام به صفحه‌ی راهنمای خودش لینک دارد (مسیرها در wrangler.jsonc و landing-data هستند) */

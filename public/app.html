@@ -141,6 +141,11 @@ table.plans th,table.plans td{padding:6px 4px;border-top:1px solid var(--line);t
 table.plans th{border-top:0;color:var(--hint);font-weight:400}
 table.plans th:first-child,table.plans td:first-child{text-align:start}
 table.plans tr.cur td{font-weight:700;color:var(--btn)}
+.pold{display:inline-block;position:relative;color:var(--hint);font-weight:400;font-size:.9em;margin-inline-end:4px}
+.pold::after{content:"";position:absolute;inset:50% -3px auto -3px;height:1.5px;background:#ef4444;transform:rotate(-8deg);animation:pstrike .6s .2s ease-out both}
+@keyframes pstrike{from{clip-path:inset(0 0 0 100%)}to{clip-path:inset(0 0 0 0)}}
+.poff{display:block;width:max-content;margin:2px auto 0;background:linear-gradient(135deg,#ef4444,#f97316);color:#fff;font-size:.68rem;font-weight:800;line-height:1;padding:3px 7px;border-radius:99px}
+@media(prefers-reduced-motion:reduce){.pold::after{animation:none}}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20}
 .modal .sheet{background:var(--card);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px 14px calc(16px + var(--sab));max-height:85vh;max-height:85dvh;overflow:auto}
 @media (prefers-reduced-motion:reduce){.sk,.spin,.btn.busy::after,.bar.ind i{animation:none}.bar i{transition:none}}
@@ -1806,7 +1811,7 @@ function plansTable() {
       h("thead", {}, h("tr", {}, ...["پلن", "قیمت", "اعتبار", "اسلاید", "تصویر"].map((x) => h("th", { scope: "col" }, x)))),
       h("tbody", {},
         row(!me.plan, "رایگان", "۰", freeCredit, fa(cfg.freeMaxSlides), fa(cfg.freeMaxImages)),
-        ...plans.map((p) => row(me.plan && me.plan.id === p.id, (me.plan && me.plan.id === p.id ? "✓ " : "") + p.name, `${fa(p.price.toLocaleString("en-US")).replace(/,/g, "٬")} هزار ت`, `${fa(p.credits)} ارائه`, `تا ${fa(p.maxSlides)}`, `تا ${fa(p.maxImages)}`)))),
+        ...plans.map((p) => row(me.plan && me.plan.id === p.id, (me.plan && me.plan.id === p.id ? "✓ " : "") + p.name, h("span", {}, p.oldPrice ? h("span", { class: "pold" }, fa(p.oldPrice.toLocaleString("en-US")).replace(/,/g, "٬")) : null, `${fa(p.price.toLocaleString("en-US")).replace(/,/g, "٬")} هزار ت`, p.off ? h("span", { class: "poff" }, `${fa(p.off)}٪ تخفیف`) : null), `${fa(p.credits)} ارائه`, `تا ${fa(p.maxSlides)}`, `تا ${fa(p.maxImages)}`)))),
     h("div", { class: "muted", style: "margin-top:6px" }, `قیمت‌ها ماهانه (${fa((plans[0] && plans[0].days) || 30)} روزه) و به تومان است؛ پرداخت در سایت و با ورود خودکار انجام می‌شود. فایل‌های پلاس و پرو بدون واترمارک‌اند.`));
 }
 const plansModal = $("#plansModal");

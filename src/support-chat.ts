@@ -186,7 +186,7 @@ const FREE_ONCE = SIGNUP_CREDITS + CONTACT_CREDITS * 2 + Math.floor(REF_MAX / RE
 function knowledge(env: Env): string {
   const site = (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
   const plans = PLANS.map((p) =>
-    `- پلن ${p.name}: ${toFa(p.price.toLocaleString("en-US")).replace(/,/g, "٬")} هزار تومان، ${toFa(p.credits)} اعتبار (هر اعتبار = یک ارائه) برای ${toFa(p.days)} روز، تا ${toFa(p.maxSlides)} اسلاید و ${toFa(p.maxImages)} تصویر در هر ارائه، دسترسی به حالت‌های ساخت دانشجویی/کسب‌وکار/معلم/دفاع پایان‌نامه و مدل‌های ویژه، فایل بدون واترمارک`).join("\n");
+    `- پلن ${p.name}: ${toFa(p.price.toLocaleString("en-US")).replace(/,/g, "٬")} هزار تومان (قیمت خط‌خورده‌ی ${toFa(p.oldPrice.toLocaleString("en-US")).replace(/,/g, "٬")} هزار تومان، ${toFa(String(p.off))}٪ تخفیف)، ${toFa(p.credits)} اعتبار (هر اعتبار = یک ارائه) برای ${toFa(p.days)} روز، تا ${toFa(p.maxSlides)} اسلاید و ${toFa(p.maxImages)} تصویر در هر ارائه، دسترسی به حالت‌های ساخت دانشجویی/کسب‌وکار/معلم/دفاع پایان‌نامه و مدل‌های ویژه، فایل بدون واترمارک`).join("\n");
   const usd = 300_000; // نرخ ثابت هر دلار به تومان برای مقایسه‌ی قیمت
   const mil = (d: number) => toFa(String(Math.round((usd * d) / 100_000) / 10)).replace(/\.0$/, "").replace(".", "٫"); // دلار → میلیون تومان (یک رقم اعشار)
   const usdLine = usd > 1000

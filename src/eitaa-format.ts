@@ -29,20 +29,23 @@ export const eitaaWording = (s: string): string => s.replace(/تلگرامت/g, 
 export function htmlToEitaaMd(html: string): string {
   let out = "";
   let href: string | null = null;
-  let inPre = false, inCode = false;
+  let inPre = false, inCode = false, inS = false;
   const re = /<(\/?)([a-zA-Z][\w-]*)((?:\s[^>]*)?)>|([^<]+|<)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
     if (m[4] !== undefined) {
       const raw = decode(m[4]);
-      out += inPre || inCode ? raw.replace(/`/g, "ˋ") : escMd(raw);
+      // ایتا خط‌خوردگی ندارد؛ با نویسه‌ی ترکیبی «خط روی نویسه» (U+0336) شبیه‌سازی می‌شود
+      const strike = (s: string) => (inS ? s.replace(/[^\s\u0336]/g, "$&\u0336") : s);
+      out += inPre || inCode ? raw.replace(/`/g, "ˋ") : strike(escMd(raw));
       continue;
     }
     const close = m[1] === "/";
     let tag = m[2].toLowerCase();
-    if (tag === "strong") tag = "b"; else if (tag === "em") tag = "i";
+    if (tag === "strong") tag = "b"; else if (tag === "em") tag = "i"; else if (tag === "strike" || tag === "del") tag = "s";
     if (tag === "br") { out += "\n"; continue; }
-    if (tag === "b") out += "**";
+    if (tag === "s") inS = !close;
+    else if (tag === "b") out += "**";
     else if (tag === "i") out += "__";
     else if (tag === "code" && !inPre) { out += "`"; inCode = !close; }
     else if (tag === "pre") { out += close ? "\n```" : "```\n"; inPre = !close; }

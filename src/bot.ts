@@ -208,7 +208,8 @@ function pendingView(env: Env, p: Pending, s: Settings, caps: Caps) {
 /** فهرست پلن‌ها برای /credit: رایگان + پلاس/پرو با قیمت (هزار تومان)، اعتبار، سقف اسلاید و تصویر؛ پلن فعلی با ✅ */
 function plansText(curId?: string): string {
   const free = `${!curId ? "✅ " : "▫️ "}<b>رایگان</b> — روزی ${toFa(String(DAILY_FREE_CREDITS))} ارائه • تا ${toFa(String(FREE_MAX_SLIDES))} اسلاید • ${toFa(String(FREE_MAX_IMAGES))} تصویر • حالت «عادی» • با واترمارک`;
-  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — ${toFa(p.price.toLocaleString("en-US")).replace(/,/g, "٬")} هزار تومان • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • تا ${toFa(String(p.maxImages))} تصویر • همه‌ی حالت‌ها • بدون واترمارک`);
+  const faK = (n: number) => toFa(n.toLocaleString("en-US")).replace(/,/g, "٬");
+  const rows = PLANS.map((p) => `${curId === p.id ? "✅ " : "▫️ "}<b>${p.name}</b> — <s>${faK(p.oldPrice)}</s> ⟵ <b>${faK(p.price)}</b> هزار تومان 🔥 ${toFa(String(p.off))}٪ تخفیف • ${toFa(String(p.credits))} ارائه • تا ${toFa(String(p.maxSlides))} اسلاید • تا ${toFa(String(p.maxImages))} تصویر • همه‌ی حالت‌ها • بدون واترمارک`);
   return [free, ...rows].join("\n");
 }
 

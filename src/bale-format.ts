@@ -92,7 +92,8 @@ function wrap(f: Frame, stack: Frame[]): string {
       if (!/^https?:\/\//i.test(url)) return inner; // tg:// و … در بله کار نمی‌کند؛ فقط متن
       return `${lead}[${plain(core).replace(/[\[\]]/g, "")}](${url})${trail}`;
     }
-    default: return inner; // u, s, spoiler, span, blockquote: بله پشتیبانی نمی‌کند ← متن ساده
+    case "s": return `${lead}${plain(core).replace(/[^\s\u0336]/g, "$&\u0336")}${trail}`; // بله خط‌خوردگی ندارد؛ با نویسه‌ی ترکیبی «خط روی نویسه» (U+0336) شبیه‌سازی می‌شود
+    default: return inner; // u, spoiler, span, blockquote: بله پشتیبانی نمی‌کند ← متن ساده
   }
 }
 

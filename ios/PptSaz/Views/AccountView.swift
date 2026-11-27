@@ -172,8 +172,29 @@ struct AccountView: View {
                                 .clipShape(Capsule())
                         }
                         Spacer()
-                        Text(p.price.faGrouped).font(.title2.bold()).foregroundStyle(Theme.gradient)
-                        Text("هزار تومان / ماه").font(.caption).foregroundColor(.secondary)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            if p.oldPrice > p.price {
+                                HStack(spacing: 6) {
+                                    if p.off > 0 {
+                                        Text("\(p.off.fa)٪ تخفیف")
+                                            .font(.caption2.weight(.heavy))
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .background(LinearGradient(colors: [.red, .orange], startPoint: .leading, endPoint: .trailing))
+                                            .foregroundColor(.white)
+                                            .clipShape(Capsule())
+                                    }
+                                    Text(p.oldPrice.faGrouped)
+                                        .font(.subheadline)
+                                        .strikethrough(true, color: .red)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text(p.price.faGrouped).font(.title2.bold()).foregroundStyle(Theme.gradient)
+                                Text("هزار تومان / ماه").font(.caption).foregroundColor(.secondary)
+                            }
+                        }
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         feature("\(p.credits.fa) اعتبار (ارائه) در ماه")

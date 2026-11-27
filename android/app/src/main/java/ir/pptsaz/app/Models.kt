@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 data class Opt(val key: String, val name: String, val color: String? = null, val hint: String = "")
 
-data class PlanInfo(val id: String, val name: String, val price: Int, val credits: Int, val days: Int, val maxSlides: Int, val maxImages: Int, val url: String)
+data class PlanInfo(val id: String, val name: String, val price: Int, val credits: Int, val days: Int, val maxSlides: Int, val maxImages: Int, val url: String, val oldPrice: Int = 0, val off: Int = 0)
 
 data class ModelOpt(val id: String, val name: String, val brand: String, val free: Boolean)
 
@@ -165,7 +165,7 @@ fun parseMe(j: JSONObject): Me? {
         ),
         activeJob = j.str("activeJob").ifEmpty { null },
         plans = j.optJSONArray("plans").objects().map {
-            PlanInfo(it.str("id"), it.str("name"), it.optInt("price"), it.optInt("credits"), it.optInt("days"), it.optInt("maxSlides"), it.optInt("maxImages"), it.str("url"))
+            PlanInfo(it.str("id"), it.str("name"), it.optInt("price"), it.optInt("credits"), it.optInt("days"), it.optInt("maxSlides"), it.optInt("maxImages"), it.str("url"), it.optInt("oldPrice"), it.optInt("off"))
         },
         support = j.str("support"),
         decks = j.optInt("decks"),

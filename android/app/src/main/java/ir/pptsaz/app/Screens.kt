@@ -1485,6 +1485,17 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
                                     if (active) Pill("فعال", ex.successBg, ex.success)
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
+                                    if (p.oldPrice > p.price) {
+                                        // قیمت خط‌خورده + برچسب تخفیف (مقادیر از سرور: payment.ts ← PRICE_MARKUP_PCT)
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            if (p.off > 0) Pill(p.off.fa() + "٪ تخفیف", Color(0xFFEF4444), Color.White)
+                                            Text(
+                                                p.oldPrice.faGrouped(),
+                                                style = MaterialTheme.typography.bodyMedium.copy(textDecoration = TextDecoration.LineThrough),
+                                                color = cs.onSurfaceVariant.copy(alpha = 0.75f),
+                                            )
+                                        }
+                                    }
                                     Text(p.price.faGrouped(), style = MaterialTheme.typography.headlineSmall, color = cs.primary)
                                     Text("هزار تومان", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
                                 }
