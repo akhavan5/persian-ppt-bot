@@ -1,14 +1,11 @@
-/** رسید خرید پلن: بعد از هر خرید موفق (درگاه دیجی‌پی، کافه‌بازار، مایکت) هم به ایمیل حساب (اگر دارد) و هم به ربات تلگرام (اگر تلگرام وصل است) فرستاده می‌شود.
+/** رسید خرید پلن: بعد از هر خرید موفق (درگاه دیجی‌پی، کافه‌بازار، مایکت) به همه‌ی کانال‌های کاربر فرستاده می‌شود: ایمیل حساب، همه‌ی پیام‌رسان‌های وصل‌شده، اپ اندروید و اعلان مرورگر (notify.ts).
  *  هرگز خطا پرتاب نمی‌کند و پرداخت را خراب نمی‌کند؛ اگر ایمیل ثبت نشده یا RESEND_API_KEY نیست، ایمیل بی‌اثر است. */
 import type { Env } from "./env";
-import { getUserById } from "./auth";
 import { toFa } from "./util";
-import { sendToChannels } from "./link";
-import { esc as tgEsc, sendMessage } from "./telegram";
-import { BRAND, sendEmail, siteOf } from "./email";
+import { esc as tgEsc } from "./telegram";
+import { BRAND, siteOf } from "./email";
 import { featuresCard, featuresText, ghostButton, linkBar, linksText, mailUrl, tipBox } from "./email-blocks";
-import { sendWebPush } from "./webpush";
-import { sendPushToUser } from "./push";
+import { notifyUser } from "./notify";
 
 const FONT = "Vazirmatn,Tahoma,'Segoe UI',Arial,sans-serif";
 const BLUE = "#2563eb", INK = "#0f1b33", MUTED = "#5b6b86", LINE = "#e3e9f5", SOFT = "#eef4ff";
@@ -106,18 +103,6 @@ export function receiptEmail(env: Env, name: string, r: Receipt): { subject: str
   return { subject, html, text };
 }
 
-export async function sendReceiptEmail(env: Env, r: Receipt): Promise<boolean> {
-  try {
-    const u = await getUserById(env, r.uid);
-    if (!u?.email) return false;
-    const m = receiptEmail(env, u.name, r);
-    return await sendEmail(env, { to: u.email, ...m, tag: "receipt", idempotencyKey: `receipt-${r.idem}`.slice(0, 256) });
-  } catch (e) {
-    console.error("receipt email", e);
-    return false;
-  }
-}
-
 /** متن رسید برای ربات تلگرام (HTML) */
 export function receiptTelegram(r: Receipt): string {
   const L = [
@@ -136,33 +121,15 @@ export function receiptTelegram(r: Receipt): string {
   return L.join("\n");
 }
 
-export async function sendReceiptTelegram(env: Env, r: Receipt): Promise<boolean> {
-  try {
-    // رسید به همه‌ی پیام‌رسان‌های وصل‌شده‌ی روشن (تلگرام، بله، ایتا، …) می‌رسد
-    const res = await sendToChannels(env, r.uid, (id) => sendMessage(env, id, receiptTelegram(r)));
-    return res.ok > 0;
-  } catch (e) {
-    console.error("receipt telegram", e);
-    return false;
-  }
-}
-
-/** اعلان کوتاه «پرداخت موفق بود» در سایت/PWA (اعلان وب) و اپ اندروید (FCM) */
-export async function sendReceiptPush(env: Env, r: Receipt): Promise<boolean> {
-  try {
-    const msg = { title: "✅ پرداخت موفق بود", body: `پلن ${r.planName} فعال شد؛ ${toFa(String(r.credits))} اعتبار به حسابت اضافه شد.`, tag: "receipt" };
-    const [w, f] = await Promise.all([
-      sendWebPush(env, r.uid, { ...msg, url: "/" }).then((x) => x.ok > 0).catch(() => false),
-      sendPushToUser(env, r.uid, msg).then((x) => x.ok > 0).catch(() => false),
-    ]);
-    return w || f;
-  } catch (e) {
-    console.error("receipt push", e);
-    return false;
-  }
-}
-
-/** رسید کامل: ایمیل + تلگرام/پیام‌رسان + اعلان وب + اپ اندروید (هر کدام که برای حساب موجود باشد) */
+/** رسید کامل به همه‌ی کانال‌های کاربر (همه‌ی پیام‌رسان‌های وصل‌شده، اپ اندروید، اعلان مرورگر، ایمیل؛ هر کدام که برای حساب موجود باشد) — notify.ts.
+ *  هرگز خطا پرتاب نمی‌کند و پرداخت را خراب نمی‌کند. */
 export async function sendReceipt(env: Env, r: Receipt): Promise<void> {
-  await Promise.all([sendReceiptEmail(env, r), sendReceiptTelegram(env, r), sendReceiptPush(env, r)]);
+  await notifyUser(env, r.uid, {
+    title: "✅ پرداخت موفق بود",
+    body: `پلن ${r.planName} فعال شد؛ ${toFa(String(r.credits))} اعتبار به حسابت اضافه شد.`,
+    url: "/", tag: "receipt",
+    html: receiptTelegram(r),
+    email: ({ name }) => receiptEmail(env, name, r),
+    key: `receipt-${r.idem}`,
+  });
 }

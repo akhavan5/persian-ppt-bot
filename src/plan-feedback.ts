@@ -1,4 +1,4 @@
-/** نظرسنجی پایان پلن: کاربری که پلنش (پلاس/پرو) تمام شده و تمدید نکرده، یک‌بار نظرسنجی می‌گیرد (ایمیل + ربات تلگرام).
+/** نظرسنجی پایان پلن: کاربری که پلنش (پلاس/پرو) تمام شده و تمدید نکرده، یک‌بار نظرسنجی می‌گیرد (ایمیل + همه‌ی پیام‌رسان‌های وصل‌شده + اپ + مرورگر).
  *
  *  - «پلن تمام شد» = لحظه‌ای که حساب به رایگان برمی‌گردد (مثل getActiveSub در settings.ts): یا مدت پلن تمام شده (exp گذشته)،
  *    یا اعتبار پلن صفر شده (credits ≤ ۰؛ مدت هنوز مانده). ردیف sub:<حساب> تا ۲۴ ساعت بعد از exp در D1 می‌ماند (putSub).
@@ -16,6 +16,7 @@ import { esc as tgEsc, sendMessage } from "./telegram";
 import { BRAND, emailEnabled, sendEmail, siteOf } from "./email";
 import { inSendHours } from "./activation-reminder";
 import { isEitaaId } from "./eitaa-format";
+import { CHANS, chanOf, chanReady, sendToChannels } from "./link";
 import { sendWebPush, webPushEnabled } from "./webpush";
 import { fcmTokensOf, pushEnabled, sendPushToUser } from "./push";
 import { faDate, firstName, render } from "./plan-notify";
@@ -71,12 +72,13 @@ export function feedbackTelegram(plan: string, exp: number, why: EndReason, canR
   ].join("\n");
 }
 
-interface Row { k: string; v: string; usr: string | null; tg: string | null; banned: number | null; rewarded: number | null }
+interface Row { k: string; v: string; usr: string | null; tg: string | null; ids: string | null; banned: number | null; rewarded: number | null }
 
 const SQL = `
 SELECT s.k AS k, s.v AS v,
   (SELECT w.v FROM kv w WHERE w.k = 'wu:' || substr(s.k, 5)) AS usr,
   (SELECT t.v FROM kv t WHERE t.k = 'w2tg:' || substr(s.k, 5)) AS tg,
+  (SELECT i.v FROM kv i WHERE i.k = 'w2ids:' || substr(s.k, 5)) AS ids,
   (SELECT 1 FROM kv n WHERE n.k = 'ban:' || substr(s.k, 5)) AS banned,
   (SELECT 1 FROM kv r WHERE r.k = 'fbr:' || substr(s.k, 5)) AS rewarded
 FROM kv s
@@ -93,8 +95,8 @@ export async function sendPlanFeedbackSurveys(env: Env): Promise<{ scanned: numb
   try {
     const now = Date.now();
     if (!inSendHours(now)) return { scanned, sent };
-    const mailOn = emailEnabled(env), tgOn = !!env.TELEGRAM_BOT_TOKEN, pushOn = webPushEnabled(env), fcmOn = pushEnabled(env);
-    if (!mailOn && !tgOn && !pushOn && !fcmOn) return { scanned, sent };
+    const mailOn = emailEnabled(env), msgOn = CHANS.some((c) => chanReady(env, c)), pushOn = webPushEnabled(env), fcmOn = pushEnabled(env);
+    if (!mailOn && !msgOn && !pushOn && !fcmOn) return { scanned, sent };
     await env.KV.ready();
     const nowSec = Math.floor(now / 1000);
     const rows = (await env.DB.prepare(SQL).bind("sub:", "sub:" + MAXC, nowSec, now - DELAY, MAX_PER_RUN).all<Row>()).results ?? [];
@@ -112,24 +114,27 @@ export async function sendPlanFeedbackSurveys(env: Env): Promise<{ scanned: numb
       exp = Math.floor(exp); // همان مقداری که SQL با CAST AS INTEGER در کلید نشانگر می‌گذارد
       let u: WebUser | null = null;
       try { u = r.usr ? JSON.parse(r.usr) : null; } catch { /* بدون ایمیل */ }
-      const tgN = uid.startsWith("w_") ? Number(r.tg) : Number(uid); // مدیرها (شناسه‌ی عددی) خودِ تلگرامشان هستند
-      const tgId = Number.isSafeInteger(tgN) && tgN > 0 ? tgN : null;
+      // همه‌ی پیام‌رسان‌های وصل‌شده‌ی حساب (هویت اصلی اول) که ربات‌شان فعال است — نه فقط یک «تلگرام اصلی»؛ مدیرها (شناسه‌ی عددی) خودِ همان پیام‌رسان‌اند
+      const tgN = uid.startsWith("w_") ? Number(r.tg) : Number(uid);
+      let linked: number[] = [];
+      try { const a = JSON.parse(r.ids ?? "[]"); if (Array.isArray(a)) linked = a.map(Number); } catch { /* فقط هویت اصلی */ }
+      const msgIds = [...new Set([tgN, ...linked])].filter((i) => Number.isSafeInteger(i) && i > 0 && (uid.startsWith("w_") || i === tgN) && chanReady(env, chanOf(i)));
       const to = mailOn && u?.email ? u.email : "";
       // اعلان وب و اپ اندروید: کاربر فقط‌وب/اپ هم نظرسنجی می‌گیرد (نظر را از همان فرمِ «ارسال نظر» سایت/اپ می‌نویسد)
       const fcm = fcmOn ? await fcmTokensOf(env, uid) : [];
       const webOn = pushOn && uid.startsWith("w_");
-      if (r.banned || (!to && !(tgOn && tgId) && !webOn && !fcm.length)) { mark(uid, exp, "0", DONE_TTL); continue; }
+      if (r.banned || (!to && !msgIds.length && !webOn && !fcm.length)) { mark(uid, exp, "0", DONE_TTL); continue; }
       const pushMsg = { title: "نظرت درباره‌ی پلن چیست؟", body: "از چه چیزی راضی بودی و چه چیزی کم بود؟ در بخش «ارسال نظر» برایمان بنویس.", url: "/", tag: "survey" };
 
       // ایتا دکمه‌ی callback ندارد؛ برای ایتا دکمه‌ی برنامک گذاشته می‌شود که به یک خط لینک تبدیل می‌شود
-      const fbMarkup = isEitaaId(tgId ?? 0)
+      const fbMarkup = (id: number) => isEitaaId(id)
         ? { inline_keyboard: [[{ text: "💬 ارسال نظر", web_app: { url: siteOf(env) } }]] }
         : { inline_keyboard: [[{ text: "💬 ارسال نظر", callback_data: "fb:p" }]] };
       const [mailOk, tgOk, webOk, fcmOk] = await Promise.all([
         to ? sendEmail(env, { to, ...feedbackEmail(env, u!.name, plan, exp, why), tag: "plan-feedback", idempotencyKey: `plan-fb-${uid}-${exp}`.slice(0, 256) }) : Promise.resolve(false),
-        tgOn && tgId
-          ? sendMessage(env, tgId, feedbackTelegram(plan, exp, why, FEEDBACK_CREDITS > 0 && !r.rewarded), { reply_markup: fbMarkup })
-              .then(() => true).catch((e) => { console.error("plan feedback telegram", String(e).slice(0, 200)); return false; })
+        msgIds.length
+          ? sendToChannels(env, uid, (id) => sendMessage(env, id, feedbackTelegram(plan, exp, why, FEEDBACK_CREDITS > 0 && !r.rewarded), { reply_markup: fbMarkup(id) }), msgIds)
+              .then((x) => x.ok > 0).catch((e) => { console.error("plan feedback messenger", String(e).slice(0, 200)); return false; })
           : Promise.resolve(false),
         webOn ? sendWebPush(env, uid, pushMsg).then((x) => x.ok > 0).catch(() => false) : Promise.resolve(false),
         fcm.length ? sendPushToUser(env, uid, pushMsg, fcm, 1).then((x) => x.ok > 0).catch(() => false) : Promise.resolve(false),

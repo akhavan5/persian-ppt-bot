@@ -10,12 +10,9 @@ import { REF_CREDITS, REF_EVERY, REF_MAX, clearPendingReferral, holdReferral, is
 import { hitLimit } from "./auth";
 import { toFa } from "./util";
 import { getLinkedTg, resolveUid } from "./link";
-import { sendMessage } from "./telegram";
-import { sendWebPush } from "./webpush";
-import { sendPushToUser } from "./push";
-import { getUserById } from "./auth";
-import { BRAND, emailEnabled, sendEmail } from "./email";
+import { BRAND } from "./email";
 import { firstName, render } from "./plan-notify";
+import { notifyUser } from "./notify";
 
 /** شناسه‌ی دعوتِ یک حساب: پیام‌رسان/مدیر ← همان عدد؛ حساب وب ← پیام‌رسانِ وصل‌شده (اگر هست) وگرنه شناسه‌ی خودِ حساب وب */
 export async function refIdOf(env: Env, uid: Uid): Promise<RefId | null> {
@@ -28,33 +25,23 @@ export async function refCount(env: Env, id: RefId): Promise<number> {
   return Math.min(REF_MAX, Math.max(0, Number(await env.KV.get(`refc:${id}`).catch(() => null)) || 0));
 }
 
-/** پیام به دعوت‌کننده در همه‌ی کانال‌هایی که دارد: پیام‌رسان (اگر شناسه‌اش عددی است) + اعلان وب + اپ اندروید (FCM)
+/** پیام به دعوت‌کننده در همه‌ی کانال‌هایی که دارد (notify.ts): همه‌ی پیام‌رسان‌های وصل‌شده‌ی حساب + اعلان وب + اپ اندروید
  *  و، فقط برای پاداش نهایی (email=true)، ایمیل. کانال‌ها مستقل‌اند و خطای یکی بقیه را خراب نمی‌کند. خطا نمی‌پرتابد. */
 async function notifyInviter(env: Env, inviter: RefId, html: string, email = false): Promise<void> {
   try {
     const body = html.replace(/<[^>]+>/g, "").replace(/\s*\n+\s*/g, " ").trim();
-    const acct = typeof inviter === "number" ? await resolveUid(env, inviter) : inviter; // حساب اصلی دعوت‌کننده
-    const jobs: Promise<unknown>[] = [];
-    if (typeof inviter === "number") jobs.push(sendMessage(env, inviter, html));
-    if (isWebId(acct)) {
-      const id = String(acct);
-      jobs.push(sendWebPush(env, id, { title: "🎁 دعوت دوستان", body, url: "/", tag: "referral" }));
-      jobs.push(sendPushToUser(env, id, { title: "🎁 دعوت دوستان", body, tag: "referral" }));
-      if (email && emailEnabled(env)) {
-        jobs.push((async () => {
-          const u = await getUserById(env, id);
-          if (!u?.email) return;
-          const m = render(env, `پاداش دعوت دوستانت رسید 🎁 — ${BRAND}`, {
-            head: "پاداش دعوت دوستانت رسید 🎁", sub: `${firstName(u.name)}، دوستت اولین ارائه‌اش را ساخت`,
-            paras: body.split(/(?<=[.!؟])\s+/).filter(Boolean).slice(0, 4), rows: [], cta: "دیدن حساب ←", color: "#0f766e", campaign: "referral-reward", promo: "features",
-            tip: "اعتبار هدیه را می‌توانی برای ساخت ارائه، پوستر، جزوه یا پادکست خرج کنی؛ و با دعوت دوستان بیشترش کنی.",
-            foot: "این پیام فقط وقتی فرستاده می‌شود که دعوت یکی از دوستانت کامل شود.", preview: "دعوت دوستت شمرده شد.",
-          } as Parameters<typeof render>[2]);
-          await sendEmail(env, { to: u.email, ...m, tag: "referral-reward", idempotencyKey: `ref-${id}-${Date.now().toString(36)}`.slice(0, 250) });
-        })());
-      }
-    }
-    await Promise.allSettled(jobs);
+    await notifyUser(env, inviter, {
+      title: "🎁 دعوت دوستان", body, url: "/", tag: "referral", html,
+      except: email ? [] : ["email"],
+      email: ({ name }) => render(env, `پاداش دعوت دوستانت رسید 🎁 — ${BRAND}`, {
+        head: "پاداش دعوت دوستانت رسید 🎁", sub: `${firstName(name)}، دوستت اولین ارائه‌اش را ساخت`,
+        paras: body.split(/(?<=[.!؟])\s+/).filter(Boolean).slice(0, 4), rows: [], cta: "دیدن حساب ←", color: "#0f766e", campaign: "referral-reward", promo: "features",
+        tip: "اعتبار هدیه را می‌توانی برای ساخت ارائه، پوستر، جزوه یا پادکست خرج کنی؛ و با دعوت دوستان بیشترش کنی.",
+        foot: "این پیام فقط وقتی فرستاده می‌شود که دعوت یکی از دوستانت کامل شود.", preview: "دعوت دوستت شمرده شد.",
+      } as Parameters<typeof render>[2]),
+      emailTag: "referral-reward",
+      key: `ref-${inviter}-${Date.now().toString(36)}`,
+    });
   } catch { /* اعلان اختیاری است */ }
 }
 

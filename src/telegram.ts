@@ -221,4 +221,5 @@ export const ADMIN_COMMANDS = [
   { command: "cancel", description: "لغو ورودی در انتظار پنل" },
   { command: "appver", description: "نسخه‌ی اپ اندروید (دکمه‌ای در پنل)" },
   { command: "apppush", description: "اعلان به اپ اندروید: /apppush عنوان | متن | لینک" },
+  { command: "notifyall", description: "یک پیام به همه‌ی کانال‌ها: /notifyall عنوان | متن | لینک" },
 ];

@@ -1,19 +1,16 @@
 /** اعلان‌های پلن ماهانه:
- *  ۱) یادآوری ۷ روز و یادآوری آخر (کمتر از ۱ روز) مانده به پایان پلن (ایمیل + ربات تلگرام؛ هر کدام که برای حساب موجود باشد) — از cron روزانه (remindExpiringPlans)
- *  ۲) اعلام تمام شدن اعتبار پلن (ایمیل + ربات تلگرام) — بعد از ساخت ارائه‌ای که آخرین اعتبار پلن را مصرف کرده (notifyPlanCreditsOut)
+ *  ۱) یادآوری ۷ روز و یادآوری آخر (کمتر از ۱ روز) مانده به پایان پلن — به همه‌ی کانال‌های کاربر (همه‌ی پیام‌رسان‌های وصل‌شده، اپ اندروید، اعلان مرورگر، ایمیل؛ هر کدام که برای حساب موجود باشد) با notify.ts — از cron روزانه (remindExpiringPlans)
+ *  ۲) اعلام تمام شدن اعتبار پلن (به همه‌ی کانال‌ها) — بعد از ساخت ارائه‌ای که آخرین اعتبار پلن را مصرف کرده (notifyPlanCreditsOut)
  *  هر اعلان (هر کدام از دو یادآوری) برای هر دوره‌ی پلن فقط یک‌بار فرستاده می‌شود (نشانگر در KV با کلید شامل پایان پلن)؛ با تمدید، پایان پلن عوض می‌شود و دوره‌ی بعد دوباره اعلام می‌گیرد.
  *  هرگز خطا پرتاب نمی‌کند و کار اصلی (ساخت ارائه، cron) را خراب نمی‌کند. بدون RESEND_API_KEY ایمیل بی‌اثر است. */
 import type { Env } from "./env";
-import { getUserById } from "./auth";
-import { notifyIds, sendToChannels } from "./link";
-import { getSub, isWebId, type Sub, type Uid } from "./settings";
-import { esc as tgEsc, sendMessage } from "./telegram";
-import { BRAND, emailEnabled, sendEmail, siteOf } from "./email";
+import { getSub, type Sub, type Uid } from "./settings";
+import { esc as tgEsc } from "./telegram";
+import { BRAND, siteOf } from "./email";
+import { notifyUser } from "./notify";
 import { PLANS } from "./payment";
 import { buyKbFor } from "./deck-service";
 import { toFa } from "./util";
-import { sendWebPush, webPushEnabled } from "./webpush";
-import { fcmTokensOf, sendPushToUser } from "./push";
 import { featuresCard, featuresText, ghostButton, linkBar, linksText, mailUrl, plansCard, plansText, tipBox } from "./email-blocks";
 
 const DAY = 86_400_000;
@@ -97,12 +94,6 @@ export function render(env: Env, subject: string, m: Mail): { subject: string; h
   return { subject, html, text };
 }
 
-/** آیا کاربر ایمیل قابل‌ارسال دارد؟ (فقط حساب‌های وب) */
-async function emailOf(env: Env, uid: Uid): Promise<{ to: string; name: string } | null> {
-  if (!emailEnabled(env) || !isWebId(uid)) return null;
-  const u = await getUserById(env, String(uid)).catch(() => null);
-  return u?.email ? { to: u.email, name: u.name } : null;
-}
 /** نام کوچک برای سلام در ایمیل/پیام. اگر نام لاتین باشد، یک RLM (U+200F) بعدش می‌آید تا «،» و عددِ فارسیِ بعد از آن در جمله‌ی راست‌به‌چپ جابه‌جا نشوند (مثلاً «Akhava ،۱» به‌جای «Akhava، ۱») */
 export const firstName = (n: string) => {
   const f = n.trim().split(/\s+/)[0]?.slice(0, 24) || "دوست عزیز";
@@ -174,48 +165,24 @@ export function expiryTelegram(s: Sub, now = Date.now(), last = false): string {
 /** نشانگر «فرستاده شد» برای هر دوره‌ی پلن: rem7 = یادآوری ۷ روز (کلید قدیمی، دست‌نخورده)، rem1 = یادآوری آخر */
 const remKey = (uid: string, exp: number, last: boolean) => `${last ? "rem1" : "rem7"}:${uid}:${exp}`;
 
-/** پیام‌رسان‌های گیرنده‌ی اعلان: حساب وب ⇒ همه‌ی پیام‌رسان‌های وصل‌شده‌ی روشن (link.ts ← notifyIds)؛ کاربر فقط‌ربات (شناسه‌ی عددی) ⇒ خودش */
-async function botIdsOf(env: Env, uid: Uid): Promise<number[]> {
-  if (isWebId(uid)) return notifyIds(env, String(uid));
-  const n = Number(uid);
-  return Number.isSafeInteger(n) && n > 0 ? [n] : [];
-}
-
-/** یک پلن: ایمیل + تلگرام. true = یادآوری رسید (یا کانالی برای رساندن وجود ندارد و نیازی به تلاش مجدد نیست) */
+/** یک پلن: اعلان یکسان به همه‌ی کانال‌های کاربر (همه‌ی پیام‌رسان‌ها، اپ، مرورگر، ایمیل) — notify.ts.
+ *  true = یادآوری رسید. اگر کاربر هیچ کانال قابل‌رسیدنی ندارد دیگر تلاش نمی‌شود؛ اگر مقصد بود ولی نرسید فردا دوباره تلاش می‌شود. */
 async function remindOne(env: Env, uid: string, s: Sub, last: boolean): Promise<boolean> {
   const key = remKey(uid, s.exp, last);
   if (await env.KV.get(key)) return false; // قبلاً فرستاده شده
-  const mail = await emailOf(env, uid);
-  const tgIds = await botIdsOf(env, uid); // همه‌ی پیام‌رسان‌های وصل‌شده‌ی روشن (تلگرام، بله، ایتا، …)
-  const tgId = tgIds.length > 0;
-  const pushOn = webPushEnabled(env) && isWebId(uid); // اعلان وب: فقط حساب‌های وب (wps:<حساب>)
-  const fcm = await fcmTokensOf(env, String(uid)); // اپ اندروید (FCM)؛ بدون کلید/توکن = []
-  if (!mail && !tgId && !pushOn && !fcm.length) { await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); return false; }
-  const jobs: Promise<boolean>[] = [];
-  if (fcm.length) {
-    const days = Math.max(1, Math.ceil((s.exp - Date.now()) / DAY));
-    jobs.push(sendPushToUser(env, String(uid), last
-      ? { title: `پلن ${planName(s)} فردا تمام می‌شود`, body: "برای اینکه اعتبار و امکانات پلن قطع نشود، همین حالا تمدیدش کن.", tag: "plan-expiry" }
-      : { title: `${toFa(String(days))} روز تا پایان پلن ${planName(s)}`, body: "اگر پیش از پایان تمدید کنی، ۳۰ روز به مدت پلن اضافه می‌شود.", tag: "plan-expiry" }, fcm, 1).then((r) => r.ok > 0));
-  }
-  if (pushOn) {
-    const days = Math.max(1, Math.ceil((s.exp - Date.now()) / DAY));
-    jobs.push(sendWebPush(env, uid, last
-      ? { title: `پلن ${planName(s)} فردا تمام می‌شود`, body: "برای اینکه اعتبار و امکانات پلن قطع نشود، همین حالا تمدیدش کن.", url: "/?buy=1", tag: "plan-expiry" }
-      : { title: `${toFa(String(days))} روز تا پایان پلن ${planName(s)}`, body: "اگر پیش از پایان تمدید کنی، ۳۰ روز به مدت پلن اضافه می‌شود.", url: "/?buy=1", tag: "plan-expiry" }).then((r) => r.ok > 0).catch(() => false));
-  }
-  if (mail) {
-    const m = expiryEmail(env, mail.name, s, Date.now(), last);
-    jobs.push(sendEmail(env, { to: mail.to, ...m, tag: last ? "plan-expiry-1d" : "plan-expiry", idempotencyKey: `plan-exp${last ? 1 : 7}-${uid}-${s.exp}`.slice(0, 256) }));
-  }
-  if (tgId) {
-    jobs.push(sendToChannels(env, uid, async (id) => { await sendMessage(env, id, expiryTelegram(s, Date.now(), last), await buyKbFor(env, uid, id)); }, tgIds)
-      .then((r) => r.ok > 0).catch((e) => { console.error("expiry telegram", String(e).slice(0, 200)); return false; }));
-  }
-  const ok = (await Promise.all(jobs)).some(Boolean);
-  if (ok) await env.KV.put(key, "1", { expirationTtl: 10 * 86_400 }); // اگر هیچ کانالی نرسید، فردا دوباره تلاش می‌شود
-  else if (!mail && !tgId) await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); // فقط اعلان وب/اپ بود و دستگاهی نداشت: تلاش مجدد ندارد
-  return ok;
+  const days = Math.max(1, Math.ceil((s.exp - Date.now()) / DAY));
+  const r = await notifyUser(env, uid, {
+    title: last ? `پلن ${planName(s)} فردا تمام می‌شود` : `${toFa(String(days))} روز تا پایان پلن ${planName(s)}`,
+    body: last ? "برای اینکه اعتبار و امکانات پلن قطع نشود، همین حالا تمدیدش کن." : "اگر پیش از پایان تمدید کنی، ۳۰ روز به مدت پلن اضافه می‌شود.",
+    url: "/?buy=1", tag: "plan-expiry", emailTag: last ? "plan-expiry-1d" : "plan-expiry",
+    html: expiryTelegram(s, Date.now(), last),
+    extra: (id) => buyKbFor(env, uid, id),
+    email: ({ name }) => expiryEmail(env, name, s, Date.now(), last),
+    key: `plan-exp${last ? 1 : 7}-${uid}-${s.exp}`,
+  });
+  if (r.ok) await env.KV.put(key, "1", { expirationTtl: 10 * 86_400 }); // اگر هیچ کانالی نرسید، فردا دوباره تلاش می‌شود
+  else if (r.reachable === 0) await env.KV.put(key, "0", { expirationTtl: 10 * 86_400 }); // کانالی برای رساندن وجود ندارد: تلاش مجدد ندارد
+  return r.ok;
 }
 
 /** پلن‌های فعالی که حداکثر `days` روز تا پایان‌شان مانده و هنوز اعتبار دارند. handled: پلن‌هایی (uid:exp) که پنجره‌ی «آخر» همین اجرا پوشش داده و دیگر یادآوری ۷ روزه نمی‌گیرند. */
@@ -290,30 +257,23 @@ export function creditsOutTelegram(s: Sub, now = Date.now()): string {
   ].join("\n");
 }
 
-/** بعد از ساخت ارائه صدا زده می‌شود (فقط وقتی اعتبارِ این ارائه از پلن کم شده): اگر اعتبار پلن اکنون صفر است و پلن هنوز تمام نشده، ایمیل می‌رود. */
+/** بعد از ساخت ارائه صدا زده می‌شود (فقط وقتی اعتبارِ این ارائه از پلن کم شده): اگر اعتبار پلن اکنون صفر است و پلن هنوز تمام نشده، به همه‌ی کانال‌های کاربر اعلام می‌شود. */
 export async function notifyPlanCreditsOut(env: Env, uid: Uid): Promise<void> {
   try {
     const s = await getSub(env, uid); // فقط پلن منقضی‌نشده
     if (!s || s.credits > 0) return; // اعتبار برگشته یا تمدید شده
     const key = `planout:${uid}:${s.exp}`;
     if (await env.KV.get(key)) return;
-    const mail = await emailOf(env, uid);
-    // ربات: حساب وبِ لینک‌شده، یا کاربر فقط‌ربات (شناسه‌ی عددی = خودِ پیام‌رسان؛ مثل یادآوری پایان پلن)
-    const tgIds = await botIdsOf(env, uid);
-    const tgId = tgIds.length > 0;
-    const pushOn = webPushEnabled(env) && isWebId(uid);
-    const fcm = await fcmTokensOf(env, String(uid));
-    if (!mail && !tgId && !pushOn && !fcm.length) return;
-    const jobs: Promise<boolean>[] = [];
-    if (fcm.length) jobs.push(sendPushToUser(env, String(uid), { title: `اعتبار پلن ${planName(s)} تمام شد`, body: "مدت پلن هنوز باقی است؛ با تمدید، اعتبار و امکانات پلن برمی‌گردد.", tag: "plan-out" }, fcm, 1).then((r) => r.ok > 0));
-    if (pushOn) jobs.push(sendWebPush(env, String(uid), { title: `اعتبار پلن ${planName(s)} تمام شد`, body: "مدت پلن هنوز باقی است؛ با تمدید، اعتبار و امکانات پلن برمی‌گردد.", url: "/?buy=1", tag: "plan-out" }).then((r) => r.ok > 0).catch(() => false));
-    if (mail) jobs.push(sendEmail(env, { to: mail.to, ...creditsOutEmail(env, mail.name, s), tag: "plan-credits-out", idempotencyKey: `plan-out-${uid}-${s.exp}`.slice(0, 256) }));
-    if (tgId) {
-      jobs.push(sendToChannels(env, String(uid), async (id) => { await sendMessage(env, id, creditsOutTelegram(s), await buyKbFor(env, uid, id)); }, tgIds)
-        .then((r) => r.ok > 0).catch((e) => { console.error("credits-out telegram", String(e).slice(0, 200)); return false; }));
-    }
-    const ok = (await Promise.all(jobs)).some(Boolean);
-    if (ok) await env.KV.put(key, "1", { expiration: Math.floor(s.exp / 1000) + 86_400 });
+    const r = await notifyUser(env, uid, {
+      title: `اعتبار پلن ${planName(s)} تمام شد`,
+      body: "مدت پلن هنوز باقی است؛ با تمدید، اعتبار و امکانات پلن برمی‌گردد.",
+      url: "/?buy=1", tag: "plan-out", emailTag: "plan-credits-out",
+      html: creditsOutTelegram(s),
+      extra: (id) => buyKbFor(env, uid, id),
+      email: ({ name }) => creditsOutEmail(env, name, s),
+      key: `plan-out-${uid}-${s.exp}`,
+    });
+    if (r.ok) await env.KV.put(key, "1", { expiration: Math.floor(s.exp / 1000) + 86_400 });
   } catch (e) {
     console.error("notifyPlanCreditsOut", String(e).slice(0, 300));
   }

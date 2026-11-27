@@ -7,7 +7,8 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "sample": "tsx scripts/sample.ts",
-    "email:preview": "tsx scripts/email-preview.ts"
+    "email:preview": "tsx scripts/email-preview.ts",
+    "notify:smoke": "tsx scripts/notify-smoke.ts"
   },
   "dependencies": {
     "@cloudflare/puppeteer": "^1.0.6",
