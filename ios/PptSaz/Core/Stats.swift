@@ -12,9 +12,16 @@ enum Stats {
         let info = Bundle.main.infoDictionary ?? [:]
         let appID = (info["FirebaseAppID"] as? String ?? "").trimmingCharacters(in: .whitespaces)
         let sender = (info["FirebaseSenderID"] as? String ?? "").trimmingCharacters(in: .whitespaces)
-        guard !appID.isEmpty, !sender.isEmpty, !appID.hasPrefix("$(") else { return }
+        let apiKey = (info["FirebaseAPIKey"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        let projectID = (info["FirebaseProjectID"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        // در تست‌های واحد آنالیتیکس لازم نیست (و بدون مقدارهای کامل فایربیس کل برنامه را با استثنا می‌بندد)
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        guard !appID.isEmpty, !sender.isEmpty, !apiKey.isEmpty, !projectID.isEmpty,
+              ![appID, sender, apiKey, projectID].contains(where: { $0.hasPrefix("$(") }) else { return }
         if FirebaseApp.app() == nil {
             let o = FirebaseOptions(googleAppID: appID, gcmSenderID: sender)
+            o.apiKey = apiKey
+            o.projectID = projectID
             o.bundleID = Bundle.main.bundleIdentifier ?? "ir.pptsaz.app"
             FirebaseApp.configure(options: o)
         }

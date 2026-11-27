@@ -47,6 +47,9 @@ targets:
         # آنالیتیکس: شناسه‌ها هنگام بیلد از GitHub Secrets می‌آیند (خالی = خاموش). فایل GoogleService-Info.plist لازم نیست.
         FirebaseAppID: $(FIREBASE_IOS_APP_ID)
         FirebaseSenderID: $(FIREBASE_SENDER_ID)
+        # فایربیس (نسخه‌های جدید) بدون این دو مقدار هنگام راه‌اندازی کرش می‌کند؛ هر دو از GoogleService-Info.plist (API_KEY و PROJECT_ID). خالی = آنالیتیکس خاموش
+        FirebaseAPIKey: $(FIREBASE_API_KEY)
+        FirebaseProjectID: $(FIREBASE_PROJECT_ID)
         # جمع‌آوری تا وقتی Stats.start آن را روشن نکند خاموش است
         FIREBASE_ANALYTICS_COLLECTION_ENABLED: false
         GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS: false
