@@ -23,6 +23,7 @@ import { withStore } from "./store";
 import { notifyPlanCreditsOut } from "./plan-notify";
 import { completeReferral } from "./referral";
 import { sendWebPush } from "./webpush";
+import { autoSendToBale } from "./bale-autosend";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const LLM_STEP = { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" }, timeout: "4 minutes" } as const;
@@ -327,11 +328,16 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ یک پیام کوتاه با دکمه‌ی باز کردن اپ (فایل‌ها داخل اپ‌اند).
     // بعد از «finish» (قفل قبلاً آزاد شده) و بدون تلاش مجدد: شکست یا کندی این پیام نباید به «برگشت اعتبار» یا شکست کار برسد.
     if (web && event.payload.notify) {
-      await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+      await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "120 seconds" }, async () => {
         const tgChat = await linkedFor(this.env, String(userId), event.payload.plat);
         if (!tgChat) return;
+        // مینی‌اپ بله دانلود مستقیم ندارد؛ هر چه ساخته شده (ارائه + پوستر + جزوه) خودکار به چت بله فرستاده می‌شود (bale-autosend.ts).
+        // شکست ارسال فقط لاگ می‌شود و پیام «آماده شد» پایین باز هم می‌رود؛ کاربر می‌تواند از داخل اپ «ارسال به چت» بزند.
+        const autoSent = botPlatform(tgChat) === "bale"
+          ? await autoSendToBale(this.env, userId, tgChat, [event.instanceId, ...(built.poster === "ok" ? [`${event.instanceId}-poster`] : []), ...(built.handout === "ok" ? [`${event.instanceId}-handout`] : [])]) > 0
+          : false;
         const extras = [built.poster === "ok" ? "🖼 پوستر" : "", built.handout === "ok" ? "📝 جزوه" : "", built.audio === "pending" ? "🔊 اسلاید صوتی (چند دقیقه‌ی دیگر)" : "", built.podcast === "pending" ? "🎙 پادکست (چند دقیقه‌ی دیگر)" : ""].filter(Boolean);
-        const text = `✅ <b>${esc(built.title)}</b> آماده شد (${toFa(String(built.slides))} اسلاید${extras.length ? " + " + extras.join(" + ") : ""}).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`;
+        const text = `✅ <b>${esc(built.title)}</b> آماده شد (${toFa(String(built.slides))} اسلاید${extras.length ? " + " + extras.join(" + ") : ""}).\n${autoSent ? "فایل‌ها همین‌جا برایت فرستاده شد؛ بعداً هم می‌توانی از داخل اپ دوباره بگیری." : "برای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند."}`;
         await sendMessage(this.env, tgChat, text, await appReadyMarkup(this.env, tgChat, event.instanceId));
       }).catch((e) => console.error("notify-app", String(e).slice(0, 200)));
     }

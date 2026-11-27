@@ -18,7 +18,8 @@ import { editMessage, esc, sendAudio, sendDocument, sendMessage } from "./telegr
 import { linkedFor } from "./link";
 import { withStore } from "./store";
 import type { BlobStore } from "./blobstore";
-import { refundCredit, type CreditSource } from "./settings";
+import { botPlatform, refundCredit, type CreditSource } from "./settings";
+import { autoSendToBale } from "./bale-autosend";
 import { appReadyMarkup, fileNameWithSite, siteHost } from "./deck-service";
 import { toFa } from "./util";
 import { unmarkExtra } from "./extras";
@@ -159,10 +160,11 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       }
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ. خطایش نباید به «برگشت اعتبار» برسد (فایل ذخیره شده)
       if (web && event.payload.notify && out.ids.length) {
-        await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
+        await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "120 seconds" }, async () => {
           const tgChat = await linkedFor(this.env, String(uid), event.payload.plat);
           if (!tgChat) return;
-          await sendMessage(this.env, tgChat, `✅ ${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
+          const autoSent = botPlatform(tgChat) === "bale" ? await autoSendToBale(this.env, uid, tgChat, out.ids) > 0 : false; // مینی‌اپ بله: فایل خودکار به چت می‌رود
+          await sendMessage(this.env, tgChat, `✅ ${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} «${esc(out.title)}» آماده شد.\n${autoSent ? "فایل همین‌جا برایت فرستاده شد؛ بعداً هم می‌توانی از داخل اپ دوباره بگیری." : "برای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند."}`,
             await appReadyMarkup(this.env, tgChat, out.ids[0]));
         }).catch((ne) => console.error("notify-app", String(ne).slice(0, 200)));
       }

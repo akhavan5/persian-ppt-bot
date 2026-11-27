@@ -1506,6 +1506,7 @@ async function fbSubmit() {
 function showDone(jobId, s, took = 0) {
   lastTopic = $("#topic").value.trim(); TG.haptic("success");
   if (IS_BALE && TG.askReview) TG.askReview(); // بعد از تحویل موفق ارائه
+  if (IS_BALE) toast("📥 فایل‌ها به‌زودی در چت ربات بله برایت ارسال می‌شوند"); // سرور (notify-app ← bale-autosend.ts) خودکار می‌فرستد
   const dl = $("#doneDl"); show(dl, TG.canDownload); dl.onclick = (e) => dlFile(jobId, e.currentTarget);
   $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = (s.slides ? ` — ${fa(s.slides)} اسلاید` : "") + (took ? ` · ساخته‌شده در ${fmtDur(took)}` : "");
   $("#doneSend").onclick = (e) => sendToChat(jobId, e.currentTarget);
