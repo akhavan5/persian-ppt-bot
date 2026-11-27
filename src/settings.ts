@@ -537,14 +537,20 @@ export async function noteActive(env: Env, userId: Uid, username?: string, name?
 }
 
 // ---------- دعوت دوستان ----------
-// قانون: به ازای هر REF_EVERY (۳) دوستِ جدید که با لینک دعوت وارد شوند و «اولین ارائه‌شان را بسازند»، ۱ اعتبار معمولی (= ۱ ارائه؛ همان bonus) به دعوت‌کننده داده می‌شود؛ حداکثر تا REF_MAX (۵۱) دعوت (= ۱۷ اعتبار).
+// قانون: به ازای هر REF_EVERY (۲) دوستِ جدید که با لینک دعوت وارد شوند و «اولین ارائه‌شان را بسازند»، ۱ اعتبار معمولی (= ۱ ارائه؛ همان bonus) به دعوت‌کننده داده می‌شود؛
+// و به ازای هر REF_PLUS_EVERY (۲۰) دعوت، علاوه بر آن یک «اکانت کامل پلاس» (۵ اعتبار + ۳۰ روز)؛ حداکثر تا REF_MAX (۴۰) دعوت (= ۲۰ اعتبار + ۲ پلاس).
 // قانون قدیمی (تا پیش از این تغییر): هر ۵ دعوت = ۱ اعتبار «پلن پلاس». پلاس‌هایی که قبلاً داده شده دست‌نخورده می‌مانند؛ دعوت‌های تسویه‌نشده‌ی قبلی با settleReferralCredits (و تسویه‌ی یک‌باره‌ی مدیر) به اعتبار معمولی تبدیل می‌شوند.
 /** حداکثر تعداد دعوت‌هایی که شمرده می‌شوند (جلوگیری از سوءاستفاده با حساب‌های ساختگی) */
-export const REF_MAX = 51;
+export const REF_MAX = 40;
 /** هر چند دعوتِ موفق یک اعتبار معمولی می‌دهد */
-export const REF_EVERY = 3;
+export const REF_EVERY = 2;
 /** اعتبار معمولی‌ای که به ازای هر REF_EVERY دعوت داده می‌شود */
 export const REF_CREDITS = 1;
+/** هر چند دعوتِ موفق یک اکانت کامل پلاس می‌دهد (علاوه بر اعتبارهای معمولی)؛ REF_MAX باید مضرب REF_EVERY و REF_PLUS_EVERY باشد */
+export const REF_PLUS_EVERY = 20;
+/** هر «اکانت کامل پلاس» دعوت = همان پلن پلاس فروشگاه (payment.ts ← PLANS): ۵ اعتبار و ۳۰ روز */
+export const REF_PLUS_CREDITS = 5;
+export const REF_PLUS_DAYS = 30;
 /** قانون قدیمی: هر چند دعوت یک اعتبار پلاس می‌داد (فقط برای محاسبه‌ی دعوت‌هایی که قبلاً تسویه شده‌اند) */
 const REF_LEGACY_EVERY = 5;
 
@@ -565,6 +571,7 @@ export async function grantPlanCredit(env: Env, userId: Uid, planId: string, day
 export interface RefResult {
   /** تعداد کل دعوت‌های موفق (بعد از این دعوت) */ count: number;
   /** با همین دعوت یک دسته‌ی کامل شد و اعتبار معمولی به دعوت‌کننده داده شد */ creditGranted: boolean;
+  /** با همین دعوت دسته‌ی REF_PLUS_EVERY‌تایی کامل شد و اکانت کامل پلاس به دعوت‌کننده داده شد (تعداد پلاس‌های داده‌شده) */ plusGranted: number;
   /** چند دعوت دیگر تا اعتبار بعدی (۱ تا REF_EVERY؛ در سقف بی‌معنی است) */ left: number }
 
 // ورود با لینک دعوت فقط یک «دعوت در انتظار» ثبت می‌کند (holdReferral: refp:<دعوت‌شده> = <دعوت‌کننده>، ۳۰ روز اعتبار)؛ وقتی دوست اولین ارائه‌اش را ساخت،
@@ -607,7 +614,7 @@ export async function pendingInviter(env: Env, newUserId: RefId): Promise<RefId 
 export const clearPendingReferral = (env: Env, newUserId: RefId) => env.KV.delete(refPendingKey(newUserId));
 
 /** ثبت یک دعوتِ جدید (بعد از ساخت اولین ارائه‌ی دوست)؛ هر کاربر جدید فقط یک بار حساب می‌شود. null = دعوت شمرده نشد (نامعتبر، تکراری یا رسیدن به سقف).
- *  شمارنده‌ی دعوت‌کننده (refc:) با یک دستور SQL اتمی بالا می‌رود تا دعوت‌های هم‌زمان مضرب ۱۰ را جا نیندازند یا دوبار حساب نکنند.
+ *  شمارنده‌ی دعوت‌کننده (refc:) با یک دستور SQL اتمی بالا می‌رود تا دعوت‌های هم‌زمان هم‌زمان را جا نیندازند یا دوبار حساب نکنند.
  *  creditTo: اگر دعوت‌کننده حسابش را به وب وصل کرده، شناسه‌ی حساب وب (پلن و اعتبار روی حساب اصلی ثبت می‌شود). */
 export async function rewardReferral(env: Env, inviterId: RefId, newUserId: RefId, creditTo: Uid = inviterId): Promise<RefResult | null> {
   const inviter = parseRefId(inviterId), invitee = parseRefId(newUserId);
@@ -625,8 +632,10 @@ export async function rewardReferral(env: Env, inviterId: RefId, newUserId: RefI
   const count = Number(row.v) || 1;
   // دعوت‌های قبل از این یکی (count-1) با قانون قدیمی تسویه شده‌اند؛ اگر این دعوت‌کننده هنوز refpaid: ندارد از همان پایه شروع می‌کنیم
   const n = await settleReferralCredits(env, inviterId, count, creditTo, count - 1).catch((e) => { console.error("referralCredit", inviterId, count, e); return 0; });
+  // پلاس: دعوت‌های قبل از این یکی (count-1) پایه‌ی تسویه‌اند؛ پس دعوت‌کننده‌ای که قبلاً مثلاً ۲۵ دعوت داشته برای گذشته پلاس نمی‌گیرد (قبلاً پلاس‌های قانون قدیمی را گرفته)
+  const plus = await settleReferralPlus(env, inviterId, count, creditTo, count - 1).catch((e) => { console.error("referralPlus", inviterId, count, e); return 0; });
   const paid = await refPaid(env, inviterId, count);
-  return { count, creditGranted: n > 0, left: REF_EVERY - (Math.min(count, REF_MAX) - paid) % REF_EVERY };
+  return { count, creditGranted: n > 0, plusGranted: plus, left: REF_EVERY - (Math.min(count, REF_MAX) - paid) % REF_EVERY };
 }
 
 // ---- تسویه‌ی اعتبار دعوت: refpaid:<دعوت‌کننده> = تعداد دعوت‌هایی که پاداششان (اعتبار معمولی یا پلاسِ قانون قدیمی) پرداخت/تسویه شده ----
@@ -671,14 +680,54 @@ export async function settleReferralCredits(env: Env, inviterId: RefId, count: n
   return 0;
 }
 
+// ---- تسویه‌ی پلاسِ دعوت: refplus:<دعوت‌کننده> = تعداد دعوت‌هایی که پلاسشان تسویه شده (همیشه مضرب REF_PLUS_EVERY) ----
+const refPlusKey = (id: RefId) => `refplus:${id}`;
+
+/** اکانت کامل پلاس را به حساب می‌دهد: بدون پلن فعال یا با پلاس فعال ← مثل خرید/تمدید پلاس (۳۰ روز و ۵ اعتبار؛ روی پلاس فعال جمع می‌شود)؛
+ *  با پلن فعالِ دیگر (پرو) ← پلن او پایین نمی‌آید و همان ۵ اعتبار و ۳۰ روز به پلن فعلی‌اش اضافه می‌شود. */
+async function grantReferralPlus(env: Env, uid: Uid, n: number): Promise<void> {
+  const cur = await getActiveSub(env, uid);
+  const add = n * REF_PLUS_CREDITS, ms = n * REF_PLUS_DAYS * 86_400_000;
+  if (cur) await putSub(env, uid, { ...cur, exp: cur.exp + ms, credits: cur.credits + add });
+  else await putSub(env, uid, { plan: "plus", exp: Date.now() + ms, credits: add });
+}
+
+/** پلاس‌های تسویه‌نشده را می‌دهد و تعدادشان را برمی‌گرداند (۰ = چیزی نبود). مثل settleReferralCredits با CAS؛ اگر اعطا خطا بدهد برمی‌گردد تا بار بعد دوباره تلاش شود.
+ *  legacyCount: پایه‌ی کسی که هنوز refplus: ندارد (دعوت‌های قبل از این قانون)؛ فقط دعوت‌های بعد از آن به پلاس حساب می‌شوند. */
+export async function settleReferralPlus(env: Env, inviterId: RefId, count: number, creditTo: Uid = inviterId, legacyCount: number = count): Promise<number> {
+  const db = await rawDb(env);
+  const key = refPlusKey(inviterId);
+  const base = Math.floor(Math.min(Math.max(0, legacyCount), REF_MAX) / REF_PLUS_EVERY) * REF_PLUS_EVERY;
+  await db.prepare("INSERT OR IGNORE INTO kv (k, v, exp) VALUES (?1, ?2, NULL)").bind(key, String(base)).run();
+  const target = Math.min(Math.max(0, Math.floor(count)), REF_MAX);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const row = await db.prepare("SELECT v FROM kv WHERE k = ?1").bind(key).first<{ v: string }>();
+    const paid = Math.max(0, Math.floor(Number(row?.v) || 0));
+    const n = Math.floor((target - paid) / REF_PLUS_EVERY);
+    if (n <= 0) return 0;
+    const next = paid + n * REF_PLUS_EVERY;
+    const cas = await db.prepare("UPDATE kv SET v = ?3 WHERE k = ?1 AND CAST(v AS INTEGER) = ?2").bind(key, paid, String(next)).run();
+    if (!changed(cas)) continue;
+    try { await grantReferralPlus(env, creditTo, n); }
+    catch (e) {
+      await db.prepare("UPDATE kv SET v = ?3 WHERE k = ?1 AND CAST(v AS INTEGER) = ?2").bind(key, next, String(paid)).run().catch(() => {});
+      throw e;
+    }
+    return n;
+  }
+  return 0;
+}
+
 /** پیام تلگرام به دعوت‌کننده بعد از هر دعوتِ موفق (دوست اولین ارائه‌اش را ساخته) */
 export function referralMsg(r: RefResult): string {
   const c = toFa(String(r.count)), max = toFa(String(REF_MAX));
+  const plusLine = r.plusGranted > 0
+    ? `\n\n👑 <b>یک اکانت کامل پلاس</b> (${toFa(String(REF_PLUS_CREDITS))} اعتبار و ${toFa(String(REF_PLUS_DAYS))} روز) هم به‌خاطر هر ${toFa(String(REF_PLUS_EVERY))} دعوت به حسابت اضافه شد!` : "";
   if (r.creditGranted) {
-    return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت؛ دعوت‌های موفقت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa(String(REF_CREDITS))} اعتبار</b> (یک ارائه‌ی رایگان) به‌خاطر هر ${toFa(String(REF_EVERY))} دعوت به حسابت اضافه شد. برای دیدن اعتبار: /credit` +
+    return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت؛ دعوت‌های موفقت به <b>${c}</b> رسید!\n\n🏆 <b>${toFa(String(REF_CREDITS))} اعتبار</b> (یک ارائه‌ی رایگان) به‌خاطر هر ${toFa(String(REF_EVERY))} دعوت به حسابت اضافه شد. برای دیدن اعتبار: /credit` + plusLine +
       (r.count >= REF_MAX ? `\n\n✅ به سقف ${max} دعوت رسیدی و تمام پاداش‌ها را گرفتی. ممنون که پاورپوینت‌ساز را معرفی کردی! 🙏` : "");
   }
-  return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت. دعوت‌های موفق تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(r.left))} دعوت دیگر تا ${toFa(String(REF_CREDITS))} اعتبار.`;
+  return `🎉 یکی از دوستانت با لینک تو وارد پاورپوینت‌ساز شد و اولین ارائه‌اش را ساخت. دعوت‌های موفق تو: <b>${c}</b> از ${max}\n🎁 ${toFa(String(r.left))} دعوت دیگر تا ${toFa(String(REF_CREDITS))} اعتبار.` + plusLine;
 }
 
 export async function getUserSeen(env: Env, userId: Uid): Promise<SeenUser | null> {

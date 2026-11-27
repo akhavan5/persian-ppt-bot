@@ -1704,7 +1704,7 @@ fun InviteCard(d: InviteInfo?, vm: AppViewModel) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("🎁 دعوت دوستان", style = MaterialTheme.typography.titleSmall)
             Text(
-                "به‌ازای هر " + d.every.fa() + " دوستی که با لینک شما وارد پاورپوینت‌ساز شوند و اولین ارائه‌شان را بسازند، ۱ اعتبار (یک ارائه‌ی رایگان) می‌گیرید (تا سقف " + d.max.fa() + " دعوت).",
+                "به‌ازای هر " + d.every.fa() + " دوستی که با لینک شما وارد پاورپوینت‌ساز شوند و اولین ارائه‌شان را بسازند، ۱ اعتبار (یک ارائه‌ی رایگان) می‌گیرید (تا سقف " + d.max.fa() + " دعوت). به‌ازای هر " + d.plusEvery.fa() + " دعوت هم یک اکانت کامل پلاس هدیه می‌گیرید.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text("📊 دعوت‌های موفق شما: " + d.count.fa() + " از " + d.max.fa(), style = MaterialTheme.typography.bodyMedium)

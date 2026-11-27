@@ -23,7 +23,7 @@ import java.io.IOException
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
-class InviteInfo(val link: String, val count: Int, val max: Int, val every: Int, val canClaim: Boolean)
+class InviteInfo(val link: String, val count: Int, val max: Int, val every: Int, val canClaim: Boolean, val plusEvery: Int = 20)
 
 class ApiException(
     message: String,
@@ -278,7 +278,7 @@ object Api {
         val j = call("GET", "/api/invite")
         return InviteInfo(
             link = j.optString("webLink").ifEmpty { j.optString("link") },
-            count = j.optInt("count"), max = j.optInt("max", 51), every = j.optInt("every", 3),
+            count = j.optInt("count"), max = j.optInt("max", 40), every = j.optInt("every", 2), plusEvery = j.optInt("plusEvery", 20),
             canClaim = j.optBoolean("canClaim"),
         )
     }

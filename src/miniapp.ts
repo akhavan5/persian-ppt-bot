@@ -8,7 +8,7 @@
  */
 import type { Env } from "./env";
 import { createSession, getUserById, hitLimit, publicUser, randomToken, reuseSession, type WebUser } from "./auth";
-import { REF_MAX, REF_EVERY, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
+import { REF_MAX, REF_EVERY, REF_PLUS_EVERY, displayName, isAdmin, isAllowed, isBanned, noteActive, touchUser } from "./settings";
 import { addLinkedId, autoBotId, ensureUid, linkedFor } from "./link";
 import { listFiles, loadFileDirect } from "./files";
 import { isSampleId, sampleById, sampleCaption, sampleMime } from "./samples";
@@ -272,14 +272,14 @@ export async function miniappPdf(env: Env, user: WebUser, body: Record<string, u
 
 /** GET|POST /api/invite (و POST /api/miniapp/invite برای نسخه‌های قدیمی) — دعوت دوستان برای همه‌ی کلاینت‌ها: سایت، اپ اندروید، Mini App تلگرام/بله و برنامک ایتا.
  *  link = لینک اختصاصی پلتفرم خودِ حساب (ربات تلگرام/بله/روبیکا یا برنامک ایتا)؛ webLink = لینک سایت (برای همه کار می‌کند: ثبت‌نام/ورود در سایت یا اپ، بعد کد خودکار ثبت می‌شود).
- *  هر ۳ دوست جدید که اولین ارائه‌شان را بسازند = ۱ اعتبار معمولی تا ۵۱ دعوت (مثل /invite ربات). */
+ *  هر ۲ دوست جدید که اولین ارائه‌شان را بسازند = ۱ اعتبار معمولی و هر ۲۰ دعوت = ۱ اکانت پلاس، تا ۴۰ دعوت (مثل /invite ربات). */
 export async function inviteInfo(env: Env, user: WebUser): Promise<Response> {
   const st = await referralState(env, user.id);
   if (st.id === null) return err("حساب شما پیدا نشد؛ دوباره وارد شو.", 409);
   if (st.banned) return err("دسترسی شما مسدود شده است.", 403);
   const webLink = webInviteLink(env, st.id);
   const link = (await inviteLinkFor(env, st.id).catch(() => "")) || webLink;
-  return json({ link, webLink, code: String(st.id), count: st.count, max: REF_MAX, every: REF_EVERY, canClaim: st.canClaim });
+  return json({ link, webLink, code: String(st.id), count: st.count, max: REF_MAX, every: REF_EVERY, plusEvery: REF_PLUS_EVERY, canClaim: st.canClaim });
 }
 
 /** POST /api/invite/claim {code} — ثبت کد/لینک دعوتِ یک دوست برای حساب فعلی (در هر زمان، یک‌بار برای هر حساب). سایت بعد از ورود، اپ اندروید با کد واردشده و

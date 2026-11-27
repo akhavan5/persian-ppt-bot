@@ -1,7 +1,7 @@
 /** متن، لینک و دکمه‌ی «دعوت دوستان» برای همه‌ی پلتفرم‌ها (تلگرام، بله، روبیکا، ایتا، سایت و اپ اندروید)؛ هم برای /invite در ربات، هم پیام همگانی (نشانه‌ی {invite})،
  *  هم یادآوری lifecycle و هم API سایت/اپ/Mini App استفاده می‌شود تا دقیقاً یکسان بمانند. */
 import type { Env } from "./env";
-import { REF_CREDITS, REF_EVERY, REF_MAX, botPlatform, type RefId } from "./settings";
+import { REF_CREDITS, REF_EVERY, REF_MAX, REF_PLUS_EVERY, botPlatform, type RefId } from "./settings";
 import { toFa } from "./util";
 import { tg } from "./telegram";
 import { eitaaLink } from "./eitaa";
@@ -57,7 +57,7 @@ export async function inviteLinkFor(env: Env, id: RefId, botName?: string): Prom
 /** متن HTML پیام دعوت؛ done = دعوت‌های موفق این کاربر تا الان */
 export function inviteBody(link: string, doneRaw: number): string {
   const done = Math.min(REF_MAX, Math.max(0, Number(doneRaw) || 0));
-  return `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد پاورپوینت‌ساز شوند و اولین ارائه‌شان را بسازند، <b>${toFa(String(REF_CREDITS))} اعتبار</b> (یک ارائه‌ی رایگان) می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(Math.floor(REF_MAX / REF_EVERY) * REF_CREDITS))} اعتبار).\n\n` +
+  return `🎁 <b>دعوت دوستان</b>\nبه ازای هر <b>${toFa(String(REF_EVERY))} دوست</b> که با لینک تو وارد پاورپوینت‌ساز شوند و اولین ارائه‌شان را بسازند، <b>${toFa(String(REF_CREDITS))} اعتبار</b> (یک ارائه‌ی رایگان) می‌گیری (تا سقف ${toFa(String(REF_MAX))} دعوت = ${toFa(String(Math.floor(REF_MAX / REF_EVERY) * REF_CREDITS))} اعتبار).\n👑 به ازای هر <b>${toFa(String(REF_PLUS_EVERY))} دعوت</b> هم یک <b>اکانت کامل پلاس</b> هدیه می‌گیری (تا ${toFa(String(Math.floor(REF_MAX / REF_PLUS_EVERY)))} پلاس).\n\n` +
     `📊 دعوت‌های موفق تو تا الان: <b>${toFa(String(done))}</b> از ${toFa(String(REF_MAX))}\n\n🔗 لینک اختصاصی تو:\n${link}`;
 }
 

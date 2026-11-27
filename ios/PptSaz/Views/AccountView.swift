@@ -499,7 +499,7 @@ struct InviteSheet: View {
                     } else if let i = info {
                         VStack(spacing: 12) {
                             IconBadge(symbol: "gift.fill", color: .orange, size: 56)
-                            Text("به هر \(i.every.fa) دوستی که با لینک تو ثبت‌نام کند، اعتبار هدیه می‌گیری.")
+                            Text("به ازای هر \(i.every.fa) دوستی که با لینک تو وارد شود و اولین ارائه‌اش را بسازد، ۱ اعتبار هدیه می‌گیری؛ و به ازای هر \(i.plusEvery.fa) دعوت، یک اکانت کامل پلاس.")
                                 .multilineTextAlignment(.center)
                                 .font(.subheadline)
                             ProgressView(value: Double(min(i.count, i.max)), total: Double(max(i.max, 1)))

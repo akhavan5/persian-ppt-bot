@@ -79,7 +79,7 @@ object InviteCache {
 
     fun save(ctx: Context, d: InviteInfo) {
         p(ctx).edit()
-            .putString("link", d.link).putInt("count", d.count).putInt("max", d.max).putInt("every", d.every).putBoolean("canClaim", d.canClaim)
+            .putString("link", d.link).putInt("count", d.count).putInt("max", d.max).putInt("every", d.every).putInt("plusEvery", d.plusEvery).putBoolean("canClaim", d.canClaim)
             .apply()
     }
 
@@ -87,7 +87,7 @@ object InviteCache {
         val p = p(ctx)
         val link = p.getString("link", "").orEmpty()
         if (link.isEmpty()) return null
-        return InviteInfo(link, p.getInt("count", 0), p.getInt("max", 51), p.getInt("every", 3), p.getBoolean("canClaim", false))
+        return InviteInfo(link, p.getInt("count", 0), p.getInt("max", 40), p.getInt("every", 2), p.getBoolean("canClaim", false), p.getInt("plusEvery", 20))
     }
 
     fun clear(ctx: Context) {

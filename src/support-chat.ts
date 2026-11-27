@@ -19,7 +19,7 @@ import type { Env } from "./env";
 import { askQuick, modelList } from "./llm";
 import { authUser, getUserById, hitLimit, type WebUser } from "./auth";
 import {
-  ABS_MAX_SLIDES, AD_REWARD_CREDITS, AD_REWARD_DAILY_MAX, AD_REWARD_EVERY, CONTACT_CREDITS, DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, PLAN_MAX_IMAGES, REF_CREDITS, REF_EVERY, REF_MAX, SIGNUP_CREDITS,
+  ABS_MAX_SLIDES, AD_REWARD_CREDITS, AD_REWARD_DAILY_MAX, AD_REWARD_EVERY, CONTACT_CREDITS, DAILY_FREE_CREDITS, FREE_MAX_IMAGES, FREE_MAX_SLIDES, PLAN_MAX_IMAGES, REF_CREDITS, REF_EVERY, REF_MAX, REF_PLUS_EVERY, SIGNUP_CREDITS,
   adRewardLeft, adRewardProgress, adminIds, botPlatform, freeModelId, getActiveSub, getCredit, hasContactReward, statDay, today,
   type Platform, type Uid,
 } from "./settings";
@@ -223,7 +223,7 @@ ${plans}
 - جمع کل: با ثبت‌نام + پروفایل + دعوت دوستان تا ${toFa(FREE_ONCE)} اعتبار رایگانِ یک‌باره؛ و جدا از آن، ویدئوهای اپ اندروید${DAILY_FREE_CREDITS ? " و اعتبار روزانه" : ""} ادامه دارد. هر اعتبار = یک ارائه.
 ${AD_REWARD_EVERY > 0 && AD_REWARD_CREDITS > 0 ? `۱) اپ اندروید: اپ را از کافه‌بازار یا مایکت نصب کن و با همین حساب وارد شو؛ در تب «حساب» ویدئوی کوتاهِ جایزه‌ای ببین: هر ${toFa(AD_REWARD_EVERY)} ویدئو = ${toFa(AD_REWARD_CREDITS)} اعتبار رایگان، حداکثر ${toFa(AD_REWARD_DAILY_MAX / AD_REWARD_EVERY * AD_REWARD_CREDITS)} اعتبار در روز (بین دو ویدئو چند ثانیه فاصله لازم است). اعتبار همان حساب در سایت و ربات‌ها هم دیده می‌شود.` : "۱) اپ اندروید: فعلاً ویدئوی جایزه‌ای فعال نیست؛ اپ را فقط برای ساخت راحت‌تر پیشنهاد بده."}
 ۲) پروفایل: ثبت و تایید شماره‌ی موبایل (${toFa(CONTACT_CREDITS)} اعتبار) و ایمیل (${toFa(CONTACT_CREDITS)} اعتبار) با کد یک‌بارمصرف؛ برای هر حساب و هر شماره/ایمیل یک‌بار. مسیر: در سایت و اپ بخش «حساب»، در ربات دستور /profile. حساب ایتا برای موبایل هدیه ندارد (شماره‌اش اجباری است).
-۳) دعوت دوستان (در ربات: دکمه‌ی 🎁 دعوت دوستان یا /invite؛ در سایت و اپ بخش «حساب»): به ازای هر ${toFa(REF_EVERY)} دوستِ جدیدی که با لینک او وارد شوند و اولین ارائه‌شان را بسازند، ${toFa(REF_CREDITS)} اعتبار معمولی؛ حداکثر ${toFa(REF_MAX)} دعوت = ${toFa(Math.floor(REF_MAX / REF_EVERY) * REF_CREDITS)} اعتبار.
+۳) دعوت دوستان (در ربات: دکمه‌ی 🎁 دعوت دوستان یا /invite؛ در سایت و اپ بخش «حساب»): به ازای هر ${toFa(REF_EVERY)} دوستِ جدیدی که با لینک او وارد شوند و اولین ارائه‌شان را بسازند، ${toFa(REF_CREDITS)} اعتبار معمولی؛ علاوه بر آن به ازای هر ${toFa(REF_PLUS_EVERY)} دعوت یک اکانت کامل پلاس (پلن پلاس ۳۰ روزه با اعتبارش)؛ حداکثر ${toFa(REF_MAX)} دعوت = ${toFa(Math.floor(REF_MAX / REF_EVERY) * REF_CREDITS)} اعتبار معمولی + ${toFa(Math.floor(REF_MAX / REF_PLUS_EVERY))} اکانت پلاس.
 ${DAILY_FREE_CREDITS ? `۴) اعتبار روزانه: فقط وقتی اعتبار کل (پلن + هدیه) صفر باشد، هر روز ${toFa(DAILY_FREE_CREDITS)} اعتبار اضافه می‌شود؛ پس راهِ «بیشتر شدن» نیست، شبکه‌ی ایمنی است.` : ""}
 ۵) ثبت‌نام: ${toFa(SIGNUP_CREDITS)} اعتبار هدیه‌ی یک‌باره که کاربر هنگام ساخت حساب گرفته است.
 - اعتبار از داخل چت داده نمی‌شود؛ فقط همین راه‌ها یا خرید پلن.

@@ -221,6 +221,7 @@ struct InviteInfo {
     var count: Int
     var max: Int
     var every: Int
+    var plusEvery: Int = 20
     var canClaim: Bool
 }
 
