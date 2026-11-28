@@ -1,8 +1,13 @@
 package ir.pptsaz.app
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -91,6 +96,26 @@ internal fun shareCaption(title: String): String =
 fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = null, webFileId: String? = null, onPick: (pkg: String?, asPdf: Boolean) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    // بعد از گرفتن توکن Drive: دریافت PPTX از سرور ← ساخت Slides در Drive کاربر ← باز کردن؛ هر خطا = مسیر سایت
+    val finish: suspend (String) -> Unit = { token ->
+        val id = webFileId.orEmpty()
+        val link = try {
+            val f = Api.fetchFile(id, maxRetries = 3)
+            DriveSlides.create(token, f.name.replace(Regex("\\.pptx$", RegexOption.IGNORE_CASE), ""), f.bytes)
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+        if (link != null) {
+            Toast.makeText(ctx, "✅ در Google Drive تو ساخته شد", Toast.LENGTH_SHORT).show()
+            try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
+        } else {
+            openSlidesOnSite(ctx, id)
+        }
+        onDismiss()
+    }
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        val t = if (r.resultCode == Activity.RESULT_OK) DriveSlides.tokenFrom(ctx, r.data) else null
+        if (t != null) scope.launch { finish(t) } else busy = false // کاربر رضایت نداد: بدون مسیر جایگزین، فقط دکمه آزاد می‌شود
+    }
     val targets = remember { installedShareTargets(ctx) }
     // «باز کردن در Google Slides/Docs» فقط وقتی برنامه روی گوشی نصب است (googlePkg را فقط برای ارائه‌ی PPTX و جزوه‌ی Word بده)
     val google = remember(googlePkg) {
@@ -121,7 +146,18 @@ fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = nul
                 google?.let { g -> ShareRow(g.label, g.icon) { onPick(g.pkg, false) } }
                 // برنامه‌ی Slides نیست (فقط برای ارائه): ساخت Slides از راه سایت
                 if (google == null && googlePkg == PKG_SLIDES && webFileId != null) {
-                    ShareRow("ساخت در Google Slides (از طریق سایت)", null) { scope.launch { openSlidesOnSite(ctx, webFileId); onDismiss() } }
+                    ShareRow(if (busy) "در حال ساخت در Google Drive…" else "ساخت در Google Slides", null) {
+                        if (!busy) {
+                            busy = true
+                            scope.launch {
+                                when (val a = DriveSlides.authorize(ctx)) {
+                                    is DriveAuth.Token -> finish(a.value)
+                                    is DriveAuth.Resolve -> consent.launch(IntentSenderRequest.Builder(a.pending).build())
+                                    DriveAuth.Unavailable -> { openSlidesOnSite(ctx, webFileId); onDismiss() } // بدون سرویس‌های گوگل/کلاینت: سایت
+                                }
+                            }
+                        }
+                    }
                 }
                 targets.forEach { t ->
                     ShareRow(t.label, t.icon) { onPick(t.pkg, pdf) }

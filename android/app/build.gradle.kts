@@ -210,6 +210,8 @@ dependencies {
     implementation("androidx.credentials:credentials:1.5.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    // ساخت Google Slides مستقیم در Drive کاربر (DriveSlides.kt): Identity Authorization با دامنه‌ی drive.file؛ بدون Play Services به مسیر سایت برمی‌گردد
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
     // اعلان تبلیغاتی (FCM)؛ بدون Google Play Services بی‌اثر است و اپ مثل قبل کار می‌کند
     implementation("com.google.firebase:firebase-messaging:24.1.2")
     // آمار استفاده‌ی اپ (Google Analytics 4)؛ بدون FIREBASE_* خاموش است. نسخه‌ی هم‌خانواده با firebase-messaging 24.1.2
