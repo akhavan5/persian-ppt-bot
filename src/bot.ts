@@ -10,7 +10,7 @@ import {
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminSampleCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
 import { listFiles, loadFile } from "./files";
 import { SAMPLE_BADGE, isSampleId, listSamples, sampleById, sampleCaption, sampleLabel, sampleMime } from "./samples";
-import { ALL_EXTRA_KINDS, GAMMA_HEADER, extraButtons, extraOfCode, extrasHint, isButtonOf, isGammaAdmin, isMainDeck, madeExtras, slidesRow, startExtra, type ExtraKind } from "./extras";
+import { ALL_EXTRA_KINDS, GAMMA_HEADER, extraButtons, extraOfCode, extrasHint, isButtonOf, isGammaAdmin, isMainDeck, madeExtras, startExtra, type ExtraKind } from "./extras";
 import { buildDeckPdf, cachedPdf } from "./pdf";
 import { googleSlidesEnabled, hitLimit } from "./auth";
 import { appPushCommand } from "./push";
@@ -18,7 +18,7 @@ import { notifyAllCommand } from "./notify";
 import { appVerCommand } from "./app-version";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { audioSeconds, isAudioName } from "./wav";
-import { siteHost, slidesOnChat } from "./deck-service";
+import { siteHost, slidesOnChat, slidesRow } from "./deck-service";
 import { isBaleId } from "./bale-format";
 import { isSplusId } from "./splus-format";
 import { isRubikaId } from "./rubika-format";

@@ -16,8 +16,6 @@ import { hasBrowser } from "./browser-api";
 import { supportLink, type Uid } from "./settings";
 import { createLoginToken } from "./link";
 import { isEitaaId } from "./eitaa-format";
-import { isSplusId } from "./splus-format";
-import { isRubikaId } from "./rubika-format";
 import { googleSlidesEnabled } from "./auth";
 import { ttsEnabled } from "./gemini-tts";
 
@@ -51,18 +49,24 @@ export async function siteLoginUrl(env: Env, tgId: number | undefined, to: "buy"
 
 /** کیبورد پیام «فایل آماده شد» (Mini App): دکمه‌ی باز کردن اپ؛ برای کاربر ایتا دکمه‌ی «مشاهده در سایت» هم اضافه می‌شود
  *  (لینک ورود یک‌بارمصرف مستقیم روی همان فایل؛ در ایتا هر دکمه به یک خط لینک زیر پیام تبدیل می‌شود). */
-export async function appReadyMarkup(env: Env, tgChat: number, fileId?: string): Promise<{ reply_markup: { inline_keyboard: unknown[][] } }> {
+export async function appReadyMarkup(env: Env, tgChat: number, fileId?: string, slides = false): Promise<{ reply_markup: { inline_keyboard: unknown[][] } }> {
   const rows: unknown[][] = [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(env)}/app` } }]];
+  const slidesOk = slides && !!fileId && googleSlidesEnabled(env); // slides = پیام «ارائه آماده شد» (نه پوستر/جزوه/صوت)
+  if (slidesOk && slidesOnChat(env, tgChat)) rows.push(slidesRow(fileId as string));
   if (isEitaaId(tgChat)) {
+    // ایتا: دکمه‌ی callback ندارد؛ همین یک لینک ورود یک‌بارمصرف (مستقیم روی همان فایل) هم برای مشاهده و هم برای Google Slides است (دو لینک با یک توکن نمی‌شود)
     const url = await siteLoginUrl(env, tgChat, "files", fileId).catch(() => "");
-    if (url) rows.push([{ text: "🌐 مشاهده در سایت", url }]);
+    if (url) rows.push([{ text: slidesOk ? "🌐 مشاهده در سایت و ساخت Google Slides" : "🌐 مشاهده در سایت", url }]);
   }
   return { reply_markup: { inline_keyboard: rows } };
 }
 
-/** دکمه‌ی «Google Slides» زیر ارائه فقط در ربات تلگرام و بله (ایتا مینی‌اپ و «مشاهده در سایت» دارد؛ سروش‌پلاس و روبیکا فعلاً نه) و فقط وقتی Client ID گوگل تنظیم است */
-export const slidesOnChat = (env: Env, chatId: number): boolean =>
-  googleSlidesEnabled(env) && !isEitaaId(chatId) && !isSplusId(chatId) && !isRubikaId(chatId);
+/** دکمه‌ی «Google Slides» (callback) زیر ارائه در ربات تلگرام، بله، سروش‌پلاس و روبیکا، و فقط وقتی Client ID گوگل تنظیم است.
+ *  ایتا دکمه‌ی callback ندارد (فقط متن + لینک)؛ برای ایتا لینک «مشاهده در سایت» در appReadyMarkup با همین هدف برچسب می‌خورد. */
+export const slidesOnChat = (env: Env, chatId: number): boolean => googleSlidesEnabled(env) && !isEitaaId(chatId);
+
+/** دکمه‌ی «Google Slides»؛ با زدن آن ربات لینک ورود تازه می‌فرستد (لینک ورود یک‌ساعته است ولی دکمه‌ی زیر ارائه ۲۴ ساعت می‌ماند، پس لینک هنگام زدن ساخته می‌شود) */
+export const slidesRow = (id: string): { text: string; callback_data: string }[] => [{ text: "📑 ساخت در Google Slides", callback_data: `gs:${id}` }];
 
 export const imagesLimitMsg = (max: number) => max <= FREE_MAX_IMAGES
   ? `در پلن رایگان حداکثر ${toFa(String(FREE_MAX_IMAGES))} تصویر در هر ارائه می‌گیری؛ برای تصویر بیشتر پلن پلاس (تا ${toFa(String(PLANS[0].maxImages))} تصویر) یا پرو (تا ${toFa(String(PLANS[1].maxImages))} تصویر) را بگیر.`

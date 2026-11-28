@@ -338,7 +338,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           : false;
         const extras = [built.poster === "ok" ? "🖼 پوستر" : "", built.handout === "ok" ? "📝 جزوه" : "", built.audio === "pending" ? "🔊 اسلاید صوتی (چند دقیقه‌ی دیگر)" : "", built.podcast === "pending" ? "🎙 پادکست (چند دقیقه‌ی دیگر)" : ""].filter(Boolean);
         const text = `✅ <b>${esc(built.title)}</b> آماده شد (${toFa(String(built.slides))} اسلاید${extras.length ? " + " + extras.join(" + ") : ""}).\n${autoSent ? "فایل‌ها همین‌جا برایت فرستاده شد؛ بعداً هم می‌توانی از داخل اپ دوباره بگیری." : "برای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند."}`;
-        await sendMessage(this.env, tgChat, text, await appReadyMarkup(this.env, tgChat, event.instanceId));
+        await sendMessage(this.env, tgChat, text, await appReadyMarkup(this.env, tgChat, event.instanceId, true)); // true = پیام ارائه: دکمه‌ی Google Slides هم
       }).catch((e) => console.error("notify-app", String(e).slice(0, 200)));
     }
 
