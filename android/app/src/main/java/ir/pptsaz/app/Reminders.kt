@@ -232,8 +232,8 @@ object Reminders {
             cancel(ctx, "act1"); cancel(ctx, "act2")
             val t = snap(now + 30 * HOUR)
             schedule(ctx, "extras", t, t + 3 * DAY)
-            // ۱ ساعت بعد: فایل‌هایت آماده‌ی دانلود است (تا ۲۰ ساعت، قبل از پاک‌شدن ۲۴ ساعته‌ی فایل‌ها)
-            schedule(ctx, "files1", snap(now + HOUR), now + 20 * HOUR)
+            // یادآوری تأخیری «فایل‌هایت آماده است» حذف شد: خبر آماده‌شدن فوری است (Notifier.done و FCM با تگ deck-done)
+            cancel(ctx, "files1")
             if (p.getBoolean("gift", false)) scheduleGift(ctx, p, now)
             // ۴۸ ساعت بعد از آخرین ارائه: پیشنهاد خرید (با هر ارائه‌ی تازه از نو شمرده می‌شود)
             if (!p.getBoolean("unl", false) && p.getString("plan_id", "").orEmpty().isEmpty() &&
@@ -330,12 +330,7 @@ object Reminders {
                 if (decks < 1 || doneAt == 0L || p.getLong("extra_made_at", 0L) >= doneAt) return null
                 Msg("ارائه‌ات رو کامل‌تر کن 📝", "برای ارائه‌ی اخیرت جزوه‌ی Word، پوستر یا پادکست هم بساز؛ هرکدام ۱ اعتبار جدا.", 1, key = doneAt.toString())
             }
-            "files1" -> {
-                val doneAt = p.getLong("deck_done_at", 0L)
-                if (decks < 1 || doneAt == 0L) return null
-                if (lastOpen - doneAt >= 30 * 60_000L) return null // بعد از ساخت دوباره اپ را باز کرده و فایل‌ها را دیده
-                Msg("فایل ارائه‌ات آماده‌ی دانلوده 📂", "فایل‌های ساخته‌شده ۲۴ ساعت می‌مونن؛ اگه هنوز نگرفتیش از بخش فایل‌ها دانلودش کن.", 1, key = doneAt.toString())
-            }
+            "files1" -> return null // غیرفعال: یادآوری تأخیری حذف شد؛ آلارم‌های قدیمیِ از قبل زمان‌بندی‌شده هم نمایش داده نمی‌شوند
             "buy48" -> {
                 if (p.getBoolean("buy48_done", false) || p.getBoolean("unl", false) || p.getBoolean("ever_plan", false)) return null
                 if (decks < 1 || p.getString("plan_id", "").orEmpty().isNotEmpty()) return null

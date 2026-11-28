@@ -1155,7 +1155,7 @@ export async function handleAdminInput(env: Env, chatId: number, adminId: number
     if (!(await addAdminReply(env, p.uid, text))) { await sendMessage(env, chatId, "⚠️ گفتگوی این کاربر پیدا نشد (ممکن است منقضی شده باشد)."); return true; }
     const pushed = await notifyUserOfReply(env, p.uid, text);
     await logAction(env, adminId, `پاسخ در چت پشتیبانی ${p.uid}`);
-    await sendScreen(env, chatId, { text: `✅ پاسخ در چت کاربر ثبت شد و همان‌جا دیده می‌شود.${pushed ? "\n📩 در پیام‌رسانِ وصل‌شده‌ی کاربر هم فرستاده شد." : ""}`, kb: [[cb("💬 گفتگو", `ad:sv:${p.uid}:999`), ...backHome]] });
+    await sendScreen(env, chatId, { text: `✅ پاسخ در چت کاربر ثبت شد و همان‌جا دیده می‌شود.${pushed ? "\n📩 در کانال‌های کاربر (پیام‌رسان‌ها، اپ، مرورگر) هم فرستاده شد." : ""}`, kb: [[cb("💬 گفتگو", `ad:sv:${p.uid}:999`), ...backHome]] });
     return true;
   }
 

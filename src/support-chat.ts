@@ -31,6 +31,7 @@ import { PAGES } from "./landing-data";
 import { POSTS } from "./blog-data";
 import { esc, sendMessage } from "./telegram";
 import { getLinkedTg } from "./link";
+import { notifyUser } from "./notify";
 
 /** r: u = کاربر، a = دستیار، m = پاسخ پشتیبان انسانی (مدیر)؛ f = این پاسخ، ارجاع به مدیر بوده است */
 interface Msg { r: "u" | "a" | "m"; t: string; ts: number; f?: 1 }
@@ -163,11 +164,17 @@ export async function addAdminReply(env: Env, uid: string, rawText: string): Pro
 
 /** اگر کاربر پیام‌رسانِ وصل‌شده دارد، همان پاسخ را آنجا هم می‌فرستد (برای کاربر ربات تنها اعلان است). true = فرستاده شد */
 export async function notifyUserOfReply(env: Env, uid: string, text: string): Promise<boolean> {
-  const linked = await getLinkedTg(env, uid).catch(() => null);
-  if (!linked) return false;
   try {
-    await sendMessage(env, linked, `📩 <b>پاسخ تیم پشتیبانی</b>\n\n${esc(clean(text, ADMIN_REPLY_MAX))}\n\n<i>می‌توانی ادامه‌اش را در همان چت پشتیبانی بنویسی.</i>`);
-    return true;
+    const t = clean(text, ADMIN_REPLY_MAX);
+    // همه‌ی کانال‌های کاربر (پیام‌رسان‌های وصل‌شده، اپ اندروید، اعلان مرورگر)؛ ایمیل عمداً نه (متن پاسخ خصوصی است و در ایمیل می‌ماند)
+    const r = await notifyUser(env, uid, {
+      title: "📩 پاسخ تیم پشتیبانی",
+      body: t.length > 280 ? t.slice(0, 279) + "…" : t,
+      url: "/", tag: "support-reply",
+      html: `📩 <b>پاسخ تیم پشتیبانی</b>\n\n${esc(t)}\n\n<i>می‌توانی ادامه‌اش را در همان چت پشتیبانی بنویسی.</i>`,
+      except: ["email"],
+    });
+    return r.ok;
   } catch { return false; }
 }
 

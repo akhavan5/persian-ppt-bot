@@ -1,5 +1,5 @@
 /** یادآوری فعال‌سازی: کاربری که ثبت‌نام کرده ولی هنوز اولین ارائه‌اش را نساخته، حداکثر دو یادآوری می‌گیرد و در آن اعتبار رایگان باقی‌مانده‌اش اعلام می‌شود
- *  (ایمیل برای حساب‌های دارای ایمیل + ربات تلگرام برای حساب‌های وصل‌به‌تلگرام):
+ *  (ایمیل برای حساب‌های دارای ایمیل + همه‌ی پیام‌رسان‌های وصل‌شده + اعلان مرورگر + اپ اندروید):
  *    ۱) ۲۴ تا ۷۲ ساعت بعد از ساخت حساب (مرحله‌ی act24)
  *    ۲) ۵ تا ۷ روز بعد از ساخت حساب (مرحله‌ی act5d) — با یک موضوع آماده‌ی نمونه که کاربر فقط کپی و ارسال کند («موضوع ننوشتن» بزرگ‌ترین مانع شروع است)
  *
@@ -21,6 +21,7 @@ import { mailUrl } from "./email-blocks";
 import { toFa } from "./util";
 import { parseDevices, sendWebPushDevices, webPushEnabled, type WebPushMsg } from "./webpush";
 import { parseFcmCol, pushEnabled, sendPushToUser } from "./push";
+import { CHANS, chanOf, chanReady, sendToChannels } from "./link";
 
 /** cron ساعتی (دقیقه‌ی ۴۷ تا با cron روزانه‌ی ۰۳:۱۷ هم‌زمان نشود)؛ باید با triggers.crons در wrangler.jsonc یکی باشد */
 export const ACTIVATION_CRON = "47 * * * *";
@@ -112,7 +113,7 @@ export function activationTelegram2(credits: number, topic: string): string {
   ].join("\n");
 }
 
-interface Row { k: string; v: string; bonus: string | null; sub: string | null; banned: number | null; tg: string | null; wps: string | null; fcm: string | null }
+interface Row { k: string; v: string; bonus: string | null; sub: string | null; banned: number | null; tg: string | null; ids: string | null; wps: string | null; fcm: string | null }
 
 /** marker: پیشوند نشانگر «فرستاده شد» (act24 / act5d) — ثابتِ کد است، نه ورودی کاربر */
 const sqlFor = (marker: string) => `
@@ -121,6 +122,7 @@ SELECT u.k AS k, u.v AS v,
   (SELECT s.v FROM kv s WHERE s.k = 'sub:' || substr(u.k, 4) AND (s.exp IS NULL OR s.exp > ?3)) AS sub,
   (SELECT 1 FROM kv n WHERE n.k = 'ban:' || substr(u.k, 4)) AS banned,
   (SELECT t.v FROM kv t WHERE t.k = 'w2tg:' || substr(u.k, 4)) AS tg,
+  (SELECT i.v FROM kv i WHERE i.k = 'w2ids:' || substr(u.k, 4)) AS ids,
   (SELECT p.v FROM kv p WHERE p.k = 'wps:' || substr(u.k, 4) AND (p.exp IS NULL OR p.exp > ?3)) AS wps,
   (SELECT f.v FROM kv f WHERE f.k = 'ptu:' || substr(u.k, 4) AND (f.exp IS NULL OR f.exp > ?3)) AS fcm
 FROM kv u
@@ -151,8 +153,8 @@ export async function remindInactiveSignups(env: Env): Promise<{ scanned: number
   try {
     const now = Date.now();
     if (!inSendHours(now)) return { scanned, sent };
-    const mailOn = emailEnabled(env), tgOn = !!env.TELEGRAM_BOT_TOKEN, pushOn = webPushEnabled(env), fcmOn = pushEnabled(env);
-    if (!mailOn && !tgOn && !pushOn && !fcmOn) return { scanned, sent };
+    const mailOn = emailEnabled(env), msgOn = CHANS.some((c) => chanReady(env, c)), pushOn = webPushEnabled(env), fcmOn = pushEnabled(env);
+    if (!mailOn && !msgOn && !pushOn && !fcmOn) return { scanned, sent };
     await env.KV.ready();
     const nowSec = Math.floor(now / 1000);
     let sub = 36; // سقف زیردرخواست باقی‌مانده برای ارسال‌ها (۵۰ − پرس‌وجوها و batchها − حاشیه)؛ اعلان وب فقط وقتی جا باشد
@@ -176,24 +178,27 @@ export async function remindInactiveSignups(env: Env): Promise<{ scanned: number
           credits = Math.max(0, Math.floor(Number(r.bonus) || 0));
           if (r.sub) { const s = JSON.parse(r.sub); if (Number(s.exp) > now) credits += Math.max(0, Math.floor(Number(s.credits) || 0)); }
         } catch { mark(uid, "0", DONE_TTL); continue; }
+        // همه‌ی پیام‌رسان‌های وصل‌شده‌ی حساب (هویت اصلی اول) که ربات‌شان روی سرور فعال است؛ نه فقط یک «تلگرام اصلی»
         const tgN = Number(r.tg);
-        const tgId = Number.isSafeInteger(tgN) && tgN > 0 ? tgN : null;
+        let linked: number[] = [];
+        try { const a = JSON.parse(r.ids ?? "[]"); if (Array.isArray(a)) linked = a.map(Number); } catch { /* فقط هویت اصلی */ }
+        const msgIds = msgOn ? [...new Set([tgN, ...linked])].filter((i) => Number.isSafeInteger(i) && i > 0 && chanReady(env, chanOf(i))).slice(0, CHANS.length) : [];
         const to = mailOn && u.email ? u.email : "";
         // مسدود، بدون اعتبار یا بدون هیچ کانالی: ردش می‌کنیم و نشانگر می‌گذاریم تا صف را پر نکند
         const devices = pushOn ? parseDevices(r.wps) : [];
         const fcmTokens = fcmOn ? parseFcmCol(r.fcm) : [];
-        if (r.banned || credits <= 0 || (!to && !(tgOn && tgId) && !devices.length && !fcmTokens.length)) { mark(uid, "0", DONE_TTL); continue; }
+        if (r.banned || credits <= 0 || (!to && !msgIds.length && !devices.length && !fcmTokens.length)) { mark(uid, "0", DONE_TTL); continue; }
 
-        sub -= (to ? 1 : 0) + (tgOn && tgId ? 1 : 0);
+        sub -= (to ? 1 : 0) + msgIds.length;
         const usePush = devices.length > 0 && sub >= Math.min(3, devices.length);
         if (usePush) sub -= Math.min(3, devices.length);
         const useFcm = fcmTokens.length > 0 && sub >= 3;
         if (useFcm) sub -= 3;
         const [mailOk, tgOk, pushOk, fcmOk] = await Promise.all([
           to ? sendEmail(env, { to, ...st.email(env, u.name, credits, uid), tag: st.tag, idempotencyKey: `${st.idem}-${uid}` }) : Promise.resolve(false),
-          tgOn && tgId
-            ? sendMessage(env, tgId, st.telegram(credits, uid), { reply_markup: { inline_keyboard: [[{ text: "🚀 ساخت ارائه", web_app: { url: `${miniappUrl(env)}/app` } }]] } })
-                .then(() => true).catch((e) => { console.error("activation telegram", String(e).slice(0, 200)); return false; })
+          msgIds.length
+            ? sendToChannels(env, uid, (id) => sendMessage(env, id, st.telegram(credits, uid), { reply_markup: { inline_keyboard: [[{ text: "🚀 ساخت ارائه", web_app: { url: `${miniappUrl(env)}/app` } }]] } }), msgIds)
+                .then((x) => x.ok > 0).catch((e) => { console.error("activation messenger", String(e).slice(0, 200)); return false; })
             : Promise.resolve(false),
           usePush ? sendWebPushDevices(env, uid, devices, st.push(credits, uid)).then((x) => x.ok > 0).catch(() => false) : Promise.resolve(false),
           // اپ اندروید: برچسب activation / activation5d همتای محلی (act1 / act2) را در اپ مهار می‌کند

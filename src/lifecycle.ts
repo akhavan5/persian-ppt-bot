@@ -7,8 +7,7 @@
  *    nx   «ارائه‌ی بعدی»: ۲ تا ۴ روز بعد از ارائه‌ی اول یا دوم، با یک نکته‌ی کاربردی.
  *    wb   بازگشت کاربر غیرفعال: ۱۴ و ۳۰ روز بعد از آخرین ارائه (فقط بدون پلن فعال)، با موضوع فصلی (ماه شمسی).
  *    buy  پیشنهاد خرید پلن: ۴۸ ساعت یا بیشتر بعد از آخرین ارائه (حداکثر ۵ کاربر در هر اجرا و ۶۰ در روز، تازه‌ترین‌ها اول)، فقط برای کسی که هرگز پرداخت موفق نداشته و پلن فعال ندارد (کاربران قدیمی هم، بدون سقف بالا)؛ یک‌بار برای هر حساب و در «همه‌ی» کانال‌های موجود (ربات + اعلان وب + ایمیل).
- *    fl   «فایل‌هایت آماده است»: حدود ۱ ساعت بعد از ساخت ارائه (تا ۲۰ ساعت بعد، چون فایل‌ها ۲۴ ساعت می‌مانند)؛ در همه‌ی کانال‌ها (ربات + اعلان وب + اپ + ایمیل با پیوست PPTX).
- *         این کار سقف «۱ اعلان در ۲۰ ساعت» را مصرف نمی‌کند (noCap)، وگرنه پیام ترویج همراه‌ها (ex، ۳ تا ۲۰ ساعت بعد از ارائه) برای همه حذف می‌شد.
+ *    (کار «فایل‌هایت آماده است» حذف شد: خبر آماده‌شدن فوری و در همه‌ی کانال‌ها از خود ورک‌فلوها می‌رود — notify-done.ts)
  *    inv  دعوت دوستان: یک‌بار برای کسی که ۲ تا ۶ ارائه ساخته و هنوز کسی را دعوت نکرده (فقط ربات؛ لینک دعوت مخصوص ربات است).
  *    pf   هدیه‌ی تکمیل پروفایل: یک‌بار، ۲۶ ساعت تا ۸ روز بعد از آخرین ارائه (نه در بدو ورود)، برای کسی که موبایل یا ایمیلش ثبت نیست و هدیه‌ی آن مورد را هنوز نگرفته؛ با ثبت و تایید هر مورد ۱ اعتبار (profile.ts).
  *    rfn  یادآوری نرم به دعوت‌شده‌ای که با لینک دوست آمده ولی ۳ تا ۴۸ ساعت بعد هنوز ارائه‌ای نساخته (دعوتِ دوستش به ارائه‌ی او بسته است).
@@ -433,60 +432,6 @@ ORDER BY x.k LIMIT ?3`,
   },
 };
 
-// کار ۳٫۵: «فایل‌هایت آماده است» حدود ۱ ساعت بعد از ساخت ارائه (همه‌ی کانال‌ها؛ ایمیل با پیوست PPTX؛ cron ساعتی ⇒ ۱ تا ۲ ساعت بعد، در ساعت‌های مجاز ارسال؛ سقف ۲۰ ساعته را مصرف نمی‌کند)
-const flJob: Job<ActRow> = {
-  name: "fl", noCap: true,
-  sql: `
-SELECT ${ACT_COLS()}
-${ACT_FROM("json_extract(v,'$.d') IS NOT NULL AND json_extract(v,'$.l') <= ?4 AND json_extract(v,'$.l') > ?5")}
-WHERE ${notMarked("'lc:fl:' || x.u || ':' || x.d")}
-ORDER BY x.k LIMIT ?3`,
-  // ۲۰ ساعت: بعد از آن فایل‌ها (نگه‌داری ۲۴ ساعته) رو به پاک‌شدن‌اند و پیام بی‌فایده است
-  extra: (now) => [now - 1 * HOUR, now - 20 * HOUR],
-  marker: (r) => `lc:fl:${r.uid}:${r.d}`,
-  note: async (c, r, k) => {
-    let left = 23, ago = 1;
-    try {
-      const l = JSON.parse(r.v).l;
-      left = Math.max(1, Math.round((l + 24 * HOUR - c.now) / HOUR));
-      ago = Math.max(1, Math.round((c.now - l) / HOUR)); // ایمیل بین ۱ تا ۲۰ ساعت بعد از ساخت می‌رود (ساعت مجاز و سقف ۲۰ ساعته)؛ پس «یک ساعت پیش» ثابت نادرست است
-    } catch { /* پیش‌فرض */ }
-    const lf = toFa(String(left));
-    const agoTxt = ago <= 1 ? "یک ساعت" : `حدود ${toFa(String(ago))} ساعت`;
-    // فایل PPTX همان ارائه از KV فایل‌ها (۱ زیردرخواست)؛ اگر نبود/بزرگ بود/بودجه تمام شد، ایمیل بدون پیوست و فقط با لینک می‌رود
-    let attach: { filename: string; content: string }[] | undefined;
-    if (k.email && r.d && take(c, 1)) { // پیوست فقط برای ایمیل لازم است
-      try {
-        const f = await loadFileDirect(c.env, r.uid, String(r.d));
-        if (f && f.data.byteLength <= FL_MAX_BYTES) attach = [{ filename: f.entry.name, content: toBase64(f.data) }];
-      } catch (e) { console.error("lifecycle fl attach", String(e).slice(0, 160)); }
-    }
-    return {
-      tag: "files-ready",
-      tg: [
-        "📂 <b>فایل‌های ارائه‌ات آماده‌ی دانلود است</b>",
-        "",
-        `ارائه‌ات ${tgEsc(agoTxt)} پیش ساخته شد. فایل‌ها ۲۴ ساعت نگه‌داری می‌شوند؛ تا حدود <b>${lf} ساعت</b> دیگر می‌توانی دوباره از بخش «فایل‌ها» بگیری‌شان.`,
-      ].join("\n"),
-      kb: startKb(c.env),
-      attach,
-      mail: {
-        subject: `📂 فایل ارائه‌ات آماده است — ${BRAND}`,
-        m: {
-          href: utm(c.env, "files"), head: "فایل‌هایت آماده است 📂", sub: `${firstName(k.name)}، ارائه‌ات ${agoTxt} پیش ساخته شد.`,
-          paras: [
-            attach ? "فایل PPTX ارائه‌ات به همین ایمیل پیوست شده است." : "فایل ارائه‌ات در سایت آماده‌ی دانلود است.",
-            `فایل‌های ساخته‌شده ۲۴ ساعت در سایت نگه‌داری می‌شوند؛ تا حدود ${lf} ساعت دیگر می‌توانی دوباره از آنجا بگیری‌شان.`,
-          ],
-          rows: [["پیوست", attach ? "فایل PPTX" : "ندارد؛ از سایت دانلود کن"], ["زمان باقی‌مانده در سایت", `حدود ${lf} ساعت`]],
-          cta: "دیدن و دانلود فایل‌ها ←", color: "#2563eb", foot: "این ایمیل فقط یک‌بار برای هر ارائه فرستاده می‌شود.", preview: "فایل PPTX ارائه‌ات پیوست شده است.",
-        },
-      },
-      push: { title: "فایل‌های ارائه‌ات آماده‌ی دانلود است", body: `تا حدود ${lf} ساعت دیگر می‌توانی دوباره از بخش «فایل‌ها» بگیری‌شان.`, url: "/", tag: "files" },
-    };
-  },
-};
-
 // کار ۳٫۷: پیشنهاد خرید ۴۸ ساعته؛ یک‌بار برای هر حساب (مثل بقیه، در همه‌ی کانال‌ها)
 const buyJob: Job<ActRow> = {
   name: "buy", doneTtl: BUY_TTL, maxRows: BUY_PER_RUN,
@@ -824,7 +769,7 @@ export async function runLifecycle(env: Env): Promise<Record<string, number>> {
     await env.KV.ready();
     const c: Ctx = { env, now, nowSec: Math.floor(now / 1000), left: SUBREQUEST_BUDGET, mailOn, botNames: new Map() };
     // پرداخت و هشدار اعتبار همیشه اول؛ بقیه هر ساعت با ترتیب چرخشی تا هیچ‌کدام گرسنه نماند
-    const rest: Job<any>[] = [flJob, buyJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, pfJob, cfJob, rfnJob];
+    const rest: Job<any>[] = [buyJob, exJob, nxJob, wbJob(14), wbJob(30), invJob, pfJob, cfJob, rfnJob];
     const shift = Math.floor(now / HOUR) % rest.length;
     const order: Job<any>[] = [payJob, lowJob, ...rest.slice(shift), ...rest.slice(0, shift)];
     for (const job of order) {
