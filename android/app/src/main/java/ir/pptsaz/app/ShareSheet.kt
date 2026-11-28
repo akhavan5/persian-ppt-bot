@@ -159,6 +159,8 @@ fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = nul
                         }
                     }
                 }
+                // مشاهده‌ی فایل در سایت (مرورگر، با ورود خودکار): مستقل از نصب بودن Slides و از ساخت Google Slides
+                if (webFileId != null) ShareRow("مشاهده در سایت", null) { scope.launch { openSlidesOnSite(ctx, webFileId); onDismiss() } }
                 targets.forEach { t ->
                     ShareRow(t.label, t.icon) { onPick(t.pkg, pdf) }
                 }

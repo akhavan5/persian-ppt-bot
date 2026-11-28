@@ -347,6 +347,8 @@ struct FileDetailSheet: View {
                 }
                 .buttonStyle(SoftButtonStyle())
                 .disabled(busySlides || busyDownload)
+                Button { Haptic.light(); OpenIn.openOnSite(item.id) } label: { Label("مشاهده در سایت", systemImage: "safari") }
+                    .buttonStyle(SoftButtonStyle())
             }
             if let u = lastURL {
                 HStack(spacing: 10) {

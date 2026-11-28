@@ -1519,7 +1519,7 @@ function showDone(jobId, s, took = 0) {
   const hBtn = $("#doneHandout"), pBtn = $("#donePoster"), img = $("#posterImg"), pdfBtn = $("#donePdf");
   show(pdfBtn, !!cfg.poster); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
   const pdfView = $("#donePdfView"); show(pdfView, IS_EITAA && !!cfg.poster); pdfView.onclick = (e) => viewPdf(jobId, e.currentTarget);
-  const siteBtn = $("#doneSite"); show(siteBtn, IS_EITAA); siteBtn.onclick = (e) => openOnSite(jobId, e.currentTarget);
+  const siteBtn = $("#doneSite"); show(siteBtn, true); siteBtn.onclick = (e) => openOnSite(jobId, e.currentTarget);
   const gsBtn = $("#doneGs"); show(gsBtn, !!cfg.googleClientId); gsBtn.onclick = (e) => openOnSite(jobId, e.currentTarget, null, GS_NOTE);
   show(hBtn, s.handout === "ok" && !!s.handoutId); show(pBtn, s.poster === "ok" && !!s.posterId); show(img, false);
   if (!hBtn.hidden) hBtn.onclick = (e) => sendToChat(s.handoutId, e.currentTarget);
@@ -1706,7 +1706,7 @@ async function viewPdf(id, btn) {
   });
 }
 
-// مشاهده‌ی فایل در سایت (ایتا): سرور لینک ورود یک‌بارمصرف می‌دهد و در مرورگر بیرونی باز می‌شود؛ سایت مستقیم روی همان فایل می‌رود
+// مشاهده‌ی فایل در سایت (همه‌ی پلتفرم‌ها: ایتا، تلگرام، بله، سروش‌پلاس): سرور لینک ورود یک‌بارمصرف می‌دهد و در مرورگر بیرونی باز می‌شود؛ سایت مستقیم روی همان فایل می‌رود
 // Google Slides: ورود گوگل (OAuth) داخل WebView تلگرام/بله/ایتا مسدود است، پس سایت در مرورگر بیرونی باز می‌شود و ساخت Slides همان‌جا انجام می‌شود
 const GS_NOTE = "در سایت، روی دکمه‌ی «Google Slides» همین ارائه بزن.";
 async function openOnSite(id, btn, to, note) {
@@ -1794,7 +1794,7 @@ async function loadFiles() {
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
         !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null,
         IS_EITAA && !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => viewPdf(f.id, e.currentTarget) }, "👁 مشاهده PDF") : null,
-        IS_EITAA && !f.sample ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => openOnSite(f.id, e.currentTarget) }, "🌐 مشاهده در سایت") : null,
+        !f.sample ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => openOnSite(f.id, e.currentTarget) }, "🌐 مشاهده در سایت") : null,
         cfg.googleClientId && !f.sample && !f.poster && !f.handout && !f.audio ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => openOnSite(f.id, e.currentTarget, null, GS_NOTE) }, "📑 Google Slides") : null),
       f.extras && f.extras.length
         ? h("div", { class: "fx" },

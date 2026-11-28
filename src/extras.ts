@@ -12,7 +12,7 @@ import type { Env } from "./env";
 import { getSettings, refundCredit, spendCredit, type Uid } from "./settings";
 import { hitLimit } from "./auth";
 import { listFiles, loadPreview, type FileEntry } from "./files";
-import { audioEnabled, posterEnabled, slidesRow } from "./deck-service";
+import { audioEnabled, posterEnabled, siteRow, slidesRow } from "./deck-service";
 import { hasBrowser } from "./browser-api";
 import { editMessage, sendMessage } from "./telegram";
 import { GAMMA_CREDIT_COST, GAMMA_KINDS, GAMMA_SPECS, gammaEnabled, gammaSpec, isGammaKind, type GammaKind } from "./gamma";
@@ -124,10 +124,11 @@ export function extraButtons(env: Env, id: string, hide: Set<ExtraKind>, admin =
 /** جمله‌ی راهنمای کپشن ارائه (قیمت هر دکمه را پیش از زدن می‌گوید)؛ بدون دکمه = "" */
 export const extrasHint = (rows: Btn[][]) => rows.length ? "\n\n➕ پوستر، جزوه، اسلاید صوتی و پادکست را هم می‌توانی با دکمه‌های زیر بسازی (هرکدام ۱ اعتبار)." : "";
 /** کیبورد کامل زیر فایل ارائه: PDF + Google Slides + همراه‌ها + ارسال نظر */
-export function deckKeyboard(env: Env, id: string, hide: Set<ExtraKind>, o: { feedback?: boolean; pdf?: boolean; /** دکمه‌ی Google Slides (تلگرام و بله) */ slides?: boolean; /** مدیر در تلگرام: دکمه‌های Gamma هم */ admin?: boolean } = {}) {
+export function deckKeyboard(env: Env, id: string, hide: Set<ExtraKind>, o: { feedback?: boolean; pdf?: boolean; /** دکمه‌ی Google Slides (تلگرام و بله) */ slides?: boolean; /** دکمه‌ی «مشاهده در سایت» (همه‌ی پلتفرم‌های چت جز ایتا) */ site?: boolean; /** مدیر در تلگرام: دکمه‌های Gamma هم */ admin?: boolean } = {}) {
   const rows: Btn[][] = [];
   if (o.pdf !== false && hasBrowser(env)) rows.push([{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${id}` }]);
   if (o.slides) rows.push(slidesRow(id));
+  if (o.site) rows.push(siteRow(id));
   rows.push(...extraButtons(env, id, hide, !!o.admin));
   if (o.feedback !== false) rows.push([{ text: "💬 ارسال نظر", callback_data: "fb:s" }]);
   return { inline_keyboard: rows };

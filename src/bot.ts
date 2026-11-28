@@ -18,7 +18,7 @@ import { notifyAllCommand } from "./notify";
 import { appVerCommand } from "./app-version";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { audioSeconds, isAudioName } from "./wav";
-import { siteHost, slidesOnChat, slidesRow } from "./deck-service";
+import { siteHost, siteOnChat, siteRow, slidesOnChat, slidesRow } from "./deck-service";
 import { isBaleId } from "./bale-format";
 import { isSplusId } from "./splus-format";
 import { isRubikaId } from "./rubika-format";
@@ -407,6 +407,17 @@ async function sendSlidesLink(env: Env, cq: any, userId: number, chatId: number,
     kb([[{ text: "📑 باز کردن در سایت", url: await siteLoginUrl(env, userId, "files", id) }]]));
 }
 
+/** دکمه‌ی «🌐 مشاهده در سایت» زیر ارائه (تلگرام، بله، سروش‌پلاس، روبیکا): لینک ورود یک‌بارمصرف تازه با همان حساب، مستقیم روی همان فایل.
+ *  مستقل از Google Slides است (GOOGLE_CLIENT_ID لازم نیست) و توکنش جدا از دکمه‌ی Google Slides ساخته می‌شود. */
+async function sendSiteLink(env: Env, cq: any, userId: number, chatId: number, id: string) {
+  await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+  if (!/^[\w-]{1,100}$/.test(id)) return;
+  if (await hitLimit(env, `vsite:${userId}`, 30, 3600)) return await sendMessage(env, chatId, "تعداد درخواست زیاد بود؛ کمی بعد دوباره امتحان کن.");
+  return await sendMessage(env, chatId,
+    "🌐 با دکمه‌ی زیر با همین حساب وارد سایت می‌شوی (بدون ثبت‌نام و رمز) و همین فایل باز می‌شود تا ببینی‌اش.",
+    kb([[{ text: "🌐 مشاهده در سایت", url: await siteLoginUrl(env, userId, "files", id) }]]));
+}
+
 async function handleCallback(env: Env, cq: any) {
   const userId: number = cq.from.id;
   const chatId: number = cq.message?.chat?.id;
@@ -443,6 +454,7 @@ async function handleCallback(env: Env, cq: any) {
   if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
   if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
   if (act === "gs") return await sendSlidesLink(env, cq, userId, chatId, a);
+  if (act === "vs") return await sendSiteLink(env, cq, userId, chatId, a);
   if (act === "au" || act === "pc") return await startExtraButton(env, cq, uid, userId, chatId, act === "pc" ? "podcast" : "audio", a);
   if (act === "ex") {
     const x = extraOfCode(a);
@@ -489,7 +501,7 @@ async function handleCallback(env: Env, cq: any) {
     const isDeck = isMainDeck(a, f.entry.name); // اسلاید صوتی هم .pptx است ولی ارائه‌ی اصلی نیست: دکمه‌ی همراه نمی‌گیرد
     const gAdmin = isGammaAdmin(env, userId); // مدیر در تلگرام: دکمه‌های Gamma (ساخته‌نشده‌ها) هم می‌آید
     const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a, undefined, gAdmin ? ALL_EXTRA_KINDS : undefined).catch(() => new Set<ExtraKind>(ALL_EXTRA_KINDS)), gAdmin) : [];
-    const krows = [...(isDeck && slidesOnChat(env, chatId) ? [slidesRow(a)] : []), ...xrows]; // Google Slides + همراه‌های ساخته‌نشده
+    const krows = [...(isDeck && slidesOnChat(env, chatId) ? [slidesRow(a)] : []), ...(isDeck && siteOnChat(chatId) ? [siteRow(a)] : []), ...xrows]; // Google Slides + مشاهده در سایت + همراه‌های ساخته‌نشده
     return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>${extrasHint(xrows)}`,
       /\.(png|jpe?g)$/i.test(f.entry.name) ? { mime: /\.png$/i.test(f.entry.name) ? "image/png" : "image/jpeg" }
         : /\.docx$/i.test(f.entry.name) ? { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
