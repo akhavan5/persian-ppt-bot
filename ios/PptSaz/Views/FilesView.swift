@@ -198,6 +198,7 @@ struct FileDetailSheet: View {
     @State private var lastURL: URL?
     @State private var busyDownload = false
     @State private var busyPdf = false
+    @State private var busySlides = false
     @State private var showPreview = false
     @State private var showExport = false
     @State private var posterChoice = false
@@ -291,6 +292,20 @@ struct FileDetailSheet: View {
         if let u = u { Haptic.success(); present(u) }
     }
 
+    /// ساخت مستقیم در Google Slides: نسخه‌ی محلی PPTX یا دریافت از سرور ← آپلود به Drive کاربر
+    private func makeInSlides() async {
+        busySlides = true
+        defer { busySlides = false }
+        let src: URL?
+        if let l = localCopy { src = LocalLibrary.shared.url(l) } else { src = await m.download(item) }
+        guard let src = src else { return }
+        switch await OpenIn.createInSlides(fileURL: src, title: item.title, serverID: item.id) {
+        case .created: Haptic.success()
+        case .cancelled: break
+        case .fallback: Haptic.light(); m.toast("ساخت مستقیم ممکن نشد؛ ارائه در سایت باز شد، آنجا «Google Slides» را بزن.")
+        }
+    }
+
     private var actions: some View {
         VStack(spacing: 10) {
             if isDeck {
@@ -322,6 +337,16 @@ struct FileDetailSheet: View {
                 }
                 .buttonStyle(SoftButtonStyle())
                 .disabled(busyPdf)
+            }
+            if isDeck {
+                Button {
+                    Task { await makeInSlides() }
+                } label: {
+                    if busySlides { ProgressView() }
+                    else { Label("ساخت مستقیم در Google Slides", systemImage: "rectangle.on.rectangle.angled") }
+                }
+                .buttonStyle(SoftButtonStyle())
+                .disabled(busySlides || busyDownload)
             }
             if let u = lastURL {
                 HStack(spacing: 10) {

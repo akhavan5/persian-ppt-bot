@@ -50,6 +50,8 @@ targets:
         # فایربیس (نسخه‌های جدید) بدون این دو مقدار هنگام راه‌اندازی کرش می‌کند؛ هر دو از GoogleService-Info.plist (API_KEY و PROJECT_ID). خالی = آنالیتیکس خاموش
         FirebaseAPIKey: $(FIREBASE_API_KEY)
         FirebaseProjectID: $(FIREBASE_PROJECT_ID)
+        # ساخت مستقیم Google Slides در Drive (DriveSlides.swift): OAuth Client از نوع iOS برای ir.pptsaz.app؛ محرمانه نیست
+        GoogleIOSClientID: $(GOOGLE_IOS_CLIENT_ID)
         # جمع‌آوری تا وقتی Stats.start آن را روشن نکند خاموش است
         FIREBASE_ANALYTICS_COLLECTION_ENABLED: false
         GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS: false
@@ -101,6 +103,7 @@ targets:
         # شناسه‌های عمومی استریم iOS (داخل هر اپ منتشرشده دیده می‌شوند و محرمانه نیستند)؛ با env همنام در بیلد قابل تغییرند
         FIREBASE_IOS_APP_ID: "1:201290040240:ios:686d3aa4c2fb96f0b84c75"
         FIREBASE_SENDER_ID: "201290040240"
+        GOOGLE_IOS_CLIENT_ID: "354727513748-67ntklnmkc4sfc4dcr6rcu1o2mb72h51.apps.googleusercontent.com"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

@@ -215,7 +215,26 @@ enum OpenIn {
         Task { @MainActor in
             // لینک ورود یک‌بارمصرف (بدون ورود دوباره)؛ اگر نشد، آدرس ساده و کاربر خودش وارد می‌شود
             let link = (try? await Api.shared.siteLink(safe)) ?? ""
-            if let url = URL(string: link.isEmpty ? Api.base + "/?files=" + safe : link) { UIApplication.shared.open(url) }
+            if let url = URL(string: link.isEmpty ? Api.base + "/?files=" + safe : link) { _ = await UIApplication.shared.open(url) }
+        }
+    }
+
+    enum SlidesResult { case created, cancelled, fallback }
+
+    /// ساخت مستقیم Google Slides در Drive خودِ کاربر (DriveSlides)؛ اگر نشد (کلاینت در بیلد نیست، دسترسی ندادن، خطای شبکه) همان مسیر سایت باز می‌شود.
+    static func createInSlides(fileURL: URL, title: String, serverID: String) async -> SlidesResult {
+        guard DriveSlides.available else { openOnSite(serverID); return .fallback }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let link = try await DriveSlides.create(title: title, pptx: data)
+            guard let url = URL(string: link) else { throw DriveSlides.Failure.failed }
+            _ = await UIApplication.shared.open(url)
+            return .created
+        } catch DriveSlides.Failure.cancelled {
+            return .cancelled
+        } catch {
+            openOnSite(serverID)
+            return .fallback
         }
     }
 }

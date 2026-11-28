@@ -9,6 +9,7 @@ struct LocalDetailSheet: View {
     @State private var quick: URL?
     @State private var showExport = false
     @State private var confirmDelete = false
+    @State private var busySlides = false
 
     private var url: URL { LocalLibrary.shared.url(file) }
 
@@ -46,6 +47,25 @@ struct LocalDetailSheet: View {
                         }
                         ShareLink(item: url) { Label("اشتراک‌گذاری", systemImage: "square.and.arrow.up") }
                             .buttonStyle(SoftButtonStyle())
+                        if file.kind == "deck" {
+                            Button {
+                                Task {
+                                    busySlides = true
+                                    let r = await OpenIn.createInSlides(fileURL: url, title: file.title, serverID: String(file.id.split(separator: "|").first ?? ""))
+                                    busySlides = false
+                                    switch r {
+                                    case .created: Haptic.success()
+                                    case .cancelled: break
+                                    case .fallback: Haptic.light(); m.toast("ساخت مستقیم ممکن نشد؛ ارائه در سایت باز شد، آنجا «Google Slides» را بزن.")
+                                    }
+                                }
+                            } label: {
+                                if busySlides { ProgressView() }
+                                else { Label("ساخت مستقیم در Google Slides", systemImage: "rectangle.on.rectangle.angled") }
+                            }
+                            .buttonStyle(SoftButtonStyle())
+                            .disabled(busySlides)
+                        }
                         if file.kind == "deck" || file.kind == "handout" {
                             Button {
                                 if OpenIn.present(url) { Haptic.light() }
