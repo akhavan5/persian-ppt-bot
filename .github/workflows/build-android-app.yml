@@ -40,6 +40,8 @@ jobs:
           test -n "$KS_B64" && test -n "$KS_PASS" || { echo "::error::secrets ANDROID_KEYSTORE_B64 / ANDROID_KEYSTORE_PASSWORD are missing"; exit 1; }
           echo "$KS_B64" | base64 -d > android/pptsaz-release.keystore
           keytool -list -keystore android/pptsaz-release.keystore -storepass "$KS_PASS" -alias pptsaz | tail -3
+          # SHA-1 همین کلید را در Google Cloud (Android OAuth client) ثبت کن؛ لاگ بدون -v فقط SHA-256 را نشان می‌دهد
+          keytool -list -v -keystore android/pptsaz-release.keystore -storepass "$KS_PASS" -alias pptsaz | grep -E "SHA1:|SHA256:"
 
       - name: Show ad networks
         run: |
