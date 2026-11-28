@@ -70,7 +70,7 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 </script>`;
 
 /** جایگاه تبلیغ تصویری یکتانت (زیر بخش مقاله‌های مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
-export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
+export const YEKTANET_SLOT = `<div id="mediaad-6pnV7" ></div>`;
 
 /** چهار جایگاه تبلیغ مدیاد؛ بالای بخش مقاله‌های مرتبط. شناسه‌ها را تغییر ندهید. */
 export const MEDIAAD_BESIDE_YEKTANET_SLOTS = `<div id="mediaad-Rly2g" ></div> <div id="mediaad-B3z4d" ></div> <div id="mediaad-9yw2Y" ></div> <div id="mediaad-JR4kY" ></div>`;
