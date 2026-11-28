@@ -46,6 +46,12 @@ struct LocalDetailSheet: View {
                         }
                         ShareLink(item: url) { Label("اشتراک‌گذاری", systemImage: "square.and.arrow.up") }
                             .buttonStyle(SoftButtonStyle())
+                        if file.kind == "deck" || file.kind == "handout" {
+                            Button {
+                                if OpenIn.present(url) { Haptic.light() } else { Haptic.error(); m.toast("برنامه‌ای برای ویرایش این فایل نصب نیست") }
+                            } label: { Label(file.kind == "deck" ? "ویرایش در Google Slides، PowerPoint…" : "ویرایش در Google Docs، Word…", systemImage: "square.and.pencil") }
+                                .buttonStyle(SoftButtonStyle())
+                        }
                         Button { showExport = true } label: { Label("ذخیره در برنامه‌ی Files", systemImage: "folder.badge.plus") }
                             .buttonStyle(SoftButtonStyle())
                         Button(role: .destructive) { confirmDelete = true } label: {

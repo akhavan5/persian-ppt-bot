@@ -123,10 +123,12 @@ class MainActivity : ComponentActivity() {
         try { startActivity(i) } catch (_: Exception) {}
     }
 
-    private fun openFile(f: Saved, retried: Boolean = false): Boolean = try {
+    /** pkg != null: فقط در همان برنامه (مثلاً Google Slides) باز می‌شود؛ اگر نصب نبود false. */
+    private fun openFile(f: Saved, retried: Boolean = false, pkg: String? = null): Boolean = try {
         startActivity(
             Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(f.uri, f.mime)
+                if (pkg != null) setPackage(pkg)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             },
         )
@@ -136,11 +138,16 @@ class MainActivity : ComponentActivity() {
     } catch (e: SecurityException) {
         // دسترسی به آدرس MediaStore رد شد (کرش گزارش‌شده روی شیائومی): با کپی موقتی FileProvider یک بار دوباره تلاش می‌کنیم
         val c = if (retried) null else Storage.cacheCopy(this, f)
-        if (c != null) openFile(c, retried = true) else { vm.toast("باز کردن فایل ممکن نشد؛ فایل در پوشه‌ی دانلودها ذخیره شده است."); true }
+        if (c != null) openFile(c, retried = true, pkg = pkg) else { vm.toast("باز کردن فایل ممکن نشد؛ فایل در پوشه‌ی دانلودها ذخیره شده است."); true }
     }
 
     /** pkg != null: مستقیم به همان برنامه (تلگرام، ایتا، واتساپ …) می‌فرستد؛ اگر نصب نبود یا قبول نکرد، فهرست سیستم باز می‌شود. */
     private fun shareFile(f: Saved, pkg: String? = null, caption: String = "", retried: Boolean = false) {
+        // Google Slides/Docs: «ارسال» نیست، باز کردن فایل برای ویرایش است (ACTION_VIEW)؛ اگر برنامه فایل را نپذیرفت، فهرست «باز کردن با…» سیستم
+        if (isGoogleEditor(pkg)) {
+            if (!openFile(f, pkg = pkg) && !openFile(f)) vm.toast("برنامه‌ای برای باز کردن این فایل نصب نیست؛ فایل در پوشه‌ی دانلودها ذخیره شده است.")
+            return
+        }
         try {
             shareFileUnsafe(f, pkg, caption)
         } catch (e: SecurityException) {

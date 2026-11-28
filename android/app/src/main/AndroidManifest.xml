@@ -24,6 +24,9 @@
         <package android:name="com.whatsapp.w4b" />
         <package android:name="ir.nasim" />
         <package android:name="ir.resaneh1.iptv" />
+        <!-- گزینه‌ی «Google Slides / Docs» در دیالوگ ارسال (ShareSheet.kt)؛ فقط اگر نصب باشند نشان داده می‌شوند -->
+        <package android:name="com.google.android.apps.docs.editors.slides" />
+        <package android:name="com.google.android.apps.docs.editors.docs" />
     </queries>
 
     <application

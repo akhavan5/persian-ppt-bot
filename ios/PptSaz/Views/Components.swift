@@ -191,6 +191,23 @@ extension View {
     func filePreview(_ url: Binding<URL?>) -> some View { quickLookPreview(url) }
 }
 
+/// «باز کردن در…»: منوی سیستم با برنامه‌های نصب‌شده‌ای که می‌توانند فایل را باز و ویرایش کنند (Google Slides و Docs، PowerPoint، Keynote، Word…).
+/// ShareLink فقط برگه‌ی اشتراک‌گذاری را نشان می‌دهد؛ این منو مستقیم به برنامه‌ی ویرایشگر می‌رسد. اگر هیچ برنامه‌ای فایل را نپذیرد false برمی‌گرداند.
+@MainActor
+enum OpenIn {
+    private static var controller: UIDocumentInteractionController? // تا بسته‌شدن منو زنده بماند
+
+    static func present(_ url: URL) -> Bool {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first { $0.activationState == .foregroundActive }
+        guard var top = scene?.windows.first(where: { $0.isKeyWindow })?.rootViewController else { return false }
+        while let next = top.presentedViewController { top = next }
+        let c = UIDocumentInteractionController(url: url)
+        controller = c
+        let b = top.view.bounds
+        return c.presentOpenInMenu(from: CGRect(x: b.midX, y: b.maxY - 1, width: 1, height: 1), in: top.view, animated: true)
+    }
+}
+
 struct EmptyStateView: View {
     let symbol: String
     let title: String

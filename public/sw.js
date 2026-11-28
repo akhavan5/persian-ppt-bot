@@ -3,7 +3,7 @@
    - فایل‌های استاتیک (فونت، آیکون، jszip): اول کش
    - دریافت فایل/متن/لینک از منوی «اشتراک‌گذاری» گوشی و سیستم (Share Target)
    - /api و تلگرام و درخواست‌های غیر GET (جز Share Target) هرگز کش نمی‌شوند */
-const VERSION = "v6"; // با هر تغییر مهم صفحه‌ها (مثل انتخاب درگاه پرداخت) عدد را بالا ببر تا کش قدیمی پاک شود
+const VERSION = "v7"; // با هر تغییر مهم صفحه‌ها (مثل انتخاب درگاه پرداخت) عدد را بالا ببر تا کش قدیمی پاک شود
 const STATIC = "pptsaz-static-" + VERSION;
 const PAGES = "pptsaz-pages-" + VERSION;
 const SHARE = "pptsaz-share";

@@ -330,6 +330,12 @@ struct FileDetailSheet: View {
                     Button { showExport = true } label: { Label("ذخیره در Files", systemImage: "folder.badge.plus") }
                         .buttonStyle(SoftButtonStyle())
                 }
+                if isDeck || kind == .handout {
+                    Button {
+                        if OpenIn.present(u) { Haptic.light() } else { Haptic.error(); m.toast("برنامه‌ای برای ویرایش این فایل نصب نیست") }
+                    } label: { Label(isDeck ? "ویرایش در Google Slides، PowerPoint…" : "ویرایش در Google Docs، Word…", systemImage: "square.and.pencil") }
+                        .buttonStyle(SoftButtonStyle())
+                }
             }
             Text("فایل را در Files، PowerPoint، Keynote یا پیام‌رسان‌ها ذخیره یا ارسال کن.")
                 .font(.caption)

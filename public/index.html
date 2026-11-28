@@ -508,11 +508,13 @@ address{font-style:normal}
         <a class="btn ghost" id="doneView" href="#" target="_blank" rel="noopener">👁 پیش‌نمایش در مرورگر</a>
         <a class="btn ghost" id="donePdf" href="#" target="_blank" rel="noopener">📄 خروجی PDF</a>
         <button class="btn" id="doneDl" type="button">⬇️ دانلود فایل PPTX</button>
+        <button class="btn" id="doneGs" type="button" hidden>📑 باز کردن در Google Slides</button>
         <button class="btn" id="donePosterDl" type="button" hidden>🖼 دانلود پوستر</button>
         <button class="btn" id="doneHandoutDl" type="button" hidden>📝 دانلود جزوه (Word)</button>
         <button class="btn" id="doneAudioDl" type="button" hidden>🔊 دانلود اسلاید صوتی (PPTX)</button>
         <button class="btn" id="donePodcastDl" type="button" hidden>🎙 دانلود پادکست</button>
       </div>
+      <p class="muted" id="doneGsHint" style="font-size:.82rem;line-height:1.9;margin:8px 0 0" hidden>📑 ارائه با اجازه‌ی تو در Google Drive خودت ساخته و در Google Slides باز می‌شود (فقط به فایل‌هایی که همین سایت می‌سازد دسترسی می‌گیرد). اگر فونت فارسی در Slides متفاوت بود، از منوی Font فونت دلخواهت را انتخاب کن.</p>
       <div class="doneBtns" id="doneAudioMore"></div>
       <div class="ppList" id="donePodcastPlayers"></div>
       <div class="await" id="doneAudioWait" hidden>
@@ -1999,6 +2001,7 @@ async function track(jobId, resumed = false) {
     if (s.state === "done") {
       $("#doneTitle").textContent = s.title; $("#doneSlides").textContent = (s.slides ? ` — ${fa(s.slides)} اسلاید` : "") + (ms ? ` · ساخته‌شده در ${fmtDur(ms)}` : "");
       $("#doneDl").onclick = (ev) => download(jobId, ev.currentTarget);
+       gsBind($("#doneGs"), jobId, $("#doneGsHint"));
       $("#doneView").href = $("#donePdf").href = previewUrl(jobId);
       fontDlSync(me && me.settings && me.settings.font, "#doneFont", "#doneFontName", "#doneFontLink");
       // پوستر همراه: پیش‌نمایش + دانلود (فایل تازه ممکن است چند ثانیه برای KV دیده نشود؛ در خطا چند بار دوباره امتحان می‌شود)
@@ -2144,6 +2147,125 @@ async function download(id, btn) {
   } finally { btn.disabled = false; btn.textContent = label; }
 }
 
+// ---------- باز کردن در Google Slides ----------
+// مسیر: Google Identity Services (توکن در مرورگر؛ دامنه‌ی drive.file که تأیید گوگل نمی‌خواهد) ← آپلود چندبخشی به Drive API v3 با mimeType گوگل‌اسلایدز
+// (گوگل خودش PPTX را به Slides تبدیل می‌کند) ← باز شدن webViewLink. فایل مستقیم از مرورگر کاربر به Drive خودش می‌رود؛ توکن گوگل هرگز به سرور ما نمی‌رسد.
+// لازم: GOOGLE_CLIENT_ID (همان Web client ورود گوگل) + فعال‌بودن Google Drive API در پروژه + ثبت دامنه‌ی سایت در Authorized JavaScript origins (راهنما: GOOGLE-SLIDES.md).
+const GS_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const GS_SLIDES = "application/vnd.google-apps.presentation";
+const GS_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+const gsAvailable = () => !!(cfg && cfg.googleClientId);
+const gsLinks = {}; // شناسه‌ی فایل ← لینک Slides ساخته‌شده (بار دوم دوباره آپلود نمی‌شود)
+let gisLoading = null, gsTok = "", gsExp = 0;
+const gsErr = (kind, msg) => Object.assign(new Error(msg || kind), { gs: kind });
+const gsReady = () => !!(window.google && google.accounts && google.accounts.oauth2);
+
+// اسکریپت GIS از قبل (هنگام نمایش دکمه) بارگیری می‌شود؛ چون پنجره‌ی ورود باید دقیقاً داخل همان کلیکِ کاربر باز شود، نه بعد از یک await
+function gsPreload() {
+  if (!gsAvailable() || gsReady()) return Promise.resolve();
+  if (!gisLoading) gisLoading = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client"; s.async = true;
+    s.onload = () => res(); s.onerror = () => { gisLoading = null; s.remove(); rej(gsErr("gis")); };
+    document.head.append(s);
+  });
+  return gisLoading;
+}
+function gsBind(btn, id, hint) {
+  if (!btn) return;
+  const on = gsAvailable();
+  btn.hidden = !on; if (hint) hint.hidden = !on;
+  if (!on) return;
+  btn.textContent = gsLinks[id] ? "✅ باز کردن در Google Slides" : "📑 باز کردن در Google Slides";
+  btn.onclick = (ev) => openInSlides(id, ev.currentTarget);
+  gsPreload().catch(() => {});
+}
+function gsToken() {
+  if (gsTok && Date.now() < gsExp) return Promise.resolve(gsTok);
+  return new Promise((res, rej) => {
+    try {
+      const c = google.accounts.oauth2.initTokenClient({
+        client_id: cfg.googleClientId, scope: GS_SCOPE,
+        callback: (r) => {
+          if (!r || r.error || !r.access_token) return rej(gsErr("denied", r && r.error));
+          // کاربر می‌تواند در صفحه‌ی رضایت، تیک دسترسی Drive را بردارد (granular consent)
+          if (google.accounts.oauth2.hasGrantedAllScopes && !google.accounts.oauth2.hasGrantedAllScopes(r, GS_SCOPE)) return rej(gsErr("denied"));
+          gsTok = r.access_token; gsExp = Date.now() + Math.max(60, Number(r.expires_in) - 60) * 1000; res(gsTok);
+        },
+        error_callback: (e) => rej(gsErr(e && e.type === "popup_closed" ? "closed" : "popup", e && e.type)),
+      });
+      c.requestAccessToken();
+    } catch (e) { rej(gsErr("gis", String(e && e.message || e))); }
+  });
+}
+// فایل تازه ممکن است تا چند ثانیه برای KV دیده نشود؛ مثل download، ۴۰۴ چند بار دوباره امتحان می‌شود
+async function gsFetchDeck(id) {
+  for (let i = 0; i < 30; i++) {
+    const r = await fetch("/api/files/" + encodeURIComponent(id), { credentials: "same-origin" });
+    if (r.ok) {
+      const m = /filename\*=UTF-8''([^;]+)/.exec(r.headers.get("content-disposition") || "");
+      return { blob: await r.blob(), name: m ? decodeURIComponent(m[1]) : "presentation.pptx" };
+    }
+    if (r.status === 401) { me = null; boot(); throw gsErr("auth"); }
+    if (r.status !== 404) break;
+    await sleep(3000);
+  }
+  throw gsErr("fetch");
+}
+async function gsUpload(tok, blob, title) {
+  const b = "pptsaz" + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const body = new Blob([
+    `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: title, mimeType: GS_SLIDES })}\r\n--${b}\r\nContent-Type: ${GS_PPTX}\r\n\r\n`,
+    blob, `\r\n--${b}--`,
+  ]);
+  let r;
+  try {
+    r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
+      method: "POST", headers: { authorization: "Bearer " + tok, "content-type": "multipart/related; boundary=" + b }, body,
+    });
+  } catch { throw gsErr("net"); }
+  if (r.ok) { const d = await r.json().catch(() => ({})); if (d.id) return d.webViewLink || `https://docs.google.com/presentation/d/${d.id}/edit`; throw gsErr("api"); }
+  if (r.status === 401) { gsTok = ""; throw gsErr("expired"); }
+  const j = await r.json().catch(() => ({}));
+  const reason = String(j && j.error && j.error.errors && j.error.errors[0] && j.error.errors[0].reason || "");
+  console.warn("drive upload", r.status, reason);
+  if (/storageQuota|quotaExceeded/i.test(reason)) throw gsErr("quota");
+  throw gsErr("api", reason || String(r.status)); // مثلاً accessNotConfigured: Drive API در پروژه فعال نیست
+}
+const GS_MSG = {
+  denied: "دسترسی به Google Drive داده نشد؛ برای ساخت Slides باید اجازه بدهی (فقط به فایل‌هایی که همین سایت می‌سازد دسترسی می‌گیرد).",
+  closed: "پنجره‌ی ورود گوگل بسته شد؛ دوباره بزن.",
+  popup: "پنجره‌ی ورود گوگل باز نشد؛ پاپ‌آپ مرورگر را مجاز کن و دوباره بزن.",
+  gis: "اتصال به گوگل ممکن نشد؛ اینترنت یا فیلترشکن را بررسی کن. فایل PPTX را می‌توانی دانلود کنی.",
+  net: "اتصال به Google Drive برقرار نشد؛ دوباره امتحان کن.",
+  expired: "دسترسی گوگل منقضی شد؛ دوباره بزن.",
+  quota: "فضای Google Drive تو پر است؛ جا باز کن و دوباره بزن.",
+  api: "ساخت Google Slides الان ممکن نشد؛ فایل PPTX را دانلود کن و در Slides باز کن.",
+  fetch: "دریافت فایل ناموفق بود؛ کمی بعد دوباره امتحان کن.",
+};
+function gsOpen(link) { const w = window.open(link, "_blank"); if (w) w.opener = null; return !!w; }
+async function openInSlides(id, btn) {
+  if (gsLinks[id]) { if (!gsOpen(gsLinks[id])) toast("پاپ‌آپ مسدود شد؛ اجازه‌اش را بده و دوباره بزن."); return; }
+  if (!gsAvailable()) { toast("اتصال گوگل روی این سرویس فعال نیست."); return; }
+  if (!gsReady()) { gsPreload().catch(() => {}); toast("اتصال به گوگل در حال آماده‌شدن است؛ چند ثانیه بعد دوباره بزن."); return; }
+  const label = btn.textContent; let ok = false; btn.disabled = true;
+  try {
+    // درخواست توکن باید قبل از هر await و در همان کلیک شروع شود تا پنجره‌ی ورود گوگل مسدود نشود؛ دریافت فایل هم‌زمان انجام می‌شود
+    const tokP = gsToken(), deckP = gsFetchDeck(id);
+    btn.textContent = "در حال ورود به گوگل…";
+    const [tok, deck] = await Promise.all([tokP, deckP]);
+    btn.textContent = "در حال ساخت در Drive…";
+    const link = await gsUpload(tok, deck.blob, deck.name.replace(/\.pptx$/i, ""));
+    gsLinks[id] = link; ok = true; btn.textContent = btn.classList.contains("sm") ? "✅ Google Slides" : "✅ باز کردن در Google Slides";
+    if (!gsOpen(link)) toast("ساخته شد ✅ برای باز کردن، دوباره همین دکمه را بزن.");
+    else toast("✅ در Google Drive تو ساخته شد");
+  } catch (e) {
+    if (e && e.gs === "auth") return;
+    console.warn("google slides", e && e.gs, e && e.message);
+    toast(GS_MSG[e && e.gs] || GS_MSG.api);
+  } finally { btn.disabled = false; if (!ok) btn.textContent = label; }
+}
+
 // همراه‌های بعد از ساخت ارائه: زیر هر ارائه دکمه‌ی پوستر، جزوه، اسلاید صوتی و پادکست (هرکدام ۱ اعتبار جدا) فقط وقتی هنوز برای همان ارائه ساخته نشده‌اند
 const EXTRA_BTNS = {
   audio: [["🔊 اسلاید صوتی", null]], podcast: [["🎙 پادکست", null]], handout: [["📝 جزوه (Word)", null]],
@@ -2201,7 +2323,8 @@ async function loadFiles() {
           ? h("a", { class: "btn ghost sm", href: "/api/files/" + encodeURIComponent(f.id) + "?inline=1", target: "_blank", rel: "noopener" }, "👁 نمایش")
           : h("a", { class: "btn ghost sm", href: previewUrl(f.id), target: "_blank", rel: "noopener" }, "👁 پیش‌نمایش / PDF"),
         playBtn,
-        h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => download(f.id, ev.currentTarget) }, "⬇️ دانلود")),
+        h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => download(f.id, ev.currentTarget) }, "⬇️ دانلود"),
+        gsAvailable() && !f.poster && !f.handout && !f.audio && !f.pdf ? h("button", { class: "btn ghost sm", type: "button", onclick: (ev) => openInSlides(f.id, ev.currentTarget) }, gsLinks[f.id] ? "✅ Google Slides" : "📑 Google Slides") : null),
       slot,
       f.extras && f.extras.length
         ? h("div", { class: "fx" },

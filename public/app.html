@@ -239,6 +239,7 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <div style="margin:4px 0 10px"><b id="doneTitle"></b><span class="muted" id="doneSlides"></span></div>
         <button class="btn" id="doneSend" type="button">📥 ارسال ارائه (PPTX) به چت</button>
         <button class="btn ghost" id="doneDl" type="button" style="margin-top:8px" hidden>⬇️ دانلود مستقیم (PPTX)</button>
+        <button class="btn ghost" id="doneGs" type="button" style="margin-top:8px" hidden>📑 باز کردن در Google Slides</button>
         <button class="btn ghost" id="donePdf" type="button" style="margin-top:8px" hidden>📄 ارسال نسخه‌ی PDF به چت</button>
         <button class="btn ghost" id="donePdfView" type="button" style="margin-top:8px" hidden>👁 مشاهده‌ی PDF</button>
         <button class="btn ghost" id="doneSite" type="button" style="margin-top:8px" hidden>🌐 مشاهده در سایت</button>
@@ -1519,6 +1520,7 @@ function showDone(jobId, s, took = 0) {
   show(pdfBtn, !!cfg.poster); pdfBtn.onclick = (e) => sendToChat(jobId, e.currentTarget, "pdf");
   const pdfView = $("#donePdfView"); show(pdfView, IS_EITAA && !!cfg.poster); pdfView.onclick = (e) => viewPdf(jobId, e.currentTarget);
   const siteBtn = $("#doneSite"); show(siteBtn, IS_EITAA); siteBtn.onclick = (e) => openOnSite(jobId, e.currentTarget);
+  const gsBtn = $("#doneGs"); show(gsBtn, !!cfg.googleClientId); gsBtn.onclick = (e) => openOnSite(jobId, e.currentTarget, null, GS_NOTE);
   show(hBtn, s.handout === "ok" && !!s.handoutId); show(pBtn, s.poster === "ok" && !!s.posterId); show(img, false);
   if (!hBtn.hidden) hBtn.onclick = (e) => sendToChat(s.handoutId, e.currentTarget);
   if (!pBtn.hidden) { pBtn.onclick = (e) => sendToChat(s.posterId, e.currentTarget); posterPreview(s.posterId); }
@@ -1705,11 +1707,13 @@ async function viewPdf(id, btn) {
 }
 
 // مشاهده‌ی فایل در سایت (ایتا): سرور لینک ورود یک‌بارمصرف می‌دهد و در مرورگر بیرونی باز می‌شود؛ سایت مستقیم روی همان فایل می‌رود
-async function openOnSite(id, btn, to) {
+// Google Slides: ورود گوگل (OAuth) داخل WebView تلگرام/بله/ایتا مسدود است، پس سایت در مرورگر بیرونی باز می‌شود و ساخت Slides همان‌جا انجام می‌شود
+const GS_NOTE = "در سایت، روی دکمه‌ی «Google Slides» همین ارائه بزن.";
+async function openOnSite(id, btn, to, note) {
   return busy(btn, "در حال باز کردن سایت…", async () => {
     try {
       const d = await api("/api/miniapp/site", { method: "POST", body: to === "home" ? { to } : id ? { id } : {} });
-      TG.openLink(d.url); TG.haptic("success");
+      TG.openLink(d.url); TG.haptic("success"); if (note) toast(note);
     } catch (e) { toast(e.message || "باز کردن سایت ممکن نشد؛ دوباره امتحان کن."); TG.haptic("error"); }
   });
 }
@@ -1790,7 +1794,8 @@ async function loadFiles() {
         TG.canDownload ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => dlFile(f.id, e.currentTarget) }, "⬇️ دانلود") : null,
         !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => sendToChat(f.id, e.currentTarget, "pdf") }, "📄 PDF") : null,
         IS_EITAA && !f.sample && !f.poster && !f.handout && !f.audio && cfg.poster ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => viewPdf(f.id, e.currentTarget) }, "👁 مشاهده PDF") : null,
-        IS_EITAA && !f.sample ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => openOnSite(f.id, e.currentTarget) }, "🌐 مشاهده در سایت") : null),
+        IS_EITAA && !f.sample ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => openOnSite(f.id, e.currentTarget) }, "🌐 مشاهده در سایت") : null,
+        cfg.googleClientId && !f.sample && !f.poster && !f.handout && !f.audio ? h("button", { class: "btn ghost sm", type: "button", onclick: (e) => openOnSite(f.id, e.currentTarget, null, GS_NOTE) }, "📑 Google Slides") : null),
       f.extras && f.extras.length
         ? h("div", { class: "fx" },
           h("span", { class: "xl" }, "ساخت جداگانه برای همین ارائه (۱ اعتبار برای هر مورد):"),

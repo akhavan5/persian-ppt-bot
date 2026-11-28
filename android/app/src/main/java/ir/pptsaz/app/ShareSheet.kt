@@ -38,6 +38,11 @@ private val MESSENGERS = listOf(
     "ir.resaneh1.iptv", // روبیکا
 )
 
+/** برنامه‌های گوگل: فایل با ACTION_VIEW (نه SEND) مستقیم در همان برنامه باز می‌شود؛ PPTX ← Slides، DOCX ← Docs. */
+internal const val PKG_SLIDES = "com.google.android.apps.docs.editors.slides"
+internal const val PKG_DOCS = "com.google.android.apps.docs.editors.docs"
+internal fun isGoogleEditor(pkg: String?) = pkg == PKG_SLIDES || pkg == PKG_DOCS
+
 internal class ShareTarget(val pkg: String, val label: String, val icon: androidx.compose.ui.graphics.ImageBitmap?)
 
 internal fun installedShareTargets(ctx: Context): List<ShareTarget> {
@@ -65,9 +70,18 @@ internal fun shareCaption(title: String): String =
  * onPick(pkg, asPdf): pkg = null یعنی فهرست سیستم.
  */
 @Composable
-fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, onPick: (pkg: String?, asPdf: Boolean) -> Unit) {
+fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = null, onPick: (pkg: String?, asPdf: Boolean) -> Unit) {
     val ctx = LocalContext.current
     val targets = remember { installedShareTargets(ctx) }
+    // «باز کردن در Google Slides/Docs» فقط وقتی برنامه روی گوشی نصب است (googlePkg را فقط برای ارائه‌ی PPTX و جزوه‌ی Word بده)
+    val google = remember(googlePkg) {
+        googlePkg?.let { p ->
+            try {
+                val icon = ctx.packageManager.getApplicationIcon(p).toBitmap(96, 96).asImageBitmap()
+                ShareTarget(p, if (p == PKG_SLIDES) "باز کردن در Google Slides" else "باز کردن در Google Docs", icon)
+            } catch (_: Exception) { null }
+        }
+    }
     var pdf by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -85,6 +99,7 @@ fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, onPick: (pkg: String?, a
                         modifier = Modifier.padding(bottom = 6.dp),
                     )
                 }
+                google?.let { g -> ShareRow(g.label, g.icon) { onPick(g.pkg, false) } }
                 targets.forEach { t ->
                     ShareRow(t.label, t.icon) { onPick(t.pkg, pdf) }
                 }
