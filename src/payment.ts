@@ -312,7 +312,7 @@ async function startAqaye(env: Env, user: WebUser, url: URL, plan: Plan): Promis
   const r = await ap(env, "create", {
     amount: toman, callback: `${url.origin}/api/pay/callback/aqaye/${order}`, callback_method: "GET",
     description: `اشتراک ماهانه پلن ${plan.name}`, ...(mobile ? { mobile } : {}),
-  });
+  }, `${url.origin}/`);
   if (!r || r.status !== "success" || !TRANSID_RE.test(r.transid)) {
     console.error("aqaye create failed", r?.status, r?.code, r?.code ? AP_ERR[r.code] : "");
     return json({ error: "اتصال به درگاه پرداخت ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن یا درگاه دیگری را انتخاب کن." }, 502);
@@ -341,7 +341,7 @@ export async function aqayeCallback(env: Env, url: URL): Promise<Response> {
       .bind(`pay:${order}`, JSON.stringify({ ...rec, state: "failed" })).run();
     return go("pay=cancel");
   }
-  const v = await ap(env, "verify", { amount: rec.toman ?? Math.round(rec.amount / 10), transid });
+  const v = await ap(env, "verify", { amount: rec.toman ?? Math.round(rec.amount / 10), transid }, `${url.origin}/`);
   if (!v) { await flagIssue(env, rec, "net", transid); return go("pay=error"); } // خطای شبکه: pending می‌ماند تا تایید دوباره
   if (v.status !== "success" || v.code !== "1") {
     console.error("aqaye verify failed", order, v.status, v.code);
