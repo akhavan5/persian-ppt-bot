@@ -26,6 +26,8 @@ import { buildDocx, imageInfo, makeHandout, type DocImage } from "./handout";
 import { notifyPlanCreditsOut } from "./plan-notify";
 import { unmarkExtra } from "./extras";
 import { sendWebPush } from "./webpush";
+import { notifyOtherChannels } from "./notify-done";
+import type { Platform } from "./settings";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const LLM_STEP = { retries: { limit: 1, delay: "10 seconds" }, timeout: "5 minutes" } as const;
@@ -41,6 +43,8 @@ export interface ExtraParams {
   channel: "telegram" | "web";
   /** فقط وب و فقط از Mini App: پایان کار پیام کوتاه با دکمه‌ی «باز کردن اپ» به تلگرامِ وصل‌شده می‌رود */
   notify?: boolean;
+  /** پلتفرم مبدأ (برای انتخاب پیام‌رسان مینی‌اپ و جلوگیری از اعلان تکراری) */
+  plat?: Platform;
   /** فقط پوستر */
   layout?: "wide" | "tall";
   /** کاربر بدون پلن: واترمارک نام سایت (مثل ارائه) */
@@ -103,11 +107,13 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
       const out = kind === "poster" ? await this.poster(event, step, plan, status, web) : await this.handout(event, step, plan, status, web);
 
       if (!web) await step.do("finish", () => status(`✅ ${name} آماده شد؛ فایل را بالا ببین.`)).catch(() => {}); // خطای پیام پایانی نباید به «برگشت اعتبار» برسد
+      let miniAppChat: number | null = null; // چتی که پیام مینی‌اپ را گرفته (برای جلوگیری از پیام تکراری در notify-others)
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ (خطایش به اعتبار نمی‌رسد)
       if (web && event.payload.notify) {
         await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "120 seconds" }, async () => {
           const tgChat = await linkedFor(this.env, String(uid), event.payload.plat);
           if (!tgChat) return;
+          miniAppChat = tgChat;
           const autoSent = botPlatform(tgChat) === "bale" ? await autoSendToBale(this.env, uid, tgChat, out.ids) > 0 : false; // مینی‌اپ بله: فایل خودکار به چت می‌رود
           await sendMessage(this.env, tgChat, `✅ ${kind === "poster" ? "🖼 پوستر" : "📝 جزوه"} «${esc(out.title)}» آماده شد.\n${autoSent ? "فایل همین‌جا برایت فرستاده شد؛ بعداً هم می‌توانی از داخل اپ دوباره بگیری." : "برای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند."}`,
             await appReadyMarkup(this.env, tgChat, out.ids[0]));
@@ -119,6 +125,17 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
           await sendWebPush(this.env, uid, { title: `${kind === "poster" ? "🖼 پوستر" : "📝 جزوه"} آماده شد ✅`, body: `«${out.title}»؛ برای گرفتن فایل بزن. فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`, url: "/", tag: "extra-done" });
         }).catch((ne) => console.error("notify-webpush", String(ne).slice(0, 200)));
       }
+      // اعلان به بقیه‌ی کانال‌های کاربر (پیام‌رسان‌های دیگر، اپ اندروید، مرورگر)؛ کانال مبدأ حذف می‌شود. بدون تلاش مجدد و بی‌اثر روی اعتبار.
+      await step.do("notify-others", { retries: { limit: 0, delay: "1 second" }, timeout: "60 seconds" }, async () => {
+        const label = kind === "poster" ? "🖼 پوستر" : "📝 جزوه";
+        await notifyOtherChannels(this.env, uid, {
+          title: `${label} آماده شد ✅`,
+          body: `«${out.title}»؛ برای گرفتن فایل، اپ را باز کن. فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
+          html: `✅ ${label} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
+          tag: "extra-done", fileId: out.ids[0],
+          web, viaMiniApp: !!event.payload.notify, plat: event.payload.plat, originChat: web ? miniAppChat : chatId,
+        });
+      }).catch((ne) => console.error("notify-others", String(ne).slice(0, 200)));
       if (credit.source === "plan") {
         await step.do("plan-credits-out", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, () => notifyPlanCreditsOut(this.env, uid))
           .catch((e) => console.error("plan-credits-out", String(e).slice(0, 200)));

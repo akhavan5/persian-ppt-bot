@@ -141,6 +141,8 @@ export interface ExtraStart {
   chatId?: number;
   /** وب: فقط وقتی از Mini App ساخته شده؛ پایان کار پیام کوتاه به تلگرامِ وصل‌شده می‌رود */
   notify?: boolean;
+  /** پلتفرم مبدأ (وب/اپ/مینی‌اپ): برای انتخاب پیام‌رسان مینی‌اپ و جلوگیری از اعلان تکراری در اعلان «آماده شد» */
+  plat?: import("./settings").Platform;
   /** فقط پوستر */
   layout?: "wide" | "tall";
   /** مدیر در تلگرام (isGammaAdmin)؛ خروجی‌های Gamma بدون آن رد می‌شوند */
@@ -205,13 +207,13 @@ export async function startExtra(env: Env, uid: Uid, deckId: string, kind: Extra
         id: jobId,
         params: {
           kind: kind === "podcast" ? "podcast" : "slides", chatId: web ? 0 : d.chatId!, statusMessageId: statusId, uid, deckId, channel: d.channel, mark,
-          ...(web && d.notify ? { notify: true } : {}), ...(model ? { model } : {}), credit,
+          ...(web && d.notify ? { notify: true } : {}), ...(d.plat ? { plat: d.plat } : {}), ...(model ? { model } : {}), credit,
         },
       });
     } else {
       await env.EXTRA_WORKFLOW!.create({
         id: jobId,
-        params: { kind, chatId: web ? 0 : d.chatId!, statusMessageId: statusId, uid, deckId, channel: d.channel, mark, layout: d.layout ?? "tall", ...(web && d.notify ? { notify: true } : {}), credit },
+        params: { kind, chatId: web ? 0 : d.chatId!, statusMessageId: statusId, uid, deckId, channel: d.channel, mark, layout: d.layout ?? "tall", ...(web && d.notify ? { notify: true } : {}), ...(d.plat ? { plat: d.plat } : {}), credit },
       });
     }
   } catch (e) {

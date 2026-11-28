@@ -696,7 +696,10 @@ async function startExtraJob(req: Request, env: Env, user: WebUser, deckId: stri
   const b = await readBody(req, 2_000);
   const kind = EXTRA_KINDS.find((k) => k === b?.kind);
   if (!kind) return err("نوع درخواست نامعتبر است.", 400);
-  const r = await startExtra(env, user.id, deckId, kind, { channel: "web", layout: b?.layout === "wide" ? "wide" : "tall", ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) });
+  const ua = appUA(req);
+  const miniPlat = b?.via === "miniapp" ? botPlatform(await linkedFor(env, user.id, req.headers.get("x-plat")).catch(() => null)) : "tg";
+  const plat = b?.via === "eitaa" ? "eitaa" : b?.via === "miniapp" ? miniPlat : ua ? appPlatform(ua) : pwaReq(req) ? pwaPlatform(pwaReq(req)!) : "web"; // مثل ساخت ارائه: برای اعلان «آماده شد» به بقیه‌ی کانال‌ها
+  const r = await startExtra(env, user.id, deckId, kind, { channel: "web", plat, layout: b?.layout === "wide" ? "wide" : "tall", ...(b?.via === "miniapp" || b?.via === "eitaa" ? { notify: true } : {}) });
   if (!r.ok) return json({ error: r.error, ...(r.noCredit ? { noCredit: true, extras: true } : {}) }, r.status);
   return json({ jobId: r.jobId });
 }

@@ -11,7 +11,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { NonRetryableError } from "cloudflare:workflows";
 import type { Env } from "./env";
 import { alertAdmins } from "./admin-alert";
-import type { Uid } from "./settings";
+import type { Platform, Uid } from "./settings";
 import { LlmError } from "./llm";
 import { loadFileDirect, loadPreview, saveFile } from "./files";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage } from "./telegram";
@@ -24,6 +24,7 @@ import { appReadyMarkup, fileNameWithSite, siteHost, siteMarkup } from "./deck-s
 import { toFa } from "./util";
 import { unmarkExtra } from "./extras";
 import { sendWebPush } from "./webpush";
+import { notifyOtherChannels } from "./notify-done";
 import { GeminiError, ttsDialogue, ttsSpeak, type Turn } from "./gemini-tts";
 import { narrationFor, splitSpeech } from "./tts-text";
 import { chunkTurns, makePodcastScript } from "./podcast";
@@ -45,6 +46,8 @@ export interface AudioParams {
   channel?: "telegram" | "web";
   /** فقط کانال وب و فقط ساخت‌شده از Mini App: پایان کار یک پیام کوتاه با دکمه‌ی «باز کردن اپ» به تلگرامِ وصل‌شده‌ی کاربر می‌رود */
   notify?: boolean;
+  /** پلتفرم مبدأ (برای انتخاب پیام‌رسان مینی‌اپ و جلوگیری از اعلان تکراری) */
+  plat?: Platform;
   /** کاربر بدون پلن: جمله‌ی تبلیغ سایت در پایان صدا (مثل واترمارک فایل‌ها). خالی = بدون جمله */
   mark?: boolean;
   /** اعتبار این کار (همراه ارائه)؛ اگر کار کاملاً شکست بخورد برگردانده می‌شود. خالی = کار دستی مدیر */
@@ -158,11 +161,13 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         await step.do("jobres", { retries: { limit: 3, delay: "2 seconds" }, timeout: "30 seconds" }, () =>
           this.env.KV.put(`jobres:${root}`, JSON.stringify({ state: "done", ids: out.ids, note: out.note }), { expirationTtl: 3600 }));
       }
+      let miniAppChat: number | null = null; // چتی که پیام مینی‌اپ را گرفته (برای جلوگیری از پیام تکراری در notify-others)
       // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ پیام کوتاه با دکمه‌ی باز کردن اپ. خطایش نباید به «برگشت اعتبار» برسد (فایل ذخیره شده)
       if (web && event.payload.notify && out.ids.length) {
         await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "120 seconds" }, async () => {
           const tgChat = await linkedFor(this.env, String(uid), event.payload.plat);
           if (!tgChat) return;
+          miniAppChat = tgChat;
           const autoSent = botPlatform(tgChat) === "bale" ? await autoSendToBale(this.env, uid, tgChat, out.ids) > 0 : false; // مینی‌اپ بله: فایل خودکار به چت می‌رود
           await sendMessage(this.env, tgChat, `✅ ${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} «${esc(out.title)}» آماده شد.\n${autoSent ? "فایل همین‌جا برایت فرستاده شد؛ بعداً هم می‌توانی از داخل اپ دوباره بگیری." : "برای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند."}`,
             await appReadyMarkup(this.env, tgChat, out.ids[0]));
@@ -173,6 +178,19 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         await step.do("notify-webpush", { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" }, async () => {
           await sendWebPush(this.env, uid, { title: `${kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی"} آماده شد ✅`, body: `«${out.title}»؛ برای گرفتن فایل بزن. فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`, url: "/", tag: "extra-done" });
         }).catch((ne) => console.error("notify-webpush", String(ne).slice(0, 200)));
+      }
+      // اعلان به بقیه‌ی کانال‌های کاربر؛ فقط نمونه‌ی پایانی (نمونه‌ی میانیِ زنجیره out.chain دارد و فایلی ندارد). کانال مبدأ حذف می‌شود.
+      if (!out.chain && out.ids.length) {
+        await step.do("notify-others", { retries: { limit: 0, delay: "1 second" }, timeout: "60 seconds" }, async () => {
+          const label = kind === "podcast" ? "🎙 پادکست" : "🔊 اسلاید صوتی";
+          await notifyOtherChannels(this.env, uid, {
+            title: `${label} آماده شد ✅`,
+            body: `«${out.title}»؛ برای گرفتن فایل، اپ را باز کن. فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
+            html: `✅ ${label} «${esc(out.title)}» آماده شد.\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
+            tag: "extra-done", fileId: out.ids[0],
+            web, viaMiniApp: !!event.payload.notify, plat: event.payload.plat, originChat: web ? miniAppChat : chatId,
+          });
+        }).catch((ne) => console.error("notify-others", String(ne).slice(0, 200)));
       }
       return out;
     } catch (e) {

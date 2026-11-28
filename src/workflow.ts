@@ -23,7 +23,7 @@ import { withStore } from "./store";
 import { notifyPlanCreditsOut } from "./plan-notify";
 import { completeReferral } from "./referral";
 import { sendWebPush } from "./webpush";
-import { notifyUser } from "./notify";
+import { notifyOtherChannels } from "./notify-done";
 import { autoSendToBale } from "./bale-autosend";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -267,7 +267,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             await this.env.AUDIO_WORKFLOW.create({
               id: `${event.instanceId}-${key}`,
               params: {
-                kind, chatId: web ? 0 : chatId, statusMessageId: st, uid: userId, deckId: event.instanceId, channel: web ? "web" : "telegram", mark, ...(web && event.payload.notify ? { notify: true } : {}),
+                kind, chatId: web ? 0 : chatId, statusMessageId: st, uid: userId, deckId: event.instanceId, channel: web ? "web" : "telegram", mark, plat: deckPlat, ...(web && event.payload.notify ? { notify: true } : {}),
                 ...(settings.model ? { model: settings.model } : {}), credit: { source: extra.credit, day: extra.day },
               },
             });
@@ -357,23 +357,16 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     // اپ اندروید (FCM) و مرورگر هم خبر می‌دهیم. کانالی که همین حالا خبر گرفته حذف می‌شود تا پیام دوبار نرسد. ایمیل عمداً نیست.
     // بعد از «finish» و بدون تلاش مجدد؛ هر خطایش فقط لاگ می‌شود و به اعتبار یا نتیجه‌ی کار اثر ندارد.
     await step.do("notify-others", { retries: { limit: 0, delay: "1 second" }, timeout: "60 seconds" }, async () => {
-      const appOrigin = deckPlat === "bazaar" || deckPlat === "myket" || deckPlat === "app" || deckPlat === "ios"; // اپ خودش اعلان محلی نشان داده
-      const originChat = web ? miniAppChat : chatId; // ربات: همان چت؛ مینی‌اپ/ایتا: چت پیام مینی‌اپ؛ سایت/اپ: هیچ پیام‌رسانی تا حالا پیام نگرفته
-      const except: ("app" | "web" | "email")[] = ["email"];
-      if (appOrigin) except.push("app");
-      if (web && !event.payload.notify) except.push("web"); // وب‌پوش همین کاربر بالا فرستاده شد
       const n = toFa(String(built.slides));
-      const r = await notifyUser(this.env, userId, {
+      const extras = [built.poster === "ok" ? "🖼 پوستر" : "", built.handout === "ok" ? "📝 جزوه" : "", built.audio === "pending" ? "🔊 اسلاید صوتی (چند دقیقه‌ی دیگر)" : "", built.podcast === "pending" ? "🎙 پادکست (چند دقیقه‌ی دیگر)" : ""].filter(Boolean);
+      const more = extras.length ? " + " + extras.join(" + ") : "";
+      await notifyOtherChannels(this.env, userId, {
         title: "ارائه‌ات آماده شد ✅",
-        body: `${built.title} (${n} اسلاید)؛ برای گرفتن فایل، اپ را باز کن.`,
-        html: `✅ <b>${esc(built.title)}</b> آماده شد (${n} اسلاید).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
-        extra: (id) => appReadyMarkup(this.env, id, event.instanceId, true),
-        tag: "deck-done",
-        url: "/",
-        except,
-        ...(originChat ? { exceptIds: [originChat] } : {}),
+        body: `${built.title} (${n} اسلاید${more})؛ برای گرفتن فایل، اپ را باز کن.`,
+        html: `✅ <b>${esc(built.title)}</b> آماده شد (${n} اسلاید${more}).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
+        tag: "deck-done", fileId: event.instanceId, slides: true,
+        web, viaMiniApp: !!event.payload.notify, plat: deckPlat, originChat: web ? miniAppChat : chatId,
       });
-      console.log("notify-others", JSON.stringify({ delivered: r.delivered, failed: r.failed, reachable: r.reachable }));
     }).catch((e) => console.error("notify-others", String(e).slice(0, 200)));
 
     // خروجی نمونه‌ی Workflow؛ وضعیت وب از همین‌جا خوانده می‌شود
