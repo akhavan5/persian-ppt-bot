@@ -1373,7 +1373,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (!_state.value.bazaarReady) {
                 Api.reportPay("store_not_ready", "", sku)
-                toast("اتصال به " + Store.NAME_FA + " برقرار نشد. مطمئن شوید برنامه‌ی " + Store.NAME_FA + " نصب است و وارد حساب خود شده‌اید، سپس دوباره تلاش کنید.")
+                toast("پرداخت شروع نشد و مبلغی از شما کسر نشده است. اتصال به " + Store.NAME_FA + " برقرار نشد؛ برنامه‌ی " + Store.NAME_FA + " را به‌روز کنید، یک بار بازش کنید و وارد حساب خود شوید، سپس دوباره تلاش کنید.")
                 return@launch
             }
             _events.trySend(Event.BazaarBuy(sku))
