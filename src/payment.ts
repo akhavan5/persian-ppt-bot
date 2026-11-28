@@ -6,7 +6,7 @@ import { sendReceipt } from "./email-receipt";
 import { ap, AP_ERR, BASE as AQAYE_BASE, TRANSID_RE, isSandbox as aqayeSandbox } from "./support";
 
 /**
- * پلن‌های ماهانه (price: هزار تومان): پلاس ۷۹۰ (۵ اعتبار) و پرو ۱۳۴۰ (۱۱ اعتبار). هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
+ * پلن‌های ماهانه (price: هزار تومان): پلاس ۸۹۰ (۵ اعتبار) و پرو ۱۵۴۰ (۱۱ اعتبار). هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
  * مدل‌های کلودفلر برای همه رایگان است؛ مدل‌های ویژه‌ی ارائه‌دهنده‌ی دوم (EXTRA_LLM_*) فقط برای دارندگان پلن فعال است. پلن‌ها اعتبار می‌فروشند و سقف اسلاید هر ارائه را بالا می‌برند
  * (رایگان ۶، پلاس ۲۰، پرو ۳۵ اسلاید) و تعداد تصویر هر ارائه را (رایگان ۱، پلاس ۳، پرو ۶).
  */
@@ -21,8 +21,8 @@ export const offPctOf = (price: number): number => Math.round((1 - price / oldPr
 
 const planOf = (p: Omit<Plan, "oldPrice" | "off">): Plan => ({ ...p, oldPrice: oldPriceOf(p.price), off: offPctOf(p.price) });
 export const PLANS: Plan[] = [
-  planOf({ id: "plus", name: "پلاس", price: 790, credits: 5, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus }),
-  planOf({ id: "pro", name: "پرو", price: 1340, credits: 11, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro }),
+  planOf({ id: "plus", name: "پلاس", price: 890, credits: 5, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus }),
+  planOf({ id: "pro", name: "پرو", price: 1540, credits: 11, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro }),
 ];
 
 /**
