@@ -1,4 +1,5 @@
 /** نگه‌داری فایل‌های ساخته‌شده برای ۲۴ ساعت (بایت‌ها در KV واقعی با انقضای خودکار، فهرست در D1؛ بدون نیاز به R2). */
+import type { OutLang } from "./lang";
 import JSZip from "jszip";
 import type { Env } from "./env";
 import { getSub, type Uid } from "./settings";
@@ -90,7 +91,7 @@ export async function moveFiles(env: Env, from: Uid, to: Uid, max = 12): Promise
 // ---------- پیش‌نمایش در مرورگر (و خروجی PDF از روی همان صفحه) ----------
 // متن اسلایدها در D1 (از طریق env.KV) نگه داشته می‌شود: نوشتن D1 سهمیه‌ی ۱۰۰ هزار در روز دارد و به سهمیه‌ی ۱۰۰۰ نوشتنِ KV واقعی دست نمی‌زند.
 // تصویرها جدا ذخیره نمی‌شوند؛ از خود فایل PPTX (که در KV است) بیرون کشیده می‌شوند.
-export interface PreviewData { deck: Deck; theme: string; /** قالب اسلاید؛ ارائه‌های قدیمی خالی‌اند = classic */ template?: string; font: string; digits: boolean; /** شماره‌ی اسلایدهایی که تصویر دارند */ images: number[] }
+export interface PreviewData { deck: Deck; theme: string; /** قالب اسلاید؛ ارائه‌های قدیمی خالی‌اند = classic */ template?: string; font: string; digits: boolean; /** زبان خروجی؛ ارائه‌های قدیمی خالی‌اند = fa */ lang?: OutLang; /** شماره‌ی اسلایدهایی که تصویر دارند */ images: number[] }
 const previewKey = (userId: Uid, id: string) => `dk:${userId}:${id}`;
 
 export async function savePreview(env: Env, userId: Uid, id: string, p: PreviewData): Promise<void> {

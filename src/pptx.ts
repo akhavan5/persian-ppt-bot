@@ -1,4 +1,5 @@
 /** ساخت فایل PPTX فارسی (راست‌به‌چپ) با PptxGenJS؛ بازنویسی pptx_builder.py. */
+import { langInfo, type OutLang } from "./lang";
 import PptxGenJS from "pptxgenjs";
 import { b64encode } from "./b64";
 import type { Deck, Slide } from "./types";
@@ -91,6 +92,8 @@ export interface BuildOptions {
   template?: string;
   font?: string;
   persianDigits?: boolean;
+  /** زبان خروجی: fa = راست‌به‌چپ (پیش‌فرض)، en = چپ‌به‌راست (چیدمان آینه می‌شود) */
+  lang?: OutLang;
   images?: Map<number, Uint8Array>;
   /** آدرس سایت؛ اگر باشد، نام دامنه (مثل pptsaz.ir) به‌صورت واترمارک کوچک و کم‌رنگ پایین وسط «اسلاید اول و آخر» می‌آید (مثل پوستر). خالی = بدون واترمارک */
   site?: string;
@@ -112,6 +115,8 @@ class Builder {
   /** ضریب اندازه‌ی فونت: B Nazanin در همان نقطه کوچک‌تر از Vazirmatn دیده می‌شود */
   private fs: number;
   private digits: boolean;
+  private rtl: boolean;
+  private lc: string;
   private images: Map<number, Uint8Array>;
   private host = "";
   private showMark = true;
@@ -124,7 +129,10 @@ class Builder {
     this.A = academicPalette(this.t);
     this.font = o.font ?? "Vazirmatn";
     this.fs = this.font === "B Nazanin" ? 1.1 : 1;
-    this.digits = o.persianDigits ?? true;
+    const L = langInfo(o.lang);
+    this.rtl = L.rtl;
+    this.lc = L.ooxml;
+    this.digits = this.rtl && (o.persianDigits ?? true);
     this.images = o.images ?? new Map();
     this.p.defineLayout({ name: "WIDE", width: W, height: H });
     this.p.layout = "WIDE";
@@ -137,6 +145,7 @@ class Builder {
     // B Nazanin / B Titr گلیف همزه‌ی ترکیبی (U+0654/U+0655، مثل «درباره‌ٔ») را ندارند و PowerPoint «دایره‌ی نقطه‌چین» نشان می‌دهد؛
     // علامت (و نیم‌فاصله‌ی پیش از آن) حذف می‌شود: «درباره‌ٔ مشکلات» ← «درباره مشکلات»
     if (isBFont(this.font)) t = t.replace(/‌?[ٕٔ]/g, "");
+    if (!this.rtl) return t;
     return faText(t, this.digits, "embed"); // ارقام فارسی فقط بیرون از فرمول‌های لاتین؛ فرمول‌ها چپ‌به‌راست
   }
   /** متن سلول جدول؛ در فونت B تکه‌های لاتین/علامت‌های ناموجود با Times New Roman (وگرنه مربع می‌شوند) */
@@ -147,15 +156,28 @@ class Builder {
     if (segs.every((g) => !g.fb)) return t;
     return segs.map((g) => ({
       text: g.text,
-      options: { fontFace: g.fb ? B_FALLBACK : this.font, fontSize: size, color, bold, lang: g.fb ? "en-US" : "fa-IR" },
+      options: { fontFace: g.fb ? B_FALLBACK : this.font, fontSize: size, color, bold, lang: g.fb ? "en-US" : this.lc },
     }));
   }
   /** نمودار نمی‌تواند چند فونت داشته باشد؛ برای فونت B از Tahoma (دارای حروف فارسی و لاتین) استفاده می‌شود */
   private get cfont() { return isBFont(this.font) ? "Tahoma" : this.font; }
 
+  /** چپ‌به‌راست: همه‌ی اشیای اسلاید حول محور عمودی وسط آینه می‌شوند (x ← W − x − w)؛ چیدمان اصلی راست‌به‌چپ طراحی شده است */
+  private mirror(s: PptxGenJS.Slide) {
+    const flip = (o: any) => (o && typeof o.x === "number" && typeof o.w === "number" ? { ...o, x: W - o.x - o.w } : o);
+    const a: any = s;
+    const text = a.addText.bind(a), shape = a.addShape.bind(a), image = a.addImage.bind(a), chart = a.addChart.bind(a), table = a.addTable.bind(a);
+    a.addText = (t: any, o: any) => text(t, flip(o));
+    a.addShape = (t: any, o: any) => shape(t, flip(o));
+    a.addImage = (o: any) => image(flip(o));
+    a.addChart = (t: any, d: any, o: any) => chart(t, d, flip(o));
+    a.addTable = (rows: any, o: any) => table(rows, flip(o));
+  }
+
   private slide(bg: string) {
     const s = this.p.addSlide();
     s.background = { color: bg };
+    if (!this.rtl) this.mirror(s);
     return s;
   }
 
@@ -198,15 +220,21 @@ class Builder {
   /** رنگ دایره‌ی شماره‌دار/آیکن */
   private bc(i: number) { return this.ac ? badgeColor(this.t, i) : this.t.primary; }
 
+  /** راست/چپ متن: در حالت چپ‌به‌راست جابه‌جا می‌شود (چون x هم آینه شده است) */
+  private alignOf(a?: "right" | "center" | "left"): "right" | "center" | "left" {
+    if (this.rtl) return a ?? "right";
+    return a === "center" ? "center" : a === "right" ? "left" : a === "left" ? "right" : "left";
+  }
+
   private text(s: PptxGenJS.Slide, x: number, y: number, w: number, h: number, paras: string[],
     size: number, color: string, o: TextOpts = {}) {
     const face = o.font ?? this.font, size2 = o.font ? size : Math.round(size * this.fs * 2) / 2;
     const runs = paras.flatMap((para) => {
       const para0 = {
         breakLine: true,
-        rtlMode: true, // جهت پاراگراف راست‌به‌چپ
-        lang: "fa-IR",
-        align: o.align ?? "right",
+        rtlMode: this.rtl, // جهت پاراگراف راست‌به‌چپ (فارسی)
+        lang: this.lc,
+        align: this.alignOf(o.align),
         fontFace: face,
         fontSize: size2,
         bold: !!o.bold,
@@ -223,7 +251,7 @@ class Builder {
       if (!useB || segs.every((g) => !g.fb)) return [{ text: txt, options: para0 }];
       return segs.map((g, k) => {
         const last = k === segs.length - 1;
-        const run = { fontFace: g.fb ? B_FALLBACK : face, fontSize: size2, bold: !!o.bold, color, lang: g.fb ? "en-US" : "fa-IR", breakLine: last };
+        const run = { fontFace: g.fb ? B_FALLBACK : face, fontSize: size2, bold: !!o.bold, color, lang: g.fb ? "en-US" : this.lc, breakLine: last };
         return { text: g.text, options: k === 0 ? { ...para0, ...run } : run };
       });
     });
@@ -411,7 +439,7 @@ class Builder {
       this.text(s, x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, [String(i + 1)], 20, this.t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 });
       this.text(s, x0 + 0.2, 3.1, cw - 0.4, 0.85, [x.label], fitSize([x.label], cw - 0.4, 0.85, 22, 14, false, 0), this.t.primary, { bold: true, align: "center", valign: "middle", space: 0 });
       this.text(s, x0 + 0.2, 4.0, cw - 0.4, 1.7, [x.text], fitSize([x.text], cw - 0.4, 1.7, 18, 13, false, 0), this.t.text, { align: "center", space: 0 });
-      if (i < n - 1) s.addShape(this.p.ShapeType.leftArrow, { x: x0 - gap + 0.09, y: 3.7, w: gap - 0.18, h: 0.4, fill: { color: this.t.accent }, line: { type: "none" } as any });
+      if (i < n - 1) s.addShape((this.rtl ? this.p.ShapeType.leftArrow : this.p.ShapeType.rightArrow), { x: x0 - gap + 0.09, y: 3.7, w: gap - 0.18, h: 0.4, fill: { color: this.t.accent }, line: { type: "none" } as any });
     });
     return s;
   }
@@ -468,11 +496,11 @@ class Builder {
     const n = t.headers.length, tw = W - 2 * M;
     const size = Math.max(13, (t.rows.length <= 4 ? 20 : t.rows.length <= 6 ? 18 : 16) - (n >= 5 ? 3 : n === 4 ? 1 : 0));
     const rowH = Math.min(0.8, 4.7 / (t.rows.length + 1));
-    const rev = <T,>(a: T[]) => [...a].reverse(); // ستون اول سمت راست
+    const rev = <T,>(a: T[]) => (this.rtl ? [...a].reverse() : a); // ستون اول سمت راست (فارسی)
     const cell = (text: string, color: string, fill: string, bold = false) => ({
       text: this.cellRuns(text, size, color, bold),
-      options: { fontFace: this.font, fontSize: size, color, bold, align: "right" as const, valign: "middle" as const,
-        rtlMode: true, lang: "fa-IR", fill: { color: fill },
+      options: { fontFace: this.font, fontSize: size, color, bold, align: (this.rtl ? "right" : "left") as "right" | "left", valign: "middle" as const,
+        rtlMode: this.rtl, lang: this.lc, fill: { color: fill },
         border: [{ type: "none" }, { type: "none" }, { type: "solid", pt: 0.75, color: this.t.muted }, { type: "none" }] as any },
     });
     const rows = [
@@ -489,7 +517,7 @@ class Builder {
     const c = sd.chart!;
     const hasText = sd.bullets.length > 0;
     const labels = c.labels.map((l) => this.txt(l));
-    const data = c.series.map((se, i) => ({ name: this.txt(se.name || `سری ${i + 1}`), labels, values: se.values }));
+    const data = c.series.map((se, i) => ({ name: this.txt(se.name || `${this.rtl ? "سری" : "Series"} ${i + 1}`), labels, values: se.values }));
     const palette = [this.t.primary, this.t.accent, "E0A93B", "2F7D5B", "D9482B", "5B3FA6", this.t.muted, "14B8A6"];
     const ring = c.type === "pie" || c.type === "doughnut"; // سهم اجزا از یک کل
     const stacked = c.type === "stacked";
@@ -515,7 +543,7 @@ class Builder {
       this.text(s, tx, 1.8, tw, 4.55, sd.bullets.slice(0, 3), fitSize(sd.bullets.slice(0, 3), tw, 4.55, 22, 14, true), this.t.text,
         { bullet: true, valign: "middle" });
     }
-    this.text(s, M, 6.45, W - 2 * M, 0.35, ["داده‌ها تقریبی‌اند؛ پیش از ارائه با منبع معتبر تطبیق دهید."], 11, this.t.muted, { space: 0 });
+    this.text(s, M, 6.45, W - 2 * M, 0.35, [this.rtl ? "داده‌ها تقریبی‌اند؛ پیش از ارائه با منبع معتبر تطبیق دهید." : "Figures are approximate; verify against a reliable source before presenting."], 11, this.t.muted, { space: 0 });
     return s;
   }
 
@@ -537,7 +565,7 @@ class Builder {
   // ---------- ساخت نهایی ----------
   async build(deck: Deck): Promise<Uint8Array> {
     let sec = 0;
-    if (this.ac) this.acBismillah(); // اسلاید «بسم‌الله» فقط در قالب آکادمیک؛ در شماره‌گذاری نمی‌آید
+    if (this.ac && this.rtl) this.acBismillah(); // اسلاید «بسم‌الله» فقط در قالب آکادمیک؛ در شماره‌گذاری نمی‌آید
     deck.slides.forEach((sd, i) => {
       const lay = sd.layout;
       let s: PptxGenJS.Slide;
@@ -554,7 +582,7 @@ class Builder {
       else if (lay === "stats" && sd.stats.length) s = this.stats(sd);
       else if (lay === "table" && sd.table) s = this.table(sd);
       else if (lay === "chart" && sd.chart) s = this.chart(sd);
-      else if (lay === "sources") s = this.numbered(sd, "منابع پیشنهادی برای مطالعه‌ی بیشتر؛ پیش از ارجاع، وجود و صحت آن‌ها را بررسی کنید.");
+      else if (lay === "sources") s = this.numbered(sd, this.rtl ? "منابع پیشنهادی برای مطالعه‌ی بیشتر؛ پیش از ارجاع، وجود و صحت آن‌ها را بررسی کنید." : "Suggested sources for further reading; verify that each exists and is accurate before citing.");
       else if (lay === "questions") s = this.numbered(sd);
       else s = this.bullets(sd);
       if (lay !== "title" && lay !== "closing" && lay !== "section") this.number(s, i + 1);

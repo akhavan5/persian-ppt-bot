@@ -8,13 +8,14 @@ import { FONTS, THEMES, TONES, isMode, isPlanMode } from "./themes";
 import { DEFAULT_TEMPLATE, isTemplate } from "./template";
 import { modelList } from "./llm";
 import { toFa } from "./util";
+import { normLang } from "./lang";
 import type { AppPlatform, PwaPlatform } from "./app-ua";
 
 /** شناسه‌ی کاربر: عددی برای تلگرام، رشته‌ی «w_…» برای کاربران وب */
 export type Uid = number | string;
 export const isWebId = (id: Uid) => typeof id === "string" && id.startsWith("w_");
 
-export const DEFAULTS: Settings = { theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 6, tone: "formal", digits: true, images: true, imagesMany: false, mode: "normal", sources: false, questions: false, notes: true };
+export const DEFAULTS: Settings = { lang: "fa", theme: "violet", template: DEFAULT_TEMPLATE, font: "Vazirmatn", slides: 6, tone: "formal", digits: true, images: true, imagesMany: false, mode: "normal", sources: false, questions: false, notes: true };
 export const SLIDE_CHOICES = [5, 6, 8, 10, 12, 15];
 
 // ---------- سقف اسلاید: رایگان ۶، پلاس ۲۰، پرو ۳۵ ----------
@@ -47,6 +48,7 @@ export async function getSettings(env: Env, userId: Uid): Promise<Settings> {
   if (!(s.tone in TONES)) s.tone = DEFAULTS.tone;
   if (!(FONTS as readonly string[]).includes(s.font)) s.font = DEFAULTS.font;
   s.slides = clampSlides(Number(s.slides) || DEFAULTS.slides, ABS_MAX_SLIDES);
+  s.lang = normLang(s.lang);
   s.digits = !!s.digits;
   s.images = !!s.images;
   s.imagesMany = !!s.imagesMany;

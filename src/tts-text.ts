@@ -6,6 +6,7 @@
  */
 import { toEn } from "./util";
 import type { Slide } from "./types";
+import type { OutLang } from "./lang";
 
 const ONES = ["صفر", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه", "ده", "یازده", "دوازده", "سیزده", "چهارده", "پانزده", "شانزده", "هفده", "هجده", "نوزده"];
 const TENS = ["", "", "بیست", "سی", "چهل", "پنجاه", "شصت", "هفتاد", "هشتاد", "نود"];
@@ -65,7 +66,39 @@ export function numbersToWords(text: string): string {
 }
 
 /** پاک‌سازی نشانه‌ها و تبدیل عدد؛ خروجی آماده‌ی خواندن است. */
-export function prepareSpeech(raw: string): string {
+// ---------- انگلیسی: عدد به حروف ----------
+const EN_ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+const EN_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+const EN_SCALES = ["", "thousand", "million", "billion", "trillion"];
+const enBelow1000 = (n: number): string => {
+  const out: string[] = [];
+  const h = Math.floor(n / 100), r = n % 100;
+  if (h) out.push(`${EN_ONES[h]} hundred`);
+  if (r) out.push(r < 20 ? EN_ONES[r] : EN_TENS[Math.floor(r / 10)] + (r % 10 ? `-${EN_ONES[r % 10]}` : ""));
+  return out.join(" ");
+};
+export function intToWordsEn(digits: string): string {
+  if (!/^\d+$/.test(digits)) return digits;
+  if ((digits.length > 1 && digits[0] === "0") || digits.length > 15) return digits.split("").map((d) => EN_ONES[Number(d)]).join(" ");
+  let n = BigInt(digits);
+  if (n === 0n) return EN_ONES[0];
+  const groups: number[] = [];
+  while (n > 0n) { groups.push(Number(n % 1000n)); n /= 1000n; }
+  const out: string[] = [];
+  for (let i = groups.length - 1; i >= 0; i--) if (groups[i]) out.push(i ? `${enBelow1000(groups[i])} ${EN_SCALES[i]}` : enBelow1000(groups[i]));
+  return out.join(" ");
+}
+/** همه‌ی ارقام متن انگلیسی به حروف (۲٫۵ ⇒ two point five، ۲۰٪ ⇒ twenty percent) */
+export function numbersToWordsEn(text: string): string {
+  let t = toEn(text).replace(/٫/g, ".").replace(/٬/g, ",");
+  t = t.replace(/\d{1,3}(?:,\d{3})+(?!\d)/g, (m) => m.replace(/,/g, ""));
+  t = t.replace(/(\d+(?:\.\d+)?)\s*[%٪]/g, (_, n: string) => `${n} percent`);
+  t = t.replace(/(\d+)\.(\d+)/g, (_, i: string, f: string) => `${intToWordsEn(i)} point ${f.split("").map((d) => EN_ONES[Number(d)]).join(" ")}`);
+  return t.replace(/\d+/g, (m) => intToWordsEn(m));
+}
+
+export function prepareSpeech(raw: string, lang?: OutLang): string {
+  const en = lang === "en";
   let t = String(raw ?? "");
   t = t.replace(/https?:\/\/\S+/gi, " ").replace(/\bwww\.\S+/gi, " ");
   t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, " ").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"); // مارک‌دان: عکس و لینک
@@ -73,8 +106,8 @@ export function prepareSpeech(raw: string): string {
   t = t.replace(/[*_`~#|]+/g, " ");
   t = t.replace(/[\p{Extended_Pictographic}️‍]/gu, " ");
   t = t.replace(/[→←↔⇒⇐▶◀■□★☆✓✔✗✘]/g, " ");
-  t = t.replace(/&/g, " و ").replace(/\s*[(){}\[\]«»"]\s*/g, "، "); // پرانتز و گیومه ⇒ مکث کوتاه
-  t = numbersToWords(t);
+  t = t.replace(/&/g, en ? " and " : " و ").replace(/\s*[(){}\[\]«»"]\s*/g, en ? ", " : "، "); // پرانتز و گیومه ⇒ مکث کوتاه
+  t = en ? numbersToWordsEn(t) : numbersToWords(t);
   t = t.replace(/\.{3,}|…/g, "...").replace(/[،,]\s*(?=[،,.؟?!])/g, "").replace(/(?:،\s*){2,}/g, "، ");
   t = t.replace(/[ \t ]+/g, " ").replace(/\s*\n\s*/g, ". ").replace(/\.\s*\./g, ".").replace(/^[\s،.]+/, "").trim();
   if (t && !/[.!؟?…]$/.test(t)) t += ".";

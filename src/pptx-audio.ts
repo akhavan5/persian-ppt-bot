@@ -6,6 +6,7 @@
  *  • با گزینه‌ی autoAdvance، اسلاید بعد از پایان صدا (+ کمی مکث) خودکار عوض می‌شود تا ارائه مثل یک ویدیوی روایت‌شده پیش برود.
  * خروجی بدون فشرده‌سازی (STORE) ساخته می‌شود تا CPU کمی مصرف شود؛ همان کاری که pptx.ts هم می‌کند.
  */
+import type { OutLang } from "./lang";
 import JSZip from "jszip";
 import { AUDIO_ICON_B64 } from "./audio-icon";
 import { audioSeconds } from "./wav";
@@ -22,10 +23,12 @@ export interface EmbedOptions {
   autoPlay?: boolean;
   /** رفتن خودکار به اسلاید بعد پس از پایان صدا (پیش‌فرض بله) */
   autoAdvance?: boolean;
+  /** ارائه‌ی انگلیسی (چپ‌به‌راست): شماره‌ی اسلاید پایین‌راست است، پس آیکن صدا پایین‌چپ می‌رود */
+  ltr?: boolean;
 }
 
 /** شماره‌ی slideN.xml برای اسلاید i (از صفر) ارائه؛ در قالب آکادمیک اسلاید «بسم‌الله» پیش از همه در PPTX هست (مثل pptxImageName در files.ts) */
-export const pptxSlideNo = (template: string | undefined, i: number) => i + 1 + (template === "academic" ? 1 : 0);
+export const pptxSlideNo = (template: string | undefined, i: number, lang?: OutLang) => i + 1 + (template === "academic" && lang !== "en" ? 1 : 0); // انگلیسی: اسلاید «بسم‌الله» ساخته نمی‌شود
 
 const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const REL_MEDIA = "http://schemas.microsoft.com/office/2007/relationships/media"; // همان نوعی که خود پاورپوینت برای p14:media می‌نویسد
@@ -52,13 +55,13 @@ function timingXml(spid: number): string {
     `</p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>`;
 }
 
-function picXml(id: number, n: number, rAudio: string, rMedia: string, rImg: string): string {
+function picXml(id: number, n: number, rAudio: string, rMedia: string, rImg: string, ltr = false): string {
   const e = (v: number) => Math.round(v * EMU);
   return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Audio ${n}" descr="صدای اسلاید"><a:hlinkClick r:id="" action="ppaction://media"/></p:cNvPr>` +
     `<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr><a:audioFile r:link="${rAudio}"/>` +
     `<p:extLst><p:ext uri="{DAA4B4D4-6D71-4841-9C94-3DE7FCFB9230}"><p14:media xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" r:embed="${rMedia}"/></p:ext></p:extLst></p:nvPr></p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${rImg}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
-    `<p:spPr><a:xfrm><a:off x="${e(ICON.x)}" y="${e(ICON.y)}"/><a:ext cx="${e(ICON.size)}" cy="${e(ICON.size)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+    `<p:spPr><a:xfrm><a:off x="${e(ltr ? 0.55 : ICON.x)}" y="${e(ICON.y)}"/><a:ext cx="${e(ICON.size)}" cy="${e(ICON.size)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
 }
 
 /** pptx: فایل PPTX ساخته‌شده توسط buildPptx. خروجی: PPTX جدید + شماره‌ی اسلایدهایی که صدا گرفتند. */
@@ -101,7 +104,7 @@ export async function embedAudio(pptx: Uint8Array | ArrayBuffer, items: SlideAud
       `<Relationship Id="${rImg}" Type="${REL}/image" Target="../media/audio-icon.png"/></Relationships>`);
 
     const spid = Math.max(1, ...[...xml.matchAll(/<p:cNvPr[^>]*\sid="(\d+)"/g)].map((m) => Number(m[1]))) + 1;
-    xml = xml.replace("</p:spTree>", `${picXml(spid, it.slide, rAudio, rMedia, rImg)}</p:spTree>`);
+    xml = xml.replace("</p:spTree>", `${picXml(spid, it.slide, rAudio, rMedia, rImg, o.ltr === true)}</p:spTree>`);
     let tail = "";
     if (autoAdvance && !xml.includes("<p:transition")) tail += `<p:transition spd="slow" advTm="${Math.ceil(audioSeconds(audio) * 1000) + ADVANCE_PAD_MS}"/>`;
     if (autoPlay && !xml.includes("<p:timing")) tail += timingXml(spid);

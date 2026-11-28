@@ -323,6 +323,8 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
     <section id="t-set" role="tabpanel" aria-labelledby="tb-set" hidden>
       <div class="scrH"><h1>تنظیمات</h1><p>ظاهر و محتوای ارائه‌هایتان</p></div>
       <div id="tplBox"><div class="secT">قالب</div><div id="tplList" role="radiogroup" aria-label="قالب"></div></div>
+      <div class="secT">زبان خروجی</div><div class="chips" id="langs" role="radiogroup" aria-label="زبان خروجی"></div>
+      <div class="muted" style="margin-top:6px">زبان همه‌ی خروجی‌ها (اسلاید‌ها، پیش‌نمایش و PDF، جزوه، پوستر، اسلاید صوتی و پادکست). انگلیسی چپ‌به‌راست ساخته می‌شود.</div>
       <div class="secT">تم رنگی</div><div class="swRow" id="themes" role="radiogroup" aria-label="تم رنگی"></div>
       <div class="secT">فونت</div><div class="chips" id="fonts" role="radiogroup" aria-label="فونت"></div>
       <div class="muted" style="margin-top:6px">فونت Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد؛ Tahoma و Arial همه‌جا کار می‌کنند.</div>
@@ -1897,6 +1899,7 @@ function renderSettings() {
   $("#themes").replaceChildren(...cfg.themes.map((t) => { const on = s.theme === t.key;
     return h("button", { type: "button", class: "swt" + (on ? " on" : ""), ...radio(on), "data-k": t.key, onclick: () => save({ theme: t.key }) },
       h("i", {}, h("span", { style: `background:linear-gradient(135deg,#${t.primary} 55%,#${t.accent} 55%)` }, on ? "✓" : "")), t.name); }));
+  $("#langs").replaceChildren(...[["fa", "فارسی"], ["en", "English"]].map(([k, l]) => h("button", { type: "button", class: "chip" + ((s.lang || "fa") === k ? " on" : ""), ...radio((s.lang || "fa") === k), onclick: () => save({ lang: k }) }, l)));
   $("#fonts").replaceChildren(...cfg.fonts.map((f) => h("button", { type: "button", class: "chip" + (s.font === f ? " on" : ""), ...radio(s.font === f), onclick: () => save({ font: f }) }, f)));
   $("#tones").replaceChildren(...Object.entries(cfg.tones).map(([k, l]) => h("button", { type: "button", class: "chip" + (s.tone === k ? " on" : ""), ...radio(s.tone === k), onclick: () => save({ tone: k }) }, l)));
   const MODES = [["normal", "عادی", "ساختار آزاد، متناسب با موضوع"], ["student", "دانشجویی", "فهرست، مقدمه، بدنه، نتیجه‌گیری و منابع (حداقل ۸ اسلاید)"],

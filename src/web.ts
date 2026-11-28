@@ -1,4 +1,5 @@
 /** API نسخه‌ی وب: ثبت‌نام/ورود، تنظیمات، ساخت ارائه (با همان Workflow ربات)، وضعیت و دانلود. */
+import { isOutLang } from "./lang";
 import type { Env } from "./env";
 import type { Settings } from "./types";
 import { attachContact, contactRewardInfo } from "./profile";
@@ -478,6 +479,7 @@ async function putSettings(req: Request, env: Env, user: WebUser): Promise<Respo
     if (!(await canUseModel(env, user.id, b.model))) return json({ error: EXTRA_MODEL_MSG.replace("🔒 ", ""), needPlan: true }, 403);
     s.model = b.model;
   }
+  if (isOutLang(b.lang)) s.lang = b.lang;
   for (const k of ["digits", "images", "sources", "questions", "notes"] as const) if (typeof b[k] === "boolean") s[k] = b[k] as boolean;
   if (typeof b.imagesMany === "boolean") {
     if (b.imagesMany && !(await hasPlanAccess(env, user.id))) return json({ error: EXTRA_IMAGES_MSG.replace("🔒 ", ""), needPlan: true }, 403);
@@ -839,7 +841,7 @@ async function preview(env: Env, user: WebUser, id: string): Promise<Response> {
   const p = await loadPreview(env, user.id, id);
   if (!p) return page("پیش‌نمایش پیدا نشد یا منقضی شده است (ارائه‌ها ۲۴ ساعت نگه داشته می‌شوند).", 404);
   const nonce = randomToken(12);
-  return new Response(renderPreview(p.deck, { id, theme: p.theme, template: p.template, font: p.font, digits: p.digits, images: p.images, nonce }), {
+  return new Response(renderPreview(p.deck, { id, theme: p.theme, template: p.template, font: p.font, digits: p.digits, lang: p.lang, images: p.images, nonce }), {
     headers: {
       "content-type": "text/html; charset=utf-8",
       // اسکریپت فقط با nonce؛ فونت و استایل فقط از Google Fonts و خود سایت (فونت‌های B)؛ تصویر فقط از همین سایت

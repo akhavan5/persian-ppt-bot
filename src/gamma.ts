@@ -344,17 +344,17 @@ const GUARD_RULES = "Use only facts from the source; do not invent statistics, n
  * ساخت یک خروجی Gamma با ارزان‌ترین تنظیمات (Classic).
  * source = متن منبع (محتوای ارائه) که همین‌طور به Gamma داده می‌شود؛ هیچ مدل دیگری بین راه نیست.
  */
-export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: string, title?: string): Promise<{ generationId: string; warnings?: unknown[] }> {
+export async function createGammaExtra(env: Env, spec: GammaKindSpec, source: string, title?: string, lang?: "fa" | "en"): Promise<{ generationId: string; warnings?: unknown[] }> {
   const input: GammaGenerateInput = {
     inputText: source.trim().slice(0, 4000),
     textMode: "generate",
     format: spec.format,
     numCards: spec.cards.max,
     ...(spec.linkOnly ? {} : { cardOptions: { dimensions: spec.dimensions } }),
-    textOptions: { language: spec.language ?? "fa" },
+    textOptions: { language: spec.language ?? (lang === "en" ? "en" : "fa") }, // نسخه‌ی انگلیسی همیشه en؛ بقیه به زبان خروجی کاربر
     imageOptions: { source: "aiGenerated", model: GAMMA_CHEAPEST_IMAGE_MODEL },
     ...(spec.linkOnly ? { sharingOptions: { externalAccess: "view" } } : { exportAs: spec.exportAs }),
-    additionalInstructions: [spec.instructions, GUARD_RULES].filter(Boolean).join(" "),
+    additionalInstructions: [spec.instructions, lang === "en" && !spec.language ? "Write all text in English (left-to-right)." : "", GUARD_RULES].filter(Boolean).join(" "),
     ...(title ? { title: title.slice(0, 200) } : {}),
   };
   return createGeneration(env, input);

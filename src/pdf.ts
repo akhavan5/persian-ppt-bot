@@ -67,7 +67,7 @@ export async function buildDeckPdf(env: Env, userId: Uid, id: string): Promise<P
     }
   }
 
-  const html = renderPreview(p.deck, { id, theme: p.theme, template: p.template, font: p.font, digits: p.digits, images: p.images, nonce: "", pdf: pdfImgs });
+  const html = renderPreview(p.deck, { id, theme: p.theme, template: p.template, font: p.font, digits: p.digits, lang: p.lang, images: p.images, nonce: "", pdf: pdfImgs });
   const width = "13.333in", height = `${pdfPageHeight(p.deck)}in`;
   let data: Uint8Array | null = null;
   if (useBindingForRender(env)) {

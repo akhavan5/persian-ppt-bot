@@ -6,6 +6,7 @@
 import { THEMES, type Theme } from "./themes";
 import { faText, toFa } from "./util";
 import type { IgBlock, IgLayout, Infographic } from "./infographic";
+import { langInfo, type OutLang } from "./lang";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -16,6 +17,8 @@ export interface IgRenderOpts {
   theme: string;
   digits: boolean;
   layout: IgLayout;
+  /** زبان خروجی؛ en = چپ‌به‌راست (پیش‌فرض fa) */
+  lang?: OutLang;
   /** تصویر تزئینی (data: URI)؛ خالی = بدون تصویر */
   image?: string;
   /** نشانی سایت برای پانویس (فقط نام دامنه نشان داده می‌شود) */
@@ -24,13 +27,27 @@ export interface IgRenderOpts {
   mark?: boolean;
 }
 
+const FA_LABELS = { def: "تعریف", key: "نکته‌ی کلیدی", ex: "مثال", wn: "هشدار", tp: "نکته‌ی طلایی", take: "جمع‌بندی" };
+const EN_LABELS = { def: "Definition", key: "Key fact", ex: "Example", wn: "Warning", tp: "Pro tip", take: "Key takeaway" };
+
+/** چپ‌به‌راست: نوارهای رنگی کناری، خط زمان و پیکان به سمت چپ منتقل می‌شوند (CSS اصلی راست‌به‌چپ نوشته شده است) */
+function mirrorCss(css: string): string {
+  return css
+    .replace(/border-right:/g, "border-left:")
+    .replace(/padding-right:/g, "padding-left:")
+    .replace(/(\.tl li::before\{[^}]*?)right:/, "$1left:")
+    .replace(/(\.tl ol\{[^}]*?)padding:0 ([^ ;}]+) 0 0;/, "$1padding:0 0 0 $2;")
+    .replace(/(\.br em\{[^}]*?)text-align:left/, "$1text-align:right");
+}
+
 export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string {
   const t: Theme = THEMES[o.theme] ?? THEMES.ocean;
   const W = IG_WIDTH[o.layout];
   const cols = o.layout === "wide" ? 4 : 2;
   const base = o.layout === "wide" ? 80 : 24; // پوستر افقی: فونت پایه ۴۰ ← ۴۸ ← ۵۸ ← ۶۸ ← ۸۰ (بعد از پهن‌تر شدن بوم به ۶۶۵۶px، ۶۸ نسبت به عرض ریز دیده می‌شد و ستون‌های کوتاه جای خالی داشتند) (در مجموع ۴۵٪ بزرگ‌تر از اول) تا در پیش‌نمایش تلگرام خواناتر باشد؛ ۴ ستون در ۶۶۵۶px. اگر مجموع ابعاد عکس (افقی: مقیاس ۱، عمودی: ۱.۵) از سقف ۱۰۰۰۰px تلگرام بگذرد، فقط فایل کامل فرستاده می‌شود (sendDocument)
-  const tx = (s: string) => esc(faText(String(s), o.digits));
-  const num = (n: number) => (o.digits ? toFa(String(n)) : String(n));
+  const L = langInfo(o.lang), rtl = L.rtl, LB = rtl ? FA_LABELS : EN_LABELS;
+  const tx = (s: string) => esc(rtl ? faText(String(s), o.digits) : String(s));
+  const num = (n: number) => (rtl && o.digits ? toFa(String(n)) : String(n));
   const dark = t.bg.toUpperCase() < "808080"; // پس‌زمینه‌ی تیره (مثل تم نیمه‌شب)
 
   const label = (l: string, fallback: string) => `<div class="lb">${tx(l || fallback)}</div>`;
@@ -40,11 +57,11 @@ export function renderInfographicHtml(ig: Infographic, o: IgRenderOpts): string 
   const texOk = (b: { tex?: string }) => !!b.tex && !/[\u0600-\u06FF]/.test(b.tex);
   const block = (b: IgBlock): string => {
     switch (b.type) {
-      case "definition": return `<div class="bk def">${label(b.label, "تعریف")}<p>${tx(b.text)}</p></div>`;
-      case "keyfact": return `<div class="bk key">${label(b.label, "نکته‌ی کلیدی")}<p>${tx(b.text)}</p></div>`;
-      case "example": return `<div class="bk ex">${label(b.label, "مثال")}<p>${tx(b.text)}</p></div>`;
-      case "warning": return `<div class="bk wn">${label(b.label, "هشدار")}<p>${tx(b.text)}</p></div>`;
-      case "tip": return `<div class="bk tp">${label(b.label, "نکته‌ی طلایی")}<p>${tx(b.text)}</p></div>`;
+      case "definition": return `<div class="bk def">${label(b.label, LB.def)}<p>${tx(b.text)}</p></div>`;
+      case "keyfact": return `<div class="bk key">${label(b.label, LB.key)}<p>${tx(b.text)}</p></div>`;
+      case "example": return `<div class="bk ex">${label(b.label, LB.ex)}<p>${tx(b.text)}</p></div>`;
+      case "warning": return `<div class="bk wn">${label(b.label, LB.wn)}<p>${tx(b.text)}</p></div>`;
+      case "tip": return `<div class="bk tp">${label(b.label, LB.tp)}<p>${tx(b.text)}</p></div>`;
       case "formula": return `<div class="bk fm">${b.label ? label(b.label, "") : ""}<p dir="${texOk(b) ? "ltr" : "auto"}"${texOk(b) ? ` data-tex="${esc(b.tex!)}"` : ""}>${esc(b.text)}</p></div>`;
       case "flow": {
         const horiz = b.items.length <= 3;
@@ -163,13 +180,13 @@ window.addEventListener("load",function(){(document.fonts&&document.fonts.ready?
   const fontFace = `@font-face{font-family:'Vazirmatn';font-weight:100 600;font-style:normal;font-display:block;src:url('${origin}/fonts/Vazirmatn-Regular.woff2') format('woff2'),url('${origin}/fonts/Vazirmatn-Regular.ttf') format('truetype')}` +
     `@font-face{font-family:'Vazirmatn';font-weight:700 900;font-style:normal;font-display:block;src:url('${origin}/fonts/Vazirmatn-Bold.woff2') format('woff2'),url('${origin}/fonts/Vazirmatn-Bold.ttf') format('truetype')}`;
 
-  const css = `
+  let css = `
 :root{--bg:#${t.bg};--sf:#${t.surface};--pr:#${t.primary};--dk:#${t.dark};--ac:#${t.accent};--tx:#${t.text};--mt:#${t.muted};--on:#${t.onPrimary};
 --hl:#${dark ? t.accent : t.primary};--d0:var(--pr);--d1:var(--ac);--d2:color-mix(in srgb,var(--pr) 50%,var(--ac));--d3:color-mix(in srgb,var(--pr) 45%,var(--bg));--d4:color-mix(in srgb,var(--ac) 45%,var(--bg));
 --rd:#d64545;--gn:#2f9e6b;--line:color-mix(in srgb,var(--pr) 28%,var(--bg));--tint:color-mix(in srgb,var(--ac) ${dark ? 18 : 14}%,var(--bg));--soft:color-mix(in srgb,var(--pr) ${dark ? 16 : 7}%,var(--bg))}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
-body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn','Tahoma',sans-serif;font-size:${base}px;line-height:1.55;direction:rtl}
+body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn','Tahoma',sans-serif;font-size:${base}px;line-height:1.55;direction:${L.dir}}
 .top{background:var(--dk);color:var(--on);padding:${base * 1.5}px ${base * 2}px;display:flex;align-items:center;justify-content:space-between;gap:${base * 1.5}px;border-bottom:${base / 4}px solid var(--ac)}
 .top .tt{flex:1;min-width:0}
 .top h1{margin:0;font-size:${base * 2.1}px;line-height:1.35;font-weight:800}
@@ -270,8 +287,10 @@ body{width:${W}px;background:var(--soft);color:var(--tx);font-family:'Vazirmatn'
 .take p{margin:0;font-size:${base * 1.02}px;font-weight:700}
 .ft{padding:0 ${base * 1.4}px ${base * 0.9}px;text-align:left;color:var(--mt);font-size:${base * 0.7}px;direction:ltr}`;
 
+  if (!rtl) css = mirrorCss(css);
+
   return `<!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=${W}">
+<html lang="${L.html}" dir="${L.dir}"><head><meta charset="utf-8"><meta name="viewport" content="width=${W}">
 <title>${esc(ig.title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap">
 ${katex}
@@ -279,7 +298,7 @@ ${katex}
 <body>
 <div class="top"><div class="tt"><h1>${tx(ig.title)}</h1>${ig.subtitle ? `<p>${tx(ig.subtitle)}</p>` : ""}</div>${o.image ? `<img src="${o.image}" alt="">` : ""}</div>
 <div class="wrap">${hls}<div class="cols">${panels}</div></div>
-${ig.takeaway ? `<div class="take"><span class="lb">جمع‌بندی</span><p>${tx(ig.takeaway)}</p></div>` : ""}
+${ig.takeaway ? `<div class="take"><span class="lb">${LB.take}</span><p>${tx(ig.takeaway)}</p></div>` : ""}
 ${host && o.mark !== false ? `<div class="ft">${esc(host)}</div>` : ""}
 ${katexRun}
 ${balance}

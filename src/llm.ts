@@ -4,6 +4,7 @@ import type { Deck, Outline, OutlineItem, Slide, Layout, Table, Chart, SlideKind
 import { ICONS, TONES } from "./themes";
 import { toEn } from "./util";
 import { PoolExhausted, fetchWithAccounts } from "./accounts";
+import { forLang, systemFor, type OutLang } from "./lang";
 
 export const LAYOUTS: Layout[] = ["title", "section", "bullets", "image_text", "two_column", "three_column", "stats", "table", "chart", "timeline", "process", "quote", "icons", "sources", "questions", "closing"];
 
@@ -196,14 +197,15 @@ function adaptBody(body: Record<string, unknown>, err: string): boolean {
 
 /** سقف مطلق توکن خروجی هر فراخوانی (جزوه با فارسی بلند به ۸۰۰۰ نمی‌رسید و محتوای خالی برمی‌گشت) */
 const MAX_OUT = 14000;
-async function complete(env: Env, prompt: string, maxTokens: number, modelId?: string): Promise<string> {
+async function complete(env: Env, prompt: string, maxTokens: number, modelId?: string, lang?: OutLang): Promise<string> {
+  const SYS = systemFor(SYSTEM, lang);
   if (useOpenAI(env)) {
     const body: Record<string, unknown> = {
       model: resolveModel(env, modelId).model,
       // مدل‌های «استدلالی» (GLM، Gemma 4، Qwen3) بخشی از توکن‌ها را صرف فکر کردن می‌کنند؛ با سقف کم، پاسخ نیمه‌کاره/خالی می‌ماند
       max_tokens: Math.min(THINKERS.test(resolveModel(env, modelId).model) || ALWAYS_THINK.test(resolveModel(env, modelId).model) || CLAUDE.test(resolveModel(env, modelId).model) || GEMINI.test(resolveModel(env, modelId).model) ? maxTokens * 2 : GEMMA.test(resolveModel(env, modelId).model) ? maxTokens * 3 : maxTokens, MAX_OUT),
       temperature: 0.5,
-      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt }],
+      messages: [{ role: "system", content: SYS }, { role: "user", content: prompt }],
       response_format: { type: "json_object" },
     };
     // این مدل‌ها به‌طور پیش‌فرض قبل از پاسخ هزاران توکن «فکر» می‌کنند و یا تایم‌اوت می‌شوند یا پاسخ (content) خالی می‌ماند؛ برای تولید JSON لازم نیست
@@ -273,7 +275,7 @@ async function complete(env: Env, prompt: string, maxTokens: number, modelId?: s
     body: JSON.stringify({
       model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
       max_tokens: maxTokens,
-      system: SYSTEM,
+      system: SYS,
       messages: [{ role: "user", content: prompt }],
     }),
     signal: AbortSignal.timeout(180_000),
@@ -290,11 +292,12 @@ export function parseJson(text: string): any {
   return JSON.parse(t.slice(a, b + 1));
 }
 
-async function ask(env: Env, prompt: string, maxTokens = 6000, modelId?: string): Promise<any> {
+async function ask(env: Env, prompt: string, maxTokens = 6000, modelId?: string, lang?: OutLang): Promise<any> {
+  prompt = forLang(prompt, lang);
   let last: unknown;
   for (let i = 0; i < 2; i++) { // یک بار تلاش مجدد در صورت JSON نامعتبر
     // تلاش دوم (بعد از خروجی خالی/ناقص، مثلاً finish=length) با سقف توکن بیشتر
-    const text = await complete(env, prompt, i ? Math.min(MAX_OUT, Math.round(maxTokens * 1.6)) : maxTokens, modelId);
+    const text = await complete(env, prompt, i ? Math.min(MAX_OUT, Math.round(maxTokens * 1.6)) : maxTokens, modelId, lang);
     try { return parseJson(text); } catch (e) { last = e; }
   }
   throw last instanceof Error ? last : new Error("invalid JSON");
@@ -356,12 +359,12 @@ export async function askQuick(env: Env, system: string, prompt: string, o: { mo
 export { ask as askJson };
 
 /** یک بار تلاش مجدد برای خطای گذرا (تایم‌اوت، ۴۲۹، ۵xx)؛ خطای قطعی (کلید/مدل نادرست) بلافاصله پرتاب می‌شود. */
-async function askRetry(env: Env, prompt: string, maxTokens: number, modelId?: string): Promise<any> {
-  try { return await ask(env, prompt, maxTokens, modelId); }
+async function askRetry(env: Env, prompt: string, maxTokens: number, modelId?: string, lang?: OutLang): Promise<any> {
+  try { return await ask(env, prompt, maxTokens, modelId, lang); }
   catch (e) {
     if (e instanceof LlmError && e.fatal) throw e;
     await new Promise((r) => setTimeout(r, 3000));
-    return ask(env, prompt, maxTokens, modelId);
+    return ask(env, prompt, maxTokens, modelId, lang);
   }
 }
 
@@ -500,7 +503,7 @@ export function normalizeOutline(data: any, topic: string): Outline {
 }
 
 // ---------- تولید ----------
-export interface ContentOpts { model?: string; audience?: string; mode?: Mode; sources?: boolean; questions?: boolean; /** یادداشت سخنرانی؛ undefined = روشن */ notes?: boolean; maxImages?: number; /** مرور نهایی کیفیت (فقط پلن‌های پولی) */ review?: boolean; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوا */ source?: string }
+export interface ContentOpts { model?: string; /** زبان خروجی (پیش‌فرض fa) */ lang?: OutLang; audience?: string; mode?: Mode; sources?: boolean; questions?: boolean; /** یادداشت سخنرانی؛ undefined = روشن */ notes?: boolean; maxImages?: number; /** مرور نهایی کیفیت (فقط پلن‌های پولی) */ review?: boolean; /** یادداشت جستجوی آنلاین (پشت‌صحنه) */ research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوا */ source?: string }
 const wantSources = (o: ContentOpts) => o.mode === "student" || o.mode === "thesis" || !!o.sources;
 const wantQuestions = (o: ContentOpts) => o.mode === "teacher" || !!o.questions;
 const wantNotes = (o: ContentOpts) => o.notes !== false;
@@ -539,10 +542,10 @@ function ensureKinds(slides: OutlineItem[], o: ContentOpts): OutlineItem[] {
   const closeAt = () => Math.max(1, slides.length - 1);
   if (wantQuestions(o) && !has("questions")) {
     const i = slides.findIndex((s) => s.kind === "sources");
-    slides.splice(i >= 0 ? i : closeAt(), 0, { title: "پرسش‌های پایانی", summary: "چند پرسش برای بحث و پرسش‌وپاسخ", kind: "questions" });
+    slides.splice(i >= 0 ? i : closeAt(), 0, o.lang === "en" ? { title: "Discussion Questions", summary: "A few questions for discussion and Q&A", kind: "questions" } : { title: "پرسش‌های پایانی", summary: "چند پرسش برای بحث و پرسش‌وپاسخ", kind: "questions" });
   }
   if (wantSources(o) && !has("sources")) {
-    slides.splice(closeAt(), 0, { title: "منابع", summary: "منابع پیشنهادی برای مطالعه‌ی بیشتر", kind: "sources" });
+    slides.splice(closeAt(), 0, o.lang === "en" ? { title: "Sources", summary: "Recommended sources for further reading", kind: "sources" } : { title: "منابع", summary: "منابع پیشنهادی برای مطالعه‌ی بیشتر", kind: "sources" });
   }
   return slides.slice(0, 37); // سقف پلن ۳۵ + حداکثر ۲ اسلاید منابع/پرسش که مدل جا انداخته باشد
 }
@@ -576,7 +579,7 @@ Story: order the slides as one coherent narrative whose arc fits THIS topic (e.g
 Titles: every slide title except the first (title), the last (closing) and the sources/questions slides must be a short, specific headline (max ~9 words) that states the point of the slide, not a bare label. Bad: «مزایا و معایب». Good: «هزینه‌ی کم، مهم‌ترین مزیت؛ وابستگی به اینترنت، مهم‌ترین ضعف». (Fixed required titles named in the structure rules below, such as «فهرست مطالب», «بیان مسئله و ضرورت», «روش پژوهش», «مقدمه», «نتیجه‌گیری», «خلاصه‌ی مدیریتی», «گام‌های بعدی», «اهداف درس», «فعالیت کلاسی» or «جمع‌بندی», stay as they are.)
 Return JSON: {"title": "...", "slides": [{"title": "...", "summary": "one sentence: what this slide covers", "message": "one sentence: the single takeaway the audience should remember from this slide"}]}
 Only the single recommended-sources slide gets the extra field "kind":"sources", and only the single discussion-questions slide gets "kind":"questions". Every other slide MUST NOT have a "kind" field.
-${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model); // ۳۵ اسلاید با ۲۵۰۰ توکن جا نمی‌شد
+${structureRules(o)}`, Math.min(8000, 800 + n * 150), o.model, o.lang); // ۳۵ اسلاید با ۲۵۰۰ توکن جا نمی‌شد
   const out = normalizeOutline(data, topic);
   out.slides = ensureKinds(out.slides, o);
   return out;
@@ -650,7 +653,7 @@ ${edges}
 - Vary layouts; do not use the same one more than 3 times in a row.
 ${wantNotes(o) ? `- Include "notes" for every slide: ${st.notes}. Do not just repeat the slide text: add an example, a question for the audience, or a useful extra detail.` : `- The user turned speaker notes off: set "notes" to an empty string on every slide.`}
 - "slides" MUST be an array of JSON objects, one object per slide. Never flatten a slide into a list of strings.${modeLayoutRules(o)}`,
-      st.tokens * slice.length + 500, o.model);
+      st.tokens * slice.length + 500, o.model, o.lang);
     return normalizeDeck(data, slice).slides.slice(0, slice.length); // normalizeDeck کمبود را از روی سرفصل پر می‌کند ⇒ ترتیب دسته‌ها به‌هم نمی‌خورد
   }));
 
@@ -720,7 +723,7 @@ Find the WEAK slides: (a) the title is a bare label instead of a specific headli
 Rewrite ONLY the weak slides (at most ${max}), in fluent Persian, keeping each slide's topic, layout, and the SAME number of bullets and columns. Make them more specific only when the background notes or facts you are certain of support it; otherwise make them concrete but general, and remove doubtful numbers or names instead of inventing. If the deck is fine, return {"fixes": []}.${researchBlock(o)}
 Slides (JSON): ${JSON.stringify(view)}
 Return JSON: {"fixes": [{"i": <slide index>, "title": "...", "bullets": ["..."], "columns": [{"heading": "...", "bullets": ["..."]}]${wantNotes(o) ? ', "notes": "..."' : ""}}]} — include only the fields you changed.`,
-      Math.min(4000, 700 + max * 500), o.model);
+      Math.min(4000, 700 + max * 500), o.model, o.lang);
     const fixes: any[] = Array.isArray(data?.fixes) ? data.fixes.slice(0, max) : [];
     const out: Deck = structuredClone(deck);
     for (const f of fixes) {

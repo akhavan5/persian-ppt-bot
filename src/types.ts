@@ -40,6 +40,8 @@ export type Mode = "normal" | "student" | "business" | "teacher" | "thesis";
 
 export interface Settings {
   theme: string;
+  /** زبان خروجی (محتوا، PPTX، پیش‌نمایش، جزوه، پوستر، صوت): fa = فارسی راست‌به‌چپ (پیش‌فرض)، en = انگلیسی چپ‌به‌راست */
+  lang?: "fa" | "en";
   /** قالب اسلاید: classic | academic (فهرست: TEMPLATES در template.ts)؛ خالی = classic */
   template?: string;
   font: string;

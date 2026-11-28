@@ -5,6 +5,7 @@
  * فونت Vazirmatn از Google Fonts در همین صفحه بارگذاری می‌شود، پس داخل PDF جاسازی می‌شود و به نصب فونت روی دستگاه نیاز ندارد.
  * اندازه‌ها با واحد cqw (درصد عرض اسلاید) هستند: ۱ اینچ = ۷٫۵cqw و ۱pt = ۰٫۱۰۴cqw؛ پس همه‌چیز با عرض صفحه مقیاس می‌گیرد.
  */
+import { langInfo, type OutLang } from "./lang";
 import type { Chart, Deck, Slide } from "./types";
 import { B_FONTS_URL, FONT_URL, FONT_URL_ALT, THEMES, bFontFaceCss, iconOf, isBFont, type Theme } from "./themes";
 import { faText } from "./util";
@@ -36,6 +37,8 @@ export function pdfSlideHeight(notes?: string): number {
 
 export interface PreviewOpts {
   id: string; theme: string; font: string; digits: boolean; images: number[]; nonce: string;
+  /** زبان خروجی: fa = راست‌به‌چپ (پیش‌فرض)، en = چپ‌به‌راست */
+  lang?: OutLang;
   /** قالب اسلاید (classic | academic)؛ خالی = classic */
   template?: string;
   /** حالت PDF سمت سرور (ربات تلگرام): شماره‌ی اسلاید ← تصویر به‌صورت data: URI؛ نوار بالا، راهنما و اسکریپت حذف می‌شوند */
@@ -47,13 +50,20 @@ interface TOpts { bold?: boolean; align?: "right" | "center" | "left"; valign?: 
 export function renderPreview(deck: Deck, o: PreviewOpts): string {
   const t: Theme = THEMES[o.theme] ?? THEMES.violet;
   const ac = o.template === "academic", A = academicPalette(t), bgc = ac ? A.bg : t.bg;
-  const tx = (s: string) => esc(faText(String(s), o.digits));
+  const L = langInfo(o.lang), rtl = L.rtl;
+  const tx = (s: string) => esc(rtl ? faText(String(s), o.digits) : String(s));
+  /** چپ‌به‌راست: مختصات افقی آینه می‌شود (x ← W − x − w) و راست/چپ متن عوض می‌شود */
+  const mx = (x: number, w: number) => (rtl ? x : W - x - w);
+  const sideOf = (a?: "right" | "center" | "left") => (rtl ? (a ?? "right") : a === "right" ? "left" : a === "left" ? "right" : a === "center" ? "center" : "left");
+  const T = rtl
+    ? { foot: "داده‌ها تقریبی‌اند؛ پیش از ارائه با منبع معتبر تطبیق دهید.", src: "منابع پیشنهادی برای مطالعه‌ی بیشتر؛ پیش از ارجاع، وجود و صحت آن‌ها را بررسی کنید.", notes: "یادداشت سخنرانی:", pv: "پیش‌نمایش", dl: "⬇️ دانلود PPTX", pdf: "📄 ذخیره PDF", back: "بازگشت به سایت" }
+    : { foot: "Figures are approximate; verify against a reliable source before presenting.", src: "Suggested sources for further reading; verify that each exists and is accurate before citing.", notes: "Speaker notes:", pv: "Preview", dl: "⬇️ Download PPTX", pdf: "📄 Save PDF", back: "Back to site" };
   const fontName = /^[\w -]{1,40}$/.test(o.font) ? o.font : "Vazirmatn";
   const hasImg = new Set(o.images);
 
   // ---------- ابزارهای رسم (مختصات بر حسب اینچ، مثل pptx.ts) ----------
   const box = (x: number, y: number, w: number, h: number, inner = "", style = "") =>
-    `<div class="b" style="left:${I(x)};top:${I(y)};width:${I(w)};height:${I(h)};${style}">${inner}</div>`;
+    `<div class="b" style="left:${I(mx(x, w))};top:${I(y)};width:${I(w)};height:${I(h)};${style}">${inner}</div>`;
   const shape = (x: number, y: number, w: number, h: number, fill: string, kind: "rect" | "ellipse" = "rect", opacity = 100) =>
     box(x, y, w, h, "", `background:#${fill};border-radius:${kind === "ellipse" ? "50%" : I(0.05 * Math.min(w, h))};${opacity < 100 ? `opacity:${opacity / 100};` : ""}`);
   const text = (x: number, y: number, w: number, h: number, paras: string[], size: number, color: string, op: TOpts = {}) => {
@@ -62,7 +72,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
     const wrap = op.bullet ? `<${op.bullet === "number" ? "ol" : "ul"}>${items}</${op.bullet === "number" ? "ol" : "ul"}>` : items;
     const jc = op.valign === "middle" ? "center" : op.valign === "bottom" ? "flex-end" : "flex-start";
     return box(x, y, w, h, wrap,
-      `display:flex;flex-direction:column;justify-content:${jc};font-size:${P(size)};color:#${color};text-align:${op.align ?? "right"};` +
+      `display:flex;flex-direction:column;justify-content:${jc};font-size:${P(size)};color:#${color};text-align:${sideOf(op.align)};` +
       `font-weight:${op.bold ? 700 : 400};--sp:${P(sp)};${op.emoji ? "font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;" : ""}`);
   };
   /** مستطیل گرد با خط‌دور اختیاری (قالب آکادمیک) */
@@ -171,9 +181,9 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   };
   const chart = (sd: Slide): R => {
     const c = sd.chart!, hasText = sd.bullets.length > 0, cw = hasText ? 7.0 : W - 2 * M;
-    return { bg: bgc, num: true, html: title(sd.title) + (ac ? card(M, 1.8, cw, 4.55) + box(M + 0.15, 1.9, cw - 0.3, 4.35, chartSvg(c, cw - 0.3, 4.35, t, tx)) : box(M, 1.8, cw, 4.55, chartSvg(c, cw, 4.55, t, tx))) +
+    return { bg: bgc, num: true, html: title(sd.title) + (ac ? card(M, 1.8, cw, 4.55) + box(M + 0.15, 1.9, cw - 0.3, 4.35, chartSvg(c, cw - 0.3, 4.35, t, tx, rtl ? "سری" : "Series")) : box(M, 1.8, cw, 4.55, chartSvg(c, cw, 4.55, t, tx, rtl ? "سری" : "Series"))) +
       (hasText ? text(M + 7.3, 1.8, W - M - (M + 7.3), 4.55, sd.bullets.slice(0, 3), fitSize(sd.bullets.slice(0, 3), W - M - (M + 7.3), 4.55, 22, 14, true), t.text, { bullet: true, valign: "middle" }) : "") +
-      text(M, 6.45, W - 2 * M, 0.35, ["داده‌ها تقریبی‌اند؛ پیش از ارائه با منبع معتبر تطبیق دهید."], 11, t.muted, { space: 0 }) };
+      text(M, 6.45, W - 2 * M, 0.35, [T.foot], 11, t.muted, { space: 0 }) };
   };
   const timeline = (sd: Slide): R => {
     const st = sd.steps!.slice(0, 6), n = st.length, tw = W - 2 * M, cw = tw / n, ly = 3.4, w = cw - 0.2;
@@ -193,7 +203,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
         text(x0 + cw / 2 - 0.32, 2.25, 0.64, 0.64, [String(i + 1)], 20, t.onPrimary, { bold: true, align: "center", valign: "middle", space: 0 }) +
         text(x0 + 0.2, 3.1, cw - 0.4, 0.85, [x.label], fitSize([x.label], cw - 0.4, 0.85, 22, 14, false, 0), t.primary, { bold: true, align: "center", valign: "middle", space: 0 }) +
         text(x0 + 0.2, 4.0, cw - 0.4, 1.7, [x.text], fitSize([x.text], cw - 0.4, 1.7, 18, 13, false, 0), t.text, { align: "center", space: 0 }) +
-        (i < n - 1 ? box(x0 - gap + 0.09, 3.7, gap - 0.18, 0.4, "", `background:#${t.accent};clip-path:polygon(100% 25%,45% 25%,45% 0,0 50%,45% 100%,45% 75%,100% 75%)`) : "");
+        (i < n - 1 ? box(x0 - gap + 0.09, 3.7, gap - 0.18, 0.4, "", `background:#${t.accent};clip-path:${rtl ? "polygon(100% 25%,45% 25%,45% 0,0 50%,45% 100%,45% 75%,100% 75%)" : "polygon(0 25%,55% 25%,55% 0,100% 50%,55% 100%,55% 75%,0 75%)"}`) : "");
     }).join("") };
   };
   const quote = (sd: Slide): R => {
@@ -239,7 +249,7 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
       : lay === "process" && sd.steps?.length ? process(sd)
       : lay === "quote" && sd.quote ? quote(sd)
       : lay === "icons" && sd.items?.length ? icons(sd)
-      : lay === "sources" ? numbered(sd, "منابع پیشنهادی برای مطالعه‌ی بیشتر؛ پیش از ارجاع، وجود و صحت آن‌ها را بررسی کنید.")
+      : lay === "sources" ? numbered(sd, T.src)
       : lay === "questions" ? numbered(sd)
       : bullets(sd);
     const num = !r.num ? "" : ac
@@ -250,18 +260,20 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
     const npt = notesPt(nlen);
     const ph = pdfSlideHeight(sd.notes);
     if (o.pdf) pageRules.push(`@page p${i}{size:13.333in ${ph}in;margin:0}.item.p${i}{page:p${i};height:${ph}in}`);
-    const notes = sd.notes ? `<div class="notes"${o.pdf ? ` style="font-size:${npt}pt"` : ""}><b>یادداشت سخنرانی:</b> ${tx(sd.notes)}</div>` : "";
+    const notes = sd.notes ? `<div class="notes"${o.pdf ? ` style="font-size:${npt}pt"` : ""}><b>${T.notes}</b> ${tx(sd.notes)}</div>` : "";
     return `<div class="item${o.pdf ? ` p${i}` : ""}"><div class="sl"><section class="slide" style="background:#${r.bg}">${r.html}${num}</section></div>${notes}</div>`;
   }).join("\n");
 
-  const bism = ac
+  const bism = ac && rtl
     ? `<div class="item${o.pdf ? " pb" : ""}"><div class="sl"><section class="slide" style="background:#${A.bg}">${acBismillah().html}</section></div></div>\n`
     : "";
-  if (ac && o.pdf) pageRules.unshift("@page pb{size:13.333in 7.5in;margin:0}.item.pb{page:pb;height:7.5in}");
+  if (ac && rtl && o.pdf) pageRules.unshift("@page pb{size:13.333in 7.5in;margin:0}.item.pb{page:pb;height:7.5in}");
   const pageH = pdfPageHeight(deck);
   const cssVars = `--font:"${fontName}","Vazirmatn",Tahoma,Arial,sans-serif`;
   const vazir = fontName === "Vazirmatn";
-  const note = isBFont(fontName)
+  const note = !rtl
+    ? (vazir ? `This preview and PDF use the Vazirmatn font. To view the PPTX correctly on your device, install the font: <a href="${FONT_URL}" download rel="noopener">Vazirmatn.zip</a>` : isBFont(fontName) ? `This preview and PDF use the ${esc(fontName)} font; to view the PPTX correctly install it: <a href="${B_FONTS_URL}" download rel="noopener">B Nazanin &amp; B Titr (zip)</a>` : `The selected font (${esc(fontName)}) is installed on most devices; the PPTX opens the same way.`)
+    : isBFont(fontName)
     ? `این پیش‌نمایش و PDF با فونت ${esc(fontName)} ساخته می‌شود. برای نمایش درست فایل PPTX روی دستگاهت، فونت را نصب کن؛ دانلود مستقیم: <a href="${B_FONTS_URL}" download rel="noopener">فونت‌های B Nazanin و B Titr (zip)</a>`
     : vazir
     ? `این پیش‌نمایش و PDF با فونت Vazirmatn ساخته می‌شود. برای نمایش درست فایل PPTX روی دستگاهت، فونت را نصب کن؛ دانلود مستقیم: <a href="${FONT_URL}" download rel="noopener">Vazirmatn.zip</a> · <a href="${FONT_URL_ALT}" download rel="noopener">فایل TTF</a>`
@@ -269,10 +281,10 @@ export function renderPreview(deck: Deck, o: PreviewOpts): string {
   const id = encodeURIComponent(o.id);
 
   return `<!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<html lang="${L.html}" dir="${L.dir}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>پیش‌نمایش — ${esc(deck.title)}</title>
+<title>${T.pv} — ${esc(deck.title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap">
 <style>
 ${bFontFaceCss(fontName)}
@@ -289,14 +301,14 @@ body{margin:0;background:#eef1f6;font-family:var(--font);color:#1b2733}
 main{max-width:1000px;margin:0 auto;padding:12px 16px 40px}
 .item{margin:0 0 22px}
 .sl{container-type:inline-size;width:100%;border-radius:10px;overflow:hidden;box-shadow:0 6px 24px rgba(20,40,80,.18);background:#fff}
-.slide{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;direction:rtl;font-family:var(--font);line-height:1.4}
+.slide{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;direction:${L.dir};font-family:var(--font);line-height:1.4}
 .b{position:absolute}
 .b p{margin:0 0 var(--sp,0)}.b p:last-child{margin-bottom:0}
-.b ul,.b ol{margin:0;padding:0 1.6em 0 0}
+.b ul,.b ol{margin:0;padding:${rtl ? "0 1.6em 0 0" : "0 0 0 1.6em"}}
 .b li{margin:0 0 var(--sp,0)}.b li:last-child{margin-bottom:0}
 .b img{width:100%;height:100%;object-fit:cover;display:block}
 .b table{width:100%;border-collapse:collapse}
-.b td{padding:0 .7em;border-bottom:.75pt solid var(--bd);text-align:right;vertical-align:middle}
+.b td{padding:0 .7em;border-bottom:.75pt solid var(--bd);text-align:${rtl ? "right" : "left"};vertical-align:middle}
 .b svg{width:100%;height:100%;display:block}
 .notes{margin-top:8px;padding:8px 12px;background:#fff;border:1px solid #dbe1ea;border-radius:8px;font-size:.85rem;line-height:1.9;color:#334}
 @media print{
@@ -323,8 +335,8 @@ html,body{background:#eef1f6}
 </head>
 <body>
 ${o.pdf ? "" : `<header class="bar"><h1>👁 ${esc(deck.title)}</h1>
-<div class="act"><a class="btn" href="/api/files/${id}" rel="nofollow">⬇️ دانلود PPTX</a><button class="btn" id="pdf" type="button">📄 ذخیره PDF</button><a class="btn ghost" href="/">بازگشت به سایت</a></div></header>
-<p class="hint">برای PDF روی «ذخیره PDF» بزن و در پنجره‌ی چاپ، مقصد را <b>Save as PDF</b> بگذار (حاشیه: هیچ). ${note}</p>`}
+<div class="act"><a class="btn" href="/api/files/${id}" rel="nofollow">${T.dl}</a><button class="btn" id="pdf" type="button">${T.pdf}</button><a class="btn ghost" href="/">${T.back}</a></div></header>
+<p class="hint">${rtl ? "برای PDF روی «ذخیره PDF» بزن و در پنجره‌ی چاپ، مقصد را <b>Save as PDF</b> بگذار (حاشیه: هیچ)." : "For a PDF, click “Save PDF” and choose <b>Save as PDF</b> as the destination in the print dialog (margins: none)."} ${note}</p>`}
 <main>
 ${bism}${slides}
 </main>
@@ -337,7 +349,7 @@ document.querySelectorAll("img[data-src]").forEach(function(im){var n=0;function
 }
 
 // ---------- نمودار (SVG؛ واحد viewBox = ۱۰۰ در هر اینچ) ----------
-function chartSvg(c: Chart, wIn: number, hIn: number, t: Theme, tx: (s: string) => string): string {
+function chartSvg(c: Chart, wIn: number, hIn: number, t: Theme, tx: (s: string) => string, seriesLabel = "سری"): string {
   const vw = wIn * 100, vh = hIn * 100, fs = (pt: number) => ((pt * 100) / 72).toFixed(1);
   const pal = [t.primary, t.accent, "E0A93B", "2F7D5B", "D9482B", "5B3FA6", t.muted, "14B8A6"];
   const fmt = (v: number) => tx(Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
@@ -345,7 +357,7 @@ function chartSvg(c: Chart, wIn: number, hIn: number, t: Theme, tx: (s: string) 
     `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${fs(size)}" fill="#${color}" text-anchor="${anchor}"${bold ? ' font-weight="700"' : ""}>${tx(s)}</text>`;
   const ring = c.type === "pie" || c.type === "doughnut";
   const multi = c.series.length > 1 || ring;
-  const names = ring ? c.labels : c.series.map((s, i) => s.name || `سری ${i + 1}`);
+  const names = ring ? c.labels : c.series.map((s, i) => s.name || `${seriesLabel} ${i + 1}`);
   const legend = multi ? (() => {
     const wOf = (s: string) => 60 + s.length * 17;
     const total = names.reduce((a, n) => a + wOf(n), 0);

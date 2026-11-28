@@ -4,6 +4,7 @@ import type { Deck } from "./types";
 import { askJson } from "./llm";
 import { prepareSpeech } from "./tts-text";
 import type { Turn } from "./gemini-tts";
+import type { OutLang } from "./lang";
 
 export interface PodcastScript { title: string; turns: Turn[] }
 
@@ -32,8 +33,9 @@ const SPOKEN: [RegExp, string][] = [
 ];
 export const spoken = (t: string) => SPOKEN.reduce((s, [re, to]) => s.replace(re, to), t);
 
-export async function makePodcastScript(env: Env, deck: Deck, o: { model?: string } = {}): Promise<PodcastScript> {
-  const prompt = `Write the script of a short, relaxed podcast episode in SPOKEN, COLLOQUIAL Persian (Farsi) in which two hosts chat about the presentation below. It must sound like two friends talking, not like someone reading a text aloud.
+export async function makePodcastScript(env: Env, deck: Deck, o: { model?: string; lang?: OutLang } = {}): Promise<PodcastScript> {
+  const en = o.lang === "en";
+  let prompt = `Write the script of a short, relaxed podcast episode in SPOKEN, COLLOQUIAL Persian (Farsi) in which two hosts chat about the presentation below. It must sound like two friends talking, not like someone reading a text aloud.
 
 Hosts (equals, relaxed, a bit playful):
 - "A" = علی: the host. Curious and friendly; opens and closes the episode, asks the questions a listener would ask, reacts, jokes lightly, sums up.
@@ -61,13 +63,13 @@ Return ONLY JSON: {"title": "<short Persian episode title>", "turns": [{"s": "A"
 Material:
 ${material(deck)}`;
 
-  const data = await askJson(env, prompt, 7000, o.model);
+  const data = await askJson(env, en ? prompt.replace(/علی/g, "Alex").replace(/امیر/g, "Sam") : prompt, 7000, o.model, o.lang);
   const rawTurns: any[] = Array.isArray(data?.turns) ? data.turns : [];
   const turns: Turn[] = [];
   let total = 0;
   let last: "A" | "B" = "B";
   for (const t of rawTurns) {
-    const text = spoken(prepareSpeech(String(t?.t ?? t?.text ?? ""))).slice(0, MAX_TURN_CHARS + 80);
+    const text = (en ? prepareSpeech(String(t?.t ?? t?.text ?? ""), "en") : spoken(prepareSpeech(String(t?.t ?? t?.text ?? "")))).slice(0, MAX_TURN_CHARS + 80);
     if (text.length < 2) continue;
     const s = String(t?.s ?? t?.speaker ?? "").trim().toUpperCase();
     const speaker: "A" | "B" = s === "A" || s === "B" ? s : last === "A" ? "B" : "A";
@@ -95,4 +97,4 @@ export function chunkTurns(turns: Turn[], maxChars = 1500, maxTurns = 8): Turn[]
 }
 
 /** متن گفت‌وگو برای ارسال به‌صورت فایل متنی */
-export const transcript = (s: PodcastScript) => `${s.title}\n\n` + s.turns.map((t) => `${t.speaker === "A" ? "علی" : "امیر"}: ${t.text}`).join("\n\n") + "\n";
+export const transcript = (s: PodcastScript, lang?: OutLang) => `${s.title}\n\n` + s.turns.map((t) => `${t.speaker === "A" ? (lang === "en" ? "Alex" : "علی") : (lang === "en" ? "Sam" : "امیر")}: ${t.text}`).join("\n\n") + "\n";

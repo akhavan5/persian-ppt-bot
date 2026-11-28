@@ -5,6 +5,7 @@
  * خروجی کانال وب: فایل در فایل‌های ۲۴ ساعته با شناسه‌ی «<ارائه>-poster» / «<ارائه>-handout» ذخیره می‌شود (مثل حالت همراه ارائه)،
  * تلگرام: فایل مستقیم در چت فرستاده و برای /files هم ذخیره می‌شود.
  */
+import type { OutLang } from "./lang";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import type { Env } from "./env";
@@ -102,7 +103,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
         const p = await loadPreview(this.env, uid, deckId);
         if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
         const s = await getSettings(this.env, uid).catch(() => null);
-        return { title: p.deck.title, theme: p.theme, font: p.font, digits: p.digits, tone: s?.tone, model: s?.model };
+        return { title: p.deck.title, theme: p.theme, font: p.font, digits: p.digits, lang: p.lang, tone: s?.tone, model: s?.model };
       });
       const out = kind === "poster" ? await this.poster(event, step, plan, status, web) : await this.handout(event, step, plan, status, web);
 
@@ -156,7 +157,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
   }
 
   // ---------- پوستر (اینفوگرافیک) ----------
-  private async poster(event: WorkflowEvent<ExtraParams>, step: WorkflowStep, plan: { title: string; theme: string; font: string; digits: boolean; tone?: string; model?: string },
+  private async poster(event: WorkflowEvent<ExtraParams>, step: WorkflowStep, plan: { title: string; theme: string; font: string; digits: boolean; lang?: OutLang; tone?: string; model?: string },
     status: (t: string) => Promise<unknown>, web: boolean): Promise<ExtraOut> {
     const { chatId, uid, deckId, mark } = event.payload;
     const layout = event.payload.layout === "wide" ? "wide" : "tall";
@@ -165,7 +166,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
         await status("🖼 طراحی پوستر (اینفوگرافیک)…");
         const p = await loadPreview(this.env, uid, deckId);
         if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-        return makeInfographic(this.env, plan.title, { layout, tone: plan.tone, model: plan.model, source: deckSourceText(p.deck) });
+        return makeInfographic(this.env, plan.title, { lang: plan.lang, layout, tone: plan.tone, model: plan.model, source: deckSourceText(p.deck) });
       }));
     const fid = `${deckId}-poster`;
     await step.do("poster-render", { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, async () => {
@@ -175,7 +176,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
         const bytes = await generateImage(this.env, ig.image_query).catch(() => null);
         if (bytes) image = `data:${bytes[0] === 0x89 && bytes[1] === 0x50 ? "image/png" : "image/jpeg"};base64,${toBase64(bytes)}`;
       }
-      const html = renderInfographicHtml(ig, { theme: plan.theme, digits: plan.digits, layout, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
+      const html = renderInfographicHtml(ig, { lang: plan.lang, theme: plan.theme, digits: plan.digits, layout, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
       const img = await renderInfographicImage(this.env, html, IG_WIDTH[layout]);
       const pname = fileNameWithSite(this.env, ig.title, img.ext, "پوستر");
       if (web) {
@@ -192,7 +193,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
   }
 
   // ---------- جزوه‌ی Word ----------
-  private async handout(event: WorkflowEvent<ExtraParams>, step: WorkflowStep, plan: { title: string; theme: string; font: string; digits: boolean; tone?: string; model?: string },
+  private async handout(event: WorkflowEvent<ExtraParams>, step: WorkflowStep, plan: { title: string; theme: string; font: string; digits: boolean; lang?: OutLang; tone?: string; model?: string },
     status: (t: string) => Promise<unknown>, web: boolean): Promise<ExtraOut> {
     const { chatId, uid, deckId, mark } = event.payload;
     const hd = await step.do("handout-content", LLM_STEP, () =>
@@ -200,7 +201,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
         await status("📝 نوشتن جزوه‌ی Word…");
         const p = await loadPreview(this.env, uid, deckId);
         if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-        return makeHandout(this.env, plan.title, p.deck, { tone: plan.tone, model: plan.model });
+        return makeHandout(this.env, plan.title, p.deck, { lang: plan.lang, tone: plan.tone, model: plan.model });
       }));
     const fid = `${deckId}-handout`;
     await step.do("handout-build", { retries: { limit: 1, delay: "5 seconds" }, timeout: "4 minutes" }, async () => {
@@ -211,7 +212,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
         const info = bytes ? imageInfo(bytes) : null;
         if (bytes && info) image = { data: bytes, ...info };
       }
-      const data = await buildDocx(hd, { theme: plan.theme, font: plan.font, digits: plan.digits, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
+      const data = await buildDocx(hd, { lang: plan.lang, theme: plan.theme, font: plan.font, digits: plan.digits, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
       const hname = fileNameWithSite(this.env, hd.title, "docx", "جزوه");
       if (web) {
         if (!(await saveFile(this.env, uid, fid, data, hname, hd.title, 0))) throw new Error("handout too large to store");

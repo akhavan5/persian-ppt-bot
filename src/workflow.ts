@@ -51,7 +51,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
   async run(event: WorkflowEvent<DeckParams>, step: WorkflowStep) {
     const { chatId, statusMessageId: mid, userId, topic, settings, credit, day } = event.payload;
     const maxImages = Math.max(1, event.payload.maxImages ?? 1); // تلگرام: ۱ تصویر؛ وب: طبق پلن
-    const contentOpts: ContentOpts = { model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, notes: settings.notes !== false, maxImages: settings.images ? maxImages : 0, source: event.payload.source || undefined };
+    const contentOpts: ContentOpts = { lang: settings.lang, model: settings.model, mode: settings.mode, sources: settings.sources, questions: settings.questions, notes: settings.notes !== false, maxImages: settings.images ? maxImages : 0, source: event.payload.source || undefined };
     const web = event.payload.channel === "web";
     const deckPlat = event.payload.plat ?? (web ? "web" : botPlatform(event.payload.tgId ?? userId)); // پلتفرم مبدأ برای آمار هفتگی (کارهای قدیمیِ در جریان plat ندارند)
     // کاربر دارای پلن (اعتبار این ارائه از پلن کم شده) ⇒ فایل‌ها بدون واترمارک؛ رایگان/هدیه ⇒ با نام سایت. نام فایل‌ها برای همه آدرس سایت دارد.
@@ -126,7 +126,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           if (buf) images.set(i, new Uint8Array(buf));
         }
         const bytes = await buildPptx(deck, {
-          theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, images, site: this.env.SITE_URL || "https://pptsaz.ir", mark,
+          theme: settings.theme, template: settings.template, font: settings.font, persianDigits: settings.digits, lang: settings.lang, images, site: this.env.SITE_URL || "https://pptsaz.ir", mark,
         });
         const filename = fileNameWithSite(this.env, deck.title, "pptx");
         // ذخیره‌ی ۲۴ ساعته (برای دانلود وب، /files و خواندن در گام ارسال)؛ id ثابت است پس تکرار گام بی‌خطر است. اگر ذخیره نشد گام باید شکست بخورد.
@@ -162,7 +162,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
       // کارهای جانبی: پیش‌نمایش، گزارش مدیر و پیام پایانی؛ بدون تلاش مجدد و هر خطا فقط لاگ می‌شود (فایل قبلاً ساخته/فرستاده شده و نباید به «برگشت اعتبار» برسد)
       await step.do("post", { retries: { limit: 0, delay: "1 second" }, timeout: "1 minute" }, async () => {
         await savePreview(this.env, userId, event.instanceId, {
-          deck, theme: settings.theme, template: settings.template, font: settings.font, digits: settings.digits, images: meta.imgs,
+          deck, theme: settings.theme, template: settings.template, font: settings.font, digits: settings.digits, lang: settings.lang, images: meta.imgs,
         }).catch((err) => console.error("savePreview", err));
         const seen = web
           ? await getUserById(this.env, String(userId)).then((w) => (w ? { n: w.name || w.email || w.mobile || "", u: null } : null)).catch(() => null)
@@ -182,7 +182,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           const ig = await step.do("poster-content", { retries: { limit: 1, delay: "10 seconds" }, timeout: "3 minutes" }, () =>
             guard(async () => {
               await status("🖼 طراحی پوستر (اینفوگرافیک)…");
-              return makeInfographic(this.env, psource ? deck.title : topic, { layout: poster.layout, tone: settings.tone, model: settings.model, research: pnotes, source: psource || undefined });
+              return makeInfographic(this.env, psource ? deck.title : topic, { lang: settings.lang, layout: poster.layout, tone: settings.tone, model: settings.model, research: pnotes, source: psource || undefined });
             }));
           await step.do("poster-render", { retries: { limit: 1, delay: "5 seconds" }, timeout: "5 minutes" }, async () => {
             await status("🎨 ساخت تصویر پوستر…");
@@ -191,7 +191,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               const bytes = await generateImage(this.env, ig.image_query).catch(() => null); // تزئینی است؛ نشد ⇒ بدون تصویر
               if (bytes) image = `data:${bytes[0] === 0x89 && bytes[1] === 0x50 ? "image/png" : "image/jpeg"};base64,${toBase64(bytes)}`;
             }
-            const html = renderInfographicHtml(ig, { theme: settings.theme, digits: settings.digits, layout: poster.layout, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
+            const html = renderInfographicHtml(ig, { lang: settings.lang, theme: settings.theme, digits: settings.digits, layout: poster.layout, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
             const img = await renderInfographicImage(this.env, html, IG_WIDTH[poster.layout]);
             const pname = fileNameWithSite(this.env, ig.title, img.ext, "پوستر");
             const pid = `${event.instanceId}-poster`;
@@ -225,7 +225,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           const hd = await step.do("handout-content", { retries: { limit: 1, delay: "10 seconds" }, timeout: "5 minutes" }, () =>
             guard(async () => {
               await status("📝 نوشتن جزوه‌ی Word…");
-              return makeHandout(this.env, hsource ? deck.title : topic, deck, { tone: settings.tone, model: settings.model, research: hnotes, source: hsource || undefined });
+              return makeHandout(this.env, hsource ? deck.title : topic, deck, { lang: settings.lang, tone: settings.tone, model: settings.model, research: hnotes, source: hsource || undefined });
             }));
           await step.do("handout-build", { retries: { limit: 1, delay: "5 seconds" }, timeout: "4 minutes" }, async () => {
             await status("📝 ساخت فایل جزوه…");
@@ -235,7 +235,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               const info = bytes ? imageInfo(bytes) : null;
               if (bytes && info) image = { data: bytes, ...info };
             }
-            const data = await buildDocx(hd, { theme: settings.theme, font: settings.font, digits: settings.digits, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
+            const data = await buildDocx(hd, { lang: settings.lang, theme: settings.theme, font: settings.font, digits: settings.digits, image, site: this.env.SITE_URL || "https://pptsaz.ir", mark });
             const hname = fileNameWithSite(this.env, hd.title, "docx", "جزوه");
             const hid = `${event.instanceId}-handout`;
             if (web) {

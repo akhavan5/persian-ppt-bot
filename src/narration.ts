@@ -8,6 +8,7 @@ import type { Deck, Slide } from "./types";
 import { askJson } from "./llm";
 import { prepareSpeech } from "./tts-text";
 import { spoken } from "./podcast";
+import type { OutLang } from "./lang";
 
 const MAX_CHARS = 900;
 export const NARRATION_BATCH = 8;
@@ -22,7 +23,7 @@ function facts(s: Slide, i: number): string {
 }
 
 /** متن گفتنی اسلایدهای idxs (شماره‌ی صفرمبنا)؛ خروجی: شماره ⇒ متن آماده‌ی TTS. اسلایدهای بدون جواب معتبر در خروجی نیستند. */
-export async function makeNarration(env: Env, deck: Deck, idxs: number[], o: { model?: string } = {}): Promise<Record<number, string>> {
+export async function makeNarration(env: Env, deck: Deck, idxs: number[], o: { model?: string; lang?: OutLang } = {}): Promise<Record<number, string>> {
   const last = deck.slides.length - 1;
   const outline = deck.slides.map((s, i) => `${i}. ${s.title}`).join("\n").slice(0, 3000);
   const prompt = `You are writing the voice-over of a narrated presentation, in SPOKEN, COLLOQUIAL Persian (Farsi). One friendly narrator talks to the listener while each slide is on screen. It must sound like a relaxed person explaining something to a friend, not like someone reading a text aloud.
@@ -50,13 +51,13 @@ ${idxs.map((i) => facts(deck.slides[i], i)).join("\n")}
 
 Return ONLY JSON: {"slides": [{"i": <slide index>, "t": "<what the narrator says>"}]}`;
 
-  const data = await askJson(env, prompt, 4500, o.model);
+  const data = await askJson(env, prompt, 4500, o.model, o.lang);
   const rows: any[] = Array.isArray(data?.slides) ? data.slides : [];
   const out: Record<number, string> = {};
   for (const r of rows) {
     const i = Number(r?.i);
     if (!idxs.includes(i)) continue;
-    const text = spoken(prepareSpeech(String(r?.t ?? r?.text ?? ""))).slice(0, MAX_CHARS);
+    const text = (o.lang === "en" ? prepareSpeech(String(r?.t ?? r?.text ?? ""), "en") : spoken(prepareSpeech(String(r?.t ?? r?.text ?? "")))).slice(0, MAX_CHARS);
     if (text.length >= 25) out[i] = text;
   }
   return out;

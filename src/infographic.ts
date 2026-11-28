@@ -7,6 +7,7 @@ import type { Env } from "./env";
 import { TONES } from "./themes";
 import { toEn } from "./util";
 import { LlmError, askJson, hasKey } from "./llm";
+import type { OutLang } from "./lang";
 import { launchWithRetry } from "./pdf";
 import { hasBrowser, hasRemoteBrowser, remoteScreenshot, useBindingForRender } from "./browser-api";
 
@@ -173,7 +174,7 @@ Block types (use "type" exactly as written):
 {"type":"glossary","items":[{"term":"...","text":"..."}]}         2-5 terms with a one-line meaning
 {"type":"bars","label":"","items":[{"label":"...","value":12,"text":"%"}]} comparison of numbers, ONLY with known numbers`;
 
-export async function makeInfographic(env: Env, topic: string, o: { layout: IgLayout; tone?: string; model?: string; research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوای پوستر */ source?: string }): Promise<Infographic> {
+export async function makeInfographic(env: Env, topic: string, o: { lang?: OutLang; layout: IgLayout; tone?: string; model?: string; research?: string; /** متن فایل آپلودی کاربر: منبع اصلی و معتبر محتوای پوستر */ source?: string }): Promise<Infographic> {
   if (!hasKey(env)) throw new LlmError("کلید API تنظیم نشده است", true);
   const sections = o.layout === "wide" ? "7 to 8 panels" : "5 to 7 panels";
   // فایل آپلودی کاربر منبع اصلی است (نه «یادداشت جستجوی وب»)؛ موضوع فقط عنوان است و نباید محتوای فایل را کنار بزند
@@ -197,7 +198,7 @@ Rules:
 - Output language is Persian; only "image_query" is English.
 Return ONLY one JSON object with exactly this shape:
 ${SCHEMA}`;
-  const data = await askJson(env, prompt, o.layout === "wide" ? 8000 : 7000, o.model);
+  const data = await askJson(env, prompt, o.layout === "wide" ? 8000 : 7000, o.model, o.lang);
   return normalizeInfographic(data, topic);
 }
 

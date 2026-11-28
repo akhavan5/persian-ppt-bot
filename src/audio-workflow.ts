@@ -7,6 +7,7 @@
  * هر تکه‌ی صدا در گام جدا ساخته می‌شود تا خطا/سقف کلید فقط همان گام را دوباره امتحان کند (کلیدها در gemini-tts.ts می‌چرخند).
  * بایت‌های صدا از گام‌ها برنمی‌گردند (سقف ۱ مگابایت)؛ یا همان‌جا فرستاده می‌شوند یا موقت در KV فایل‌ها می‌مانند.
  */
+import type { OutLang } from "./lang";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import type { Env } from "./env";
@@ -64,7 +65,7 @@ export interface SlidesState {
   /** شماره‌ی نمونه‌ی بعدی (برای شناسه‌ی ثابت: تلاش مجدد، نمونه‌ی تکراری نمی‌سازد) */
   seq: number;
   /** اسلایدهای دارای متن: مرحله‌های بعدی نیازی به خواندن دوباره‌ی پیش‌نمایش ندارند */
-  plan: { title: string; total: number; items: { i: number; no: number; title: string; text: string }[] };
+  plan: { title: string; total: number; /** زبان خروجی ارائه (خالی = fa) */ lang?: OutLang; items: { i: number; no: number; title: string; text: string }[] };
   spoken: Record<number, string>;
   made: { i: number; no: number; title: string; bytes: number }[];
   failed: string[];
@@ -84,7 +85,7 @@ const TG_LIMIT = 45 * 1024 * 1024; // سقف آپلود ربات ۵۰ مگابا
 const SPEECH_STYLE = "warm, relaxed and friendly, like a person explaining something to a friend, natural informal Tehrani Persian speech, not reading a script";
 // سرعت گفتار از روی توضیح سبک تنظیم می‌شود (زیر‌و‌بمی صدا تغییر نمی‌کند)؛ GEMINI_TTS_PACE = normal | brisk | fast
 const PACE: Record<string, string> = { brisk: ", at a lively pace, a bit faster than normal speech, no long pauses", fast: ", at a quick, energetic pace, clearly faster than normal speech, short pauses" };
-const speechStyle = (env: Env) => SPEECH_STYLE + (PACE[(env.GEMINI_TTS_PACE || "brisk").trim().toLowerCase()] ?? "");
+const speechStyle = (env: Env, lang?: OutLang) => (lang === "en" ? SPEECH_STYLE.replace("natural informal Tehrani Persian speech", "natural conversational English") : SPEECH_STYLE) + (PACE[(env.GEMINI_TTS_PACE || "brisk").trim().toLowerCase()] ?? "");
 // پادکست: لحن دوستانه و خودمانی (نه خواندن متن)؛ با متن محاوره‌ای podcast.ts هماهنگ است
 const STYLE_A = "casual, relaxed, cheerful and curious, like chatting with a close friend, natural informal Tehrani Persian speech, not reading a script";
 const STYLE_B = "warm, easygoing and confident, like explaining something to a friend over tea, natural informal Tehrani Persian speech, not reading a script";
@@ -96,6 +97,9 @@ const WEB_FILE_LIMIT = 22 * 1024 * 1024;
 // جمله‌ی پایانیِ تبلیغ سایت برای کاربران بدون پلن (مثل واترمارک فایل‌ها). نشانی سایت با حروف نوشته شده تا TTS درست تلفظ کند.
 const OUTRO_SLIDES = "اگه از این اسلاید خوشتون اومد، به سایت ما سر بزنید: پی پی تی ساز، دات آی آر.";
 const OUTRO_PODCAST = "اگه از این پادکست خوشتون اومد، به سایت ما سر بزنید: پی پی تی ساز، دات آی آر.";
+const OUTRO_SLIDES_EN = "If you enjoyed this presentation, visit our website: P P T Saz dot I R.";
+const OUTRO_PODCAST_EN = "If you enjoyed this podcast, visit our website: P P T Saz dot I R.";
+const enStyle = (s: string) => s.replace("natural informal Tehrani Persian speech", "natural conversational English");
 
 const tmpKey = (id: string, i: number) => `tmp:aud:${id}:${i}`;
 const mp3Key = (id: string, i: number) => `tmp:aud:${id}:${i}:mp3`;
@@ -226,9 +230,9 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
         // صدا باید داخل همان فایل PPTX برود؛ پیش از خرج‌کردن سهمیه‌ی TTS مطمئن می‌شویم فایل هنوز هست
         if (!(await loadFileDirect(this.env, uid, deckId))) throw new NonRetryableError("فایل پاورپوینت منقضی شده است (۲۴ ساعت)");
-        const items = p.deck.slides.map((s, i) => ({ i, no: pptxSlideNo(p.template, i), title: s.title, text: narrationFor(s) })).filter((x) => x.text);
+        const items = p.deck.slides.map((s, i) => ({ i, no: pptxSlideNo(p.template, i, p.lang), title: s.title, text: narrationFor(s) })).filter((x) => x.text);
         if (!items.length) throw new NonRetryableError("هیچ اسلایدی متن قابل‌خواندن ندارد");
-        return { title: p.deck.title, total: p.deck.slides.length, items };
+        return { title: p.deck.title, total: p.deck.slides.length, lang: p.lang, items };
       });
       st0 = { phase: "narr", seq: 1, plan, spoken: {}, made: [], failed: [], mp3Sizes: {}, pos: 0 };
     }
@@ -247,7 +251,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
             await status("✍️ در حال نوشتن متن گفتاری اسلایدها…", lerp(3, 25, b, batches)); // درصد: ۳ تا ۲۵٪
             const p = await loadPreview(this.env, uid, deckId);
             if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-            return makeNarration(this.env, p.deck, idxs, { model: event.payload.model });
+            return makeNarration(this.env, p.deck, idxs, { model: event.payload.model, lang: plan.lang });
           }));
           Object.assign(st.spoken, part);
         } catch (e) {
@@ -270,8 +274,8 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
             await status(`🔊 در حال ساخت صدا… اسلاید ${toFa(String(it.i + 1))} از ${toFa(String(plan.total))}`, lerp(25, 88, pos, plan.items.length));
             // کاربر بدون پلن: جمله‌ی تبلیغ سایت در پایانِ آخرین اسلاید گفته می‌شود
             const body = st.spoken[it.i] ?? it.text;
-            const text = event.payload.mark && it.i === lastIdx ? `${body} ${OUTRO_SLIDES}` : body;
-            const wav = await ttsSpeak(this.env, splitSpeech(text, 1200), { style: speechStyle(this.env) });
+            const text = event.payload.mark && it.i === lastIdx ? `${body} ${plan.lang === "en" ? OUTRO_SLIDES_EN : OUTRO_SLIDES}` : body;
+            const wav = await ttsSpeak(this.env, splitSpeech(text, 1200), { style: speechStyle(this.env, plan.lang) });
             await this.env.FILES.put(tmpKey(root, it.i), wav, { expirationTtl: 3600 }); // فقط تا لحظه‌ی جاسازی؛ یک ساعته پاک می‌شود
             return wav.length;
           }));
@@ -374,7 +378,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
         budget -= size;
       }
       if (items.length) {
-        const out = await embedAudio(f.data, items, { autoPlay: true, autoAdvance: true });
+        const out = await embedAudio(f.data, items, { autoPlay: true, autoAdvance: true, ltr: plan.lang === "en" });
         await status("🔊 ذخیره و ارسال فایل…", 97);
         const name = fileNameWithSite(this.env, plan.title, "pptx", "صوتی", 40);
         if (web) {
@@ -434,17 +438,17 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
       await status("🎙 ۱/۳ — نوشتن گفت‌وگوی پادکست…", 5); // درصد: نوشتن گفت‌وگو ۵ تا ۲۵٪
       const p = await loadPreview(this.env, uid, deckId);
       if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-      return makePodcastScript(this.env, p.deck, { model });
+      return { ...(await makePodcastScript(this.env, p.deck, { model, lang: p.lang })), lang: p.lang };
     }));
     // کاربر بدون پلن: مجری (علی) در پایان پادکست سایت را معرفی می‌کند
-    const turns: Turn[] = mark ? [...script.turns, { speaker: "A", text: OUTRO_PODCAST }] : script.turns;
+    const turns: Turn[] = mark ? [...script.turns, { speaker: "A", text: script.lang === "en" ? OUTRO_PODCAST_EN : OUTRO_PODCAST }] : script.turns;
     const chunks = chunkTurns(turns);
 
     for (let i = 0; i < chunks.length; i++) {
       await step.do(`voice-${i}`, TTS_STEP, () => guard(this.meter, async () => {
         // درصد: ساخت صدا ۲۵ تا ۸۸٪ به نسبت بخش‌ها
         await status(`🎙 ۲/۳ — ساخت صدا… بخش ${toFa(String(i + 1))} از ${toFa(String(chunks.length))}`, lerp(25, 88, i, chunks.length));
-        const wav = await ttsDialogue(this.env, chunks[i], { styleA: STYLE_A, styleB: STYLE_B });
+        const wav = await ttsDialogue(this.env, chunks[i], script.lang === "en" ? { styleA: enStyle(STYLE_A), styleB: enStyle(STYLE_B) } : { styleA: STYLE_A, styleB: STYLE_B });
         await this.env.FILES.put(tmpKey(id, i), wav, { expirationTtl: 3600 }); // فقط برای چسباندن؛ یک ساعته پاک می‌شود
         return wav.length;
       }));

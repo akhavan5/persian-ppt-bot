@@ -138,7 +138,7 @@ export class GammaWorkflow extends WorkflowEntrypoint<Env, GammaParams> {
         await status(`📄 آماده‌سازی ${spec.name}…`);
         const p = await loadPreview(this.env, uid, deckId);
         if (!p) throw new NonRetryableError("متن ارائه منقضی شده است (۲۴ ساعت)");
-        return { title: p.deck.title, source: compactSource(p.deck), prompt: imagePrompt(p.deck) };
+        return { title: p.deck.title, source: compactSource(p.deck), prompt: imagePrompt(p.deck), lang: p.lang };
       });
       if (!written.source.trim()) throw new NonRetryableError("متن ارائه خالی است");
 
@@ -147,7 +147,7 @@ export class GammaWorkflow extends WorkflowEntrypoint<Env, GammaParams> {
       // ۲) ساخت (بدون تکرار: تکرار = کردیت Gamma دوباره)
       await step.do("status-create", ONE, () => status(`🎨 ساخت ${spec.name} در Gamma…\nمعمولاً ۱ تا ۳ دقیقه طول می‌کشد.`));
       const gen = await step.do("create", ONE, async () => {
-        try { return { generationId: (await createGammaExtra(this.env, spec, written.source, written.title)).generationId }; } // فقط شناسه (هشدارها قابل‌ذخیره در گام نیستند)
+        try { return { generationId: (await createGammaExtra(this.env, spec, written.source, written.title, written.lang)).generationId }; } // فقط شناسه (هشدارها قابل‌ذخیره در گام نیستند)
         catch (e) { throw new NonRetryableError(errText(e)); }
       });
 

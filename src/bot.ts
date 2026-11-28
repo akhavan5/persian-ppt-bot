@@ -1,3 +1,4 @@
+import { LANG_LABEL, normLang } from "./lang";
 import type { Env } from "./env";
 import type { Mode, Settings } from "./types";
 import { B_FONTS_URL, FONTS, FONT_URL, MODES, THEMES, TONES, nextMode } from "./themes";
@@ -82,6 +83,7 @@ function mainMenu(env: Env, s: Settings, caps: Caps) {
     [{ text: `${tpl.emoji} قالب: ${tpl.name}`, callback_data: "m:tpl" }],
     [{ text: `🎨 تم: ${THEMES[s.theme].name}`, callback_data: "m:theme" }, { text: `🗣 لحن: ${TONES[s.tone]}`, callback_data: "m:tone" }],
     [{ text: `🔤 فونت: ${s.font}`, callback_data: "m:font" }, { text: `📄 اسلاید: ${toFa(String(Math.min(s.slides, caps.maxSlides)))}`, callback_data: "m:slides" }],
+    [{ text: `🌐 زبان خروجی: ${LANG_LABEL[normLang(s.lang)]}`, callback_data: "t:lang" }],
     [{ text: `🖼 تصویر در اسلاید: ${imgLabel(s, caps)}`, callback_data: "t:images" }, { text: `🔢 ارقام: ${s.digits ? "فارسی" : "انگلیسی"}`, callback_data: "t:digits" }],
     models.length > 1 ? [{ text: `🤖 مدل: ${model.name}`, callback_data: "m:model" }, modeBtn] : [modeBtn],
     [{ text: `📚 منابع: ${s.mode === "student" || s.mode === "thesis" ? "روشن (" + MODES[s.mode].name + ")" : s.sources ? "روشن" : "خاموش"}`, callback_data: "t:sources" },
@@ -525,6 +527,7 @@ async function handleCallback(env: Env, cq: any) {
       else { s.images = false; s.imagesMany = false; }
     }
     if (a === "digits") s.digits = !s.digits;
+    if (a === "lang") s.lang = normLang(s.lang) === "fa" ? "en" : "fa"; // فارسی ⇄ انگلیسی
     if (a === "mode") {
       if (!caps.premium) return await alertLimit(EXTRA_MODE_MSG); // حالت‌های دارای حداقل اسلاید فقط برای پلن‌دارها
       s.mode = nextMode(s.mode);
