@@ -12,6 +12,7 @@ import { modelList } from "./llm";
 import { supportHistory, supportSend } from "./support-chat";
 import { appCrash } from "./app-crash";
 import { feedbackInfo, submitFeedback } from "./feedback";
+import { PUBLIC_STATS_TTL, getPublicStats } from "./public-stats";
 import { startSupport, supportCallback, supportWall } from "./support";
 import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, sibappEnabled, sibappStart, sibappVerify, payEnabled, payGateways, payReport, aqayeCallback, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
@@ -92,6 +93,12 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path.startsWith("/api/pay/callback/aqaye/") && method === "GET") return aqayeCallback(env, url);
   if (path === "/api/support/callback" && method === "GET") return supportCallback(env, url);
   if (path === "/api/support/wall" && method === "GET") return supportWall(env, url);
+
+  // آمار عمومی صفحه‌ی اصلی (فقط عدد؛ ۲۴ ساعت در KV و در لبه کش می‌شود). خطا ⇒ صفحه‌ی اصلی بخش آمار را نشان نمی‌دهد
+  if (path === "/api/public-stats" && method === "GET") {
+    try { const { t: _t, ...stats } = await getPublicStats(env); return json(stats, 200, { "cache-control": `public, max-age=3600, s-maxage=${PUBLIC_STATS_TTL}` }); }
+    catch (e) { console.error("public-stats", String(e).slice(0, 200)); return err("آمار در دسترس نیست", 503); }
+  }
 
   // حفاظت CSRF: درخواست‌های تغییردهنده فقط از همین سایت
   if (method !== "GET" && method !== "HEAD" && req.headers.get("origin") !== url.origin) return err("درخواست نامعتبر", 403);

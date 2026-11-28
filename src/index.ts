@@ -12,6 +12,7 @@ import { ACTIVATION_CRON, remindInactiveSignups } from "./activation-reminder";
 import { LIFECYCLE_CRON, runLifecycle } from "./lifecycle";
 import { FEEDBACK_CRON, sendPlanFeedbackSurveys } from "./plan-feedback";
 import { handleWeb } from "./web";
+import { renderReviewsSection } from "./reviews";
 import { miniappUrl } from "./deck-service";
 import { findLanding, HTML_HEADERS, landingSitemapEntries, renderLanding } from "./landing";
 import { HOME_IMAGES, imageTags } from "./seo-images";
@@ -336,7 +337,9 @@ export default {
       if (!res.ok) return res;
       const h = new Headers(res.headers);
       h.delete("content-length"); h.set("cache-control", HTML_HEADERS["cache-control"]); h.set("content-type", "text/html; charset=utf-8"); h.set("content-language", "fa"); h.set("vary", "Accept-Encoding");
-      return new Response((await res.text()).replaceAll("__ORIGIN__", SITE), { status: 200, headers: h });
+      let page = (await res.text()).replaceAll("__ORIGIN__", SITE);
+      if (page.includes("<!--REVIEWS-->")) page = page.replace("<!--REVIEWS-->", await renderReviewsSection(env)); // نظرهای کاربران از دیتابیس (reviews.ts؛ در حافظه و لبه کش می‌شود)
+      return new Response(page, { status: 200, headers: h });
     }
 
     // برنامک ایتا: همان صفحه‌ی /app با اسکریپت رسمی کیت توسعه‌ی ایتا (الزام مستند: اولین اسکریپت <head> و مستقیم از developer.eitaa.com).

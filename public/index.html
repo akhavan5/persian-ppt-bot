@@ -336,6 +336,29 @@ footer .wrap{position:relative}
 .contact .card{margin:0;text-align:center}
 .contact a.big{display:block;font-size:1.35rem;font-weight:800;text-decoration:none;margin:4px 0 12px;direction:ltr;unicode-bidi:isolate}
 address{font-style:normal}
+
+/* آمار زنده و نظرات کاربران */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;max-width:720px;margin:0 auto}
+.stat{position:relative;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px 10px 16px;text-align:center;overflow:hidden}
+.stat::before{content:"";position:absolute;inset-inline:0;top:0;height:4px;background:linear-gradient(90deg,var(--primary),var(--primary-2))}
+.stat .si{font-size:24px;line-height:1.2}
+.stat b{display:block;font-size:1.85rem;line-height:1.5;font-weight:800;background:linear-gradient(135deg,var(--primary),var(--primary-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.stat span{display:block;color:var(--muted);font-size:.9rem;font-weight:600}
+.rv-top{display:flex;align-items:center;justify-content:center;gap:26px;flex-wrap:wrap;max-width:720px;margin:0 auto 22px;text-align:center}
+.rv-score b{display:block;font-size:3rem;line-height:1.1;font-weight:800}
+.stars{color:#f5a524;letter-spacing:2px;white-space:nowrap}
+.rv-meta{display:grid;gap:6px;text-align:start}
+.rv-meta .chips{display:flex;gap:8px;flex-wrap:wrap}
+.rv-meta .chip2{background:var(--soft);color:var(--primary);border-radius:99px;padding:2px 12px;font-size:.82rem;font-weight:700}
+.rv-grid{columns:3 280px;column-gap:16px}
+.rv-grid .rv{break-inside:avoid;margin:0 0 16px;display:block}
+.rv blockquote{margin:8px 0 14px;padding:0;line-height:2;font-size:.97rem}
+.rv .by{display:flex;align-items:center;gap:10px}
+.rv .av{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;font-weight:800;font-size:.95rem}
+.rv .by strong{font-size:.92rem}
+.rv .src{margin-inline-start:auto;font-size:.74rem;background:var(--soft);color:var(--primary);padding:2px 10px;border-radius:99px;font-weight:700;white-space:nowrap}
+.rv .stars{font-size:.95rem}
+@media(prefers-reduced-motion:reduce){.stat b{transition:none}}
 /* انتخاب مدل (روی صفحه‌ی اصلی) */
 .models-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:18px 0 10px}
 .models-h label{margin:0}
@@ -584,6 +607,15 @@ address{font-style:normal}
 
   <div id="mediaad-X2V5O" ></div>
 
+  <section class="block stats" id="stats" aria-labelledby="sth" hidden>
+    <div class="sec-head"><h2 id="sth">پاورپوینت‌ساز فارسی در یک نگاه</h2><p class="muted">آمار زنده‌ی سرویس؛ هر ۲۴ ساعت به‌روز می‌شود.</p></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="si">👥</div><b data-k="users">…</b><span>کاربر</span></div>
+      <div class="stat"><div class="si">📊</div><b data-k="decks">…</b><span>ارائه ساخته‌شده</span></div>
+      <div class="stat"><div class="si">👑</div><b data-k="plans">…</b><span>پلن فعال‌شده</span></div>
+    </div>
+  </section>
+
   <section class="block" id="features" aria-labelledby="fh">
     <div class="sec-head"><h2 id="fh">چرا پاورپوینت‌ساز فارسی؟</h2><p class="muted">ابزاری که برای زبان فارسی ساخته شده، نه ترجمه‌ی یک ابزار خارجی.</p></div>
     <div class="grid3">
@@ -691,6 +723,8 @@ address{font-style:normal}
       <div class="card"><h3>🍎 iOS</h3><div class="stores"><a class="store" href="https://sibche.com/applications/paorpoyntsaz" target="_blank" rel="noopener noreferrer"><img src="/img/stores/sibche.svg" width="135" height="40" alt="دریافت نسخه iOS پاورپوینت‌ساز از سیبچه" loading="lazy" decoding="async"></a><a class="store tall" href="https://sibirani.com/apps/pptsaz-ir/?utm_source=pptsaz-ir&amp;utm_medium=badge" target="_blank" rel="noopener noreferrer"><img src="/img/stores/sibirani.svg" width="379" height="164" alt="دریافت نسخه iOS پاورپوینت‌ساز از سیب ایرانی" loading="lazy" decoding="async"></a><a class="store tall" href="https://sibapp.com/applications/pptsaz" target="_blank" rel="noopener noreferrer"><img src="/img/stores/sibapp.svg" width="964" height="384" alt="دریافت نسخه iOS پاورپوینت‌ساز از سیب‌اپ" loading="lazy" decoding="async"></a><a class="store" href="https://anardoni.com/ios/app/irpptsazapp" target="_blank" rel="noopener noreferrer"><img src="/img/stores/anardoni.webp" width="540" height="160" alt="دریافت نسخه iOS پاورپوینت‌ساز از اناردونی" loading="lazy" decoding="async"></a><a class="store" href="https://iapps.ir/app/paorpoynt-saz-hosh-msnoaay/714593784191" target="_blank" rel="noopener noreferrer"><img src="https://developer.iapps.ir/badges/iapps-badge-blue-fa.svg" alt="دریافت نسخه iOS پاورپوینت‌ساز از آی‌اپس" loading="lazy" decoding="async"></a><a class="store" href="https://app-star.store/app.php?id=pptsaz" target="_blank" rel="noopener noreferrer"><img src="/img/stores/appstar.svg" width="1046" height="374" alt="دریافت نسخه iOS پاورپوینت‌ساز از اپ‌استار" loading="lazy" decoding="async"></a></div></div>
     </div>
   </section>
+
+  <!--REVIEWS-->
 
   <section class="block" id="pricing" aria-labelledby="ph">
     <div class="sec-head"><h2 id="ph">تعرفه‌ها</h2><p class="muted">با ثبت‌نام ۱ ارائه‌ی رایگان هدیه می‌گیری و وقتی اعتبارت تمام شود هر روز ۱ اعتبار رایگان دیگر؛ مدل‌های رایگان برای همه‌اند و مدل‌های ویژه فقط برای دارندگان پلن؛ برای اعتبار بیشتر، اسلاید بیشتر در هر ارائه و دسترسی به مدل‌های ویژه، یکی از پلن‌های ماهانه را بگیر.</p></div>
@@ -2365,7 +2399,29 @@ n.addEventListener("click",function(e){if(e.target.closest("a"))set(false)});
 document.addEventListener("keydown",function(e){if(e.key==="Escape")set(false)});
 matchMedia("(min-width:1181px)").addEventListener("change",function(m){if(m.matches)set(false)});
 })();
-</script><script src="/pwa.js" defer></script><script src="/support.js" defer></script>
+</script>
+<script>
+(function(){
+  var sec=document.getElementById("stats"); if(!sec||!window.fetch) return;
+  var fa=new Intl.NumberFormat("fa-IR"), still=window.matchMedia&&matchMedia("(prefers-reduced-motion:reduce)").matches;
+  // عددهای بزرگ را گرد (به پایین) و با «+» نشان می‌دهد تا هیچ‌وقت بیشتر از واقعیت دیده نشود
+  function nice(n){ if(n<1000) return {v:n,s:""}; if(n<1e6) return {v:Math.floor(n/100)*100,s:"+"}; return {v:Math.floor(n/1e5)/10,s:"+",m:1}; }
+  function show(el,t){ var x=nice(t); if(x.m){ el.textContent=fa.format(x.v)+" میلیون"+x.s; return; } el.textContent=fa.format(x.v)+x.s; }
+  function run(el,t){
+    var x=nice(t); if(still||x.m||x.v<2){ show(el,t); return; }
+    var t0=null, dur=1400;
+    (function f(ts){ if(t0===null) t0=ts; var p=Math.min(1,(ts-t0)/dur), e=1-Math.pow(1-p,3); el.textContent=fa.format(Math.round(x.v*e))+(p<1?"":x.s); if(p<1) requestAnimationFrame(f); })(performance.now());
+  }
+  fetch("/api/public-stats",{headers:{accept:"application/json"}}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(d){
+    var els=sec.querySelectorAll("[data-k]"); if(!els.length) return;
+    var ok=false; els.forEach(function(el){ var v=Number(d[el.dataset.k]); if(isFinite(v)&&v>0) ok=true; });
+    if(!ok) return; sec.hidden=false;
+    function go(){ els.forEach(function(el){ var v=Number(d[el.dataset.k]); if(isFinite(v)&&v>0) run(el,v); else el.closest(".stat").hidden=true; }); }
+    if("IntersectionObserver" in window){ var io=new IntersectionObserver(function(en){ if(en[0].isIntersecting){ io.disconnect(); go(); } },{threshold:.3}); io.observe(sec); } else go();
+  }).catch(function(){});
+})();
+</script>
+<script src="/pwa.js" defer></script><script src="/support.js" defer></script>
 <!-- آخرین کد داخل تگ body: بنر ادکسو -->
 <script type="text/javascript" src="https://adexofiles.ir/script/panel.adexo.ir_banner.js?sid=906"></script>
 </body>

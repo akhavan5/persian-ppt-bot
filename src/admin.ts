@@ -21,6 +21,7 @@ import { PLANS, activatePlan, payEnabled, payGateways } from "./payment";
 import { runningJob } from "./deck-service";
 import { hasBrowser } from "./browser-api";
 import { toEn, toFa } from "./util";
+import { approveReview, rejectReview } from "./reviews";
 import { XLSX_MIME, buildXlsx, type XCell } from "./xlsx";
 import { AUDIENCES, isAudience, listAudience, type Audience } from "./broadcast";
 import {
@@ -1359,6 +1360,9 @@ export async function handlePanelCallback(env: Env, cq: any) {
       }
       // از پیام «نظر کاربر»: کارت/فایل‌های کاربر به‌صورت پیام جدید می‌آید تا متن نظر سر جایش بماند
       case "nu": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userCard(env, id)));
+      // تایید/رد نظر کاربر برای نمایش در سایت (reviews.ts)؛ شناسه‌ی نظر در b است
+      case "fa": return void (await answer((await approveReview(env, b ?? "")) ? "✅ به بخش نظرات سایت اضافه شد (حداکثر تا ۱–۲ ساعت دیده می‌شود)" : "این نظر پیدا نشد یا قبلاً بررسی شده است", true));
+      case "fr": return void (await answer((await rejectReview(env, b ?? "")) ? "🚫 رد شد و در سایت نمایش داده نمی‌شود" : "این نظر پیدا نشد یا قبلاً بررسی شده است", true));
       case "nd": if (id === null) return await answer(); await answer(); return void (await sendScreen(env, chatId, await userFilesScreen(env, id)));
       case "cr": return await prompt({ k: "cr", id }, `✏️ <b>اعتبار دلخواه</b> برای <code>${id}</code>\nیک عدد بفرست؛ مثلاً <code>25</code> یا <code>-3</code>.`, `ad:u:${id}`);
       case "sr": {

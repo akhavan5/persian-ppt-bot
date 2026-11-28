@@ -11,6 +11,7 @@ import { hitLimit } from "./auth";
 import { FEEDBACK_CREDITS, FEEDBACK_MIN_CHARS, adminIds, claimFeedbackReward, hasFeedbackReward, isAdmin } from "./settings";
 import { esc, sendMessage } from "./telegram";
 import { toFa } from "./util";
+import { savePendingReview } from "./reviews";
 
 const MAX_TEXT = 1500;
 const VIA: Record<string, string> = { web: "سایت", telegram: "مینی‌اپ تلگرام", bale: "مینی‌اپ بله", splus: "برنامک سروش‌پلاس", eitaa: "برنامک ایتا", app: "اپ اندروید" };
@@ -41,6 +42,8 @@ export async function submitFeedback(env: Env, user: WebUser, b: Record<string, 
   const via = VIA[String(b.via)] ?? VIA.web;
   const title = typeof b.title === "string" ? b.title.replace(/\s+/g, " ").trim().slice(0, 120) : "";
   const who = `${esc(user.name || "کاربر")}${user.email ? ` (${esc(user.email)})` : ""}${user.mobile ? ` · ${esc(user.mobile)}` : ""}`;
+  // نظر متنی برای تایید مدیر در دیتابیس ذخیره می‌شود (فقط نام کوچک و متن)؛ دکمه‌ی «نمایش در سایت» زیر پیام مدیر
+  const rid = text ? await savePendingReview(env, { name: user.name || "", text, rating: rating || undefined, src: via }).catch((e) => { console.error("savePendingReview", e); return null; }) : null;
   const msg = [
     `💬 <b>نظر کاربر</b> <i>(${via})</i>`,
     `👤 ${who}`,
@@ -50,7 +53,8 @@ export async function submitFeedback(env: Env, user: WebUser, b: Record<string, 
     ...(rewarded ? [`🎁 ${toFa(String(FEEDBACK_CREDITS))} اعتبار هدیه داده شد`] : []),
     ...(text ? ["", esc(text)] : []),
   ].join("\n");
-  await Promise.allSettled(adminIds(env).map((id) => sendMessage(env, Number(id), msg)));
+  const reviewKb = rid ? { reply_markup: { inline_keyboard: [[{ text: "✅ نمایش در سایت", callback_data: `ad:fa:${rid}` }, { text: "🚫 رد", callback_data: `ad:fr:${rid}` }]] } } : {};
+  await Promise.allSettled(adminIds(env).map((id) => sendMessage(env, Number(id), msg, reviewKb)));
 
   return out({ ok: true, rewarded, credits: rewarded ? FEEDBACK_CREDITS : 0 });
 }

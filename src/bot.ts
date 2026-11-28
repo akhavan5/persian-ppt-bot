@@ -36,6 +36,7 @@ import { parseRequest } from "./parse";
 import { deepgramEnabled } from "./deepgram";
 import { SUPPORTED_NOTE, extractTelegramFile, fileRefOf, type Extracted, type TgFileRef } from "./tg-file";
 import { fetchLinkSource, findLinkInText, linkCapNote, linkEnabled, linkLimitHit } from "./link-source";
+import { savePendingReview } from "./reviews";
 
 /** مربع رنگی کنار نام تم در دکمه‌های تلگرام (دکمه‌ی اینلاین تصویر نمی‌گیرد) */
 const THEME_DOT: Record<string, string> = { ocean: "🟦", forest: "🟩", sunset: "🟧", royal: "🟪", violet: "🟣", midnight: "⬛" };
@@ -590,7 +591,9 @@ async function handleFeedback(env: Env, msg: any, userId: number, uid: Uid, chat
     ? `${esc(displayName(from) || String(userId))} <i>(${isSplusId(userId) ? "سروش‌پلاس" : isRubikaId(userId) ? "روبیکا" : "بله"})</i>${from.username ? ` (@${esc(from.username)})` : ""}` // لینک tg://user برای کاربر بله کار نمی‌کند
     : `<a href="tg://user?id=${userId}">${esc(displayName(from) || String(userId))}</a>${from.username ? ` (@${esc(from.username)})` : ""}`;
   const out = `💬 <b>نظر کاربر</b>\n👤 ${who}\n🆔 <code>${userId}</code>\n📄 ارائه: ${esc(title)}${rewarded ? `\n🎁 ${toFa(String(FEEDBACK_CREDITS))} اعتبار هدیه داده شد` : ""}\n\n${esc(text.slice(0, 2000))}`;
-  const adminKb = kb([[{ text: "👤 کارت کاربر", callback_data: `ad:nu:${userId}` }, { text: "🗂 فایل‌ها", callback_data: `ad:nd:${userId}` }]]);
+  const SRC: Record<string, string> = { tg: "ربات تلگرام", bale: "ربات بله", rubika: "ربات روبیکا", eitaa: "ایتا", splus: "سروش‌پلاس" };
+  const rid = await savePendingReview(env, { name: displayName(from), text, src: SRC[botPlatform(userId)] ?? "ربات" }).catch((e) => { console.error("savePendingReview", e); return null; }); // برای تایید مدیر؛ فقط نام کوچک و متن
+  const adminKb = kb([[{ text: "👤 کارت کاربر", callback_data: `ad:nu:${userId}` }, { text: "🗂 فایل‌ها", callback_data: `ad:nd:${userId}` }], ...(rid ? [[{ text: "✅ نمایش در سایت", callback_data: `ad:fa:${rid}` }, { text: "🚫 رد", callback_data: `ad:fr:${rid}` }]] : [])]);
   for (const id of adminIds(env)) await sendMessage(env, Number(id), out, adminKb).catch(() => {});
   await sendMessage(env, chatId, rewarded
     ? `🙏 ممنون از نظرت! پیامت به دست ما رسید.\n\n🎁 به‌خاطر ثبت نظرت، <b>${toFa(String(FEEDBACK_CREDITS))} اعتبار رایگان</b> (یک ارائه‌ی دیگر) به حسابت اضافه شد. موجودی: /credit`
