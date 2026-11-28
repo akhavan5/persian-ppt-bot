@@ -479,6 +479,46 @@ const KW_RELATED: Record<string, string[]> = {
 };
 for (const [page, slugs] of Object.entries(KW_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
 
+// ۷ آذر ۱۴۰۵: لینک‌دهی دوطرفه‌ی صفحه‌ها و مقاله‌های جدید (file-to-pptx، school-conference-maker و ۹ مقاله‌ی landing-data-kw2 / blog-data-kw2)
+const KW2_ARTICLES: Record<string, string[]> = {
+  "file-to-pptx": ["thesis-to-powerpoint-ai", "multi-photo-to-powerpoint", "pdf-link-to-powerpoint-tools-compared", "webpage-to-presentation-guide", "excel-data-presentation-guide"],
+  "image-to-pptx": ["multi-photo-to-powerpoint"],
+  "thesis-defense": ["thesis-to-powerpoint-ai"],
+  "handout-maker": ["handout-meaning-powerpoint", "ai-handout-writing"],
+  "infographic-maker": ["what-is-infographic-poster"],
+  "persian-font-download": ["word-spacing-persian-powerpoint-fix"],
+  "text-to-pptx": ["word-spacing-persian-powerpoint-fix"],
+  "school-conference-maker": ["school-conference-topic-ideas", "seventh-grade-presentation-topics", "sixth-grade-presentation-topics", "school-presentation-topics", "class-presentation-tips", "how-many-slides"],
+  "school-presentation": ["seventh-grade-presentation-topics", "school-conference-topic-ideas"],
+  "powerpoint-topics": ["seventh-grade-presentation-topics", "school-conference-topic-ideas"],
+  "student-powerpoint-template": ["seventh-grade-presentation-topics"],
+  business: ["introduction-slide-powerpoint"],
+  student: ["introduction-slide-powerpoint"],
+};
+for (const [page, slugs] of Object.entries(KW2_ARTICLES)) ARTICLES_FOR[page] = [...new Set([...(ARTICLES_FOR[page] ?? []), ...slugs])];
+const KW2_RELATED: Record<string, string[]> = {
+  "word-to-pptx": ["file-to-pptx"],
+  "pdf-to-pptx": ["file-to-pptx"],
+  "image-to-pptx": ["file-to-pptx"],
+  "excel-to-pptx": ["file-to-pptx"],
+  "link-to-pptx": ["file-to-pptx"],
+  "text-to-pptx": ["file-to-pptx"],
+  "thesis-defense": ["file-to-pptx"],
+  free: ["file-to-pptx", "school-conference-maker"],
+  "ai-powerpoint-maker": ["file-to-pptx"],
+  "slide-maker": ["file-to-pptx", "school-conference-maker"],
+  "ppt-saz": ["file-to-pptx"],
+  "site-powerpoint-maker": ["file-to-pptx"],
+  "school-presentation": ["school-conference-maker"],
+  "student-powerpoint-template": ["school-conference-maker"],
+  "powerpoint-topics": ["school-conference-maker"],
+  teacher: ["school-conference-maker"],
+  "konkur-presentation": ["school-conference-maker"],
+  "speaker-notes": ["school-conference-maker"],
+  student: ["school-conference-maker"],
+};
+for (const [page, slugs] of Object.entries(KW2_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
+
 /** مقاله → صفحه‌های فرودی که به آن لینک می‌دهند؛ برای لینک برگشتی از مقاله به صفحه‌های ابزار (لینک‌دهی داخلی دوطرفه). */
 export const LANDINGS_FOR_POST: Map<string, string[]> = (() => {
   const m = new Map<string, string[]>();

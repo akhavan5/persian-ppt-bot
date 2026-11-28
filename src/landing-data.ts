@@ -34,6 +34,7 @@ import { AUDIENCE_PAGES } from "./landing-data-audiences";
 import { FEATURE_PAGES } from "./landing-data-features";
 import { SEO_PAGES } from "./landing-data-seo";
 import { KW_PAGES, applyKwFaq } from "./landing-data-kw";
+import { KW2_PAGES, applyKw2Faq } from "./landing-data-kw2";
 
 const UPDATED = "2026-10-05";
 const UPDATED_NEW = "2026-10-08"; // صفحه‌هایی که در ۱۷ مهر ۱۴۰۵ محتوایشان گسترش یافت
@@ -756,6 +757,6 @@ const BASE_PAGES: Page[] = [
 // صفحه‌های قابلیت‌ها (ساخت از لینک، اینفوگرافیک، جزوه‌ی Word، ساخت از Excel) در landing-data-features.ts هستند
 // صفحه‌های کلیدواژه‌های سرچ کنسول (دانلود فونت فارسی، ساخت با گوشی) در landing-data-seo.ts هستند
 // صفحه‌های کلیدواژه‌ی ۶ آذر ۱۴۰۵ (سایت ساخت پاورپوینت، اپ ساخت پاورپوینت، قالب دانش‌آموزی، جدول‌ساز فارسی) در landing-data-kw.ts هستند
-export const PAGES: Page[] = applyKwFaq([...BASE_PAGES, ...EXTRA_PAGES, ...AUDIENCE_PAGES, ...FEATURE_PAGES, ...SEO_PAGES, ...KW_PAGES]);
+export const PAGES: Page[] = applyKw2Faq(applyKwFaq([...BASE_PAGES, ...EXTRA_PAGES, ...AUDIENCE_PAGES, ...FEATURE_PAGES, ...SEO_PAGES, ...KW_PAGES, ...KW2_PAGES]));
 
 export const PAGE_BY_SLUG = new Map(PAGES.map((p) => [p.slug, p]));

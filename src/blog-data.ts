@@ -7,6 +7,7 @@ import { GUIDE_POSTS } from "./blog-data-guides";
 import { FEATURE_POSTS } from "./blog-data-features";
 import { SEO_POSTS } from "./blog-data-seo";
 import { KW_POSTS, applyKwPostFaq } from "./blog-data-kw";
+import { KW2_POSTS, applyKw2PostLinks } from "./blog-data-kw2";
 
 export type BlogSection = Section & { chips?: string[] };
 
@@ -1386,6 +1387,6 @@ const BASE_POSTS: Post[] = [
 // اینفوگرافیک و جزوه، تبدیل لینک و Excel، مقایسه‌ی تبدیل PDF و لینک و دو نمونه‌ی جدید در blog-data-features.ts؛
 // مقاله‌های کلیدواژه‌ی ۶ آذر ۱۴۰۵ (پاورپوینت آنلاین گوگل، برعکس‌شدن متن، زبان فارسی، اعداد فارسی، کلاس ششم، ایده‌ی دانشجویی، عکس، جزوه، مبحث ۱۹، اینفوگرافیک با گوشی) در blog-data-kw.ts هستند
 // مقاله‌های کلیدواژه‌های سرچ کنسول (موضوع مدرسه، موضوع ساده، انگلیسی در پاراگراف فارسی) در blog-data-seo.ts
-export const POSTS: Post[] = applyKwPostFaq([...BASE_POSTS, ...EXTRA_POSTS, ...GUIDE_POSTS, ...FEATURE_POSTS, ...SEO_POSTS, ...KW_POSTS]);
+export const POSTS: Post[] = applyKw2PostLinks(applyKwPostFaq([...BASE_POSTS, ...EXTRA_POSTS, ...GUIDE_POSTS, ...FEATURE_POSTS, ...SEO_POSTS, ...KW_POSTS, ...KW2_POSTS]));
 
 export const POST_BY_SLUG = new Map(POSTS.map((p) => [p.slug, p]));

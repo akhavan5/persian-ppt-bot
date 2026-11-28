@@ -55,6 +55,8 @@
 - [اپ ساخت پاورپوینت با گوشی](https://pptsaz.ir/powerpoint-maker-app): اپ اندروید (کافه‌بازار و مایکت) و iOS، امکانات و راه‌های بدون نصب
 - [قالب پاورپوینت دانش‌آموزی و درسی](https://pptsaz.ir/student-powerpoint-template): تم‌های رنگی، ساختار شش‌اسلایدی و نمونه‌ی درسی
 - [جدول ساز فارسی برای اسلاید](https://pptsaz.ir/table-slide-maker): اسلاید جدولی راست‌به‌چپ و قابل‌ویرایش از روی مطلب مقایسه‌ای
+- [تبدیل فایل به پاورپوینت با هوش مصنوعی](https://pptsaz.ir/file-to-pptx): Word، PDF، Excel، PowerPoint، عکس، متن و لینک به PPTX فارسی؛ تبدیل پایان‌نامه فصل‌به‌فصل، حجم تا ۲۰ مگابایت
+- [کنفرانس ساز با هوش مصنوعی](https://pptsaz.ir/school-conference-maker): پاورپوینت و یادداشت سخنرانی برای کنفرانس مدرسه و دانشگاه، ساختار شش‌اسلایدی و ایده‌ی موضوع
 - [حل مشکل جدا شدن حروف فارسی در پاورپوینت](https://pptsaz.ir/blog/persian-letters-separated-powerpoint): علت‌ها و راه‌حل گام‌به‌گام
 
 ## وبلاگ
@@ -111,6 +113,15 @@
 - [درست کردن جزوه](https://pptsaz.ir/blog/handout-design-guide): ساختار و قالب‌بندی جزوه در Word
 - [پاورپوینت مبحث ۱۹ مقررات ملی ساختمان](https://pptsaz.ir/blog/building-code-19-presentation): ساختار ده‌اسلایدی از متن رسمی
 - [ساخت اینفوگرافیک با گوشی](https://pptsaz.ir/blog/infographic-with-phone): پوستر آموزشی فارسی با مرورگر، اپ یا تلگرام
+- [تبدیل چند عکس به پاورپوینت](https://pptsaz.ir/blog/multi-photo-to-powerpoint): آلبوم تا ۱۰ عکس در ربات و اپ تلگرام یا PDF اسکن در سایت
+- [تبدیل پایان‌نامه به پاورپوینت با هوش مصنوعی](https://pptsaz.ir/blog/thesis-to-powerpoint-ai): جدا کردن فصل‌ها و چک‌لیست بازبینی دفاعیه
+- [معنی handout در پاورپوینت](https://pptsaz.ir/blog/handout-meaning-powerpoint): چاپ ۱ تا ۹ اسلاید در هر صفحه و Handout Master
+- [جزوه‌نویسی با هوش مصنوعی](https://pptsaz.ir/blog/ai-handout-writing): جزوه‌ی Word همراه ارائه، هزینه‌ی ۱ اعتبار و نکته‌های بازبینی
+- [پوستر اینفوگرافیک چیست؟](https://pptsaz.ir/blog/what-is-infographic-poster): انواع، اجزا و ساخت اینفوگرافیک آنلاین فارسی
+- [علت فاصله افتادن بین کلمات در پاورپوینت](https://pptsaz.ir/blog/word-spacing-persian-powerpoint-fix): Justify، فاصله‌ی حروف و فاصله‌های اضافه
+- [ایده و موضوع برای کنفرانس مدرسه](https://pptsaz.ir/blog/school-conference-topic-ideas): ۳۰ موضوع آماده با ساختار شش‌اسلایدی
+- [موضوع پاورپوینت هفتم](https://pptsaz.ir/blog/seventh-grade-presentation-topics): ۳۰ ایده برای کنفرانس و تحقیق پایه‌ی هفتم
+- [اسلاید معرفی در پاورپوینت](https://pptsaz.ir/blog/introduction-slide-powerpoint): معرفی خود، شرکت و پروژه با نمونه‌ی متن
 - [فید RSS وبلاگ](https://pptsaz.ir/feed.xml): تازه‌ترین مقاله‌ها
 
 ## نکات
