@@ -1015,7 +1015,7 @@ private fun JobCard(job: JobState, vm: AppViewModel, pdf: Boolean = false, extra
         job.done -> SurfaceCard {
             var shareOpen by remember(job.id) { mutableStateOf(false) }
             if (shareOpen) {
-                ShareDialog(canPdf = pdf, onDismiss = { shareOpen = false }, googlePkg = PKG_SLIDES) { pkg, asPdf ->
+                ShareDialog(canPdf = pdf, onDismiss = { shareOpen = false }, googlePkg = PKG_SLIDES, webFileId = job.id) { pkg, asPdf ->
                     shareOpen = false
                     val cap = shareCaption(job.title)
                     if (asPdf) vm.downloadPdf(job.id, share = true, pkg = pkg, caption = cap) else vm.download(job.id, share = true, pkg = pkg, caption = cap)
@@ -1239,6 +1239,7 @@ private fun FileRow(f: FileItem, vm: AppViewModel, onPhone: Boolean = false, pdf
             canPdf = pdf && !f.sample && !f.poster && !f.handout && f.audio.isEmpty(),
             onDismiss = { shareOpen = false },
             googlePkg = if (f.sample || f.poster || f.audio.isNotEmpty()) null else if (f.handout) PKG_DOCS else PKG_SLIDES,
+            webFileId = if (f.sample || f.poster || f.handout || f.audio.isNotEmpty()) null else f.id,
         ) { pkg, asPdf ->
             shareOpen = false
             val cap = shareCaption(f.title)
@@ -1297,6 +1298,7 @@ private fun LocalFileRow(f: LocalFile, vm: AppViewModel) {
         ShareDialog(
             canPdf = false, onDismiss = { shareOpen = false },
             googlePkg = when (f.kind) { "deck" -> PKG_SLIDES; "handout" -> PKG_DOCS; else -> null },
+            webFileId = if (f.kind == "deck") f.id else null,
         ) { pkg, _ ->
             shareOpen = false
             vm.download(f.id, share = true, pkg = pkg, caption = shareCaption(f.title))

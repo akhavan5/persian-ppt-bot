@@ -332,7 +332,9 @@ struct FileDetailSheet: View {
                 }
                 if isDeck || kind == .handout {
                     Button {
-                        if OpenIn.present(u) { Haptic.light() } else { Haptic.error(); m.toast("برنامه‌ای برای ویرایش این فایل نصب نیست") }
+                        if OpenIn.present(u) { Haptic.light() }
+                        else if isDeck { Haptic.light(); m.toast("برنامه‌ی Slides یا PowerPoint نصب نیست؛ ارائه در سایت باز شد، آنجا «Google Slides» را بزن."); OpenIn.openOnSite(item.id) }
+                        else { Haptic.error(); m.toast("برنامه‌ای برای ویرایش این فایل نصب نیست") }
                     } label: { Label(isDeck ? "ویرایش در Google Slides، PowerPoint…" : "ویرایش در Google Docs، Word…", systemImage: "square.and.pencil") }
                         .buttonStyle(SoftButtonStyle())
                 }

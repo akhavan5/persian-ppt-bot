@@ -48,7 +48,9 @@ struct LocalDetailSheet: View {
                             .buttonStyle(SoftButtonStyle())
                         if file.kind == "deck" || file.kind == "handout" {
                             Button {
-                                if OpenIn.present(url) { Haptic.light() } else { Haptic.error(); m.toast("برنامه‌ای برای ویرایش این فایل نصب نیست") }
+                                if OpenIn.present(url) { Haptic.light() }
+                                else if file.kind == "deck" { Haptic.light(); m.toast("برنامه‌ی Slides یا PowerPoint نصب نیست؛ ارائه در سایت باز شد، آنجا «Google Slides» را بزن."); OpenIn.openOnSite(String(file.id.split(separator: "|").first ?? "")) }
+                                else { Haptic.error(); m.toast("برنامه‌ای برای ویرایش این فایل نصب نیست") }
                             } label: { Label(file.kind == "deck" ? "ویرایش در Google Slides، PowerPoint…" : "ویرایش در Google Docs، Word…", systemImage: "square.and.pencil") }
                                 .buttonStyle(SoftButtonStyle())
                         }

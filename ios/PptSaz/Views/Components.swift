@@ -206,6 +206,14 @@ enum OpenIn {
         let b = top.view.bounds
         return c.presentOpenInMenu(from: CGRect(x: b.midX, y: b.maxY - 1, width: 1, height: 1), in: top.view, animated: true)
     }
+
+    /// برنامه‌ای برای باز کردن PPTX نصب نیست: همان ارائه در سایت (Safari) باز می‌شود و دکمه‌ی «Google Slides» سایت
+    /// آن را مستقیم در Google Drive خودِ کاربر می‌سازد (نیازی به نصب برنامه نیست). serverID = شناسه‌ی ارائه روی سرور.
+    static func openOnSite(_ serverID: String) {
+        let safe = String(serverID.unicodeScalars.filter { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_") })
+        guard !safe.isEmpty, let url = URL(string: Api.base + "/?files=" + safe) else { return }
+        UIApplication.shared.open(url)
+    }
 }
 
 struct EmptyStateView: View {
