@@ -70,7 +70,7 @@ import org.json.JSONObject
  */
 
 /** r = u (کاربر) یا a (دستیار)؛ referred = این پاسخ به تیم پشتیبانی ارجاع شده است. */
-class SupportMsg(val mine: Boolean, val text: String, val referred: Boolean = false)
+class SupportMsg(val mine: Boolean, val text: String, val referred: Boolean = false, val human: Boolean = false)
 
 class SupportData(val msgs: List<SupportMsg>, val remaining: Int, val limit: Int)
 
@@ -79,7 +79,7 @@ internal fun parseSupport(j: JSONObject): SupportData {
     val msgs = if (arr == null) emptyList() else (0 until arr.length()).mapNotNull { i ->
         val o = arr.optJSONObject(i) ?: return@mapNotNull null
         val t = o.optString("t")
-        if (t.isEmpty()) null else SupportMsg(o.optString("r") == "u", t, o.optInt("f") == 1)
+        if (t.isEmpty()) null else SupportMsg(o.optString("r") == "u", t, o.optInt("f") == 1, o.optString("r") == "m")
     }
     return SupportData(msgs, j.optInt("remaining", 10), j.optInt("limit", 10))
 }
@@ -290,6 +290,7 @@ private fun SupportBubble(m: SupportMsg) {
             if (mine) it.background(LocalExtra.current.brand) else it.background(cs.surface)
         }
         Column(mod.padding(horizontal = 13.dp, vertical = 9.dp)) {
+            if (m.human) Text("👨‍💼 پشتیبان انسانی", style = MaterialTheme.typography.labelMedium, color = LocalExtra.current.success, modifier = Modifier.padding(bottom = 4.dp))
             SelectionContainer {
                 Text(
                     if (mine) androidx.compose.ui.text.AnnotatedString(m.text) else linkified(m.text, cs.primary),
