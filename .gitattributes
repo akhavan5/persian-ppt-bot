@@ -1,0 +1,7 @@
+# تصاویر تولیدشده‌ی سئو (scripts/gen-seo-images.py) در زیپ «Download ZIP» گیت‌هاب نمی‌آیند تا حجم کم شود.
+# فایل‌ها داخل مخزن می‌مانند و دیپلوی Cloudflare/git بدون تغییر کار می‌کند.
+public/img/blog export-ignore
+public/img/blog-steps export-ignore
+public/img/landing export-ignore
+public/img/steps export-ignore
+public/img/home export-ignore
