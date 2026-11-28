@@ -55,6 +55,8 @@ export function imageNode(site: string, img: Img, caption: string, id?: string) 
   return {
     "@type": "ImageObject", "@id": id ?? `${url}#image`, url, contentUrl: url, width: img.w, height: img.h, caption, name: caption, inLanguage: "fa-IR",
     encodingFormat: img.path.endsWith(".png") ? "image/png" : "image/webp", creditText: BRAND, creator: { "@id": `${site}/#org` }, copyrightNotice: `© ${BRAND}`,
+    // نشانه‌های مجوز تصویر برای گوگل ایمیج (رفع هشدار Missing field acquireLicensePage)؛ هر دو به صفحه‌ی /image-license اشاره می‌کنند
+    license: `${site}/image-license`, acquireLicensePage: `${site}/image-license`,
   };
 }
 

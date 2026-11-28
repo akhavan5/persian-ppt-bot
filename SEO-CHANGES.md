@@ -19,3 +19,8 @@ sitemap، JSON-LD، breadcrumb و فهرست وبلاگ و فوتر خودکار
 - کوتاه‌کردن ۴۵ عنوان (title) که بیش از ۶۶ کاراکتر بودند و در گوگل بریده می‌شدند؛ کلیدواژه‌ی اصلی هر عنوان حفظ شده.
 - افزودن `kw` به ۲۶ مقاله که نداشتند (برای keywords داده‌ی ساختاریافته).
 - به‌روزرسانی `updated` (lastmod در sitemap) برای صفحه‌های تغییرکرده.
+
+## رفع هشدار Image Metadata (Missing field "acquireLicensePage")
+- `src/seo-images.ts`: به همه‌ی ImageObjectها `license` و `acquireLicensePage` (آدرس `/image-license`) اضافه شد.
+- `public/index.html`: همین فیلدها برای og-image صفحه‌ی اصلی.
+- `public/image-license.html` (جدید، آدرس `/image-license`): صفحه‌ی مجوز تصویرها. **متن پیش‌نویس است؛ شرایط (غیرتجاری با ذکر منبع، تجاری با مجوز) را قبل از انتشار تأیید کنید.**
