@@ -13,6 +13,7 @@ import { supportHistory, supportSend } from "./support-chat";
 import { appCrash } from "./app-crash";
 import { feedbackInfo, submitFeedback } from "./feedback";
 import { PUBLIC_STATS_TTL, getPublicStats } from "./public-stats";
+import { publicReviewsJson } from "./reviews";
 import { startSupport, supportCallback, supportWall } from "./support";
 import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, sibappEnabled, sibappStart, sibappVerify, payEnabled, payGateways, payReport, aqayeCallback, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
@@ -98,6 +99,12 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/public-stats" && method === "GET") {
     try { const { t: _t, ...stats } = await getPublicStats(env); return json(stats, 200, { "cache-control": `public, max-age=3600, s-maxage=${PUBLIC_STATS_TTL}` }); }
     catch (e) { console.error("public-stats", String(e).slice(0, 200)); return err("آمار در دسترس نیست", 503); }
+  }
+
+  // نظرهای منتشرشده‌ی کاربران برای مینی‌اپ‌ها و اپ‌های اندروید/iOS (فقط نام کوچک و متن؛ ۱ ساعت در لبه کش می‌شود)
+  if (path === "/api/public-reviews" && method === "GET") {
+    try { return json(await publicReviewsJson(env), 200, { "cache-control": "public, max-age=600, s-maxage=3600" }); }
+    catch (e) { console.error("public-reviews", String(e).slice(0, 200)); return err("نظرات در دسترس نیست", 503); }
   }
 
   // حفاظت CSRF: درخواست‌های تغییردهنده فقط از همین سایت

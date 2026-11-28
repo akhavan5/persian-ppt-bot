@@ -20,6 +20,7 @@ struct AccountView: View {
                         if me.giftAvailable && me.giftCredits > 0 { giftCard(me) }
                         channelsSection(me)
                         plansSection(me).id("plans")
+                        CommunityCard() // آمار زنده و نظرات کاربران (/api/public-stats و /api/public-reviews)
                         linksSection
                         Button(role: .destructive) { confirmLogout = true } label: {
                             Label("خروج از حساب", systemImage: "rectangle.portrait.and.arrow.right")

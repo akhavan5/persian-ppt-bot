@@ -149,6 +149,34 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20}
 .modal .sheet{background:var(--card);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px 14px calc(16px + var(--sab));max-height:85vh;max-height:85dvh;overflow:auto}
 @media (prefers-reduced-motion:reduce){.sk,.spin,.btn.busy::after,.bar.ind i{animation:none}.bar i{transition:none}}
+
+/* آمار زنده و نظرات کاربران (تب «حساب») */
+.cmStats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.cmStats .st{background:var(--sec);border:1px solid var(--line);border-radius:12px;padding:10px 4px}
+.cmStats .st i{font-style:normal;display:block;font-size:1.2rem;line-height:1.3}
+.cmStats .st b{display:block;font-size:1.15rem;line-height:1.6;color:var(--btn)}
+.cmStats .st span{display:block;font-size:.74rem;color:var(--hint)}
+.rvTop{display:flex;align-items:center;gap:12px;margin:0 0 10px}
+.rvTop b{font-size:1.9rem;line-height:1.1}
+.rvTop .stars{color:#f5a524;letter-spacing:1px;font-size:.95rem}
+.rvTop .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.rvTop .chips span{background:var(--sec);border:1px solid var(--line);border-radius:99px;padding:1px 9px;font-size:.74rem;color:var(--hint)}
+.rvView{overflow:hidden;touch-action:pan-y;cursor:grab;-webkit-user-select:none;user-select:none;border-radius:12px}
+.rvView.drag{cursor:grabbing}
+.rvTrack{display:flex;gap:10px;transition:transform .4s cubic-bezier(.22,.8,.3,1);will-change:transform}
+.rvView.drag .rvTrack{transition:none}
+.rvItem{flex:0 0 100%;min-width:0;box-sizing:border-box;background:var(--sec);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.rvItem .stars{color:#f5a524;font-size:.85rem}
+.rvItem q{quotes:"«" "»";line-height:2;font-size:.9rem;flex:1}
+.rvItem .by{display:flex;align-items:center;gap:8px}
+.rvItem .av{flex:none;width:30px;height:30px;border-radius:50%;background:var(--btn);color:var(--btn-fg);display:grid;place-items:center;font-weight:700;font-size:.85rem}
+.rvItem .by strong{font-size:.85rem}
+.rvItem .src{margin-inline-start:auto;font-size:.7rem;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:1px 8px;color:var(--hint);white-space:nowrap}
+.rvNav{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px}
+.rvNav button{flex:none;display:grid;place-items:center;width:34px;height:34px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--sec);color:var(--btn);cursor:pointer}
+.rvDots{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;max-width:62%}
+.rvDots i{width:7px;height:7px;border-radius:99px;background:var(--line);transition:.25s}
+.rvDots i.on{width:18px;background:var(--btn)}
 </style>
 </head>
 <body>
@@ -336,6 +364,20 @@ table.plans tr.cur td{font-weight:700;color:var(--btn)}
         <h2>🤖 پشتیبانی هوشمند</h2>
         <div class="muted">درباره‌ی قیمت و اعتبار، ساخت ارائه یا مشکل فنی سؤال داری؟ از دستیار هوشمند بپرس.</div>
         <button class="btn ghost" id="supBtn" type="button" style="margin-top:10px">💬 گفتگو با دستیار</button>
+      </div>
+      <div class="card" id="cmStatsCard" hidden>
+        <h2>📊 پاورپوینت‌ساز در یک نگاه</h2>
+        <div class="cmStats">
+          <div class="st"><i>👥</i><b data-k="users">…</b><span>کاربر</span></div>
+          <div class="st"><i>📊</i><b data-k="decks">…</b><span>ارائه ساخته‌شده</span></div>
+          <div class="st"><i>👑</i><b data-k="plans">…</b><span>پلن فعال‌شده</span></div>
+        </div>
+      </div>
+      <div class="card" id="rvCard" hidden>
+        <h2>⭐ کاربران چه می‌گویند؟</h2>
+        <div class="rvTop"><b id="rvAvg"></b><div><div class="stars" aria-hidden="true">★★★★★</div><div class="muted" id="rvCnt"></div><div class="chips" id="rvStores"></div></div></div>
+        <div class="rvView" id="rvView" tabindex="0" role="region" aria-roledescription="اسلایدر" aria-label="نظرهای کاربران"><div class="rvTrack" id="rvTrack"></div></div>
+        <div class="rvNav"><button type="button" id="rvPrev" aria-label="نظر قبلی"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button><div class="rvDots" id="rvDots" aria-hidden="true"></div><button type="button" id="rvNext" aria-label="نظر بعدی"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button></div>
       </div>
     </section>
   </div>
@@ -2118,6 +2160,78 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && me
 
 setTimeout(() => { if (!$("#boot").hidden) $("#bootMsg").textContent = `در حال ورود… SDK:${!!window.Bale} initData:${!!TG.initData} cfg:${!!cfg}`; }, 8000);
 boot();
+})();
+</script>
+<script>
+/* آمار زنده و نظرات کاربران در تب «حساب»: فقط وقتی تب دیده شد (یک‌بار) از /api/public-stats و /api/public-reviews خوانده می‌شود */
+(function(){
+  var sc=document.getElementById("cmStatsCard"),rc=document.getElementById("rvCard");if(!sc||!rc)return;
+  var fa=new Intl.NumberFormat("fa-IR"),loaded=false;
+  function nice(n){if(n<1000)return{v:n,s:""};if(n<1e6)return{v:Math.floor(n/100)*100,s:"+"};return{v:Math.floor(n/1e5)/10,s:"+",m:1}}
+  function fmt(n){var x=nice(n);return fa.format(x.v)+(x.m?" میلیون":"")+x.s}
+  function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+  function getJ(u){return fetch(u,{headers:{accept:"application/json"}}).then(function(r){if(!r.ok)throw 0;return r.json()})}
+  function stats(){
+    getJ("/api/public-stats").then(function(d){
+      var ok=false;sc.querySelectorAll("[data-k]").forEach(function(el){var v=Number(d[el.dataset.k]);if(isFinite(v)&&v>0){el.textContent=fmt(v);ok=true}else el.closest(".st").hidden=true});
+      if(ok)sc.hidden=false;
+    }).catch(function(){});
+  }
+  function reviews(){
+    getJ("/api/public-reviews").then(function(d){
+      var list=(d&&d.items)||[];if(!list.length)return;
+      var track=document.getElementById("rvTrack"),view=document.getElementById("rvView"),dots=document.getElementById("rvDots");
+      document.getElementById("rvAvg").textContent=d.rating.avg;
+      document.getElementById("rvCnt").textContent="از "+d.rating.count+" امتیاز کاربران";
+      document.getElementById("rvStores").innerHTML="<span>مایکت "+esc(d.rating.myket)+"</span><span>کافه‌بازار "+esc(d.rating.bazaar)+"</span>";
+      track.innerHTML=list.map(function(v){
+        var st=v.r?'<div class="stars" aria-label="امتیاز '+v.r+' از ۵">'+"★".repeat(v.r)+"☆".repeat(5-v.r)+"</div>":"";
+        return '<article class="rvItem">'+st+"<q>"+esc(v.t)+'</q><div class="by"><span class="av" aria-hidden="true">'+esc(Array.from(v.n)[0]||"ک")+"</span><strong>"+esc(v.n)+'</strong><span class="src">'+esc(v.s)+"</span></div></article>";
+      }).join("");
+      rc.hidden=false;
+      var n=list.length,idx=0,step=1,sign=1,drag=null,moved=false,timer=0;
+      dots.innerHTML=list.map(function(){return"<i></i>"}).join("");
+      if(n>12){dots.innerHTML='<span class="muted" id="rvPos"></span>'}
+      function measure(){step=track.firstElementChild.getBoundingClientRect().width+10;sign=getComputedStyle(view).direction==="rtl"?1:-1}
+      function paint(){
+        track.style.transform="translate3d("+(sign*idx*step)+"px,0,0)";
+        if(n>12){document.getElementById("rvPos").textContent=fa.format(idx+1)+" / "+fa.format(n)}
+        else for(var i=0;i<dots.children.length;i++)dots.children[i].className=i===idx?"on":"";
+      }
+      function show(i){idx=Math.max(0,Math.min(n-1,i));paint()}
+      function next(){show(idx>=n-1?0:idx+1)}
+      function prev(){show(idx<=0?n-1:idx-1)}
+      function stop(){clearInterval(timer);timer=0}
+      function play(){stop();if(window.matchMedia&&matchMedia("(prefers-reduced-motion:reduce)").matches)return;timer=setInterval(function(){if(!document.hidden&&rc.offsetParent)next()},5000)}
+      document.getElementById("rvNext").addEventListener("click",function(){next();play()});
+      document.getElementById("rvPrev").addEventListener("click",function(){prev();play()});
+      view.addEventListener("pointerdown",function(e){if(e.pointerType==="mouse"&&e.button!==0)return;drag={x:e.clientX,y:e.clientY,id:e.pointerId,on:false,t:Date.now()};moved=false;stop()});
+      view.addEventListener("pointermove",function(e){
+        if(!drag||e.pointerId!==drag.id)return;var dx=e.clientX-drag.x;
+        if(!drag.on){if(Math.abs(dx)<6)return;if(Math.abs(e.clientY-drag.y)>Math.abs(dx)&&e.pointerType!=="mouse"){drag=null;return}drag.on=true;moved=true;view.classList.add("drag");try{view.setPointerCapture(e.pointerId)}catch(_){}}
+        var pos=sign*idx*step+dx,a=0,b=sign*(n-1)*step,lo=Math.min(a,b),hi=Math.max(a,b);
+        if(pos>hi)pos=hi+(pos-hi)*.3;else if(pos<lo)pos=lo+(pos-lo)*.3;
+        track.style.transform="translate3d("+pos+"px,0,0)";
+      });
+      function end(e){
+        if(!drag||(e&&e.pointerId!==drag.id))return;var d=drag;drag=null;view.classList.remove("drag");
+        if(!d.on){play();return}
+        var dx=(e?e.clientX:d.x)-d.x,t=Math.round(idx+sign*dx/step);
+        if(t===idx&&((Date.now()-d.t<280&&Math.abs(dx)>30)||Math.abs(dx)>step*.15))t=idx+(sign*dx>0?1:-1);
+        show(t);play();
+      }
+      view.addEventListener("pointerup",end);view.addEventListener("pointercancel",end);
+      view.addEventListener("click",function(e){if(moved){e.preventDefault();e.stopPropagation();moved=false}},true);
+      view.addEventListener("keydown",function(e){var k=e.key;if(k!=="ArrowLeft"&&k!=="ArrowRight")return;e.preventDefault();((k==="ArrowLeft")===(sign===1))?next():prev();play()});
+      window.addEventListener("resize",function(){measure();paint()});
+      measure();paint();play();
+    }).catch(function(){});
+  }
+  function load(){if(loaded)return;loaded=true;stats();reviews()}
+  /* تب «حساب» تا باز نشود دیده نمی‌شود؛ هر وقت دیده شد یک‌بار بارگذاری می‌کنیم */
+  var tab=document.getElementById("t-acc");
+  if("IntersectionObserver" in window&&tab){var io=new IntersectionObserver(function(en){if(en[0].isIntersecting){io.disconnect();load()}},{rootMargin:"200px"});io.observe(tab)}
+  else load();
 })();
 </script>
 <script src="/support.js" defer></script>

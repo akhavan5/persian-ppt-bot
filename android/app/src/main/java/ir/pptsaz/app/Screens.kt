@@ -1541,6 +1541,8 @@ fun AccountTab(st: UiState, me: Me, vm: AppViewModel) {
 
             Ads.RewardCard(me.adEvery, me.adProgress, me.adCredits, me.adLeft, onClaimed = { if (it > 0) vm.onResume(force = true) }, say = { vm.toast(it) })
 
+            CommunityCard() // آمار زنده و نظرات کاربران (از /api/public-stats و /api/public-reviews)
+
             ContactCard(vm)
 
             SoftButton("بررسی به‌روزرسانی (نسخه‌ی " + BuildConfig.VERSION_NAME + ")", { vm.checkUpdate() }, Modifier.fillMaxWidth(), icon = AppIcons.Refresh)

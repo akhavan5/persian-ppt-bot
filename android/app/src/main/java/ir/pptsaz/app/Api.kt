@@ -133,6 +133,10 @@ object Api {
 
     suspend fun config(): Config = parseConfig(call("GET", "/api/config"))
 
+    /** آمار عمومی سرویس (کاربر، ارائه، پلن) و نظرهای منتشرشده‌ی کاربران؛ بدون نیاز به ورود */
+    suspend fun publicStats(): JSONObject = call("GET", "/api/public-stats")
+    suspend fun publicReviews(): JSONObject = call("GET", "/api/public-reviews")
+
     /** گزارش کرش دفعه‌ی قبل (بدون ورود هم کار می‌کند). */
     suspend fun reportCrash(report: JSONObject) {
         call("POST", "/api/app/crash", report)

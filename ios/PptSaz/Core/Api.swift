@@ -131,6 +131,10 @@ final class Api {
 
     func config() async throws -> Config { parseConfig(try await call("GET", "/api/config")) }
 
+    /// آمار عمومی سرویس (کاربر، ارائه، پلن) و نظرهای منتشرشده‌ی کاربران؛ بدون نیاز به ورود
+    func publicStats() async throws -> J { try await call("GET", "/api/public-stats") }
+    func publicReviews() async throws -> J { try await call("GET", "/api/public-reviews") }
+
     /// nil یعنی وارد نشده‌اید
     func me() async throws -> Me? { parseMe(try await call("GET", "/api/me")) }
 

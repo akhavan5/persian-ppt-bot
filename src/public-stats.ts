@@ -38,7 +38,16 @@ async function compute(env: Env): Promise<PublicStats> {
   return { users: seen + web, decks, plans, t: Date.now() };
 }
 
+let mem: { at: number; v: PublicStats } | null = null;
+
 export async function getPublicStats(env: Env): Promise<PublicStats> {
+  if (mem && Date.now() - mem.at < 3_600_000) return mem.v; // یک ساعت در حافظه‌ی Worker: بیشتر درخواست‌ها هیچ خواندنی ندارند
+  const v = await getPublicStatsKv(env);
+  mem = { at: Date.now(), v };
+  return v;
+}
+
+async function getPublicStatsKv(env: Env): Promise<PublicStats> {
   const cached = (await env.KV.get(CACHE_KEY, "json").catch(() => null)) as PublicStats | null;
   if (cached && Number.isFinite(cached.t)) return cached;
   const s = await compute(env);

@@ -87,7 +87,7 @@ export async function approveReview(env: Env, id: string): Promise<boolean> {
   const list = await loadPublic(env);
   await env.KV.put(PUB_KEY, JSON.stringify([rec, ...list].slice(0, MAX_PUBLIC)));
   await env.KV.delete(`fbk:${id}`);
-  htmlCache = null;
+  htmlCache = null; jsonCache = null;
   return true;
 }
 
@@ -103,7 +103,7 @@ export async function removePublicReview(env: Env, c: number): Promise<boolean> 
   const next = list.filter((v) => v.c !== c);
   if (next.length === list.length) return false;
   await env.KV.put(PUB_KEY, JSON.stringify(next));
-  htmlCache = null;
+  htmlCache = null; jsonCache = null;
   return true;
 }
 
@@ -118,6 +118,24 @@ function card(v: Review): string {
   const stars = v.r ? `<div class="stars" aria-label="امتیاز ${v.r} از ۵">${"★".repeat(v.r)}${"☆".repeat(5 - v.r)}</div>` : "";
   const ini = esc(Array.from(v.n)[0] ?? "ک");
   return `      <article class="card rv">${stars}<blockquote>«${esc(v.t)}»</blockquote><div class="by"><span class="av" aria-hidden="true">${ini}</span><strong>${esc(v.n)}</strong><span class="src">${esc(v.s)}</span></div></article>\n`;
+}
+
+/** نظرهای منتشرشده + میانگین امتیاز فروشگاه‌ها به‌صورت JSON برای مینی‌اپ‌ها و اپ اندروید/iOS (GET /api/public-reviews)؛ فقط نام کوچک و متن */
+let jsonCache: { t: number; v: Awaited<ReturnType<typeof buildReviewsJson>> } | null = null;
+
+export async function publicReviewsJson(env: Env) {
+  if (jsonCache && Date.now() - jsonCache.t < HTML_TTL_MS) return jsonCache.v; // یک ساعت در حافظه‌ی Worker؛ بدون خواندن از دیتابیس
+  const v = await buildReviewsJson(env);
+  jsonCache = { t: Date.now(), v };
+  return v;
+}
+
+async function buildReviewsJson(env: Env) {
+  const list = await loadPublic(env);
+  return {
+    rating: { avg: STORE_RATING.avg, count: STORE_RATING.count, myket: STORE_RATING.myket, bazaar: STORE_RATING.bazaar },
+    items: list.slice(0, MAX_PUBLIC).map((v) => ({ n: v.n, s: v.s, t: v.t, r: v.r })),
+  };
 }
 
 /** HTML کامل بخش نظرات (جایگزین نشانه‌ی <!--REVIEWS--> در صفحه‌ی اصلی)؛ هر خطا ⇒ رشته‌ی خالی تا صفحه سالم بماند */
