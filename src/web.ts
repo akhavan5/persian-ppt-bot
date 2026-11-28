@@ -13,7 +13,7 @@ import { supportHistory, supportSend } from "./support-chat";
 import { appCrash } from "./app-crash";
 import { feedbackInfo, submitFeedback } from "./feedback";
 import { startSupport, supportCallback, supportWall } from "./support";
-import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, sibappEnabled, sibappStart, sibappVerify, payEnabled, payReport, paymentCallback, paymentGo, startPayment } from "./payment";
+import { PLANS, bazaarEnabled, bazaarVerify, myketEnabled, myketVerify, sibappEnabled, sibappStart, sibappVerify, payEnabled, payGateways, payReport, aqayeCallback, paymentCallback, paymentGo, startPayment } from "./payment";
 import { listFiles, loadFileDirect, loadPreview, loadPreviewImage } from "./files";
 import { tagMp3 } from "./id3";
 import { listSamples, sampleLabel } from "./samples";
@@ -88,6 +88,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   // درگاه سیزپی: انتقال به درگاه (GET) و بازگشت از درگاه (POST از مرورگر کاربر؛ بدون بررسی origin)
   if (path === "/api/pay/go" && method === "GET") return paymentGo(env, url);
   if (path === "/api/pay/callback") return paymentCallback(env, req, url);
+  if (path.startsWith("/api/pay/callback/aqaye/") && method === "GET") return aqayeCallback(env, url);
   if (path === "/api/support/callback" && method === "GET") return supportCallback(env, url);
   if (path === "/api/support/wall" && method === "GET") return supportWall(env, url);
 
@@ -106,6 +107,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
       // ورود/ثبت‌نام با کد ایمیلی (برای ایمیل‌های غیر جیمیل)؛ در همان کادر شماره‌ی موبایل وارد می‌شود
       emailOtp: emailOtpEnabled(env),
       payEnabled: payEnabled(env),
+      payGateways: payGateways(env), // به ترتیب اولویت؛ با بیش از یکی، کاربر در پنجره‌ی خرید انتخاب می‌کند
       // خرید درون‌برنامه‌ای کافه‌بازار (فقط اپ اندروید)
       bazaar: bazaarEnabled(env),
       // خرید درون‌برنامه‌ای مایکت (فقط نسخه‌ی مایکت اپ اندروید)

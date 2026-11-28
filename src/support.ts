@@ -9,8 +9,8 @@ import { hitLimit } from "./auth";
 /** حداقل و حداکثر مبلغ حمایت (تومان)؛ باید با MIN در public/support.html یکی باشد */
 const MIN = 10_000;
 const MAX = 20_000_000;
-const BASE = "https://panel.aqayepardakht.ir";
-const TRANSID_RE = /^[A-Za-z0-9_-]{4,64}$/;
+export const BASE = "https://panel.aqayepardakht.ir";
+export const TRANSID_RE =/^[A-Za-z0-9_-]{4,64}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const TTL = 60 * 60 * 24 * 14;
 const WALL_PAGE = 8;
@@ -109,10 +109,10 @@ async function callbackNexpal(env: Env, url: URL, back: (q: string) => Response)
 }
 
 // ───────────────────── آقای پرداخت (درگاه قبلی؛ استفاده نمی‌شود) ─────────────────────
-const isSandbox = (env: Env) => (env.AQAYE_PIN ?? "").trim() === "sandbox";
+export const isSandbox = (env: Env) => (env.AQAYE_PIN ?? "").trim() === "sandbox";
 
 /** کدهای خطای create/verify آقای پرداخت (مستندات رسمی) */
-const AP_ERR: Record<string, string> = {
+export const AP_ERR: Record<string, string> = {
   "-1": "مبلغ خالی است", "-2": "کد پین درگاه خالی است", "-3": "آدرس callback خالی است", "-4": "مبلغ باید عددی باشد",
   "-5": "مبلغ باید بین ۱٬۰۰۰ تا ۴۰۰٬۰۰۰٬۰۰۰ تومان باشد", "-6": "کد پین درگاه اشتباه است", "-7": "transid خالی است",
   "-8": "تراکنش وجود ندارد", "-9": "پین با درگاه تراکنش نمی‌خواند", "-10": "مبلغ با تراکنش نمی‌خواند",
@@ -120,7 +120,7 @@ const AP_ERR: Record<string, string> = {
   "-15": "دامنه‌ی callback با دامنه‌ی تاییدشده‌ی درگاه نمی‌خواند", "-16": "Referrer ارسال نشده است", "-17": "callback_method نامعتبر است",
 };
 
-async function ap(env: Env, path: "create" | "verify", body: Record<string, unknown>): Promise<{ status: string; code: string; transid: string } | null> {
+export async function ap(env: Env, path: "create" | "verify", body: Record<string, unknown>): Promise<{ status: string; code: string; transid: string } | null> {
   try {
     const r = await fetch(`${BASE}/api/v2/${path}`, {
       method: "POST",

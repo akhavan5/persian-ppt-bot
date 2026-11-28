@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { PLAN_MAX_IMAGES, PLAN_MAX_SLIDES, getActiveSub, getBonus, putSub, setBonus, type Sub } from "./settings";
 import { hitLimit, type WebUser } from "./auth";
 import { sendReceipt } from "./email-receipt";
+import { ap, AP_ERR, BASE as AQAYE_BASE, TRANSID_RE, isSandbox as aqayeSandbox } from "./support";
 
 /**
  * پلن‌های ماهانه (price: هزار تومان): پلاس ۷۹۰ (۵ اعتبار) و پرو ۱۳۴۰ (۱۱ اعتبار). هر پلن ۳۰ روز اعتبار دارد و تمدید خودکار ندارد.
@@ -70,10 +71,22 @@ const DP_VERIFY_FALLBACK = "0";
  *  توجه: خود درگاه حداقل مبلغ دارد؛ مبلغ‌های پایین‌تر از آن به‌صورت خودکار بالا برده می‌شوند. */
 const DP_AMOUNT_UNIT: "toman" | "rial" = "rial";
 
-export const payEnabled = (env: Env) => { const c = cfg(env); return Boolean(c.clientId && c.clientSecret && c.username && c.password); };
+const dpEnabled = (env: Env) => { const c = cfg(env); return Boolean(c.clientId && c.clientSecret && c.username && c.password); };
+
+/**
+ * درگاه‌های خرید پلن به ترتیب اولویت: آقای پرداخت (اول، با AQAYE_PIN) و دیجی‌پی (دوم).
+ * پین «sandbox» برای خرید پلن فعال نمی‌شود (پرداخت آزمایشی نباید پلن واقعی بدهد).
+ */
+export type PayGw = "aqaye" | "digipay";
+const aqayeEnabled = (env: Env) => { const pin = (env.AQAYE_PIN ?? "").trim(); return Boolean(pin) && !aqayeSandbox(env); };
+export const payGateways = (env: Env): { id: PayGw; name: string }[] => [
+  ...(aqayeEnabled(env) ? [{ id: "aqaye" as const, name: "آقای پرداخت" }] : []),
+  ...(dpEnabled(env) ? [{ id: "digipay" as const, name: "دیجی‌پی" }] : []),
+];
+export const payEnabled = (env: Env) => payGateways(env).length > 0;
 
 /** issue/it: وقتی کاربر از درگاه «موفق» برگشته ولی تایید یا فعال‌سازی کامل نشده (برای هشدار در گزارش پرداخت پنل مدیر؛ وضعیت pending می‌ماند تا تایید دوباره ممکن باشد) */
-interface PayRecord { uid: string; plan?: string; count: number; amount: number; /** مبلغ واقعی پرداخت به تومان در لحظه‌ی خرید */ toman?: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string; redirect?: string; issue?: string; it?: number }
+interface PayRecord { uid: string; plan?: string; count: number; amount: number; /** مبلغ واقعی پرداخت به تومان در لحظه‌ی خرید */ toman?: number; order: string; state: "pending" | "paid" | "failed"; t: number; ref?: string; redirect?: string; issue?: string; it?: number; /** درگاه؛ نبودن = دیجی‌پی (رکوردهای قدیمی) */ gw?: PayGw; /** شناسه‌ی تراکنش آقای پرداخت (transid) */ tid?: string }
 const TTL = 60 * 60 * 24 * 14;
 
 const json = (data: unknown, status = 200) =>
@@ -166,6 +179,12 @@ export async function startPayment(env: Env, url: URL, user: WebUser, b: Record<
   const plan = PLANS.find((p) => p.id === b?.plan);
   if (!plan) return json({ error: "بسته‌ی انتخابی نامعتبر است." }, 400);
   if (await hitLimit(env, `payrl:${user.id}`, 20, 3600)) return json({ error: "تعداد درخواست پرداخت زیاد بود؛ کمی بعد دوباره امتحان کن." }, 429);
+
+  // درگاه: انتخاب کاربر (gateway)، وگرنه اولین درگاه فعال (آقای پرداخت ← دیجی‌پی)
+  const gws = payGateways(env);
+  const gw = gws.find((g) => g.id === b?.gateway) ?? (b?.gateway ? null : gws[0]);
+  if (!gw) return json({ error: "درگاه انتخاب‌شده فعال نیست." }, 400);
+  if (gw.id === "aqaye") return startAqaye(env, user, url, plan);
 
   // شماره‌ی موبایل خریدار: طبق مستند دیجی‌پی (و افزونه‌ی رسمی) فیلد cellNumber در تیکت اجباری است؛
   // نبودنش باعث خطای 1103 «فیچر یافت نشد» می‌شود
@@ -280,6 +299,61 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
     if (!dpOk(d)) console.error("digipay deliver failed", JSON.stringify({ s: d?.result?.status, m: d?.result?.message }).slice(0, 300));
   }
 
+  await settlePayment(env, rec, order, trackingCode, "درگاه پرداخت");
+  return go(okQ);
+}
+
+// ---------- آقای پرداخت (درگاه اول خرید پلن) ----------
+/** شروع پرداخت: create ← رکورد pending ← انتقال با /api/pay/go. آدرس بازگشت بدون query است تا درگاه خودش transid و status را اضافه کند؛ شماره‌ی سفارش در مسیر است. */
+async function startAqaye(env: Env, user: WebUser, url: URL, plan: Plan): Promise<Response> {
+  const toman = plan.price * 1000; // آقای پرداخت مبلغ را به تومان می‌گیرد
+  const order = newOrderId();
+  const mobile = normalizeMobile(user.mobile); // اختیاری است
+  const r = await ap(env, "create", {
+    amount: toman, callback: `${url.origin}/api/pay/callback/aqaye/${order}`, callback_method: "GET",
+    description: `اشتراک ماهانه پلن ${plan.name}`, ...(mobile ? { mobile } : {}),
+  });
+  if (!r || r.status !== "success" || !TRANSID_RE.test(r.transid)) {
+    console.error("aqaye create failed", r?.status, r?.code, r?.code ? AP_ERR[r.code] : "");
+    return json({ error: "اتصال به درگاه پرداخت ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن یا درگاه دیگری را انتخاب کن." }, 502);
+  }
+  const rec: PayRecord = {
+    uid: user.id, plan: plan.id, count: plan.credits, amount: toman * 10, toman, order, state: "pending", t: Date.now(),
+    redirect: `${AQAYE_BASE}/startpay/${encodeURIComponent(r.transid)}`, gw: "aqaye", tid: r.transid,
+  };
+  await env.KV.put(`pay:${order}`, JSON.stringify(rec), { expirationTtl: TTL });
+  return json({ url: `/api/pay/go?t=${encodeURIComponent(order)}` });
+}
+
+/** GET /api/pay/callback/aqaye/<سفارش>?transid&status — بازگشت از آقای پرداخت؛ با verify تایید و پلن فعال می‌شود */
+export async function aqayeCallback(env: Env, url: URL): Promise<Response> {
+  const go = (q: string) => Response.redirect(`${url.origin}/?${q}`, 303);
+  const order = url.pathname.split("/").pop() ?? "";
+  const transid = url.searchParams.get("transid") ?? "";
+  if (!ORDER_RE.test(order) || !TRANSID_RE.test(transid)) return go("pay=fail");
+  const rec = (await env.KV.get(`pay:${order}`, "json")) as PayRecord | null;
+  if (!rec || rec.gw !== "aqaye" || rec.tid !== transid) return go("pay=fail"); // transid باید همان تراکنشِ ساخته‌شده برای همین سفارش باشد
+  const okQ = `pay=ok&n=${rec.count}${rec.plan ? `&p=${encodeURIComponent(rec.plan)}` : ""}`;
+  if (rec.state === "paid") return go(okQ);
+
+  if (url.searchParams.get("status") !== "1") { // طبق مستند، status=0 ناموفق است؛ فقط pending ← failed
+    await env.DB.prepare("UPDATE kv SET v=?2 WHERE k=?1 AND json_extract(v,'$.state')='pending'")
+      .bind(`pay:${order}`, JSON.stringify({ ...rec, state: "failed" })).run();
+    return go("pay=cancel");
+  }
+  const v = await ap(env, "verify", { amount: rec.toman ?? Math.round(rec.amount / 10), transid });
+  if (!v) { await flagIssue(env, rec, "net", transid); return go("pay=error"); } // خطای شبکه: pending می‌ماند تا تایید دوباره
+  if (v.status !== "success" || v.code !== "1") {
+    console.error("aqaye verify failed", order, v.status, v.code);
+    await flagIssue(env, rec, `verify:${v.code || "?"}`, transid);
+    return go("pay=fail");
+  }
+  await settlePayment(env, rec, order, transid, "آقای پرداخت");
+  return go(okQ);
+}
+
+/** ثبت پرداخت موفق + فعال‌سازی پلن (مشترک بین همه‌ی درگاه‌ها): ادعای اتمی، فعال‌سازی، آمار فروش و رسید */
+async function settlePayment(env: Env, rec: PayRecord, order: string, trackingCode: string, method: string): Promise<void> {
   // ادعای اتمی: فقط یک درخواست «برنده» می‌شود. علامت‌زدن «paid» و فعال‌سازی پلن در «یک تراکنش» D1 انجام می‌شود؛
   // پس نه رفرش/callback تکراری پلن را دوبار فعال می‌کند و نه کرش وسط کار باعث «پول رفته، پلن نیامده» می‌شود.
   const by = crypto.randomUUID(); // نشانه‌ی برنده؛ نوشتن اشتراک فقط وقتی انجام می‌شود که رکورد پرداخت همین نشانه را داشته باشد
@@ -309,9 +383,8 @@ export async function paymentCallback(env: Env, req: Request, url: URL): Promise
     console.log("payment ok", rec.uid, rec.plan ?? "pack", rec.count, trackingCode);
     await noteSale(env, { ...rec, toman: paidToman }, plan);
     // رسید خرید به ایمیل حساب و ربات تلگرام (فقط پلن‌ها؛ ایمیل بدون ایمیل ثبت‌شده یا بدون RESEND_API_KEY بی‌اثر است و هرگز پرداخت را خراب نمی‌کند)
-    if (plan) await sendReceipt(env, { uid: rec.uid, planName: plan.name, credits: plan.credits, days: plan.days, toman: paidToman, order, idem: order, ref: trackingCode, method: "درگاه پرداخت", paidAt: Date.now(), expAt: subExpMs });
+    if (plan) await sendReceipt(env, { uid: rec.uid, planName: plan.name, credits: plan.credits, days: plan.days, toman: paidToman, order, idem: order, ref: trackingCode, method, paidAt: Date.now(), expAt: subExpMs });
   }
-  return go(okQ);
 }
 
 

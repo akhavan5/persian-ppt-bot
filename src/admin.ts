@@ -17,7 +17,7 @@ import { getDeckLog, listFiles, loadFile, type DeckLog } from "./files";
 import { SAMPLE_BADGE, addSample, listSamples, removeSample, sampleLabel } from "./samples";
 import { cachedPdf } from "./pdf";
 import { hasKey, modelList } from "./llm";
-import { PLANS, activatePlan, payEnabled } from "./payment";
+import { PLANS, activatePlan, payEnabled, payGateways } from "./payment";
 import { runningJob } from "./deck-service";
 import { hasBrowser } from "./browser-api";
 import { toEn, toFa } from "./util";
@@ -724,7 +724,7 @@ async function paymentScreen(env: Env, tab: "s" | "l" | "p", page: number): Prom
     return {
       text:
         "💰 <b>گزارش پرداخت و درآمد</b>\n\n" +
-        `🔌 درگاه دیجی‌پی: ${payEnabled(env) ? "✅ فعال" : "❌ غیرفعال (متغیرها تنظیم نشده)"}\n` +
+        `🔌 درگاه‌های پرداخت: ${payGateways(env).map((g) => g.name).join("، ") || "❌ غیرفعال (متغیرها تنظیم نشده)"}\n` +
         (urgent ? `🚨 <b>${fa(urgent)} مورد نیازمند بررسی فوری</b> ← تب ⚠️ مشکل‌دار\n` : "✅ مورد فوری ندارد\n") +
         `\n<b>فروش</b> (به وقت ایران)\n` +
         `امروز: ${fa(t1.n)} فروش · ${money(t1.a)} تومان\n` +
