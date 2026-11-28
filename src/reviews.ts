@@ -21,13 +21,13 @@ const STORE_RATING = { avg: "۴٫۵", count: "۴۲", myket: "۴٫۵۲", bazaar: 
 
 const SEED: Review[] = [
   { n: "کاربر", s: "سایت", r: 5, c: 1, t: "اسلایدها بسیار زیبا بود و کار من رو راه انداخت. خوشحالم که با یه محصول ایرانی می‌تونم این کار رو بکنم … ممنونم از سازندگان این محصول که باعث سربلندی ایرانند" },
-  { n: "ماهان", s: "کافه‌بازار", r: 0, c: 2, t: "عالیه، به‌راحتی می‌شه باهاش کار کرد" },
-  { n: "علیرضا", s: "مایکت", r: 0, c: 3, t: "عالی بود، حتماً نصبش کنید!" },
+  { n: "ماهان", s: "کافه‌بازار", r: 5, c: 2, t: "عالیه، به‌راحتی می‌شه باهاش کار کرد" },
+  { n: "علیرضا", s: "مایکت", r: 5, c: 3, t: "عالی بود، حتماً نصبش کنید!" },
   { n: "Aysa", s: "مینی‌اپ بله", r: 0, c: 4, t: "خوب بود، ولی اگه عکس بیشتر و حال‌وهوای هنری و تاریخی داشت خیلی خوب می‌شد" },
   { n: "Zeynab", s: "ربات تلگرام", r: 0, c: 5, t: "همه‌چیز عالی بود ولی تغییر دکوراسیون بده" },
-  { n: "حسین", s: "مایکت", r: 0, c: 6, t: "عالی بود، حرف نداره!" },
-  { n: "کاربر", s: "مایکت", r: 0, c: 7, t: "عالی و سریع" },
-  { n: "sanal", s: "مایکت", r: 0, c: 8, t: "همه‌چیز عالی بود" },
+  { n: "حسین", s: "مایکت", r: 5, c: 6, t: "عالی بود، حرف نداره!" },
+  { n: "کاربر", s: "مایکت", r: 5, c: 7, t: "عالی و سریع" },
+  { n: "sanal", s: "مایکت", r: 5, c: 8, t: "همه‌چیز عالی بود" },
   { n: "کاربر", s: "سایت", r: 0, c: 9, t: "ممنون، عالی بود" },
   { n: "رویا", s: "مینی‌اپ بله", r: 0, c: 10, t: "خیلی خوب است" },
   { n: "سادات", s: "مینی‌اپ بله", r: 0, c: 11, t: "عالی بود" },
@@ -36,16 +36,16 @@ const SEED: Review[] = [
   { n: "هانیه", s: "مینی‌اپ بله", r: 0, c: 14, t: "خوب بود" },
   { n: "مهرداد", s: "مینی‌اپ بله", r: 0, c: 15, t: "عالیه" },
   { n: "مائده", s: "سایت", r: 0, c: 16, t: "عالیه" },
-  { n: "زهرا", s: "کافه‌بازار", r: 0, c: 17, t: "عالی" },
+  { n: "زهرا", s: "کافه‌بازار", r: 5, c: 17, t: "عالی" },
   { n: "محمد", s: "کافه‌بازار", r: 0, c: 18, t: "عالی" },
   { n: "اتش", s: "کافه‌بازار", r: 0, c: 19, t: "عالی" },
-  { n: "سوگند", s: "مایکت", r: 0, c: 20, t: "عالی" },
-  { n: "علی", s: "مایکت", r: 0, c: 21, t: "عااالی" },
-  { n: "atash", s: "مایکت", r: 0, c: 22, t: "عالی" },
+  { n: "سوگند", s: "مایکت", r: 5, c: 20, t: "عالی" },
+  { n: "علی", s: "مایکت", r: 5, c: 21, t: "عااالی" },
+  { n: "atash", s: "مایکت", r: 5, c: 22, t: "عالی" },
   { n: "آتریسا", s: "مینی‌اپ بله", r: 0, c: 23, t: "عالی" },
   { n: "Aliasghar", s: "سایت", r: 0, c: 24, t: "عالی" },
   { n: "کاربر", s: "سایت", r: 0, c: 25, t: "عالی" },
-  { n: "همین", s: "مایکت", r: 0, c: 26, t: "خوبه" },
+  { n: "همین", s: "مایکت", r: 5, c: 26, t: "خوبه" },
 ];
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -115,8 +115,30 @@ export async function renderReviewsSection(env: Env): Promise<string> {
       <div class="rv-score"><b>${STORE_RATING.avg}</b><div class="stars" aria-label="میانگین امتیاز ${STORE_RATING.avg} از ۵">★★★★★</div></div>
       <div class="rv-meta"><strong>میانگین امتیاز اپ اندروید</strong><span class="muted">از ${STORE_RATING.count} امتیاز کاربران</span><div class="chips"><span class="chip2">مایکت ${STORE_RATING.myket}</span><span class="chip2">کافه‌بازار ${STORE_RATING.bazaar}</span></div></div>
     </div>
-    <div class="rv-grid">
+    <div class="rv-slider" role="region" aria-roledescription="اسلایدر" aria-label="نظرهای کاربران">
+    <div class="rv-track" tabindex="0">
 ${list.map(card).join("")}    </div>
+    <div class="rv-nav"><button type="button" class="rv-prev" aria-label="نظر قبلی">›</button><button type="button" class="rv-next" aria-label="نظر بعدی">‹</button></div>
+    </div>
+    <script>
+    (function(){var s=document.getElementById("reviews");if(!s)return;var t=s.querySelector(".rv-track");if(!t)return;
+    function dir(){return getComputedStyle(t).direction==="rtl"?-1:1}
+    function step(){var c=t.firstElementChild;return c?c.getBoundingClientRect().width+16:t.clientWidth}
+    function atEnd(){return Math.abs(t.scrollLeft)+t.clientWidth>=t.scrollWidth-4}
+    function atStart(){return Math.abs(t.scrollLeft)<4}
+    function go(n){
+      if(n>0){if(atEnd())t.scrollTo({left:0,behavior:"smooth"});else t.scrollBy({left:dir()*step(),behavior:"smooth"});}
+      else{if(atStart())t.scrollTo({left:dir()*(t.scrollWidth-t.clientWidth),behavior:"smooth"});else t.scrollBy({left:-dir()*step(),behavior:"smooth"});}
+    }
+    s.querySelector(".rv-next").addEventListener("click",function(){go(1)});
+    s.querySelector(".rv-prev").addEventListener("click",function(){go(-1)});
+    var tm=0;function stop(){clearInterval(tm)}
+    function play(){stop();if(window.matchMedia&&matchMedia("(prefers-reduced-motion:reduce)").matches)return;tm=setInterval(function(){go(1)},5000)}
+    ["mouseenter","touchstart","focusin"].forEach(function(e){t.addEventListener(e,stop,{passive:true})});
+    ["mouseleave","touchend","focusout"].forEach(function(e){t.addEventListener(e,play,{passive:true})});
+    play();
+    })();
+    </script>
   </section>
 
   `;

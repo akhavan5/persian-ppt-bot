@@ -350,8 +350,14 @@ address{font-style:normal}
 .rv-meta{display:grid;gap:6px;text-align:start}
 .rv-meta .chips{display:flex;gap:8px;flex-wrap:wrap}
 .rv-meta .chip2{background:var(--soft);color:var(--primary);border-radius:99px;padding:2px 12px;font-size:.82rem;font-weight:700}
-.rv-grid{columns:3 280px;column-gap:16px}
-.rv-grid .rv{break-inside:avoid;margin:0 0 16px;display:block}
+.rv-track{display:grid;grid-template-rows:repeat(2,auto);grid-auto-flow:column;grid-auto-columns:calc((100% - 32px)/3);gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 12px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.rv-track::-webkit-scrollbar{display:none}
+.rv-track .rv{scroll-snap-align:start;margin:0;display:block;min-width:0}
+.rv-nav{display:flex;justify-content:center;gap:12px;margin-top:6px}
+.rv-nav button{width:42px;height:42px;border-radius:50%;border:0;background:var(--soft);color:var(--primary);font-size:1.5rem;font-weight:800;line-height:1;cursor:pointer;font-family:inherit}
+.rv-nav button:hover{background:var(--primary);color:#fff}
+@media(max-width:900px){.rv-track{grid-auto-columns:calc((100% - 16px)/2)}}
+@media(max-width:600px){.rv-track{grid-auto-columns:88%}}
 .rv blockquote{margin:8px 0 14px;padding:0;line-height:2;font-size:.97rem}
 .rv .by{display:flex;align-items:center;gap:10px}
 .rv .av{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;font-weight:800;font-size:.95rem}
@@ -616,6 +622,8 @@ address{font-style:normal}
     </div>
   </section>
 
+  <!--REVIEWS-->
+
   <section class="block" id="features" aria-labelledby="fh">
     <div class="sec-head"><h2 id="fh">چرا پاورپوینت‌ساز فارسی؟</h2><p class="muted">ابزاری که برای زبان فارسی ساخته شده، نه ترجمه‌ی یک ابزار خارجی.</p></div>
     <div class="grid3">
@@ -723,8 +731,6 @@ address{font-style:normal}
       <div class="card"><h3>🍎 iOS</h3><div class="stores"><a class="store" href="https://sibche.com/applications/paorpoyntsaz" target="_blank" rel="noopener noreferrer"><img src="/img/stores/sibche.svg" width="135" height="40" alt="دریافت نسخه iOS پاورپوینت‌ساز از سیبچه" loading="lazy" decoding="async"></a><a class="store tall" href="https://sibirani.com/apps/pptsaz-ir/?utm_source=pptsaz-ir&amp;utm_medium=badge" target="_blank" rel="noopener noreferrer"><img src="/img/stores/sibirani.svg" width="379" height="164" alt="دریافت نسخه iOS پاورپوینت‌ساز از سیب ایرانی" loading="lazy" decoding="async"></a><a class="store tall" href="https://sibapp.com/applications/pptsaz" target="_blank" rel="noopener noreferrer"><img src="/img/stores/sibapp.svg" width="964" height="384" alt="دریافت نسخه iOS پاورپوینت‌ساز از سیب‌اپ" loading="lazy" decoding="async"></a><a class="store" href="https://anardoni.com/ios/app/irpptsazapp" target="_blank" rel="noopener noreferrer"><img src="/img/stores/anardoni.webp" width="540" height="160" alt="دریافت نسخه iOS پاورپوینت‌ساز از اناردونی" loading="lazy" decoding="async"></a><a class="store" href="https://iapps.ir/app/paorpoynt-saz-hosh-msnoaay/714593784191" target="_blank" rel="noopener noreferrer"><img src="https://developer.iapps.ir/badges/iapps-badge-blue-fa.svg" alt="دریافت نسخه iOS پاورپوینت‌ساز از آی‌اپس" loading="lazy" decoding="async"></a><a class="store" href="https://app-star.store/app.php?id=pptsaz" target="_blank" rel="noopener noreferrer"><img src="/img/stores/appstar.svg" width="1046" height="374" alt="دریافت نسخه iOS پاورپوینت‌ساز از اپ‌استار" loading="lazy" decoding="async"></a></div></div>
     </div>
   </section>
-
-  <!--REVIEWS-->
 
   <section class="block" id="pricing" aria-labelledby="ph">
     <div class="sec-head"><h2 id="ph">تعرفه‌ها</h2><p class="muted">با ثبت‌نام ۱ ارائه‌ی رایگان هدیه می‌گیری و وقتی اعتبارت تمام شود هر روز ۱ اعتبار رایگان دیگر؛ مدل‌های رایگان برای همه‌اند و مدل‌های ویژه فقط برای دارندگان پلن؛ برای اعتبار بیشتر، اسلاید بیشتر در هر ارائه و دسترسی به مدل‌های ویژه، یکی از پلن‌های ماهانه را بگیر.</p></div>
