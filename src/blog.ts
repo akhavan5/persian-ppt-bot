@@ -110,6 +110,34 @@ const FIX_POST_RELATED: Record<string, string[]> = {
 };
 for (const [post, slugs] of Object.entries(FIX_POST_RELATED)) MORE_POST_RELATED[post] = [...new Set([...(MORE_POST_RELATED[post] ?? []), ...slugs])];
 
+// ۶ آذر ۱۴۰۵: لینک‌دهی دوطرفه‌ی ۱۰ مقاله‌ی کلیدواژه‌ی جدید با مقاله‌های قدیمی
+const KW_POST_RELATED: Record<string, string[]> = {
+  "fix-persian-powerpoint-broken": ["reversed-text-powerpoint-fix", "powerpoint-language-persian"],
+  "persian-letters-separated-powerpoint": ["reversed-text-powerpoint-fix"],
+  "english-in-persian-powerpoint-fix": ["reversed-text-powerpoint-fix", "powerpoint-language-persian", "persian-numbers-powerpoint"],
+  "persian-rtl-slides": ["reversed-text-powerpoint-fix", "powerpoint-language-persian", "persian-numbers-powerpoint"],
+  "best-persian-font-powerpoint": ["persian-numbers-powerpoint", "powerpoint-language-persian"],
+  "persian-powerpoint-design": ["persian-numbers-powerpoint", "images-for-powerpoint"],
+  "ai-powerpoint-charts": ["persian-numbers-powerpoint"],
+  "persian-table-in-slide": ["persian-numbers-powerpoint", "reversed-text-powerpoint-fix"],
+  "pptsaz-honest-comparison": ["google-slides-persian-online"],
+  "best-ai-powerpoint-makers-persian": ["google-slides-persian-online"],
+  "gemini-copilot-powerpoint-persian": ["google-slides-persian-online"],
+  "make-powerpoint-from-scratch": ["google-slides-persian-online"],
+  "school-presentation-topics": ["sixth-grade-presentation-topics"],
+  "simple-powerpoint-topics": ["sixth-grade-presentation-topics"],
+  "presentation-topic-ideas": ["sixth-grade-presentation-topics", "university-presentation-ideas"],
+  "class-presentation-tips": ["sixth-grade-presentation-topics", "university-presentation-ideas"],
+  "thesis-defense-slides-guide": ["university-presentation-ideas", "building-code-19-presentation"],
+  "defense-judges-common-questions": ["building-code-19-presentation"],
+  "photo-to-powerpoint-ocr-tips": ["images-for-powerpoint"],
+  "free-powerpoint-templates-persian": ["images-for-powerpoint"],
+  "handout-vs-slides-vs-infographic": ["handout-design-guide", "infographic-with-phone"],
+  "persian-infographic-guide": ["infographic-with-phone", "handout-design-guide"],
+  "ai-powerpoint-mobile-telegram": ["infographic-with-phone"],
+};
+for (const [post, slugs] of Object.entries(KW_POST_RELATED)) MORE_POST_RELATED[post] = [...new Set([...(MORE_POST_RELATED[post] ?? []), ...slugs])];
+
 const xml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** فید RSS وبلاگ (/feed.xml)؛ ۳۰ مقاله‌ی تازه‌تر. برای خواننده‌های فید و کشف سریع‌تر مقاله‌ها. */

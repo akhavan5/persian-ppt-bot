@@ -4,7 +4,7 @@
 
 ## صفحه‌ها
 - [صفحه‌ی اصلی و ابزار ساخت](https://pptsaz.ir/): ساخت ارائه، ویژگی‌ها، تعرفه‌ها و پرسش‌های متداول
-- [تعرفه‌ها](https://pptsaz.ir/#pricing): رایگان (تا ۸ اسلاید)، پلاس (۷۹۰ هزار تومان به‌جای ۱٬۱۰۶، تا ۲۰ اسلاید)، پرو (۱٬۳۴۰ هزار تومان به‌جای ۱٬۸۷۶، تا ۳۵ اسلاید)؛ فایل‌های پلاس و پرو بدون واترمارک‌اند
+- [تعرفه‌ها](https://pptsaz.ir/#pricing): رایگان (تا ۶ اسلاید)، پلاس (۷۹۰ هزار تومان به‌جای ۱٬۱۰۶، تا ۲۰ اسلاید)، پرو (۱٬۳۴۰ هزار تومان به‌جای ۱٬۸۷۶، تا ۳۵ اسلاید)؛ فایل‌های پلاس و پرو بدون واترمارک‌اند
 - [پرسش‌های متداول](https://pptsaz.ir/#faq)
 - [تماس با ما](https://pptsaz.ir/#contact): ربات تلگرام @pptsaz_bot ، ایمیل info@pptsaz.ir و شماره تماس 09393704036
 
@@ -51,6 +51,10 @@
 - [تبدیل متن به پاورپوینت با گوشی](https://pptsaz.ir/mobile-powerpoint-maker): ساخت پاورپوینت آنلاین با مرورگر گوشی یا ربات تلگرام
 - [موضوع برای پاورپوینت](https://pptsaz.ir/powerpoint-topics): ایده‌ی موضوع برای مدرسه، دانشگاه و کار، با ساخت یک‌کلیکی
 - [پاورپوینت صوتی و پادکست](https://pptsaz.ir/audio-slide-podcast): اسلاید صوتی با صدای گوینده داخل هر اسلاید و پادکست دونفره از ارائه؛ هرکدام ۱ اعتبار جدا
+- [سایت ساخت پاورپوینت](https://pptsaz.ir/site-powerpoint-maker): انواع سایت‌های پاورپوینت ساز، چک‌لیست انتخاب و ساخت در چهار قدم
+- [اپ ساخت پاورپوینت با گوشی](https://pptsaz.ir/powerpoint-maker-app): اپ اندروید (کافه‌بازار و مایکت) و iOS، امکانات و راه‌های بدون نصب
+- [قالب پاورپوینت دانش‌آموزی و درسی](https://pptsaz.ir/student-powerpoint-template): تم‌های رنگی، ساختار شش‌اسلایدی و نمونه‌ی درسی
+- [جدول ساز فارسی برای اسلاید](https://pptsaz.ir/table-slide-maker): اسلاید جدولی راست‌به‌چپ و قابل‌ویرایش از روی مطلب مقایسه‌ای
 - [حل مشکل جدا شدن حروف فارسی در پاورپوینت](https://pptsaz.ir/blog/persian-letters-separated-powerpoint): علت‌ها و راه‌حل گام‌به‌گام
 
 ## وبلاگ
@@ -97,6 +101,16 @@
 - [نمونه پاورپوینت گرمایش جهانی](https://pptsaz.ir/blog/global-warming-presentation-sample): نمونه‌ی نه‌اسلایدی با منبع و نکته‌ی بررسی
 - [اسلاید فارسی در جدول](https://pptsaz.ir/blog/persian-table-in-slide): ساخت جدول راست‌به‌چپ، تعداد ستون، فونت و رفع جابه‌جایی ارقام
 - [عکس جزوه به پاورپوینت](https://pptsaz.ir/blog/photo-to-powerpoint-ocr-tips): ده نکته برای عکسی که OCR فارسی بهتر بخواند
+- [پاورپوینت آنلاین گوگل (Google Slides)](https://pptsaz.ir/blog/google-slides-persian-online): مزیت‌ها، محدودیت‌ها و باز کردن PPTX در Google Slides
+- [حل مشکل برعکس شدن متن در پاورپوینت](https://pptsaz.ir/blog/reversed-text-powerpoint-fix): جهت پاراگراف، متن آینه‌ای و متن چسبانده‌شده
+- [چگونه زبان پاورپوینت را فارسی کنیم](https://pptsaz.ir/blog/powerpoint-language-persian): صفحه‌کلید، زبان ویرایش و غلط‌یاب
+- [اعداد فارسی در پاورپوینت](https://pptsaz.ir/blog/persian-numbers-powerpoint): تایپ، فونت و تبدیل ارقام
+- [موضوع پاورپوینت برای کلاس ششم](https://pptsaz.ir/blog/sixth-grade-presentation-topics): ۳۰ ایده‌ی جالب و آموزنده
+- [ایده پاورپوینت دانشجویی](https://pptsaz.ir/blog/university-presentation-ideas): ۳۰ موضوع برای کلاس، سمینار و ژورنال کلاب
+- [عکس برای پاورپوینت](https://pptsaz.ir/blog/images-for-powerpoint): منبع قانونی و عکس هوش مصنوعی
+- [درست کردن جزوه](https://pptsaz.ir/blog/handout-design-guide): ساختار و قالب‌بندی جزوه در Word
+- [پاورپوینت مبحث ۱۹ مقررات ملی ساختمان](https://pptsaz.ir/blog/building-code-19-presentation): ساختار ده‌اسلایدی از متن رسمی
+- [ساخت اینفوگرافیک با گوشی](https://pptsaz.ir/blog/infographic-with-phone): پوستر آموزشی فارسی با مرورگر، اپ یا تلگرام
 - [فید RSS وبلاگ](https://pptsaz.ir/feed.xml): تازه‌ترین مقاله‌ها
 
 ## نکات

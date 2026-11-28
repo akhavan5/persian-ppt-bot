@@ -440,6 +440,45 @@ const TOPIC_AUDIO_RELATED: Record<string, string[]> = {
 };
 for (const [page, slugs] of Object.entries(TOPIC_AUDIO_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
 
+// ۶ آذر ۱۴۰۵: لینک‌دهی دوطرفه‌ی صفحه‌ها و مقاله‌های کلیدواژه‌ی جدید (site-powerpoint-maker، powerpoint-maker-app، student-powerpoint-template، table-slide-maker و ۱۰ مقاله)
+const KW_ARTICLES: Record<string, string[]> = {
+  "site-powerpoint-maker": ["best-ai-powerpoint-makers-persian", "google-slides-persian-online", "pptsaz-honest-comparison", "ai-powerpoint-faq-persian"],
+  "powerpoint-maker-app": ["ai-powerpoint-mobile-telegram", "infographic-with-phone", "google-slides-persian-online"],
+  "student-powerpoint-template": ["sixth-grade-presentation-topics", "school-presentation-topics", "class-presentation-tips", "free-powerpoint-templates-persian"],
+  "table-slide-maker": ["persian-table-in-slide", "ai-powerpoint-charts", "excel-data-presentation-guide"],
+  student: ["university-presentation-ideas"],
+  "school-presentation": ["sixth-grade-presentation-topics"],
+  "powerpoint-topics": ["sixth-grade-presentation-topics", "university-presentation-ideas"],
+  "ppt-with-images": ["images-for-powerpoint"],
+  "handout-maker": ["handout-design-guide"],
+  "infographic-maker": ["infographic-with-phone"],
+  "engineering-presentation": ["building-code-19-presentation"],
+  "persian-font-download": ["reversed-text-powerpoint-fix", "powerpoint-language-persian", "persian-numbers-powerpoint"],
+  "online-powerpoint-maker": ["google-slides-persian-online"],
+  compare: ["google-slides-persian-online"],
+  "mobile-powerpoint-maker": ["infographic-with-phone"],
+  "slide-maker": ["persian-table-in-slide"],
+};
+for (const [page, slugs] of Object.entries(KW_ARTICLES)) ARTICLES_FOR[page] = [...new Set([...(ARTICLES_FOR[page] ?? []), ...slugs])];
+const KW_RELATED: Record<string, string[]> = {
+  free: ["site-powerpoint-maker"],
+  "online-powerpoint-maker": ["site-powerpoint-maker", "powerpoint-maker-app"],
+  "iranian-powerpoint-maker": ["site-powerpoint-maker"],
+  "ai-powerpoint-maker": ["site-powerpoint-maker"],
+  compare: ["site-powerpoint-maker"],
+  "ppt-saz": ["site-powerpoint-maker", "powerpoint-maker-app"],
+  "mobile-powerpoint-maker": ["powerpoint-maker-app"],
+  "telegram-bot": ["powerpoint-maker-app"],
+  "school-presentation": ["student-powerpoint-template"],
+  "persian-powerpoint-templates": ["student-powerpoint-template"],
+  "ready-made-powerpoint": ["student-powerpoint-template"],
+  teacher: ["student-powerpoint-template"],
+  "slide-maker": ["table-slide-maker"],
+  "excel-to-pptx": ["table-slide-maker"],
+  "text-to-pptx": ["table-slide-maker"],
+};
+for (const [page, slugs] of Object.entries(KW_RELATED)) MORE_RELATED[page] = [...new Set([...(MORE_RELATED[page] ?? []), ...slugs])];
+
 /** مقاله → صفحه‌های فرودی که به آن لینک می‌دهند؛ برای لینک برگشتی از مقاله به صفحه‌های ابزار (لینک‌دهی داخلی دوطرفه). */
 export const LANDINGS_FOR_POST: Map<string, string[]> = (() => {
   const m = new Map<string, string[]>();
