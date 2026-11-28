@@ -56,6 +56,10 @@ struct SettingsView: View {
                         Picker("لحن", selection: Binding(get: { s.tone }, set: { m.setSetting("tone", $0) })) {
                             ForEach(m.cfg.tones) { Text($0.name).tag($0.key) }
                         }
+                        Picker("زبان خروجی", selection: Binding(get: { s.lang }, set: { m.setSetting("lang", $0) })) {
+                            Text("فارسی").tag("fa")
+                            Text("English").tag("en")
+                        }
                     } footer: {
                         Text("فونت‌های Vazirmatn و B Nazanin باید روی دستگاهی که ارائه را باز می‌کند نصب باشند؛ Tahoma و Arial همه‌جا کار می‌کنند.")
                     }

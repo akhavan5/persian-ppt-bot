@@ -1352,6 +1352,12 @@ fun SettingsTab(st: UiState, me: Me, vm: AppViewModel) {
             }
             Text("فونت Vazirmatn باید روی دستگاه نمایش‌دهنده نصب باشد؛ Tahoma و Arial همه‌جا کار می‌کنند.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
 
+            SectionTitle("زبان خروجی", Modifier.padding(top = 8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("fa" to "فارسی", "en" to "English").forEach { (k, l) -> SelectChip(l, s.lang == k, { vm.setSetting("lang", k) }) }
+            }
+            Text("روی همه‌ی خروجی‌ها اعمال می‌شود: اسلایدها، PPTX، PDF، جزوه، پوستر، اسلاید صوتی و پادکست. انگلیسی چپ‌به‌راست است.", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+
             SectionTitle("لحن", Modifier.padding(top = 8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 cfg.tones.forEach { o -> SelectChip(o.name, s.tone == o.key, { vm.setSetting("tone", o.key) }) }

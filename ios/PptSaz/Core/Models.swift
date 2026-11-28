@@ -63,6 +63,8 @@ struct Settings {
     var notes = true
     var images = true
     var imagesMany = false
+    /// زبان خروجی: fa = فارسی راست‌به‌چپ، en = انگلیسی چپ‌به‌راست
+    var lang = "fa"
 
     mutating func apply(_ key: String, _ value: Any) {
         switch key {
@@ -79,6 +81,7 @@ struct Settings {
         case "notes": notes = value as? Bool ?? notes
         case "images": images = value as? Bool ?? images
         case "imagesMany": imagesMany = value as? Bool ?? imagesMany
+        case "lang": lang = (value as? String) == "en" ? "en" : "fa"
         default: break
         }
     }
@@ -315,6 +318,7 @@ func parseMe(_ j: J) -> Me? {
     s.notes = st["notes"].exists ? st["notes"].bool : true
     s.images = st["images"].exists ? st["images"].bool : true
     s.imagesMany = st["imagesMany"].bool
+    s.lang = st["lang"].str == "en" ? "en" : "fa"
     m.settings = s
     let aj = j["activeJob"].str
     m.activeJob = aj.isEmpty ? nil : aj

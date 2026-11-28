@@ -1166,6 +1166,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         "sources" -> s.copy(sources = value as Boolean)
         "questions" -> s.copy(questions = value as Boolean)
         "notes" -> s.copy(notes = value as Boolean)
+        "lang" -> s.copy(lang = value as String)
         else -> s
     }
 
@@ -1192,6 +1193,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     "sources" -> before.sources
                     "questions" -> before.questions
                     "notes" -> before.notes
+                    "lang" -> before.lang
                     else -> value
                 }
                 _state.update { st -> st.copy(me = st.me?.let { m -> m.copy(settings = applySetting(m.settings, key, old)) }) }

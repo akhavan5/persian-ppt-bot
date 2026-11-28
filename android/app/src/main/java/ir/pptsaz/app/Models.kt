@@ -39,6 +39,8 @@ data class Settings(val theme: String, val template: String, val tone: String, v
     val imagesMany: Boolean = false,
     /** یادداشت سخنرانی زیر هر اسلاید؛ پیش‌فرض روشن */
     val notes: Boolean = true,
+    /** زبان خروجی ارائه و فایل‌های همراه (PPTX، پیش‌نمایش/PDF، جزوه، پوستر، صوت): fa = فارسی راست‌به‌چپ، en = انگلیسی چپ‌به‌راست */
+    val lang: String = "fa",
 )
 
 /** وضعیت اتصال یک پیام‌رسان به حساب (سرور: channels در /api/me)؛ key: tg | bale | eitaa | rubika | splus */
@@ -162,6 +164,7 @@ fun parseMe(j: JSONObject): Me? {
             mode = st.str("mode").ifEmpty { "normal" },
             digits = st.optBoolean("digits"), sources = st.optBoolean("sources"), questions = st.optBoolean("questions"),
             images = st.optBoolean("images", true), imagesMany = st.optBoolean("imagesMany", false), notes = st.optBoolean("notes", true),
+            lang = if (st.str("lang") == "en") "en" else "fa",
         ),
         activeJob = j.str("activeJob").ifEmpty { null },
         plans = j.optJSONArray("plans").objects().map {
