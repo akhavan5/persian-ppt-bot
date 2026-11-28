@@ -35,27 +35,8 @@ window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);
 gtag('js',new Date());gtag('config','G-7W4KTFJGE9');
 </script>`;
 
-/** اسکریپت یکتانت (نوتیفیکیشن شناور همسان). طبق قوانین یکتانت باید بدون هیچ تغییری و داخل head قرار بگیرد؛ این متن را دست‌کاری نکنید. */
-export const YEKTANET_SCRIPT = `<script>
-        !function(e,t,n){
-            e.yektanetAnalyticsObject=n,
-            e[n]=e[n]||function(){e[n].q.push(arguments)},
-            e[n].q=e[n].q||[];
-            var a=t.getElementsByTagName("head")[0],
-                r=new Date,
-                c="https://cdn.yektanet.ir/superscript-v2/Pq312DDt/native-49323/yn_pub.js?v="
-                    +r.getFullYear().toString()+"0"+r.getMonth()+"0"+r.getDate()+"0"+r.getHours(),
-                s=t.createElement("link");
-            s.rel="preload",
-            s.as="script",
-            s.href=c,
-            a.appendChild(s);
-            var l=t.createElement("script");
-            l.async=!0,
-            l.src=c,
-            a.appendChild(l);
-        }(window,document,"yektanet");
-        </script>`;
+/** اسکریپت یکتانت از سایت حذف شده است (فقط در برنامک ایتا، src/index.ts، استفاده می‌شود). */
+export const YEKTANET_SCRIPT = "";
 
 /** اسکریپت مدیاد (mediaad). */
 export const MEDIAAD_SCRIPT = `<script type="text/javascript">
