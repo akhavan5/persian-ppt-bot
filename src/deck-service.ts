@@ -16,6 +16,9 @@ import { hasBrowser } from "./browser-api";
 import { supportLink, type Uid } from "./settings";
 import { createLoginToken } from "./link";
 import { isEitaaId } from "./eitaa-format";
+import { isSplusId } from "./splus-format";
+import { isRubikaId } from "./rubika-format";
+import { googleSlidesEnabled } from "./auth";
 import { ttsEnabled } from "./gemini-tts";
 
 export const siteUrl = (env: Env) => (env.SITE_URL || "https://pptsaz.ir").replace(/\/+$/, "");
@@ -56,6 +59,10 @@ export async function appReadyMarkup(env: Env, tgChat: number, fileId?: string):
   }
   return { reply_markup: { inline_keyboard: rows } };
 }
+
+/** دکمه‌ی «Google Slides» زیر ارائه فقط در ربات تلگرام و بله (ایتا مینی‌اپ و «مشاهده در سایت» دارد؛ سروش‌پلاس و روبیکا فعلاً نه) و فقط وقتی Client ID گوگل تنظیم است */
+export const slidesOnChat = (env: Env, chatId: number): boolean =>
+  googleSlidesEnabled(env) && !isEitaaId(chatId) && !isSplusId(chatId) && !isRubikaId(chatId);
 
 export const imagesLimitMsg = (max: number) => max <= FREE_MAX_IMAGES
   ? `در پلن رایگان حداکثر ${toFa(String(FREE_MAX_IMAGES))} تصویر در هر ارائه می‌گیری؛ برای تصویر بیشتر پلن پلاس (تا ${toFa(String(PLANS[0].maxImages))} تصویر) یا پرو (تا ${toFa(String(PLANS[1].maxImages))} تصویر) را بگیر.`

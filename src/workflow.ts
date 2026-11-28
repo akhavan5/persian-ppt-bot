@@ -10,7 +10,7 @@ import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegr
 import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { adminIds, botPlatform, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
-import { BUY_SITE_NOTE, appReadyMarkup, buyKbFor, fileNameWithSite } from "./deck-service";
+import { BUY_SITE_NOTE, appReadyMarkup, buyKbFor, fileNameWithSite, slidesOnChat } from "./deck-service";
 import { linkedFor } from "./link";
 import { deckKeyboard, extraButtons, extrasHint, isGammaAdmin, markExtra, type ExtraKind } from "./extras";
 import { loadFileDirect, logDeck, saveFile, savePreview } from "./files";
@@ -154,7 +154,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
           const hide = new Set<ExtraKind>([poster ? "poster" : null, handout ? "handout" : null, audio ? "audio" : null, podcast ? "podcast" : null].filter((k): k is ExtraKind => !!k));
           await sendDocument(this.env, chatId, new Uint8Array(f.data), meta.name,
             `✅ <b>${esc(deck.title)}</b>\n${toFa(String(deck.slides.length))} اسلاید${fontCaption(settings.font)}${extrasHint(extraButtons(this.env, event.instanceId, hide))}`,
-            { reply_markup: deckKeyboard(this.env, event.instanceId, hide, { admin: isGammaAdmin(this.env, event.payload.tgId ?? chatId) }) }); // مدیر در تلگرام: دکمه‌های Gamma هم
+            { reply_markup: deckKeyboard(this.env, event.instanceId, hide, { admin: isGammaAdmin(this.env, event.payload.tgId ?? chatId), slides: slidesOnChat(this.env, chatId) }) }); // مدیر در تلگرام: دکمه‌های Gamma هم
         });
       }
 

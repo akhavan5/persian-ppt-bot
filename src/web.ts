@@ -26,7 +26,7 @@ import { getAppVersions } from "./app-version";
 import { appFields, appPlatform, parseAppUA, pwaOf, pwaPlatform } from "./app-ua";
 import {
   authUser, checkOtp, markSite, clearSessionCookie, createSession, createUser, destroySession, emailOtpEnabled, getUserByEmail, getUserByMobile, googleCallback,
-  googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtpEx,
+  googleAppExchange, googleEnabled, googleLoginWithIdToken, googleSlidesEnabled, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtpEx,
   sessionCookie, validEmail, type WebUser,
 } from "./auth";
 import { audioEnabled, beginDeck, fileNameWithSite, launchDeck, posterEnabled, runningJob, siteHost, siteUrl, slidesLimitMsg } from "./deck-service";
@@ -102,8 +102,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     const ver = await getAppVersions(env);
     return json({
       google: googleEnabled(env),
-      // Web client ID برای ورود داخل اپ اندروید (Credential Manager)؛ عمومی است و محرمانه نیست
-      googleClientId: googleEnabled(env) ? env.GOOGLE_CLIENT_ID : undefined,
+      // Web client ID؛ عمومی است و محرمانه نیست. برای دکمه‌ی Google Slides (سایت/مینی‌اپ) فقط همین لازم است و به Client Secret وابسته نیست.
+      // ورود با گوگل در اپ اندروید (Credential Manager) همچنان با فیلد «google» بالا کنترل می‌شود (Models.kt فقط اگر google=true از این استفاده می‌کند).
+      googleClientId: googleSlidesEnabled(env) ? env.GOOGLE_CLIENT_ID : undefined,
       otp: otpEnabled(env),
       // ورود/ثبت‌نام با کد ایمیلی (برای ایمیل‌های غیر جیمیل)؛ در همان کادر شماره‌ی موبایل وارد می‌شود
       emailOtp: emailOtpEnabled(env),

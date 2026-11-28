@@ -265,6 +265,8 @@ export async function checkOtp(env: Env, mobile: string, code: string): Promise<
 
 // ---------- ورود با گوگل ----------
 export const googleEnabled = (env: Env) => !!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET;
+/** ساخت Google Slides در Drive خودِ کاربر (دکمه‌ی سایت، مینی‌اپ و ربات) فقط به Web Client ID نیاز دارد؛ Client Secret (ورود با گوگل) لازم نیست */
+export const googleSlidesEnabled = (env: Env) => !!env.GOOGLE_CLIENT_ID;
 const redirectUri = (url: URL) => `${url.origin}/api/auth/google/callback`;
 const STATE_COOKIE = "gstate";
 

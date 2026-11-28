@@ -123,10 +123,13 @@ export function extraButtons(env: Env, id: string, hide: Set<ExtraKind>, admin =
 
 /** جمله‌ی راهنمای کپشن ارائه (قیمت هر دکمه را پیش از زدن می‌گوید)؛ بدون دکمه = "" */
 export const extrasHint = (rows: Btn[][]) => rows.length ? "\n\n➕ پوستر، جزوه، اسلاید صوتی و پادکست را هم می‌توانی با دکمه‌های زیر بسازی (هرکدام ۱ اعتبار)." : "";
-/** کیبورد کامل زیر فایل ارائه: PDF + همراه‌ها + ارسال نظر */
-export function deckKeyboard(env: Env, id: string, hide: Set<ExtraKind>, o: { feedback?: boolean; pdf?: boolean; /** مدیر در تلگرام: دکمه‌های Gamma هم */ admin?: boolean } = {}) {
+/** دکمه‌ی «Google Slides»؛ با زدن آن ربات لینک ورود تازه می‌فرستد (لینک ورود یک‌ساعته است ولی دکمه‌ی زیر ارائه ۲۴ ساعت می‌ماند، پس لینک هنگام زدن ساخته می‌شود) */
+export const slidesRow = (id: string): Btn[] => [{ text: "📑 ساخت در Google Slides", callback_data: `gs:${id}` }];
+/** کیبورد کامل زیر فایل ارائه: PDF + Google Slides + همراه‌ها + ارسال نظر */
+export function deckKeyboard(env: Env, id: string, hide: Set<ExtraKind>, o: { feedback?: boolean; pdf?: boolean; /** دکمه‌ی Google Slides (تلگرام و بله) */ slides?: boolean; /** مدیر در تلگرام: دکمه‌های Gamma هم */ admin?: boolean } = {}) {
   const rows: Btn[][] = [];
   if (o.pdf !== false && hasBrowser(env)) rows.push([{ text: "📄 دریافت نسخه‌ی PDF", callback_data: `g:${id}` }]);
+  if (o.slides) rows.push(slidesRow(id));
   rows.push(...extraButtons(env, id, hide, !!o.admin));
   if (o.feedback !== false) rows.push([{ text: "💬 ارسال نظر", callback_data: "fb:s" }]);
   return { inline_keyboard: rows };

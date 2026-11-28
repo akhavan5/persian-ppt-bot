@@ -10,15 +10,15 @@ import {
 import { ADMIN_CMDS, handleAdmin, handleAdminFileCallback, handleAdminSampleCallback, handleAdminInput, handleBroadcastCallback, handlePanelCallback } from "./admin";
 import { listFiles, loadFile } from "./files";
 import { SAMPLE_BADGE, isSampleId, listSamples, sampleById, sampleCaption, sampleLabel, sampleMime } from "./samples";
-import { ALL_EXTRA_KINDS, GAMMA_HEADER, extraButtons, extraOfCode, extrasHint, isButtonOf, isGammaAdmin, isMainDeck, madeExtras, startExtra, type ExtraKind } from "./extras";
+import { ALL_EXTRA_KINDS, GAMMA_HEADER, extraButtons, extraOfCode, extrasHint, isButtonOf, isGammaAdmin, isMainDeck, madeExtras, slidesRow, startExtra, type ExtraKind } from "./extras";
 import { buildDeckPdf, cachedPdf } from "./pdf";
-import { hitLimit } from "./auth";
+import { googleSlidesEnabled, hitLimit } from "./auth";
 import { appPushCommand } from "./push";
 import { notifyAllCommand } from "./notify";
 import { appVerCommand } from "./app-version";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { audioSeconds, isAudioName } from "./wav";
-import { siteHost } from "./deck-service";
+import { siteHost, slidesOnChat } from "./deck-service";
 import { isBaleId } from "./bale-format";
 import { isSplusId } from "./splus-format";
 import { isRubikaId } from "./rubika-format";
@@ -396,6 +396,17 @@ async function startExtraButton(env: Env, cq: any, uid: Uid, tgId: number, chatI
   }
 }
 
+/** دکمه‌ی «📑 Google Slides» زیر ارائه (تلگرام و بله): لینک ورود یک‌بارمصرف تازه با همان حساب، مستقیم روی همین ارائه؛
+ *  ساخت در Drive کاربر در سایت (مرورگر بیرونی) انجام می‌شود چون ورود گوگل داخل WebView/برنامک مسدود است. */
+async function sendSlidesLink(env: Env, cq: any, userId: number, chatId: number, id: string) {
+  await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {});
+  if (!googleSlidesEnabled(env)) return await sendMessage(env, chatId, "اتصال گوگل روی این سرویس فعال نیست.");
+  if (!/^[\w-]{1,100}$/.test(id)) return;
+  return await sendMessage(env, chatId,
+    "📑 با دکمه‌ی زیر با همین حساب وارد سایت می‌شوی (بدون ثبت‌نام و رمز) و همین ارائه باز می‌شود؛ آنجا روی «Google Slides» بزن تا در Google Drive خودت ساخته شود.",
+    kb([[{ text: "📑 باز کردن در سایت", url: await siteLoginUrl(env, userId, "files", id) }]]));
+}
+
 async function handleCallback(env: Env, cq: any) {
   const userId: number = cq.from.id;
   const chatId: number = cq.message?.chat?.id;
@@ -431,6 +442,7 @@ async function handleCallback(env: Env, cq: any) {
   if (act === "n") return await tg(env, "answerCallbackQuery", { callback_query_id: cq.id }).catch(() => {}); // عنوان بخش (بی‌اثر)
   if (act === "p") return await handlePending(env, cq, uid, userId, chatId, mid, a, b);
   if (act === "g") return await sendDeckPdf(env, cq, uid, chatId, a);
+  if (act === "gs") return await sendSlidesLink(env, cq, userId, chatId, a);
   if (act === "au" || act === "pc") return await startExtraButton(env, cq, uid, userId, chatId, act === "pc" ? "podcast" : "audio", a);
   if (act === "ex") {
     const x = extraOfCode(a);
@@ -477,10 +489,11 @@ async function handleCallback(env: Env, cq: any) {
     const isDeck = isMainDeck(a, f.entry.name); // اسلاید صوتی هم .pptx است ولی ارائه‌ی اصلی نیست: دکمه‌ی همراه نمی‌گیرد
     const gAdmin = isGammaAdmin(env, userId); // مدیر در تلگرام: دکمه‌های Gamma (ساخته‌نشده‌ها) هم می‌آید
     const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a, undefined, gAdmin ? ALL_EXTRA_KINDS : undefined).catch(() => new Set<ExtraKind>(ALL_EXTRA_KINDS)), gAdmin) : [];
+    const krows = [...(isDeck && slidesOnChat(env, chatId) ? [slidesRow(a)] : []), ...xrows]; // Google Slides + همراه‌های ساخته‌نشده
     return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>${extrasHint(xrows)}`,
       /\.(png|jpe?g)$/i.test(f.entry.name) ? { mime: /\.png$/i.test(f.entry.name) ? "image/png" : "image/jpeg" }
         : /\.docx$/i.test(f.entry.name) ? { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
-        : xrows.length ? { reply_markup: { inline_keyboard: xrows } } : undefined);
+        : krows.length ? { reply_markup: { inline_keyboard: krows } } : undefined);
   }
   const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);
   let view = mainMenu(env, s, caps);
