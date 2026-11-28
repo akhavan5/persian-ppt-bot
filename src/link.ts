@@ -69,6 +69,21 @@ export async function consumeLoginToken(env: Env, token: string): Promise<number
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
+/** لینک ورود یک‌بارمصرفِ کاربرِ اپ (اندروید/iOS) به سایت: بر پایه‌ی شناسه‌ی حساب وب (نه تلگرام)، اعتبار ۵ دقیقه.
+ *  فقط پس از احرازِ نشستِ خودِ اپ ساخته می‌شود (POST /api/app/site-link) و با GET /api/auth/web مصرف می‌شود. */
+export async function createWebLoginToken(env: Env, uid: string): Promise<string> {
+  const t = randomToken(24);
+  await env.KV.put(`wlt:${t}`, uid, { expirationTtl: 300 });
+  return t;
+}
+export async function consumeWebLoginToken(env: Env, token: string): Promise<string | null> {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
+  const v = await env.KV.get(`wlt:${token}`);
+  if (!v) return null;
+  await env.KV.delete(`wlt:${token}`).catch(() => {});
+  return v;
+}
+
 /** تلگرام وصل‌شده به این حساب وب (اگر باشد)؛ «هویت اصلی» حساب. فهرست همه‌ی پیام‌رسان‌ها: getLinkedIds */
 export async function getLinkedTg(env: Env, uid: string): Promise<number | null> {
   const n = Number(await env.KV.get(`w2tg:${uid}`).catch(() => null));

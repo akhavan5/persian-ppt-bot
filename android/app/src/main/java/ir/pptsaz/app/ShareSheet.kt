@@ -22,6 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,10 +51,13 @@ internal fun isGoogleEditor(pkg: String?) = pkg == PKG_SLIDES || pkg == PKG_DOCS
  * برنامه‌ی Google Slides نصب نیست: همان ارائه در سایت (مرورگر) باز می‌شود و دکمه‌ی «Google Slides» سایت آن را
  * مستقیم در Google Drive خودِ کاربر می‌سازد؛ نیازی به نصب برنامه نیست. فقط مسیر /open به برنامه برمی‌گردد (App Link)، پس این آدرس در مرورگر می‌ماند.
  */
-internal fun openSlidesOnSite(ctx: Context, fileId: String) {
+internal suspend fun openSlidesOnSite(ctx: Context, fileId: String) {
     if (!Regex("[\\w-]{1,100}").matches(fileId)) return
+    // لینک ورود یک‌بارمصرف از سرور (بدون ورود دوباره در مرورگر)؛ اگر نشد، آدرس ساده (کاربر خودش وارد می‌شود)
+    val url = try { Api.siteLink(fileId).ifBlank { null } } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+        ?: "${Api.BASE}/?files=$fileId"
     try {
-        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("${Api.BASE}/?files=$fileId")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (_: Exception) {}
 }
 
@@ -85,6 +90,7 @@ internal fun shareCaption(title: String): String =
 @Composable
 fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = null, webFileId: String? = null, onPick: (pkg: String?, asPdf: Boolean) -> Unit) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val targets = remember { installedShareTargets(ctx) }
     // «باز کردن در Google Slides/Docs» فقط وقتی برنامه روی گوشی نصب است (googlePkg را فقط برای ارائه‌ی PPTX و جزوه‌ی Word بده)
     val google = remember(googlePkg) {
@@ -115,7 +121,7 @@ fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = nul
                 google?.let { g -> ShareRow(g.label, g.icon) { onPick(g.pkg, false) } }
                 // برنامه‌ی Slides نیست (فقط برای ارائه): ساخت Slides از راه سایت
                 if (google == null && googlePkg == PKG_SLIDES && webFileId != null) {
-                    ShareRow("ساخت در Google Slides (از طریق سایت)", null) { onDismiss(); openSlidesOnSite(ctx, webFileId) }
+                    ShareRow("ساخت در Google Slides (از طریق سایت)", null) { scope.launch { openSlidesOnSite(ctx, webFileId); onDismiss() } }
                 }
                 targets.forEach { t ->
                     ShareRow(t.label, t.icon) { onPick(t.pkg, pdf) }

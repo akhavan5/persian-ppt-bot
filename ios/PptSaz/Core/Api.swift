@@ -145,6 +145,11 @@ final class Api {
         persistCookies()
     }
 
+    /// لینک ورود یک‌بارمصرف به سایت روی همان ارائه (برای ساخت Google Slides در Safari بدون ورود دوباره)
+    func siteLink(_ id: String) async throws -> String {
+        try await call("POST", "/api/app/site-link", ["id": id])["url"].str
+    }
+
     func logout() async {
         _ = try? await call("POST", "/api/auth/logout")
         clearSession()

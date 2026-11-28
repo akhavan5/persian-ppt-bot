@@ -29,7 +29,7 @@ import {
   googleAppExchange, googleEnabled, googleLoginWithIdToken, googleStart, hitLimit, normEmail, normMobile, otpEnabled, publicUser, randomToken, renewSession, saveWebUser, sendEmailOtp, sendOtpEx,
   sessionCookie, validEmail, type WebUser,
 } from "./auth";
-import { audioEnabled, beginDeck, fileNameWithSite, launchDeck, posterEnabled, runningJob, siteHost, slidesLimitMsg } from "./deck-service";
+import { audioEnabled, beginDeck, fileNameWithSite, launchDeck, posterEnabled, runningJob, siteHost, siteUrl, slidesLimitMsg } from "./deck-service";
 import { OCR_TYPES } from "./extract";
 import { AUDIO_TYPES, deepgramEnabled } from "./deepgram";
 import { VISION_MAX_IMAGE_BYTES } from "./vision-ocr";
@@ -37,7 +37,7 @@ import { WEB_MAX_FILE, extractFileBytes } from "./tg-file";
 import { webOcrKey, type WebOcrOut } from "./web-ocr-workflow";
 import { OCR_CAP_NOTE, ocrLimitHit } from "./ocr-limit";
 import { fetchLinkSource, linkCapNote, linkEnabled, linkLimitHit, parseLinkUrl } from "./link-source";
-import { addLinkedId, autoBotId, channelStatus, consumeLoginToken, deviceStatus, ensureUid, getLinkedIds, getLinkedTg, isChan, linkedFor, setChannelNotify, unlinkChannel } from "./link";
+import { addLinkedId, autoBotId, channelStatus, consumeLoginToken, consumeWebLoginToken, createWebLoginToken, deviceStatus, ensureUid, getLinkedIds, getLinkedTg, isChan, linkedFor, setChannelNotify, unlinkChannel } from "./link";
 import { channelOpenLink } from "./invite-msg";
 import { EXTRA_KINDS, audioKind, isMainDeck, missingExtras, startExtra } from "./extras";
 import { isBaleId, fromBaleId } from "./bale-format";
@@ -84,6 +84,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   // ورود خودکار از دکمه‌های ربات تلگرام (لینک یک‌بارمصرف که فقط به چت خود کاربر فرستاده شده)
   if (path === "/api/auth/tg" && method === "GET") return tgLogin(env, req, url);
+  if (path === "/api/auth/web" && method === "GET") return webLogin(env, req, url); // ورود یک‌بارمصرف از اپ اندروید/iOS (لینک را /api/app/site-link می‌دهد)
 
   // درگاه سیزپی: انتقال به درگاه (GET) و بازگشت از درگاه (POST از مرورگر کاربر؛ بدون بررسی origin)
   if (path === "/api/pay/go" && method === "GET") return paymentGo(env, url);
@@ -211,6 +212,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/miniapp/buy" && method === "POST") return miniappBuy(env, user, req.headers.get("x-plat"));
   if (path === "/api/miniapp/site" && method === "POST") return miniappSite(env, user, await readBody(req, 2_000), req.headers.get("x-plat"));
   if (path === "/api/miniapp/welcome" && method === "POST") return miniappWelcome(env, user);
+  if (path === "/api/app/site-link" && method === "POST") return appSiteLink(env, user, await readBody(req, 2_000));
   if (path === "/api/miniapp/pdf" && method === "POST") return miniappPdf(env, user, await readBody(req, 2_000), req.headers.get("x-plat"));
   if (path === "/api/miniapp/pdf-dl" && method === "POST") return miniappPdfLink(env, user, await readBody(req, 2_000));
   // دعوت دوستان برای همه‌ی پلتفرم‌ها (سایت، اپ اندروید، Mini App تلگرام/بله، برنامک ایتا)؛ /api/miniapp/invite برای نسخه‌های قدیمی Mini App می‌ماند
@@ -499,6 +501,30 @@ async function tgLogin(env: Env, req: Request, url: URL): Promise<Response> {
     status: 303,
     headers: { location: `${url.origin}${to}`, "set-cookie": sessionCookie(token), ...noStore },
   });
+}
+
+/** POST /api/app/site-link {id} ← {url} — اپ اندروید/iOS: لینک ورود یک‌بارمصرف به سایت، مستقیم روی همان ارائه (برای ساخت Google Slides در مرورگر بدون ورود دوباره). فایل باید مال خود کاربر باشد (وگرنه فقط بخش فایل‌ها). */
+async function appSiteLink(env: Env, user: WebUser, body: Record<string, unknown> | null): Promise<Response> {
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!/^[\w-]{1,100}$/.test(id)) return err("فایل نامعتبر است.", 400);
+  if (await hitLimit(env, `asite:${user.id}`, 30, 3600)) return err("تعداد درخواست زیاد بود؛ کمی بعد دوباره امتحان کن.", 429);
+  const owned = await loadFileDirect(env, user.id, id).catch(() => null);
+  const t = await createWebLoginToken(env, user.id);
+  return json({ url: `${siteUrl(env)}/api/auth/web?t=${t}&f=${owned ? encodeURIComponent(id) : "1"}` });
+}
+
+/** GET /api/auth/web?t=توکن[&f=شناسه‌ی فایل] — توکن یک‌بارمصرف و ۵ دقیقه‌ای؛ نشست ۳۰ روزه ساخته می‌شود و کاربر روی همان فایل می‌رود */
+async function webLogin(env: Env, req: Request, url: URL): Promise<Response> {
+  const fid = url.searchParams.get("f") ?? "";
+  const to = `/?files=${/^[\w-]{1,100}$/.test(fid) ? encodeURIComponent(fid) : "1"}`;
+  const noStore = { "cache-control": "no-store", "referrer-policy": "no-referrer" };
+  const uid = await consumeWebLoginToken(env, url.searchParams.get("t") ?? "");
+  if (!uid || (await isBanned(env, uid))) {
+    const already = await authUser(env, req).catch(() => null); // درخواست تکراری مرورگر: اگر همین حالا وارد شده، خطا نشان نمی‌دهیم
+    return new Response(null, { status: 303, headers: { location: `${url.origin}${already ? to : "/?login=expired"}`, ...noStore } });
+  }
+  const token = await createSession(env, uid);
+  return new Response(null, { status: 303, headers: { location: `${url.origin}${to}`, "set-cookie": sessionCookie(token), ...noStore } });
 }
 
 // ---------- ساخت ارائه ----------

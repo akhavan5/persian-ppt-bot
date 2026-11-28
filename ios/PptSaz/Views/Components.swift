@@ -211,8 +211,12 @@ enum OpenIn {
     /// آن را مستقیم در Google Drive خودِ کاربر می‌سازد (نیازی به نصب برنامه نیست). serverID = شناسه‌ی ارائه روی سرور.
     static func openOnSite(_ serverID: String) {
         let safe = String(serverID.unicodeScalars.filter { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_") })
-        guard !safe.isEmpty, let url = URL(string: Api.base + "/?files=" + safe) else { return }
-        UIApplication.shared.open(url)
+        guard !safe.isEmpty else { return }
+        Task { @MainActor in
+            // لینک ورود یک‌بارمصرف (بدون ورود دوباره)؛ اگر نشد، آدرس ساده و کاربر خودش وارد می‌شود
+            let link = (try? await Api.shared.siteLink(safe)) ?? ""
+            if let url = URL(string: link.isEmpty ? Api.base + "/?files=" + safe : link) { UIApplication.shared.open(url) }
+        }
     }
 }
 

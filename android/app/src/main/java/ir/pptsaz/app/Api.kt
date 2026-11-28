@@ -165,6 +165,9 @@ object Api {
         call("POST", "/api/app/push", JSONObject().put("token", token).put("promo", promo).put("remove", remove))
     }
 
+    /** لینک ورود یک‌بارمصرف به سایت روی همان ارائه (برای ساخت Google Slides در مرورگر بدون ورود دوباره). */
+    suspend fun siteLink(id: String): String = call("POST", "/api/app/site-link", JSONObject().put("id", id)).optString("url")
+
     suspend fun logout() {
         try { call("POST", "/api/auth/logout") } catch (e: ApiException) { /* مهم نیست */ }
         clearSession()
