@@ -120,11 +120,11 @@ export const AP_ERR: Record<string, string> = {
   "-15": "دامنه‌ی callback با دامنه‌ی تاییدشده‌ی درگاه نمی‌خواند", "-16": "Referrer ارسال نشده است", "-17": "callback_method نامعتبر است",
 };
 
-export async function ap(env: Env, path: "create" | "verify", body: Record<string, unknown>, referer?: string): Promise<{ status: string; code: string; transid: string } | null> {
+export async function ap(env: Env, path: "create" | "verify", body: Record<string, unknown>): Promise<{ status: string; code: string; transid: string } | null> {
   try {
     const r = await fetch(`${BASE}/api/v2/${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json", ...(referer ? { referer } : {}) }, // آقای پرداخت بدون Referer خطای -16 می‌دهد
+      headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({ pin: (env.AQAYE_PIN ?? "").trim(), ...body }),
     });
     const d = (await r.json().catch(() => null)) as { status?: string; code?: string | number; transid?: string | number } | null;

@@ -234,7 +234,7 @@ export async function paymentGo(env: Env, url: URL): Promise<Response> {
   const order = url.searchParams.get("t") ?? "";
   const rec = ORDER_RE.test(order) ? ((await env.KV.get(`pay:${order}`, "json")) as PayRecord | null) : null;
   if (!rec || rec.state !== "pending" || !rec.redirect) return Response.redirect(`${url.origin}/?pay=fail`, 303);
-  return new Response(null, { status: 303, headers: { location: rec.redirect, "cache-control": "no-store", "referrer-policy": "no-referrer" } });
+  return new Response(null, { status: 303, headers: { location: rec.redirect, "cache-control": "no-store", "referrer-policy": rec.gw === "aqaye" ? "origin" : "no-referrer" } }); // آقای پرداخت روی صفحه‌ی پرداخت Referer (دامنه‌ی سایت) را می‌خواهد؛ بدونش خطای -16
 }
 
 /** POST /api/pay/callback — بازگشت کاربر از دیجی‌پی؛ پرداخت را تایید (purchases/verify) و پلن را فعال می‌کند */
@@ -312,7 +312,7 @@ async function startAqaye(env: Env, user: WebUser, url: URL, plan: Plan): Promis
   const r = await ap(env, "create", {
     amount: toman, callback: `${url.origin}/api/pay/callback/aqaye/${order}`, callback_method: "GET",
     description: `اشتراک ماهانه پلن ${plan.name}`, ...(mobile ? { mobile } : {}),
-  }, `${url.origin}/`);
+  });
   if (!r || r.status !== "success" || !TRANSID_RE.test(r.transid)) {
     console.error("aqaye create failed", r?.status, r?.code, r?.code ? AP_ERR[r.code] : "");
     return json({ error: "اتصال به درگاه پرداخت ممکن نشد؛ چند دقیقه بعد دوباره امتحان کن یا درگاه دیگری را انتخاب کن." }, 502);
@@ -341,7 +341,7 @@ export async function aqayeCallback(env: Env, url: URL): Promise<Response> {
       .bind(`pay:${order}`, JSON.stringify({ ...rec, state: "failed" })).run();
     return go("pay=cancel");
   }
-  const v = await ap(env, "verify", { amount: rec.toman ?? Math.round(rec.amount / 10), transid }, `${url.origin}/`);
+  const v = await ap(env, "verify", { amount: rec.toman ?? Math.round(rec.amount / 10), transid });
   if (!v) { await flagIssue(env, rec, "net", transid); return go("pay=error"); } // خطای شبکه: pending می‌ماند تا تایید دوباره
   if (v.status !== "success" || v.code !== "1") {
     console.error("aqaye verify failed", order, v.status, v.code);
