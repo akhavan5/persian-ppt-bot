@@ -21,7 +21,7 @@ import { PLANS, activatePlan, payEnabled, payGateways } from "./payment";
 import { runningJob } from "./deck-service";
 import { hasBrowser } from "./browser-api";
 import { toEn, toFa } from "./util";
-import { approveReview, rejectReview } from "./reviews";
+import { approveReview, listPublicReviews, rejectReview, removePublicReview } from "./reviews";
 import { XLSX_MIME, buildXlsx, type XCell } from "./xlsx";
 import { AUDIENCES, isAudience, listAudience, type Audience } from "./broadcast";
 import {
@@ -258,11 +258,32 @@ async function homeScreen(env: Env): Promise<Screen> {
       [cb("🔎 جستجوی کاربر", "ad:se"), cb("🗂 ارائه‌های اخیر", "ad:dk")],
       [cb("📣 پیام همگانی", "ad:bc"), cb("👑 پلن‌های فعال", "ad:sb:0")],
       [cb("⛔️ مسدودها", "ad:bn"), cb("⚙️ سیستم", "ad:sy")],
-      [cb("💬 پشتیبانی سایت", "ad:sc:r:0")],
+      [cb("💬 پشتیبانی سایت", "ad:sc:r:0"), cb("⭐ نظرات سایت", "ad:rv:0")],
       [cb(`💰 پرداخت‌ها${payIssues ? ` 🚨${fa(payIssues)}` : ""}`, "ad:pm:s:0"), cb("🔻 قیف کاربران", "ad:fn:30"), cb("🎁 دعوت‌ها", "ad:iv:t:0")],
       [cb("📱 اپ اندروید/iOS (نسخه و اعلان)", "ad:ap"), cb("📤 خروجی‌ها", "ad:xo")],
       [cb("🔄 تازه‌سازی", "ad:h"), cb("✖️ بستن", "ad:x")],
     ],
+  };
+}
+
+/** نظرهای منتشرشده‌ی صفحه‌ی اصلی؛ هر صفحه ۸ نظر با دکمه‌ی حذف (حذف با تایید) */
+const RV_PAGE = 8;
+async function reviewsScreen(env: Env, page: number, note = ""): Promise<Screen> {
+  const list = await listPublicReviews(env);
+  const pages = Math.max(1, Math.ceil(list.length / RV_PAGE));
+  const p = Math.max(0, Math.min(pages - 1, page));
+  const slice = list.slice(p * RV_PAGE, p * RV_PAGE + RV_PAGE);
+  const lines = slice.map((v, i) => `<b>${fa(p * RV_PAGE + i + 1)}.</b> ${esc(v.n)} · ${esc(v.s)}${v.r ? ` · ${"★".repeat(v.r)}` : ""}\n<i>«${esc(v.t.slice(0, 90))}${v.t.length > 90 ? "…" : ""}»</i>`);
+  const kb: Btn[][] = slice.map((v, i) => [cb(`🗑 ${fa(p * RV_PAGE + i + 1)}. ${v.n.slice(0, 14)} — ${v.t.slice(0, 22)}`, `ad:rc:${v.c}:${p}`)]);
+  const nav: Btn[] = [];
+  if (p > 0) nav.push(cb("➡️ قبلی", `ad:rv:${p - 1}`));
+  if (p < pages - 1) nav.push(cb("بعدی ⬅️", `ad:rv:${p + 1}`));
+  if (nav.length) kb.push(nav);
+  kb.push(backHome);
+  return {
+    text: `⭐ <b>نظرات سایت</b> (${fa(list.length)} نظر · صفحه‌ی ${fa(p + 1)} از ${fa(pages)})\n` + (note ? `\n${note}\n` : "") +
+      (lines.length ? `\n${lines.join("\n\n")}\n\n<i>برای حذف، دکمه‌ی 🗑 نظر را بزن. تغییر حداکثر تا ۱–۲ ساعت در سایت دیده می‌شود.</i>` : "\nنظری برای نمایش نیست."),
+    kb,
   };
 }
 
@@ -1235,6 +1256,22 @@ export async function handlePanelCallback(env: Env, cq: any) {
     switch (a) {
       case "h": return await show(await homeScreen(env));
       case "x": await answer(); return await tg(env, "deleteMessage", { chat_id: chatId, message_id: mid }).catch(() => {});
+      case "rv": return await show(await reviewsScreen(env, Math.max(0, Math.min(50, Number(b) || 0))));
+      case "rc": {
+        const rc = Number(b), pg = Math.max(0, Math.min(50, Number(c) || 0));
+        const v = (await listPublicReviews(env)).find((x) => x.c === rc);
+        if (!v) return await show(await reviewsScreen(env, pg, "این نظر دیگر نیست."));
+        return await show({
+          text: `🗑 <b>حذف این نظر از سایت؟</b>\n\n${esc(v.n)} · ${esc(v.s)}${v.r ? ` · ${"★".repeat(v.r)}` : ""}\n<i>«${esc(v.t)}»</i>`,
+          kb: [[cb("✅ بله، حذف شود", `ad:rd:${rc}:${pg}`), cb("↩️ انصراف", `ad:rv:${pg}`)]],
+        });
+      }
+      case "rd": {
+        const rc = Number(b), pg = Math.max(0, Math.min(50, Number(c) || 0));
+        const ok = await removePublicReview(env, rc);
+        if (ok) await logAction(env, adminId, `حذف نظر سایت ${rc}`);
+        return await show(await reviewsScreen(env, pg, ok ? "🗑 نظر از سایت حذف شد." : "این نظر پیدا نشد یا قبلاً حذف شده است."));
+      }
       case "tt": return await show(await totalsScreen(env));
       case "st": return await show(await statsScreen(env, [1, 7, 30].includes(Number(b)) ? Number(b) : 7));
       case "us": return await show(await usersScreen(env, b === "w" || b === "b" || b === "r" || b === "e" || b === "s" || b === "a" || b === "i" || b === "p" ? b : "t", Math.max(0, Math.min(2000, Number(c) || 0))));

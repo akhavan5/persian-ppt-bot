@@ -91,6 +91,22 @@ export async function approveReview(env: Env, id: string): Promise<boolean> {
   return true;
 }
 
+/** فهرست نظرهای منتشرشده‌ی سایت برای پنل مدیر (به همان ترتیب نمایش در سایت) */
+export async function listPublicReviews(env: Env): Promise<Review[]> {
+  return await loadPublic(env);
+}
+
+/** حذف یک نظر منتشرشده با شناسه‌ی c؛ true = حذف شد، false = پیدا نشد */
+export async function removePublicReview(env: Env, c: number): Promise<boolean> {
+  if (!Number.isFinite(c)) return false;
+  const list = await loadPublic(env);
+  const next = list.filter((v) => v.c !== c);
+  if (next.length === list.length) return false;
+  await env.KV.put(PUB_KEY, JSON.stringify(next));
+  htmlCache = null;
+  return true;
+}
+
 export async function rejectReview(env: Env, id: string): Promise<boolean> {
   if (!/^[a-z0-9]{6,16}$/.test(id)) return false;
   const had = (await env.KV.get(`fbk:${id}`)) !== null;
