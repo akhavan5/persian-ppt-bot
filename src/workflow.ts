@@ -23,6 +23,7 @@ import { withStore } from "./store";
 import { notifyPlanCreditsOut } from "./plan-notify";
 import { completeReferral } from "./referral";
 import { sendWebPush } from "./webpush";
+import { notifyUser } from "./notify";
 import { autoSendToBale } from "./bale-autosend";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -327,10 +328,12 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
     }
     // Mini App: اگر کاربر اپ را بسته باشد از آماده شدن خبردار نمی‌شود؛ یک پیام کوتاه با دکمه‌ی باز کردن اپ (فایل‌ها داخل اپ‌اند).
     // بعد از «finish» (قفل قبلاً آزاد شده) و بدون تلاش مجدد: شکست یا کندی این پیام نباید به «برگشت اعتبار» یا شکست کار برسد.
+    let miniAppChat: number | null = null; // چتی که پیام «آماده شد» مینی‌اپ را گرفته (برای جلوگیری از پیام تکراری در notify-others)
     if (web && event.payload.notify) {
       await step.do("notify-app", { retries: { limit: 0, delay: "1 second" }, timeout: "120 seconds" }, async () => {
         const tgChat = await linkedFor(this.env, String(userId), event.payload.plat);
         if (!tgChat) return;
+        miniAppChat = tgChat;
         // مینی‌اپ بله دانلود مستقیم ندارد؛ هر چه ساخته شده (ارائه + پوستر + جزوه) خودکار به چت بله فرستاده می‌شود (bale-autosend.ts).
         // شکست ارسال فقط لاگ می‌شود و پیام «آماده شد» پایین باز هم می‌رود؛ کاربر می‌تواند از داخل اپ «ارسال به چت» بزند.
         const autoSent = botPlatform(tgChat) === "bale"
@@ -349,6 +352,29 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
         await sendWebPush(this.env, userId, { title: "ارائه‌ات آماده شد ✅", body: `${built.title} (${toFa(String(built.slides))} اسلاید)؛ برای گرفتن فایل بزن.`, url: "/", tag: "deck-done" });
       }).catch((e) => console.error("notify-webpush", String(e).slice(0, 200)));
     }
+
+    // اعلان به «بقیه‌ی» کانال‌های کاربر: پیام آماده‌شدن تا اینجا فقط به کانال مبدأ رسیده؛ اینجا به باقی پیام‌رسان‌های وصل‌شده،
+    // اپ اندروید (FCM) و مرورگر هم خبر می‌دهیم. کانالی که همین حالا خبر گرفته حذف می‌شود تا پیام دوبار نرسد. ایمیل عمداً نیست.
+    // بعد از «finish» و بدون تلاش مجدد؛ هر خطایش فقط لاگ می‌شود و به اعتبار یا نتیجه‌ی کار اثر ندارد.
+    await step.do("notify-others", { retries: { limit: 0, delay: "1 second" }, timeout: "60 seconds" }, async () => {
+      const appOrigin = deckPlat === "bazaar" || deckPlat === "myket" || deckPlat === "app" || deckPlat === "ios"; // اپ خودش اعلان محلی نشان داده
+      const originChat = web ? miniAppChat : chatId; // ربات: همان چت؛ مینی‌اپ/ایتا: چت پیام مینی‌اپ؛ سایت/اپ: هیچ پیام‌رسانی تا حالا پیام نگرفته
+      const except: ("app" | "web" | "email")[] = ["email"];
+      if (appOrigin) except.push("app");
+      if (web && !event.payload.notify) except.push("web"); // وب‌پوش همین کاربر بالا فرستاده شد
+      const n = toFa(String(built.slides));
+      const r = await notifyUser(this.env, userId, {
+        title: "ارائه‌ات آماده شد ✅",
+        body: `${built.title} (${n} اسلاید)؛ برای گرفتن فایل، اپ را باز کن.`,
+        html: `✅ <b>${esc(built.title)}</b> آماده شد (${n} اسلاید).\nبرای گرفتن فایل، اپ را باز کن؛ فایل‌ها ۲۴ ساعت نگه داشته می‌شوند.`,
+        extra: (id) => appReadyMarkup(this.env, id, event.instanceId, true),
+        tag: "deck-done",
+        url: "/",
+        except,
+        ...(originChat ? { exceptIds: [originChat] } : {}),
+      });
+      console.log("notify-others", JSON.stringify({ delivered: r.delivered, failed: r.failed, reachable: r.reachable }));
+    }).catch((e) => console.error("notify-others", String(e).slice(0, 200)));
 
     // خروجی نمونه‌ی Workflow؛ وضعیت وب از همین‌جا خوانده می‌شود
     return built;

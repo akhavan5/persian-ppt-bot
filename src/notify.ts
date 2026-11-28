@@ -54,6 +54,8 @@ export interface Notification {
   only?: readonly NotifyKind[];
   /** همه‌ی کانال‌ها به‌جز این‌ها */
   except?: readonly NotifyKind[];
+  /** پیام‌رسان‌هایی (شناسه‌ی چت) که نباید پیام بگیرند؛ مثلاً چتی که پیام همین رویداد را قبلاً گرفته تا تکراری نرسد */
+  exceptIds?: readonly number[];
 }
 
 export interface NotifyResult {
@@ -125,7 +127,7 @@ export async function notifyUser(env: Env, uid: Uid, n: Notification): Promise<N
 
     // ۱) همه‌ی پیام‌رسان‌ها (هر کدام جدا)
     if (want("messenger")) jobs.push((async () => {
-      const ids = await messengerIds(env, acct, botId);
+      const ids = (await messengerIds(env, acct, botId)).filter((id) => !n.exceptIds?.includes(id));
       if (!ids.length) return;
       const html = n.html ?? defaultHtml(env, n);
       const res = await Promise.all(ids.map(async (id) => {
