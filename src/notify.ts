@@ -25,7 +25,7 @@ export type NotifyKind = "messenger" | "app" | "web" | "email";
 export const NOTIFY_KINDS: readonly NotifyKind[] = ["messenger", "app", "web", "email"];
 export const NOTIFY_LABEL: Record<NotifyKind, string> = { messenger: "پیام‌رسان", app: "اپ اندروید", web: "اعلان مرورگر", email: "ایمیل" };
 
-export interface EmailContent { subject: string; html: string; text: string }
+export interface EmailContent { subject: string; html: string; text: string; /** پیوست‌ها؛ content = base64 (به sendEmail می‌رسد) */ attachments?: { filename: string; content: string }[] }
 
 export interface Notification {
   /** عنوان کوتاه (عنوان اعلان اپ/مرورگر، موضوع و تیتر ایمیل، خط اول پیام‌رسان) */
