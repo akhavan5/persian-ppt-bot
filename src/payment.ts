@@ -21,7 +21,7 @@ export const offPctOf = (price: number): number => Math.round((1 - price / oldPr
 
 const planOf = (p: Omit<Plan, "oldPrice" | "off">): Plan => ({ ...p, oldPrice: oldPriceOf(p.price), off: offPctOf(p.price) });
 export const PLANS: Plan[] = [
-  planOf({ id: "plus", name: "پلاس", price: 790, credits: 5, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus }),
+  planOf({ id: "plus", name: "پلاس", price: 1 /* TEST: ۱ هزار تومان؛ قبل از انتشار به 790 برگردان */, credits: 5, days: 30, maxSlides: PLAN_MAX_SLIDES.plus, maxImages: PLAN_MAX_IMAGES.plus }),
   planOf({ id: "pro", name: "پرو", price: 1340, credits: 11, days: 30, maxSlides: PLAN_MAX_SLIDES.pro, maxImages: PLAN_MAX_IMAGES.pro }),
 ];
 
