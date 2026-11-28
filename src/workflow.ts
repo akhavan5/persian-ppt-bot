@@ -10,7 +10,7 @@ import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegr
 import { getUserById } from "./auth";
 import { toFa } from "./util";
 import { adminIds, botPlatform, bumpStat, getCredit, getUserSeen, noteDeckDone, refundCredit, releaseLock } from "./settings";
-import { BUY_SITE_NOTE, appReadyMarkup, buyKbFor, fileNameWithSite, siteOnChat, slidesOnChat } from "./deck-service";
+import { BUY_SITE_NOTE, appReadyMarkup, buyKbFor, fileNameWithSite, siteMarkup, siteOnChat, slidesOnChat } from "./deck-service";
 import { linkedFor } from "./link";
 import { deckKeyboard, extraButtons, extrasHint, isGammaAdmin, markExtra, type ExtraKind } from "./extras";
 import { loadFileDirect, logDeck, saveFile, savePreview } from "./files";
@@ -201,7 +201,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
             const caption = `🖼 <b>${esc(ig.title)}</b>\nپوستر (اینفوگرافیک)`;
             // عکس برای پیش‌نمایش داخل چت؛ اگر تلگرام نپذیرفت، فقط فایل کامل فرستاده می‌شود
             const photoOk = await sendPhoto(this.env, chatId, img.data, pname, caption, img.mime).then(() => true, (e) => { console.error("poster sendPhoto", String(e).slice(0, 200)); return false; });
-            await sendDocument(this.env, chatId, img.data, pname, photoOk ? "📎 پوستر با کیفیت کامل" : caption, { mime: img.mime });
+            await sendDocument(this.env, chatId, img.data, pname, photoOk ? "📎 پوستر با کیفیت کامل" : caption, { mime: img.mime, reply_markup: siteMarkup(pid) });
             await saveFile(this.env, userId, pid, img.data, pname, ig.title, 0).catch((err) => console.error("saveFile poster", err));
           });
           posterOk = true;
@@ -241,7 +241,7 @@ export class DeckWorkflow extends WorkflowEntrypoint<Env, DeckParams> {
               if (!(await saveFile(this.env, userId, hid, data, hname, hd.title, 0))) throw new Error("handout too large to store");
               return;
             }
-            await sendDocument(this.env, chatId, data, hname, `📝 <b>${esc(hd.title)}</b>\nجزوه‌ی Word${fontCaption(settings.font)}`, { mime: DOCX_MIME });
+            await sendDocument(this.env, chatId, data, hname, `📝 <b>${esc(hd.title)}</b>\nجزوه‌ی Word${fontCaption(settings.font)}`, { mime: DOCX_MIME, reply_markup: siteMarkup(hid) });
             await saveFile(this.env, userId, hid, data, hname, hd.title, 0).catch((err) => console.error("saveFile handout", err));
           });
           handoutOk = true;

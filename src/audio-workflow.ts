@@ -20,7 +20,7 @@ import { withStore } from "./store";
 import type { BlobStore } from "./blobstore";
 import { botPlatform, refundCredit, type CreditSource } from "./settings";
 import { autoSendToBale } from "./bale-autosend";
-import { appReadyMarkup, fileNameWithSite, siteHost } from "./deck-service";
+import { appReadyMarkup, fileNameWithSite, siteHost, siteMarkup } from "./deck-service";
 import { toFa } from "./util";
 import { unmarkExtra } from "./extras";
 import { sendWebPush } from "./webpush";
@@ -365,7 +365,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           saved.push(id);
         } else {
           await sendDocument(this.env, chatId, out.bytes, name,
-            `🔊 <b>${esc(plan.title)}</b>\nصدای ${toFa(String(items.length))} اسلاید داخل خود اسلایدها گذاشته شده است؛ در حالت نمایش (Slide Show) خودکار پخش می‌شود و بعد از پایان صدا اسلاید عوض می‌شود.`);
+            `🔊 <b>${esc(plan.title)}</b>\nصدای ${toFa(String(items.length))} اسلاید داخل خود اسلایدها گذاشته شده است؛ در حالت نمایش (Slide Show) خودکار پخش می‌شود و بعد از پایان صدا اسلاید عوض می‌شود.`, { reply_markup: siteMarkup(id) });
           // ربات: نسخه‌ای هم در «فایل‌ها» (سایت، Mini App و اپ) نگه می‌داریم؛ بهترین‌تلاش است و اگر ذخیره نشد (مثلاً بزرگ‌تر از ۲۴ مگابایت) ارسال به چت خراب نمی‌شود
           await saveFile(this.env, uid, id, out.bytes, name, plan.title, items.length).catch((e) => console.error("audio save (bot)", String(e).slice(0, 200)));
         }
@@ -387,7 +387,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           continue;
         }
         await sendAudio(this.env, chatId, audio, wname,
-          `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: siteHost(this.env), duration: audioSeconds(audio) });
+          `🔊 <b>اسلاید ${toFa(String(m.i + 1))}</b> · ${esc(m.title.slice(0, 80))}`, { title: `اسلاید ${toFa(String(m.i + 1))}: ${m.title}`, performer: siteHost(this.env), duration: audioSeconds(audio), reply_markup: siteMarkup(`${id}-s${m.i + 1}`) });
         await saveFile(this.env, uid, `${id}-s${m.i + 1}`, audio, wname, `اسلاید ${m.i + 1}: ${m.title}`.slice(0, 120), 0).catch((e) => console.error("slide audio save (bot)", String(e).slice(0, 200)));
       }
       // فایل‌های موقت در گام cleanup-tmp پس از این گام پاک می‌شوند (یک batch برای همه)
@@ -486,7 +486,7 @@ export class AudioWorkflow extends WorkflowEntrypoint<Env, AudioParams> {
           continue;
         }
         await sendAudio(this.env, chatId, merged, pname,
-          `🎙 <b>${esc(script.title)}</b>${part}`, { title: script.title, performer: siteHost(this.env), duration: audioSeconds(merged) });
+          `🎙 <b>${esc(script.title)}</b>${part}`, { title: script.title, performer: siteHost(this.env), duration: audioSeconds(merged), reply_markup: siteMarkup(g === 0 ? id : `${id}-${g + 1}`) });
         // ربات: علاوه بر چت، نسخه‌ای هم در «فایل‌ها» (سایت، Mini App و اپ) نگه می‌داریم تا پلیر و دانلود آن‌جا هم باشد.
         // بهترین‌تلاش است: اگر فایل از سقف ذخیره (۲۴ مگابایت) بزرگ‌تر بود یا ذخیره نشد، ارسال به چت که انجام شده خراب نمی‌شود.
         try {

@@ -53,7 +53,7 @@ export async function appReadyMarkup(env: Env, tgChat: number, fileId?: string, 
   const rows: unknown[][] = [[{ text: "📱 باز کردن اپ", web_app: { url: `${miniappUrl(env)}/app` } }]];
   const slidesOk = slides && !!fileId && googleSlidesEnabled(env); // slides = پیام «ارائه آماده شد» (نه پوستر/جزوه/صوت)
   if (slidesOk && slidesOnChat(env, tgChat)) rows.push(slidesRow(fileId as string));
-  if (slides && !!fileId && siteOnChat(tgChat)) rows.push(siteRow(fileId)); // مشاهده در سایت برای همه‌ی پلتفرم‌ها (ایتا پایین‌تر لینک مستقیم می‌گیرد)
+  if (!!fileId && siteOnChat(tgChat)) rows.push(siteRow(fileId)); // مشاهده در سایت برای همه‌ی نوع فایل و همه‌ی پلتفرم‌ها (ایتا پایین‌تر لینک مستقیم می‌گیرد)
   if (isEitaaId(tgChat)) {
     // ایتا: دکمه‌ی callback ندارد؛ همین یک لینک ورود یک‌بارمصرف (مستقیم روی همان فایل) هم برای مشاهده و هم برای Google Slides است (دو لینک با یک توکن نمی‌شود)
     const url = await siteLoginUrl(env, tgChat, "files", fileId).catch(() => "");
@@ -73,6 +73,8 @@ export const slidesRow = (id: string): { text: string; callback_data: string }[]
  *  ایتا callback ندارد و لینک مشاهده‌اش در appReadyMarkup است. لینک ورود هنگام زدن دکمه ساخته می‌شود (توکن جدا از دکمه‌ی Google Slides). */
 export const siteOnChat = (chatId: number): boolean => !isEitaaId(chatId);
 export const siteRow = (id: string): { text: string; callback_data: string }[] => [{ text: "🌐 مشاهده در سایت", callback_data: `vs:${id}` }];
+/** کیبورد تک‌دکمه‌ی «مشاهده در سایت» زیر فایل‌هایی که ربات به چت می‌فرستد (پوستر، جزوه، صوت، پادکست) */
+export const siteMarkup = (id: string) => ({ inline_keyboard: [siteRow(id)] });
 
 export const imagesLimitMsg = (max: number) => max <= FREE_MAX_IMAGES
   ? `در پلن رایگان حداکثر ${toFa(String(FREE_MAX_IMAGES))} تصویر در هر ارائه می‌گیری؛ برای تصویر بیشتر پلن پلاس (تا ${toFa(String(PLANS[0].maxImages))} تصویر) یا پرو (تا ${toFa(String(PLANS[1].maxImages))} تصویر) را بگیر.`

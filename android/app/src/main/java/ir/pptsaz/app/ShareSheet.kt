@@ -93,7 +93,7 @@ internal fun shareCaption(title: String): String =
  * onPick(pkg, asPdf): pkg = null یعنی فهرست سیستم.
  */
 @Composable
-fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = null, webFileId: String? = null, onPick: (pkg: String?, asPdf: Boolean) -> Unit) {
+fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = null, webFileId: String? = null, siteFileId: String? = null, onPick: (pkg: String?, asPdf: Boolean) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -159,8 +159,8 @@ fun ShareDialog(canPdf: Boolean, onDismiss: () -> Unit, googlePkg: String? = nul
                         }
                     }
                 }
-                // مشاهده‌ی فایل در سایت (مرورگر، با ورود خودکار): مستقل از نصب بودن Slides و از ساخت Google Slides
-                if (webFileId != null) ShareRow("مشاهده در سایت", null) { scope.launch { openSlidesOnSite(ctx, webFileId); onDismiss() } }
+                // مشاهده‌ی فایل در سایت (مرورگر، با ورود خودکار) برای همه‌ی نوع فایل: ارائه، پوستر، جزوه، صوت، پادکست؛ مستقل از Slides
+                if (siteFileId != null) ShareRow("مشاهده در سایت", null) { scope.launch { openSlidesOnSite(ctx, siteFileId); onDismiss() } }
                 targets.forEach { t ->
                     ShareRow(t.label, t.icon) { onPick(t.pkg, pdf) }
                 }

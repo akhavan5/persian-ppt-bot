@@ -17,7 +17,7 @@ import { loadPreview, saveFile } from "./files";
 import { editMessage, esc, sendDocument, sendMessage, sendPhoto } from "./telegram";
 import { linkedFor } from "./link";
 import { withStore } from "./store";
-import { appReadyMarkup, fileNameWithSite } from "./deck-service";
+import { appReadyMarkup, fileNameWithSite, siteMarkup } from "./deck-service";
 import { fontCaption } from "./themes";
 import { generateImage } from "./images";
 import { IG_WIDTH, renderInfographicHtml } from "./infographic-html";
@@ -168,7 +168,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
       const caption = `🖼 <b>${esc(ig.title)}</b>\nپوستر (اینفوگرافیک)`;
       // عکس برای پیش‌نمایش داخل چت؛ اگر تلگرام نپذیرفت، فقط فایل کامل فرستاده می‌شود
       const photoOk = await sendPhoto(this.env, chatId, img.data, pname, caption, img.mime).then(() => true, (e) => { console.error("poster sendPhoto", String(e).slice(0, 200)); return false; });
-      await sendDocument(this.env, chatId, img.data, pname, photoOk ? "📎 پوستر با کیفیت کامل" : caption, { mime: img.mime });
+      await sendDocument(this.env, chatId, img.data, pname, photoOk ? "📎 پوستر با کیفیت کامل" : caption, { mime: img.mime, reply_markup: siteMarkup(fid) });
       await saveFile(this.env, uid, fid, img.data, pname, ig.title, 0).catch((err) => console.error("saveFile poster", err));
     });
     return { kind: "poster", title: ig.title, ids: web ? [fid] : [], note: "" };
@@ -200,7 +200,7 @@ export class ExtraWorkflow extends WorkflowEntrypoint<Env, ExtraParams> {
         if (!(await saveFile(this.env, uid, fid, data, hname, hd.title, 0))) throw new Error("handout too large to store");
         return;
       }
-      await sendDocument(this.env, chatId, data, hname, `📝 <b>${esc(hd.title)}</b>\nجزوه‌ی Word${fontCaption(plan.font)}`, { mime: DOCX_MIME });
+      await sendDocument(this.env, chatId, data, hname, `📝 <b>${esc(hd.title)}</b>\nجزوه‌ی Word${fontCaption(plan.font)}`, { mime: DOCX_MIME, reply_markup: siteMarkup(fid) });
       await saveFile(this.env, uid, fid, data, hname, hd.title, 0).catch((err) => console.error("saveFile handout", err));
     });
     return { kind: "handout", title: hd.title, ids: web ? [fid] : [], note: "" };

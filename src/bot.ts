@@ -18,7 +18,7 @@ import { notifyAllCommand } from "./notify";
 import { appVerCommand } from "./app-version";
 import { editMessage, esc, sendAudio, sendDocument, sendMessage, tg } from "./telegram";
 import { audioSeconds, isAudioName } from "./wav";
-import { siteHost, siteOnChat, siteRow, slidesOnChat, slidesRow } from "./deck-service";
+import { siteHost, siteMarkup, siteOnChat, siteRow, slidesOnChat, slidesRow } from "./deck-service";
 import { isBaleId } from "./bale-format";
 import { isSplusId } from "./splus-format";
 import { isRubikaId } from "./rubika-format";
@@ -496,15 +496,15 @@ async function handleCallback(env: Env, cq: any) {
     }
     if (isAudioName(f.entry.name)) {
       const wav = new Uint8Array(f.data);
-      return await sendAudio(env, chatId, wav, f.entry.name, `${/-podcast(-\d+)?$/.test(a) ? "🎙" : "🔊"} <b>${esc(f.entry.title)}</b>`, { title: f.entry.title, ...(/-podcast(-\d+)?$/.test(a) ? { performer: siteHost(env) } : {}), duration: audioSeconds(wav) });
+      return await sendAudio(env, chatId, wav, f.entry.name, `${/-podcast(-\d+)?$/.test(a) ? "🎙" : "🔊"} <b>${esc(f.entry.title)}</b>`, { title: f.entry.title, ...(/-podcast(-\d+)?$/.test(a) ? { performer: siteHost(env) } : {}), duration: audioSeconds(wav), reply_markup: siteMarkup(a) });
     }
     const isDeck = isMainDeck(a, f.entry.name); // اسلاید صوتی هم .pptx است ولی ارائه‌ی اصلی نیست: دکمه‌ی همراه نمی‌گیرد
     const gAdmin = isGammaAdmin(env, userId); // مدیر در تلگرام: دکمه‌های Gamma (ساخته‌نشده‌ها) هم می‌آید
     const xrows = isDeck ? extraButtons(env, a, await madeExtras(env, uid, a, undefined, gAdmin ? ALL_EXTRA_KINDS : undefined).catch(() => new Set<ExtraKind>(ALL_EXTRA_KINDS)), gAdmin) : [];
     const krows = [...(isDeck && slidesOnChat(env, chatId) ? [slidesRow(a)] : []), ...(isDeck && siteOnChat(chatId) ? [siteRow(a)] : []), ...xrows]; // Google Slides + مشاهده در سایت + همراه‌های ساخته‌نشده
     return await sendDocument(env, chatId, new Uint8Array(f.data), f.entry.name, `✅ <b>${esc(f.entry.title)}</b>${extrasHint(xrows)}`,
-      /\.(png|jpe?g)$/i.test(f.entry.name) ? { mime: /\.png$/i.test(f.entry.name) ? "image/png" : "image/jpeg" }
-        : /\.docx$/i.test(f.entry.name) ? { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
+      /\.(png|jpe?g)$/i.test(f.entry.name) ? { mime: /\.png$/i.test(f.entry.name) ? "image/png" : "image/jpeg", reply_markup: siteMarkup(a) }
+        : /\.docx$/i.test(f.entry.name) ? { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", reply_markup: siteMarkup(a) }
         : krows.length ? { reply_markup: { inline_keyboard: krows } } : undefined);
   }
   const [s, caps] = await Promise.all([getSettings(env, uid), getCaps(env, uid)]);

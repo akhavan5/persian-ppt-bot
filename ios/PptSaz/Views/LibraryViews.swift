@@ -65,9 +65,10 @@ struct LocalDetailSheet: View {
                             }
                             .buttonStyle(SoftButtonStyle())
                             .disabled(busySlides)
-                            Button { Haptic.light(); OpenIn.openOnSite(String(file.id.split(separator: "|").first ?? "")) } label: { Label("مشاهده در سایت", systemImage: "safari") }
-                                .buttonStyle(SoftButtonStyle())
                         }
+                        // مشاهده در سایت برای همه‌ی نوع فایل (ارائه، پوستر، جزوه، صوت، پادکست)
+                        Button { Haptic.light(); OpenIn.openOnSite(String(file.id.split(separator: "|").first ?? "")) } label: { Label("مشاهده در سایت", systemImage: "safari") }
+                            .buttonStyle(SoftButtonStyle())
                         if file.kind == "deck" || file.kind == "handout" {
                             Button {
                                 if OpenIn.present(url) { Haptic.light() }

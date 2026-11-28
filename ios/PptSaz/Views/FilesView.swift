@@ -347,6 +347,9 @@ struct FileDetailSheet: View {
                 }
                 .buttonStyle(SoftButtonStyle())
                 .disabled(busySlides || busyDownload)
+            }
+            // مشاهده در سایت برای همه‌ی نوع فایل (ارائه، پوستر، جزوه، صوت، پادکست)
+            if !item.sample {
                 Button { Haptic.light(); OpenIn.openOnSite(item.id) } label: { Label("مشاهده در سایت", systemImage: "safari") }
                     .buttonStyle(SoftButtonStyle())
             }
