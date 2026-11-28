@@ -1578,6 +1578,8 @@ async function refreshMe() { try { const r = await api("/api/me"); if (r.user) {
 let pendingPlan = null;
 async function buyPlan(id, btn) {
   if (!me) { $("#buy").close(); openAuth("register", "برای خرید پلن، ابتدا وارد شو یا ثبت‌نام کن."); return; }
+  // دکمه‌های پلن بیرون از پنجره‌ی خرید (صفحه‌ی اصلی): با بیش از یک درگاه، اول پنجره‌ی انتخاب درگاه باز شود
+  if (cfg.payEnabled && (cfg.payGateways || []).length > 1 && !$("#buy").open) { openBuy("درگاه پرداخت را انتخاب کن و روی پلن مورد نظر بزن."); return; }
   const plan = me.plans.find((p) => p.id === id); if (!plan) return;
   // خرید پلنِ دیگر، پلن فعلی را (با روز و اعتبار باقی‌مانده) منقضی می‌کند؛ قبل از ادامه هشدار بده
   if (me.plan && me.plan.id !== id) {
