@@ -69,10 +69,10 @@ export const MEDIAAD_SCRIPT = `<script type="text/javascript">
 })();
 </script>`;
 
-/** جایگاه تبلیغ تصویری یکتانت (بالای بخش مقاله‌های مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
+/** جایگاه تبلیغ تصویری یکتانت (زیر بخش مقاله‌های مرتبط). فقط در محتوای اصلی (داخل article) قرار می‌گیرد، نه سایدبار؛ شناسه را تغییر ندهید و کلاس/آیدی حاوی ad/banner به آن اضافه نکنید. */
 export const YEKTANET_SLOT = `<div id="pos-article-display-124201"></div>`;
 
-/** چهار جایگاه تبلیغ مدیاد که کنار جایگاه یکتانت قرار می‌گیرند. شناسه‌ها را تغییر ندهید. */
+/** چهار جایگاه تبلیغ مدیاد که کنار جایگاه مدیاد بالای بخش مقاله‌های مرتبط (MEDIAAD_RELATED_SLOT) قرار می‌گیرند. شناسه‌ها را تغییر ندهید. */
 export const MEDIAAD_BESIDE_YEKTANET_SLOTS = `<div id="mediaad-Rly2g" ></div> <div id="mediaad-B3z4d" ></div> <div id="mediaad-9yw2Y" ></div> <div id="mediaad-JR4kY" ></div>`;
 
 /** جایگاه تبلیغ مدیاد؛ زیر تصویر اصلی. شناسه را تغییر ندهید. */
@@ -81,7 +81,7 @@ export const MEDIAAD_HERO_SLOT = `<div id="mediaad-rm4mJ" ></div>`;
 /** جایگاه تبلیغ مدیاد؛ زیر بخش‌های محتوایی. شناسه را تغییر ندهید. */
 export const MEDIAAD_CONTENT_SLOT = `<div id="mediaad-X2V5O" ></div>`;
 
-/** جایگاه تبلیغ مدیاد؛ زیر بخش «مقاله‌های مرتبط». شناسه را تغییر ندهید. */
+/** جایگاه تبلیغ مدیاد؛ بالای بخش «مقاله‌های مرتبط»، پیش از چهار جایگاه مدیاد دیگر. شناسه را تغییر ندهید. */
 export const MEDIAAD_RELATED_SLOT = `<div id="mediaad-6pQpw"></div>`;
 
 /** جایگاه تبلیغ چسبان مدیاد؛ خودش جای نمایش را پیدا می‌کند، فقط یک‌بار در هر صفحه (قبل از فوتر). شناسه را تغییر ندهید. */
@@ -644,13 +644,13 @@ ${p.sections.map((x) => renderSection(x) + (x === stepsSec ? stepsFigure("landin
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
     </section>
-    ${YEKTANET_SLOT}
+    ${MEDIAAD_RELATED_SLOT}
     ${MEDIAAD_BESIDE_YEKTANET_SLOTS}
 ${articles.length ? `    <section>
       <h2>مقاله‌های مرتبط در وبلاگ</h2>
       <div class="rel">${articles.map((a) => `<a href="/blog/${a!.slug}">${esc(a!.nav)}<span>${esc(a!.category)}</span></a>`).join("")}</div>
     </section>
-` : ""}    ${MEDIAAD_RELATED_SLOT}
+` : ""}    ${YEKTANET_SLOT}
     <section>
       <h2>راهنماهای مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/${r.slug}">${esc(r.nav)}<span>${esc(r.title.split("|")[0].trim())}</span></a>`).join("")}</div>

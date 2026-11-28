@@ -342,13 +342,13 @@ ${p.sections.map((x, i) => renderBlogSection(x, i) + (x === stepsSec ? stepsFigu
       <h2>پرسش‌های متداول</h2>
 ${p.faq.map((f) => `      <details><summary>${esc(f.q)}</summary><p>${inline(f.a)}</p></details>`).join("\n")}
     </section>
-${adjacent(p)}    ${YEKTANET_SLOT}
+${adjacent(p)}    ${MEDIAAD_RELATED_SLOT}
     ${MEDIAAD_BESIDE_YEKTANET_SLOTS}
     <section>
       <h2>مقاله‌های مرتبط</h2>
       <div class="rel">${related.map((r) => `<a href="/blog/${r.slug}">${esc(r.nav)}<span>${esc(r.category)}</span></a>`).join("")}${tools.map((x) => `<a href="/${x.slug}">${esc(x.nav)}<span>ابزار ساخت</span></a>`).join("")}</div>
     </section>
-    ${MEDIAAD_RELATED_SLOT}
+    ${YEKTANET_SLOT}
     <section class="final">
       <h2>آماده‌ای پیش‌نویس بگیری؟</h2>
       <p>موضوع را بنویس و ظرف چند دقیقه فایل PPTX فارسی و قابل‌ویرایش را بگیر؛ با ثبت‌نام ۱ ارائه‌ی رایگان هدیه می‌گیری.</p>
