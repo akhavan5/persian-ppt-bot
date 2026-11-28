@@ -734,8 +734,18 @@ const KW2_POST_RELATED: Record<string, string[]> = {
   "self-introduction-presentation-sample": ["introduction-slide-powerpoint"],
 };
 
+// توضیح متای مقاله‌های موجود که از ۱۷۰ کاراکتر بلندتر بودند؛ همه ≤۱۶۰ کاراکتر
+const DESC_FIX: Record<string, string> = {
+  "presentation-topic-ideas": "دنبال موضوع پاورپوینت جالب می‌گردی؟ ۵۰ ایده‌ی دسته‌بندی‌شده برای ارائه‌ی کلاسی، دانشگاهی و کاری و روش دقیق‌کردن موضوع کلی، با ساخت یک‌کلیکی.",
+  "chatgpt-powerpoint-persian": "چت جی پی تی پاورپوینت ساز؟ سه پرامپت آماده برای متن و ساختار اسلایدها با ChatGPT، به‌علاوه‌ی محدودیت‌های فارسی و راه سریع‌تر گرفتن PPTX راست‌به‌چپ.",
+  "global-warming-presentation-sample": "نمونه‌ی پاورپوینت گرمایش جهانی اسلاید به اسلاید: اثر گلخانه‌ای، علت‌ها، پیامدها، کاهش و سازگاری و توافق پاریس؛ با زمان‌بندی و منبع‌های معتبر.",
+  "english-in-persian-powerpoint-fix": "وقتی میان متن فارسی پاورپوینت کلمه‌ی انگلیسی تایپ می‌کنی، نقطه و پرانتز جابه‌جا می‌شود؟ علت، میان‌برهای جهت متن، علامت RLM و تنظیم فونت؛ گام‌به‌گام.",
+  "google-slides-persian-online": "پاورپوینت آنلاین گوگل یعنی Google Slides: برای ارائه‌ی فارسی چه مزیت و محدودیتی دارد و فایل PPTX را چطور در آن باز و اصلاح کنی؛ مقایسه با pptساز.",
+};
+
 export function applyKw2PostLinks(posts: Post[]): Post[] {
   for (const p of posts) {
+    if (DESC_FIX[p.slug]) { p.desc = DESC_FIX[p.slug]; p.updated = D; }
     const add = KW2_POST_FAQ[p.slug];
     const rel = KW2_POST_RELATED[p.slug];
     if (!add && !rel) continue;
